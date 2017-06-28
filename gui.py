@@ -114,7 +114,7 @@ class App(QMainWindow):
 
         # Correlation matrix view
         correlations = np.random.rand(64,64) * 2 - 1
-        self.matrix_view = MatrixView(container,correlations)
+        self.matrix_view = MatrixView(correlations, container)
         self.matrix_view.move(10,10)
         self.matrix_view.resize(500,500)
 
