@@ -120,6 +120,14 @@ class App(QMainWindow):
 
         self.matrix_view.update()
 
+
+        self.matrix_widget = MatrixWidget(correlations, container)
+        self.matrix_widget.move(600,10)
+        self.matrix_widget.resize(500,500)
+
+        self.matrix_widget.repaint()
+
+
     def nextsamplebuttonclickked(self):
         '''Callback for clicking the "next" sample button.
         '''
