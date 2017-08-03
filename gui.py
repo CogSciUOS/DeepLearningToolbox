@@ -11,7 +11,7 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QTabWidget
 
 
-from qtgui.matrixview import MatrixView
+from qtgui.matrixview import QMatrixView
 
 
 # There are three classes defined in this file:
@@ -114,18 +114,18 @@ class App(QMainWindow):
 
         # Correlation matrix view
         correlations = np.random.rand(64,64) * 2 - 1
-        self.matrix_view = MatrixView(correlations, container)
+        self.matrix_view = QMatrixView(correlations, container)
         self.matrix_view.move(10,10)
         self.matrix_view.resize(500,500)
 
         self.matrix_view.update()
 
 
-        self.matrix_widget = MatrixWidget(correlations, container)
-        self.matrix_widget.move(600,10)
-        self.matrix_widget.resize(500,500)
+        #self.matrix_widget = MatrixWidget(correlations, container)
+        #self.matrix_widget.move(600,10)
+        #self.matrix_widget.resize(500,500)
 
-        self.matrix_widget.repaint()
+        #self.matrix_widget.repaint()
 
 
     def nextsamplebuttonclickked(self):
