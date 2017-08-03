@@ -8,10 +8,7 @@ from matplotlib.figure import Figure
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QWidget, QPushButton, QLabel
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QTabWidget
 
-
-from qtgui.matrixview import QMatrixView
 
 
 # There are three classes defined in this file:
@@ -30,6 +27,11 @@ class App(QMainWindow):
         self.network = network
         self.data = data
 
+        self.left = 10
+        self.top = 10
+        self.title = 'Activations'
+        self.width = 1800
+        self.height = 900
         layers = self.network.get_layer_list()
         self.layer_label = layers[0]
         self.sample_index=0
@@ -41,91 +43,56 @@ class App(QMainWindow):
         '''Initialize the graphical components of this user interface.
         '''
 
-        self.title = 'Activations'
-
-        self.left = 10
-        self.top = 10
-        self.width = 1800
-        self.height = 900
-
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
-	
-        main = QWidget()
-        experiments = QWidget()
-
-        self.initMain(main)
-        self.initExperiments(experiments)
-
-        self.tabs = QTabWidget(self);
-        self.tabs.setFixedSize(self.width-5, self.height-5)
-        self.tabs.addTab(main,"Main")
-        self.tabs.addTab(experiments,"Experiments")
-
-        #window->setCentralWidget(centralWidget)
-        self.show()
-
-
-    def initMain(self, container):
 
         # a column of buttons to select the network layer
         self.old_sender = None
         for i,name in enumerate(self.network.get_layer_list()):
-            btn = QPushButton(name, container)
+            btn = QPushButton(name, self)
             btn.resize(btn.sizeHint())
-            btn.move(1500, 120+100*i)
+            btn.move(1500, 70+30*i)
             btn.clicked.connect(self.layerbuttonClicked)
             # FIXME[hack]: we need a better concept to access buttons!
             if self.layer_label == name:
                 btn.setStyleSheet("background-color: red")
                 self.old_sender = btn
 
-        # the "next" button: used to load the next image 
-        btnnext = QPushButton('next', container)
+        # the "next" button: used to load the next image
+        btnnext = QPushButton('next', self)
         btnnext.resize(btn.sizeHint())
         btnnext.move(1500, 120+100*7)
         btnnext.clicked.connect(self.nextsamplebuttonclickked)
 
+        btnprev = QPushButton('prev', self)
+        btnprev.resize(btn.sizeHint())
+        btnprev.move(1400, 120+100*7)
+        btnprev.clicked.connect(self.prevsamplebuttonclickked)
+
         # a small textfield to display the name of the current image
-        self.img_counter = QLabel("0", container)
+        self.img_counter = QLabel("0", self)
         self.img_counter.move(1500, 80+100*7)
 
         # canvas_input: a canvas to display the input image
-        self.canvas_input = MyImage(container, width=4, height=4)
+        self.canvas_input = MyImage(self, width=4, height=4)
         self.canvas_input.move(900,0)
 
         # canvas_activation: a canvas to display a layer activation
-        self.canvas_activation = PlotCanvas(container, width=9, height=9)
+        self.canvas_activation = PlotCanvas(self, width=9, height=9)
         self.canvas_activation.move(0,0)
 
         # canvas_input2: a canvas to display the input image
         # (mayb be more efficient - check!)
-        self.canvas_input2 = MyImage2(container)
+        self.canvas_input2 = MyImage2(self)
         self.canvas_input2.move(900,400)
         self.canvas_input2.resize(300,300)
 
         # info_box: display input and layer info
-        self.info_box = InfoBox(container)
+        self.info_box = InfoBox(self)
         self.info_box.move(900,700)
         self.info_box.resize(300,200)
 
-
-    def initExperiments(self, container):
-
-        # Correlation matrix view
-        correlations = np.random.rand(64,64) * 2 - 1
-        self.matrix_view = QMatrixView(correlations, container)
-        self.matrix_view.move(10,10)
-        self.matrix_view.resize(500,500)
-
-        self.matrix_view.update()
-
-
-        #self.matrix_widget = MatrixWidget(correlations, container)
-        #self.matrix_widget.move(600,10)
-        #self.matrix_widget.resize(500,500)
-
-        #self.matrix_widget.repaint()
+        self.show()
 
 
     def nextsamplebuttonclickked(self):
@@ -135,11 +102,18 @@ class App(QMainWindow):
         print("nextsamplebuttonclickked: {}".format(self.sample_index))
         self.update(input=True)
 
+    def prevsamplebuttonclickked(self):
+        '''Callback for clicking the "prev" sample button.
+        '''
+        self.sample_index = (self.sample_index - 1) % len(self.data)
+        print("prevsamplebuttonclickked: {}".format(self.sample_index))
+        self.update(input=True)
+
 
     def layerbuttonClicked(self, sample_index):
         '''Callback for clicking one of the layer buttons.
         '''
-        sender = self.sender()  
+        sender = self.sender()
         self.layer_label = sender.text()
         print("layerbuttonClicked: {}".format(self.layer_label))
         self.update(activation=True)
@@ -162,7 +136,7 @@ class App(QMainWindow):
             self.canvas_input2.myplot(self.data[self.sample_index,:,:,0])
             self.info_box.showInputInfo("{}/{}".format(self.sample_index,len(self.data)), self.data.shape[1:3])
             self.img_counter.setText("{}/{}".format(self.sample_index,len(self.data)))
-            if activation is None: activation = True 
+            if activation is None: activation = True
 
 
         if activation:
@@ -171,7 +145,7 @@ class App(QMainWindow):
             self.canvas_activation.plotactivat(activations)
             self.info_box.showLayerInfo(activations.shape,
                                         self.network.get_layer_info(self.layer_label))
-        
+
 
 
 
@@ -238,8 +212,8 @@ class PlotCanvas(FigureCanvas):
             intermediate_output = intermediate_output.reshape(1,1,1,intermediate_output.shape[1])
         # the axis of intermediate_output are:
         # (batch_size, width, height, output_channels)
-            
-        vm = np.max(intermediate_output) if fully_connected else None
+
+    #    vm = np.max(intermediate_output) if fully_connected else None
 
         # number of plots: plot all output channels
         nbofplots = intermediate_output.shape[3]
@@ -251,18 +225,20 @@ class PlotCanvas(FigureCanvas):
         ncolumns = nraws = math.ceil(np.sqrt(nbofplots))
 
         # the pixel map to be shown
-        ishow = np.zeros([imagesize*ncolumns,imagesize*ncolumns])
-        
+        ishow = np.ones([(imagesize+1)*ncolumns,(1+imagesize)*ncolumns])*2
+
         intermediate_output = np.swapaxes(intermediate_output,0,3)
         # the axis of intermediate_output are:
         # (output_channels, width, height, batch_size)
-        
+
         print("plotactivat: columns = {}, plots = {}".format(ncolumns,nbofplots))
-        for i in range(ncolumns):
-            ishow[i*imagesize:(i+1)*imagesize,0:imagesize*(nbofplots-i*ncolumns)]=np.hstack(intermediate_output[i*ncolumns:(i+1)*ncolumns,:,:,0])
+        for i in range(ncolumns-(ncolumns*ncolumns-nbofplots)//ncolumns):
+
+            ishow[i*(imagesize+1):(i+1)*(imagesize+1),0:(imagesize+1)*(nbofplots-i*ncolumns)]=np.hstack(np.lib.pad(intermediate_output[i*ncolumns:(i+1)*ncolumns,:,:,0],[(0,0),(0,1),(0,1)],'constant', constant_values=2))
+
 
         # FIXME: no negative values?
-        self.axes.imshow(ishow,vmin=0,vmax=vm,cmap='gray')
+        self.axes.imshow(ishow,vmin=0,cmap='gray')
         self.draw()
 
 
@@ -279,7 +255,7 @@ class MyImage2(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
         self.setScaledContents(True)
-        # an alternative may be to call 
+        # an alternative may be to call
         #     pixmap.scaled(self.size(), Qt.KeepAspectRatio)
         # in the myplot method.
 
@@ -292,9 +268,9 @@ class MyImage2(QLabel):
 
         # To construct a 8-bit monochrome QImage, we need a uint8
         # numpy array
-        if image.dtype != np.uint8: 
+        if image.dtype != np.uint8:
             image = (image*255).astype(np.uint8)
-            
+
         qtimage = QImage(image, image.shape[1], image.shape[0],
                          QImage.Format_Grayscale8)
         pixmap = QPixmap(qtimage)
@@ -323,4 +299,3 @@ class InfoBox(QLabel):
     def showInfo(self):
         self.setText(self.input_text + "<br>\n<br>\n" +
                      self.layer_text)
-        
