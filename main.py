@@ -20,6 +20,7 @@ if __name__ == '__main__':
     network = KerasNetwork(args.model)
     data = np.load(args.data)
     data=data.reshape(data.shape[0],data.shape[1],data.shape[2],1)
+
     app = QApplication(sys.argv)
     ex = App(network, data)
     sys.exit(app.exec_())
