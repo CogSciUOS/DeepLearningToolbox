@@ -76,14 +76,14 @@ class App(QMainWindow):
         # canvas_input: a canvas to display the input image
         self.canvas_input = MyImage(self, width=4, height=4)
         self.canvas_input.move(900,0)
-
+        self.canvas_input.resize(300,300)
         # canvas_activation: a canvas to display a layer activation
         self.canvas_activation = PlotCanvas(self, width=9, height=9)
         self.canvas_activation.move(0,0)
 
         # canvas_input2: a canvas to display the input image
         # (mayb be more efficient - check!)
-        self.canvas_input2 = MyImage2(self)
+        self.canvas_input2 = MyImage(self)
         self.canvas_input2.move(900,400)
         self.canvas_input2.resize(300,300)
 
@@ -109,7 +109,6 @@ class App(QMainWindow):
         print("prevsamplebuttonclickked: {}".format(self.sample_index))
         self.update(input=True)
 
-
     def layerbuttonClicked(self, sample_index):
         '''Callback for clicking one of the layer buttons.
         '''
@@ -132,8 +131,8 @@ class App(QMainWindow):
         print("update: {} ({}) ".format(self.layer_label,self.sample_index))
 
         if input:
-            self.canvas_input.myplot(self.data[self.sample_index,:,:,0])
-            self.canvas_input2.myplot(self.data[self.sample_index,:,:,0])
+            self.canvas_input.myplot(self.data[self.sample_index,:,:,0],'gray')
+            self.canvas_input2.myplot(np.asarray(self.network.get_relevance(self.network.get_activations_list(self.data[self.sample_index,:,:,0]),self.network.model.predict(self.data[self.sample_index:self.sample_index+1,:,:,0:1])))[0][:,:,0],'coolwarm')
             self.info_box.showInputInfo("{}/{}".format(self.sample_index,len(self.data)), self.data.shape[1:3])
             self.img_counter.setText("{}/{}".format(self.sample_index,len(self.data)))
             if activation is None: activation = True
@@ -168,10 +167,10 @@ class MyImage(FigureCanvas):
         self.draw()
 
 
-    def myplot(self, image):
+    def myplot(self, image,map):
         '''Plot the given image.
         '''
-        self.axes.imshow(image,cmap='gray')
+        self.axes.imshow(image,cmap=map)
         self.draw()
 
 
