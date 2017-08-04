@@ -242,7 +242,7 @@ class QMatrixView(QWidget):
         '''Get the zoom ratio. The zoom ratio is given by the size
         of the widget divided by the size of the zoomed image.
         '''
-        return (self.width / self._scaledImage.width(),
+        return (self.width() / self._scaledImage.width(),
                 self.height() / self._scaledImage.height())
 
 
