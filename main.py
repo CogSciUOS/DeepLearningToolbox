@@ -2,15 +2,15 @@
 
 import sys
 import argparse
-
-from PyQt5.QtWidgets import QApplication
 import numpy as np
 
-from gui import App
+from PyQt5.QtWidgets import QApplication
+
+from qtgui.main import DeepVisMainWindow
 from list_of_funnctions import KerasNetwork
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Neural network analysation.')
+    parser = argparse.ArgumentParser(description='Neural network analysis.')
     parser.add_argument("model", help = 'filename of model to use',
                         default = 'my2c2d_model.h5')
     parser.add_argument("data", help = 'filename of dataset to visualize',
@@ -19,8 +19,11 @@ if __name__ == '__main__':
 
     network = KerasNetwork(args.model)
     data = np.load(args.data)
-    data=data.reshape(data.shape[0],data.shape[1],data.shape[2],1)
+    data = data.reshape(data.shape[0],data.shape[1],data.shape[2],1)
 
     app = QApplication(sys.argv)
-    ex = App(network, data)
+    mainWindow = DeepVisMainWindow()
+    mainWindow.setNetwork(network, data)
+    mainWindow.show()
+
     sys.exit(app.exec_())
