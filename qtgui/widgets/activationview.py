@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from PyQt5.QtCore import Qt, QRect, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
@@ -15,35 +15,102 @@ class QActivationView(QWidget):
     activation : object = None
 
     selected = pyqtSignal(int)
+    
+    padding : int = 2
+
+    selectedUnit : int = None
+
+    def __init__(self, parent = None):
+        '''Initialization of the QMatrixView.
+
+        Arguments
+        ---------
+        matrix : numpy.ndarray
+            The matrix to be displayed in this QMatrixView.
+        parent : QWidget
+            The parent argument is sent to the QWidget constructor.
+        '''
+        super().__init__(parent)
+
+        self.selectedUnit = None
+
+        # By default, a QWidget does not accept the keyboard focus, so
+        # we need to enable it explicitly: Qt.StrongFocus means to
+        # get focus by "Tab" key as well as by mouse click.
+        self.setFocusPolicy(Qt.StrongFocus)
 
     def setActivation(self, activation):
 
         self.activation = activation
+
+        # unset selected entry
+        self.selectedUnit = None
+        
         if self.activation is not None:
             self.isConvolution = (len(self.activation.shape)>2)
 
-    def computerGeometry(self):
-        if self.activation is not None:
+            # normalization (values should be between 0 and 1)
+            min_value = self.activation.min()
+            max_value = self.activation.max()
+            value_range = max_value - min_value
+            self.activation = (self.activation - min_value)
+            if value_range > 0:
+                self.activation = self.activation/value_range
+
+            # check the shape
+            if self.isConvolution:
+                # for convolution we want activtation to be of shape
+                # (output_channels, width, height)
+                if len(self.activation.shape) == 4:
+                    # activation may include one axis for batches, i.e.,
+                    # the axis of _activation are:
+                    # (batch_size, width, height, output_channels)
+                    # we do not need it - just take the first
+                    # element from the batch
+                    self.activation = self.activation[0].transpose([2,0,1])
+                    #self.activation = np.swapaxes(self.activation,0,3)
+            else:
+                if len(self.activation.shape) == 2:
+                    # activation may include one axis for batches, i.e.,
+                    # we do not need it - just take the first
+                    # element from the batch
+                    self.activation = self.activation[0]
+
+            # change dtype to uint8
+            self.activation = np.ascontiguousarray(self.activation*255, np.uint8)
+
+        self._computeGeometry()
+        self.update()
+
+    def selectUnit(self, unit = None):
+        if self.selectedUnit != unit:
+            self.selectedUnit = unit
+            self.update()
+
+    def _computeGeometry(self):
+        if self.activation is None:
+            self.rows = None
+            self.columns = None
+            self.unitWidth = None
+            self.unitHeight = None            
+        else:
             # In case of a convolutional layer, the axes of activation are:
             # (batch_size, width, height, output_channels)
             # For fully connected (i.e., dense) layers, the axes are:
             # (batch_size, units)
             # In both cases, batch_size should be 1!
             self.isConvolution = (len(self.activation.shape)>2)
+            n = self.activation.shape[0]
             if self.isConvolution:
-                n = self.activation.shape[3]
                 # unitRatio = width/height
                 unitRatio = self.activation.shape[1]/self.activation.shape[2]
             else:
-                n = self.activation.shape[1]
                 unitRatio = 1
 
             # FIXME: implement better computation!
             # - allow for rectangular (i.e. non-quadratic) widget size
             # - allow for rectangular (i.e. non-quadratic) convolution filters
             # and maintain aspect ratio ...
-
-            self.padding = 2
 
             # unitRatio = w/h
             # unitSize = w*h
@@ -68,7 +135,6 @@ class QActivationView(QWidget):
         ---------
         event : QPaintEvent       
         '''
-        self.computerGeometry()
         qp = QPainter()
         qp.begin(self)
         if self.activation is None:
@@ -77,13 +143,54 @@ class QActivationView(QWidget):
             self._drawConvolution(qp)
         else:
             self._drawDense(qp)
+        if self.selectedUnit is not None:
+            self._drawSelection(qp)
+
         qp.end()
 
-    def getUnitRect(self, unit, padding = 0):
+
+    def _getUnitRect(self, unit : int, padding : int = None):
+        '''Get the rectangle (screen position and size) occupied by the given
+        unit.
+
+        
+        Arguments
+        ---------
+        unit : index of the unit of interest
+        padding: padding of the unit.
+            If None is given, standard padding value of this QActivationView
+            will be use.
+        '''
+        if padding is None:
+            padding = self.padding
         return QRect(self.unitWidth * (unit % self.columns) + padding,
                      self.unitHeight * (unit // self.columns) + padding,
                      self.unitWidth - 2*padding,
                      self.unitHeight - 2*padding)
+
+
+    def _unitAtPosition(self, position : QPoint):
+        '''Compute the entry corresponding to some point in this widget.
+
+        Arguments
+        ---------
+        position
+            The position of the point in question (in Widget coordinates).
+
+        Returns
+        -------
+        The unit occupying that position of None
+        if no entry corresponds to that position.
+        '''
+        
+        if self.activation is None:
+            return None
+        unit = ((position.y() // self.unitHeight) * self.columns +
+                (position.x() // self.unitWidth))
+        if unit >= self.activation.shape[0]:
+            unit = None
+        return unit
+
 
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer.
@@ -93,51 +200,15 @@ class QActivationView(QWidget):
         qp : QPainter
         '''
 
-
-        # vm = np.max(intermediate_output) if fully_connected else None
-
-        # number of plots: plot all output channels
-        number_of_plots = self.activation.shape[3]
-
         # image size: filter size (or a single pixel per neuron)
         filter_width, filter_height = self.activation.shape[1:3]
-
-        # number of columns and rows (arrange as square)
-        #ncolumns = nraws = math.ceil(np.sqrt(nbofplots))
-
-        # FIXME[old]
-        # the pixel map to be shown
-        #output_array = np.ones([(self.unitHeight+1) * self.rows,
-        #                        (self.unitWidth+1) * self.columns])*2
-
-        # the axis of _activation are:
-        # (output_channels, width, height, batch_size)
         
-        print("shape={}, dtype={}, min={}, max={}".format(self.activation.shape,self.activation.dtype,self.activation.min(),self.activation.max()))
-        _activation = np.swapaxes(self.activation*255,0,3).astype(np.uint8).copy()
-        # FIXME[hack]: we copy here to get the activation in the
-        # correct memory order, so that we can construct a QImage.
-        # This may be inefficient - is there a better way?
-        
-        for unit in range(_activation.shape[0]):
-            image = QImage(_activation[unit],
+        for unit in range(self.activation.shape[0]):
+            image = QImage(self.activation[unit],
                            filter_width, filter_height,
                            QImage.Format_Grayscale8)
-            qp.drawImage(self.getUnitRect(unit, self.padding), image)
+            qp.drawImage(self._getUnitRect(unit), image)
 
-        self.selectedUnit = 2
-        if self.selectedUnit is not None:
-            pen_width = 4
-            pen_color = Qt.red
-            pen = QPen(pen_color)
-            pen.setWidth(pen_width)
-            qp.setPen(pen)
-            qp.drawRect(self.getUnitRect(self.selectedUnit))
-        
-
-        qp.fillRect(QRect(0, self.height()//2-20, self.width(), 40), QBrush(QColor(Qt.yellow)))
-        qp.setPen(Qt.red);
-        qp.drawText(QRect(0, 0, self.width(), self.height()), Qt.AlignCenter, "FIXME[bug]: convolution currently does not work!")
 
 
     def _drawDense(self, qp):
@@ -147,11 +218,20 @@ class QActivationView(QWidget):
         ---------
         qp : QPainter
         '''
-        for i in range(self.activation.shape[1]):
-            value = max(0,min(int(self.activation[0,i] * 255),255))
-            qp.fillRect(self.getUnitRect(unit, self.padding),
+        for unit, value in enumerate(self.activation):
+            qp.fillRect(self._getUnitRect(unit),
                         QBrush(QColor(value,value,value)))
 
+
+    def _drawSelection(self, qp):
+
+        pen_width = 4
+        pen_color = Qt.red
+        pen = QPen(pen_color)
+        pen.setWidth(pen_width)
+        qp.setPen(pen)
+        qp.drawRect(self._getUnitRect(self.selectedUnit,0))
+        
 
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.
@@ -163,6 +243,38 @@ class QActivationView(QWidget):
         qp.drawText(self.rect(), Qt.AlignCenter, "No data!")
 
 
+
+    def mousePressEvent(self, event):
+        '''Process mouse event.
+        
+        Arguments
+        ---------
+        event : QMouseEvent
+        '''
+        self.selectUnit(self._unitAtPosition(event.pos()))
+
+
+    def mouseReleaseEvent(self, event):
+        '''Process mouse event.
+        Arguments
+        ---------
+        event : QMouseEvent
+        '''
+        # As we implement .mouseDoubleClickEvent(), we
+        # also provide stubs for the other mouse events to not confuse
+        # other widgets.
+        pass
+
+    def mouseDoubleClickEvent(self, event):
+        '''Process a double click. We use double click to select a
+        matrix entry.
+
+        Arguments
+        ---------
+        event : QMouseEvent
+        '''
+        self.selectUnit(self._unitAtPosition(event.pos()))
+    
 
     def keyPressEvent(self, event):
         '''Process special keys for this widget.

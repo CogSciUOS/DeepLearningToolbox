@@ -46,7 +46,7 @@ class ActivationsPanel(QWidget):
 
         # activationview: a canvas to display a layer activation
         #self.activationview = PlotCanvas(None, width=9, height=9)
-        self.activationview = QActivationView(None, width=9, height=9)
+        self.activationview = QActivationView()
 
         activationLayout = QVBoxLayout()
         activationLayout.addWidget(self.activationview)

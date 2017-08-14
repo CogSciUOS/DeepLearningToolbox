@@ -18,6 +18,12 @@ class QImageView(QLabel):
         # in the myplot method.
 
 
+
+    def setMask(self, mask, position):
+        self.mask = mask
+        QImage.Format_ARGB32
+        self.update()
+
     def myplot(self, image):
         '''Display the given image. Image is supposed to be a numpy array.
         '''
