@@ -19,6 +19,8 @@ class QActivationView(QWidget):
     def setActivation(self, activation):
 
         self.activation = activation
+        if self.activation is not None:
+            self.isConvolution = (len(self.activation.shape)>2)
 
     def computerGeometry(self):
         if self.activation is not None:
@@ -45,7 +47,6 @@ class QActivationView(QWidget):
 
             # unitRatio = w/h
             # unitSize = w*h
-            unitRatio = 1 # FIXME[todo]
             unitSize = (self.width() * self.height()) / n
 
             unitHeight = math.floor(math.sqrt(unitSize/unitRatio))
@@ -78,6 +79,11 @@ class QActivationView(QWidget):
             self._drawDense(qp)
         qp.end()
 
+    def getUnitRect(self, unit, padding = 0):
+        return QRect(self.unitWidth * (unit % self.columns) + padding,
+                     self.unitHeight * (unit // self.columns) + padding,
+                     self.unitWidth - 2*padding,
+                     self.unitHeight - 2*padding)
 
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer.
@@ -106,27 +112,28 @@ class QActivationView(QWidget):
 
         # the axis of _activation are:
         # (output_channels, width, height, batch_size)
-        _activation = np.swapaxes(self.activation,0,3).copy()
+        
+        print("shape={}, dtype={}, min={}, max={}".format(self.activation.shape,self.activation.dtype,self.activation.min(),self.activation.max()))
+        _activation = np.swapaxes(self.activation*255,0,3).astype(np.uint8).copy()
         # FIXME[hack]: we copy here to get the activation in the
         # correct memory order, so that we can construct a QImage.
         # This may be inefficient - is there a better way?
-
         
-        for i in range(_activation.shape[0]):
-            #value = max(0,min(int(self.activation[0,i] * 255),255))
-            row = i % self.columns
-            col = i // self.columns
-            rect = QRect(self.unitWidth*row + self.padding,
-                         self.unitHeight*col + self.padding,
-                         self.unitWidth-2*self.padding,
-                         self.unitHeight-2*self.padding)
-            image = QImage(_activation[i],
+        for unit in range(_activation.shape[0]):
+            image = QImage(_activation[unit],
                            filter_width, filter_height,
                            QImage.Format_Grayscale8)
-            qp.drawImage(rect, image)
-            # FIXME[old]:
-            #for i in range(ncolumns-(ncolumns*ncolumns-nbofplots)//ncolumns):
-            #    ishow[i*(imagesize+1):(i+1)*(imagesize+1),0:(imagesize+1)*(nbofplots-i*ncolumns)]=np.hstack(np.lib.pad(_activation[i*ncolumns:(i+1)*ncolumns,:,:,0],[(0,0),(0,1),(0,1)],'constant', constant_values=2))
+            qp.drawImage(self.getUnitRect(unit, self.padding), image)
+
+        self.selectedUnit = 2
+        if self.selectedUnit is not None:
+            pen_width = 4
+            pen_color = Qt.red
+            pen = QPen(pen_color)
+            pen.setWidth(pen_width)
+            qp.setPen(pen)
+            qp.drawRect(self.getUnitRect(self.selectedUnit))
+        
 
         qp.fillRect(QRect(0, self.height()//2-20, self.width(), 40), QBrush(QColor(Qt.yellow)))
         qp.setPen(Qt.red);
@@ -142,16 +149,7 @@ class QActivationView(QWidget):
         '''
         for i in range(self.activation.shape[1]):
             value = max(0,min(int(self.activation[0,i] * 255),255))
-            #qp.setPen(color);
-            #qp.setBrush(Qt.NoBrush);
-            row = i % self.columns
-            col = i // self.columns
-            x = row * self.unitWidth
-            y = col * self.unitHeight
-            qp.fillRect(math.floor(x)+self.padding,
-                        math.floor(y)+self.padding,
-                        math.ceil(self.unitWidth-2*self.padding),
-                        math.ceil(self.unitHeight-2*self.padding),
+            qp.fillRect(self.getUnitRect(unit, self.padding),
                         QBrush(QColor(value,value,value)))
 
 
@@ -162,4 +160,35 @@ class QActivationView(QWidget):
         ---------
         qp : QPainter
         '''
-        qp.drawText(QRect(0, 0, self.width(), self.height()), Qt.AlignCenter, "No data!")
+        qp.drawText(self.rect(), Qt.AlignCenter, "No data!")
+
+
+
+    def keyPressEvent(self, event):
+        '''Process special keys for this widget.
+        Allow moving selected entry using the cursor key.
+
+        Arguments
+        ---------
+        event : QKeyEvent
+        '''
+        key = event.key()
+        # Space will toggle display of tooltips
+        if key == Qt.Key_Space:
+            self.setToolTip(not self.toolTipActive)
+            # Arrow keyes will move the selected entry
+        elif self.selectedUnit is not None:
+            row = self.selectedUnit % self.columns
+            col = self.selectedUnit // self.columns
+            if key == Qt.Key_Left:
+                self.setSelection((row,col-1))
+            elif key == Qt.Key_Up:
+                self.setSelection((row-1,col))
+            elif key == Qt.Key_Right:
+                self.setSelection((row,col+1))
+            elif key == Qt.Key_Down:
+                self.setSelection((row+1,col))
+            else:
+                event.ignore()
+        else:
+            event.ignore()
