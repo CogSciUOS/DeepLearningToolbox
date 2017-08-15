@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QWidget
 
 class QActivationView(QWidget):
 
+
     activation : object = None
 
     selected = pyqtSignal(int)
@@ -85,7 +86,15 @@ class QActivationView(QWidget):
     def selectUnit(self, unit = None):
         if self.selectedUnit != unit:
             self.selectedUnit = unit
+            self.selected.emit(self.selectedUnit)
             self.update()
+
+    def getUnitActivation(self, unit = None):
+        if unit is None:
+            unit = self.selectedUnit
+        if self.activation is None or unit is None:
+            return None
+        return self.activation[self.selectedUnit]
 
     def _computeGeometry(self):
         if self.activation is None:

@@ -47,6 +47,7 @@ class ActivationsPanel(QWidget):
         # activationview: a canvas to display a layer activation
         #self.activationview = PlotCanvas(None, width=9, height=9)
         self.activationview = QActivationView()
+        self.activationview.selected.connect(self.setUnit)
 
         activationLayout = QVBoxLayout()
         activationLayout.addWidget(self.activationview)
@@ -187,6 +188,12 @@ class ActivationsPanel(QWidget):
         # FIXME[todo]: move to self.setLabel() once activations.shape is not needed anymore ...
         self.networkinfo.setLayer(self.layer, None if activations is None else activations.shape)
             
+
+    def setUnit(self, unit : int = None):
+        self.inputview.setActivationMask(self.activationview.getUnitActivation(unit))
+        # FIXME[hack]
+        self.inputview.myplot(self.data[self.dataIndex,:,:,0])
+
 
     def setInputData(self, data = None):
         '''Provide a collection of input data for the network.
