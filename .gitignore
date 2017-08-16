@@ -1,0 +1,4 @@
+# Ignore all numpy data files.
+*.npy
+# Ignore keras model files.
+*.h5
