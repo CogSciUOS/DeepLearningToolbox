@@ -11,14 +11,19 @@ from list_of_funnctions import KerasNetwork
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Neural network analysis.')
-    parser.add_argument("model", help = 'filename of model to use',
-                        default = 'my2c2d_model.h5')
-    parser.add_argument("data", help = 'filename of dataset to visualize',
-                        default = 'data.npy')
+    parser.add_argument("--model", help = 'filename of model to use',
+                        default = 'models/keras_mnist_model_example.h5')
+    parser.add_argument("--data", help = 'filename of dataset to visualize',
+                        default = 'mnist')
     args = parser.parse_args()
 
     network = KerasNetwork(args.model)
-    data = np.load(args.data)
+    if args.data=='mnist':
+        from keras.datasets import mnist
+        data = mnist.load_data()[0][0]
+    else:
+        data = np.load(args.data)
+    
     data = data.reshape(data.shape[0],data.shape[1],data.shape[2],1)
 
     app = QApplication(sys.argv)
