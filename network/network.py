@@ -6,7 +6,8 @@ class BaseNetwork:
     def __init__(self):
         raise NotImplementedError
 
-    def get_layer_id_list(self):
+    @property
+    def layer_ids(self) -> list:
         """
         Get list of layer ids.
         Returns
@@ -30,20 +31,19 @@ class BaseNetwork:
         """
         raise NotImplementedError
 
-    def get_activations(self, layer_id, input_samples: np.ndarray) -> np.ndarray:
-        """
-        Gives activations values of the network/model
+    def get_activations(selfs, layer_ids: list, input_samples: np.ndarray) -> list:
+        """Gives activations values of the network/model
         for a given layername and an input (inputsample).
         Parameters
         ----------
-        layer_id
-        inputsample
+        layer_ids: The layers the activations should be fetched for.
+        input_samples: Array of samples the activations should be computed for.
 
         Returns
         -------
+        Array of shape (input_samples, image_height, image_width, feature_maps).
 
         """
-
         raise NotImplementedError
 
     def get_layer_weights(self, layer_id) -> np.ndarray:

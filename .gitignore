@@ -2,3 +2,5 @@
 *.npy
 # Ignore keras model files.
 *.h5
+#
+.idea/
