@@ -74,7 +74,7 @@ class ActivationsPanel(QWidget):
 
         # inputselect: a widget to select the input to the network
         # (data array, image directory, webcam, ...)
-        # the "next" button: used to load the next image 
+        # the "next" button: used to load the next image
         self.inputselector = QInputSelector()
         self.inputselector.setNumberOfElements(20) # FIXME[hack]
         self.inputselector.selected.connect(self.setInput)
@@ -90,7 +90,7 @@ class ActivationsPanel(QWidget):
         inputLayout.addWidget(self.inputview)
         inputLayout.addWidget(self.inputinfo)
         inputLayout.addWidget(self.inputselector)
-        
+
         inputBox = QGroupBox("Input")
         inputBox.setLayout(inputLayout)
 
@@ -110,7 +110,7 @@ class ActivationsPanel(QWidget):
         self.networks = { 'None': None }
         self.networkselector.addItems(self.networks.keys())
         self.networkselector.activated.connect(lambda i:self.setNetwork(self.networks[self.networkselector.currentText()]))
-        
+
         # layerinfo: display input and layer info
         self.networkinfo = QNetworkInfoBox()
         # FIXME[layout]
@@ -128,7 +128,7 @@ class ActivationsPanel(QWidget):
         #
         # Putting all together
         #
-        
+
         layout = QHBoxLayout()
         layout.addWidget(activationBox)
         layout.addWidget(inputBox)
@@ -165,14 +165,16 @@ class ActivationsPanel(QWidget):
             self.setLayer(None)
 
 
-    def setLayer(self, layer : str = None):
+    def setLayer(self, layer = None):
+        print("setLayer : {} -> {}".format(self.layer,layer))
         if layer != self.layer:
             self.layer = layer
+            self.networkinfo.setLayer(self.layer)
             self.updateActivation()
 
 
     def updateActivation(self):
-        
+
         if self.network is None:
             activations = None
         elif self.layer is None:
@@ -181,19 +183,12 @@ class ActivationsPanel(QWidget):
             activations = None
         else:
             input = self.data[self.dataIndex:self.dataIndex+1,:,:,0:1]
-            activations = self.network.get_activations(self.layer, input)
-            
-        self.activationview.setActivation(activations)
+            activations = self.network.get_activations([self.layer], input)[0]
 
-        # FIXME[todo]: move to self.setLabel() once activations.shape is not needed anymore ...
-        self.networkinfo.setLayer(self.layer, None if activations is None else activations.shape)
-            
+        self.activationview.setActivation(activations)
 
     def setUnit(self, unit : int = None):
         self.inputview.setActivationMask(self.activationview.getUnitActivation(unit))
-        # FIXME[hack]
-        self.inputview.myplot(self.data[self.dataIndex,:,:,0])
-
 
     def setInputData(self, data = None):
         '''Provide a collection of input data for the network.
@@ -220,11 +215,10 @@ class ActivationsPanel(QWidget):
 
     def updateInput(self):
         if self.dataIndex is not None:
-            self.inputview.myplot(self.data[self.dataIndex,:,:,0])
+            self.inputview.setImage(self.data[self.dataIndex,:,:,0])
             self.inputinfo.showInfo("{}/{}".
                                     format(self.dataIndex,len(self.data)),
                                     self.data.shape[1:3])
             self.updateActivation()
         else:
             print("FIXME: no input data selected!")
-

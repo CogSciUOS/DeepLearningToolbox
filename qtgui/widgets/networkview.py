@@ -43,7 +43,7 @@ class QNetworkView(QWidget):
 
         if self.network is not None:
             # a column of buttons to select the network layer
-            for i,name in enumerate(self.network.get_layer_list()):
+            for i,name in enumerate(self.network.layer_ids):
                 button = QPushButton(name, self)
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
@@ -75,11 +75,11 @@ class QNetworkView(QWidget):
                 oldItem = self.layout().itemAt(self.active)
                 if oldItem is not None:
                     oldItem.widget().setStyleSheet("")
-            
+
             # assign the new active layer
             self.active = active
             if isinstance(self.active, str):
-                for index, label in enumerate(self.network.get_layer_list()):
+                for index, label in enumerate(self.network.layer_ids):
                     if active == label:
                         self.active = index
 
@@ -106,7 +106,7 @@ class QNetworkInfoBox(QLabel):
 
     network : object = None
     networkText = ""
-    
+
     layer = None
     layerText = ""
 
@@ -123,27 +123,43 @@ class QNetworkInfoBox(QLabel):
                 self.networkText += "No network selected"
             else:
                 self.networkText += "FIXME[todo]: obtain network information ..."
+                self.networkText += "<br>\n<b>class:</b> {}".format(type(self.network).__name__)
         self.setLayer(layer)
 
 
-    def setLayer(self, layer = None, shape = None):
+    def setLayer(self, layer = None):
         # FIXME: shape should be obtain from self.network, not passed as argument!
-        if layer != self.layer or not self.layerText:
-            self.layer = layer
+        print("setLayer2 : {} -> {}".format(self.layer,layer))
 
+        if layer != self.layer or not self.layerText:
             if self.network is None:
                 self.layerText = ""
+                self.layer = None
             else:
+                self.layer = layer
                 self.layerText = "<br>\n<br>\n"
                 self.layerText += "<b>Layer info:</b> "
-        
+
                 if self.layer is None:
                     self.layerText += "No layer selected"
                 else:
-                    info = self.network.get_layer_info(self.layer)
-                    self.layerText += info['name'] + "<br>\n"
+                    shape = None
+                    try:
+                        shape = self.network.get_layer_output_shape(self.layer)
+                        info = self.network.get_layer_info(self.layer)
+                        self.layerText += info['name'] + "<br>\n"
+                    except NotImplementedError:
+                        self.layerText += "The implementation provides no information for this layer.<br>\n"
                     self.layerText += ("Fully connected" if len(shape) == 2 else "Convolutional") + "<br>\n"
                     self.layerText += "Shape: {}<br>\n".format(shape)
+                    print(shape)
+                    if shape is not None and len(shape) > 2:
+                        try:
+                            weights, bias = self.network.get_layer_weights(self.layer)
+                            self.layerText += "{} kernels of size {}x{}<br>\n".format(weights.shape[3],weights.shape[1],weights.shape[0])
+                        except NotImplementedError:
+                            self.layerText += "The implementation provides no further information.<br>\n"
+                        except ValueError:
+                            self.layerText += "FIXME: ValueError!<br>\n"
 
         self.setText(self.networkText + self.layerText)
-
