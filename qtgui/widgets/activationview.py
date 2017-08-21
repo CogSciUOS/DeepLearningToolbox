@@ -210,11 +210,12 @@ class QActivationView(QWidget):
         '''
 
         # image size: filter size (or a single pixel per neuron)
-        filter_width, filter_height = self.activation.shape[1:3]
+        map_width, map_height = self.activation.shape[1:3]
         
         for unit in range(self.activation.shape[0]):
             image = QImage(self.activation[unit],
-                           filter_width, filter_height,
+                           map_width, map_height,
+                           map_width,
                            QImage.Format_Grayscale8)
             qp.drawImage(self._getUnitRect(unit), image)
 
