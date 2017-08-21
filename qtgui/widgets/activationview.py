@@ -6,7 +6,6 @@ from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
 
-# FIXME[todo]: repair convolution view!
 # FIXME[todo]: add docstrings!
 
 
@@ -217,15 +216,12 @@ class QActivationView(QWidget):
         '''
 
         # image size: filter size (or a single pixel per neuron)
-        filter_width, filter_height = self.activation.shape[1:3]
-
+        map_width, map_height = self.activation.shape[1:3]
 
         for unit in range(self.activation.shape[0]):
-            # FIXME[problem]: there seem to be some memory alignment
-            # issues here: QImage
             image = QImage(self.activation[unit],
-                           filter_width, filter_height,
-                           filter_width,
+                           map_width, map_height,
+                           map_width,
                            QImage.Format_Grayscale8)
             qp.drawImage(self._getUnitRect(unit), image)
 
