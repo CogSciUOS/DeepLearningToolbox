@@ -7,7 +7,8 @@ import numpy as np
 from PyQt5.QtWidgets import QApplication
 
 from qtgui.main import DeepVisMainWindow
-from list_of_funnctions import KerasNetwork
+#from list_of_funnctions import KerasNetwork
+from network import KerasTensorFlowNetwork
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Neural network analysis.')
@@ -17,13 +18,14 @@ if __name__ == '__main__':
                         default = 'mnist')
     args = parser.parse_args()
 
-    network = KerasNetwork(args.model)
+    #network = KerasNetwork(args.model)
+    network = KerasTensorFlowNetwork(args.model)
     if args.data=='mnist':
         from keras.datasets import mnist
         data = mnist.load_data()[0][0]
     else:
         data = np.load(args.data)
-    
+
     data = data.reshape(data.shape[0],data.shape[1],data.shape[2],1)
 
     app = QApplication(sys.argv)

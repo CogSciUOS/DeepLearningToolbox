@@ -6,7 +6,6 @@ from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
 
-# FIXME[todo]: repair convolution view!
 # FIXME[todo]: add docstrings!
 
 
@@ -16,7 +15,7 @@ class QActivationView(QWidget):
     activation : object = None
 
     selected = pyqtSignal(int)
-    
+
     padding : int = 2
 
     selectedUnit : int = None
@@ -46,7 +45,7 @@ class QActivationView(QWidget):
 
         # unset selected entry
         self.selectedUnit = None
-        
+
         if self.activation is not None:
             self.isConvolution = (len(self.activation.shape)>2)
 
@@ -68,8 +67,11 @@ class QActivationView(QWidget):
                     # (batch_size, width, height, output_channels)
                     # we do not need it - just take the first
                     # element from the batch
-                    self.activation = self.activation[0].transpose([2,0,1])
-                    #self.activation = np.swapaxes(self.activation,0,3)
+                    self.activation = self.activation.squeeze(axis=0)
+                # (width, height, output_channels)
+                #  to (output_channels, width, height)
+                self.activation = self.activation.transpose([2,0,1])
+                #self.activation = np.swapaxes(self.activation,0,3)
             else:
                 if len(self.activation.shape) == 2:
                     # activation may include one axis for batches, i.e.,
@@ -84,6 +86,10 @@ class QActivationView(QWidget):
         self.update()
 
     def selectUnit(self, unit = None):
+        if self.activation is None:
+            unit = None
+        elif unit is not None and (unit < 0 or unit >= self.activation.shape[0]):
+            unit = None
         if self.selectedUnit != unit:
             self.selectedUnit = unit
             self.selected.emit(self.selectedUnit)
@@ -92,7 +98,7 @@ class QActivationView(QWidget):
     def getUnitActivation(self, unit = None):
         if unit is None:
             unit = self.selectedUnit
-        if self.activation is None or unit is None:
+        if self.activation is None or unit is None or not self.isConvolution:
             return None
         return self.activation[self.selectedUnit]
 
@@ -101,7 +107,7 @@ class QActivationView(QWidget):
             self.rows = None
             self.columns = None
             self.unitWidth = None
-            self.unitHeight = None            
+            self.unitHeight = None
         else:
             # In case of a convolutional layer, the axes of activation are:
             # (batch_size, width, height, output_channels)
@@ -132,17 +138,17 @@ class QActivationView(QWidget):
             unitWidth = math.floor(unitRatio * self.unitHeight)
             self.columns = math.ceil(self.width()/unitWidth)
             self.unitWidth = math.floor(self.width()/self.columns)
-            
+
         self.update()
 
 
-        
+
     def paintEvent(self, event):
         '''Process the paint event by repainting this Widget.
 
         Arguments
         ---------
-        event : QPaintEvent       
+        event : QPaintEvent
         '''
         qp = QPainter()
         qp.begin(self)
@@ -162,7 +168,7 @@ class QActivationView(QWidget):
         '''Get the rectangle (screen position and size) occupied by the given
         unit.
 
-        
+
         Arguments
         ---------
         unit : index of the unit of interest
@@ -191,7 +197,7 @@ class QActivationView(QWidget):
         The unit occupying that position of None
         if no entry corresponds to that position.
         '''
-        
+
         if self.activation is None:
             return None
         unit = ((position.y() // self.unitHeight) * self.columns +
@@ -203,18 +209,19 @@ class QActivationView(QWidget):
 
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer.
-        
+
         Arguments
         ---------
         qp : QPainter
         '''
 
         # image size: filter size (or a single pixel per neuron)
-        filter_width, filter_height = self.activation.shape[1:3]
-        
+        map_width, map_height = self.activation.shape[1:3]
+
         for unit in range(self.activation.shape[0]):
             image = QImage(self.activation[unit],
-                           filter_width, filter_height,
+                           map_width, map_height,
+                           map_width,
                            QImage.Format_Grayscale8)
             qp.drawImage(self._getUnitRect(unit), image)
 
@@ -222,7 +229,7 @@ class QActivationView(QWidget):
 
     def _drawDense(self, qp):
         '''Draw activation values for a dense layer.
-        
+
         Arguments
         ---------
         qp : QPainter
@@ -240,11 +247,11 @@ class QActivationView(QWidget):
         pen.setWidth(pen_width)
         qp.setPen(pen)
         qp.drawRect(self._getUnitRect(self.selectedUnit,0))
-        
+
 
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.
-        
+
         Arguments
         ---------
         qp : QPainter
@@ -255,7 +262,7 @@ class QActivationView(QWidget):
 
     def mousePressEvent(self, event):
         '''Process mouse event.
-        
+
         Arguments
         ---------
         event : QMouseEvent
@@ -283,7 +290,7 @@ class QActivationView(QWidget):
         event : QMouseEvent
         '''
         self.selectUnit(self._unitAtPosition(event.pos()))
-    
+
 
     def keyPressEvent(self, event):
         '''Process special keys for this widget.
@@ -297,18 +304,20 @@ class QActivationView(QWidget):
         # Space will toggle display of tooltips
         if key == Qt.Key_Space:
             self.setToolTip(not self.toolTipActive)
-            # Arrow keyes will move the selected entry
+        # Arrow keyes will move the selected entry
         elif self.selectedUnit is not None:
             row = self.selectedUnit % self.columns
             col = self.selectedUnit // self.columns
             if key == Qt.Key_Left:
-                self.setSelection((row,col-1))
+                self.selectUnit(self.selectedUnit-1)
             elif key == Qt.Key_Up:
-                self.setSelection((row-1,col))
+                self.selectUnit(self.selectedUnit-self.columns)
             elif key == Qt.Key_Right:
-                self.setSelection((row,col+1))
+                self.selectUnit(self.selectedUnit+1)
             elif key == Qt.Key_Down:
-                self.setSelection((row+1,col))
+                self.selectUnit(self.selectedUnit+self.columns)
+            elif key == Qt.Key_Escape:
+                self.selectUnit(None)
             else:
                 event.ignore()
         else:
