@@ -166,11 +166,15 @@ class ActivationsPanel(QWidget):
 
 
     def setLayer(self, layer = None):
-        print("setLayer : {} -> {}".format(self.layer,layer))
         if layer != self.layer:
             self.layer = layer
             self.networkinfo.setLayer(self.layer)
-            self.updateActivation()
+
+        ## We update the activation on every invocation, no matter if
+        ## the selected layer changed. This allows for some dynamics
+        ## if layers like dropout are involved. However, if such
+        ## layers do not exist, it will only waste computing power ...
+        self.updateActivation()
 
 
     def updateActivation(self):
@@ -187,8 +191,15 @@ class ActivationsPanel(QWidget):
 
         self.activationview.setActivation(activations)
 
+
     def setUnit(self, unit : int = None):
-        self.inputview.setActivationMask(self.activationview.getUnitActivation(unit))
+        """This methode is involved when the currently selected unit (e.g., in
+        the activationview) has changed. This change should be
+        reflected in other widgets.
+        """
+        activationMask = self.activationview.getUnitActivation(unit)
+        self.inputview.setActivationMask(activationMask)
+
 
     def setInputData(self, data = None):
         '''Provide a collection of input data for the network.

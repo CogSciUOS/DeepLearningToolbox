@@ -1,14 +1,34 @@
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QWidget, QPushButton, QVBoxLayout
 
-# FIXME[todo]: add docstrings!
+from network import BaseNetwork
+
 
 class QNetworkView(QWidget):
+    """A simple widget to display information on a network and select a
+    layer.
+    """
 
-    # FIXME: int (index) or str (label)?
-    selected = pyqtSignal(str)
+    network : BaseNetwork = None
+    """The network currently displayed in this QNetworkView.
+    """
 
+    active = None
+    """The identifier of the currently selected layer.  The actual type of
+    the identifier depends on the network implementation. The value
+    None indicates that no layer is currently selectd.
+    """
 
+    selected = pyqtSignal(object)
+    """A signal that will be emitted everytime a layer is selected in this
+    view. The signal will be emitted multiple times if the same layer
+    is pressed multiple times in a raw, as some layers (like dropout),
+    may change on every activation. The argument provided by the
+    signal will be the layer_id, i.e. the identifier of the label in
+    the current network.
+    """
+
+    
     def __init__(self, parent = None):
         '''Initialization of the QNetworkView.
 
@@ -22,18 +42,22 @@ class QNetworkView(QWidget):
         self.setNetwork()
 
 
-    def initUI(self):
+    def initUI(self) -> None:
+        '''Initialize the user interface.
+        '''
         self.setLayout(QVBoxLayout())
 
 
     def setNetwork(self, network = None):
+        '''Set the network to display in this widget
+        '''
         self.network = network
         self.active = None
 
         layout = self.layout()
 
-        # remove the old network buttons
-        # (still not sure what is the correct way to do:
+        ## remove the old network buttons
+        # FIXME[todo]: (still not sure what is the correct way to do:
         # widget.deleteLater(), widget.close(), widget.setParent(None), or
         # layout.removeWidget(widget) + widget.setParent(None))
         while layout.count():
@@ -42,15 +66,18 @@ class QNetworkView(QWidget):
                 item.widget().deleteLater()
 
         if self.network is not None:
-            # a column of buttons to select the network layer
+            ## a column of buttons to select the network layer
             for i,name in enumerate(self.network.layer_ids):
                 button = QPushButton(name, self)
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
                 button.clicked.connect(self.layerClicked)
 
-            # choose the active layer for the new network
+            ## choose the active layer for the new network
             #self.setActiveLayer(0)
+            self.setActiveLayer(None)
+        else:
+            self.setActiveLayer(None)
 
         self.update()
 
@@ -70,13 +97,13 @@ class QNetworkView(QWidget):
             The index or the name of the layer to activate.
         '''
         if active != self.active:
-            # unmark the previously active layer
+            ## unmark the previously active layer
             if self.active is not None:
                 oldItem = self.layout().itemAt(self.active)
                 if oldItem is not None:
                     oldItem.widget().setStyleSheet("")
 
-            # assign the new active layer
+            ## assign the new active layer
             self.active = active
             if isinstance(self.active, str):
                 for index, label in enumerate(self.network.layer_ids):
@@ -87,27 +114,34 @@ class QNetworkView(QWidget):
                     self.active = None
                     # FIXME: Maybe throw exception!
 
-            # and mark the new active layer
+            ## and mark the new active layer
             if self.active is not None:
                 newItem = self.layout().itemAt(self.active)
                 if newItem is not None:
                     newItem.widget().setStyleSheet("background-color: red")
 
-            # FIXME[question]: what to emit: index or label?
-            #self.selected.emit(self.active)
-            self.selected.emit(active)
+        # FIXME[question]: what to emit: index or label?
+        #self.selected.emit(self.active)
+        self.selected.emit(active)
 
 
-# FIXME[todo]: add docstrings!
+##
+## QNetworkInfoBox
+##
 
 from PyQt5.QtWidgets import QLabel
+from collections import OrderedDict
+from network import BaseNetwork
 
 class QNetworkInfoBox(QLabel):
-
-    network : object = None
+    """A simple widget to display information on a network and a selected
+    layer.
+    """
+    
+    network : BaseNetwork = None
     networkText = ""
 
-    layer = None
+    layer_id = None
     layerText = ""
 
     def __init__(self, parent = None):
@@ -115,7 +149,15 @@ class QNetworkInfoBox(QLabel):
         self.setWordWrap(True)
         self.setNetwork()
 
-    def setNetwork(self, network = None, layer = None):
+
+    def setNetwork(self, network : BaseNetwork = None, layer_id = None) -> None:
+        """Set the network for which information are displayed.
+
+        Arguments
+        ---------
+        network
+            The network.
+        """
         if self.network != network or not self.networkText:
             self.network = network
             self.networkText = "<b>Network info:</b> "
@@ -124,42 +166,96 @@ class QNetworkInfoBox(QLabel):
             else:
                 self.networkText += "FIXME[todo]: obtain network information ..."
                 self.networkText += "<br>\n<b>class:</b> {}".format(type(self.network).__name__)
-        self.setLayer(layer)
+        self.setLayer(layer_id)
 
 
-    def setLayer(self, layer = None):
-        # FIXME: shape should be obtain from self.network, not passed as argument!
-        print("setLayer2 : {} -> {}".format(self.layer,layer))
+    def setLayer(self, layer_id = None) -> None:
+        """Set the layer for which information are displayed.
 
-        if layer != self.layer or not self.layerText:
+        Arguments
+        ---------
+        layer_id
+            The identifier of the network layer.
+        """
+
+        if layer_id != self.layer_id or not self.layerText:
             if self.network is None:
                 self.layerText = ""
-                self.layer = None
+                self.layer_id = None
             else:
-                self.layer = layer
+                self.layer_id = layer_id
                 self.layerText = "<br>\n<br>\n"
-                self.layerText += "<b>Layer info:</b> "
+                self.layerText += "<b>Layer info:</b><br>\n"
 
-                if self.layer is None:
+                if self.layer_id is None:
                     self.layerText += "No layer selected"
                 else:
-                    shape = None
-                    try:
-                        shape = self.network.get_layer_output_shape(self.layer)
-                        info = self.network.get_layer_info(self.layer)
-                        self.layerText += info['name'] + "<br>\n"
-                    except NotImplementedError:
-                        self.layerText += "The implementation provides no information for this layer.<br>\n"
-                    self.layerText += ("Fully connected" if len(shape) == 2 else "Convolutional") + "<br>\n"
-                    self.layerText += "Shape: {}<br>\n".format(shape)
-                    print(shape)
-                    if shape is not None and len(shape) > 2:
-                        try:
-                            weights, bias = self.network.get_layer_weights(self.layer)
-                            self.layerText += "{} kernels of size {}x{}<br>\n".format(weights.shape[3],weights.shape[1],weights.shape[0])
-                        except NotImplementedError:
-                            self.layerText += "The implementation provides no further information.<br>\n"
-                        except ValueError:
-                            self.layerText += "FIXME: ValueError!<br>\n"
+                    self.layerText += self._layerInfoString(self.layer_id)
 
         self.setText(self.networkText + self.layerText)
+
+
+    def _layerInfoString(self, layer_id):
+        """Provide a string with information on a network layer.
+
+        Arguments
+        ---------
+        layer_id
+            The identifier of the network layer.
+
+        Returns
+        -------
+        str
+            A string containing information on that layer.
+        """
+        if self.network.layer_is_convolutional(layer_id):
+            text = "Convolutional" + "<br>\n"
+            text += self._convolutionalLayerInfoString(layer_id)
+        else:
+            text = "Fully connected" + "<br>\n"
+            
+        try:
+            info = self.network.get_layer_info(self.layer_id)
+            text += info['name'] + "<br>\n"
+        except NotImplementedError:
+            text += "The implementation provides no information for this layer.<br>\n"
+        return text
+
+
+    def _convolutionalLayerInfoString(self, layer_id) -> str:
+        """Provide a string with information on a convolutional layer.
+
+        Arguments
+        ---------
+        layer_id
+            The identifier of the network layer. The layer should be
+            convolutional.
+
+        Returns
+        -------
+        str
+            A string containing information on that layer.
+        """
+        features = OrderedDict()
+        features['Input shape'] = 'get_layer_input_shape'
+        features['Output shape'] = 'get_layer_output_shape'
+        features['Input channels'] = 'get_layer_input_channels'
+        features['Output channels'] = 'get_layer_output_channels'
+        features['Input units'] = 'get_layer_input_units'
+        features['Output units'] = 'get_layer_output_units'
+        features['Kernel size'] = 'get_layer_kernel_size'
+        features['Stride'] = 'get_layer_stride'
+        features['Padding'] = 'get_layer_padding'
+        features['Output padding'] = 'get_layer_output_padding'
+        features['Dilation'] = 'get_layer_dilation'
+
+        text = ""
+        for feature, method in features.items():
+            try:
+                method_to_call = getattr(self.network, method)
+                text += ("{}: {}<br>\n".
+                     format(feature, method_to_call(layer_id)))
+            except NotImplementedError:
+                text += ("{}: not implemented ({})<br>\n".
+                     format(feature, format(type(self.network).__name__)))
+        return text

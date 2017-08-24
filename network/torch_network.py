@@ -9,26 +9,11 @@ from collections import OrderedDict
 from typing import List
 import importlib.util
 
-## FIXME[todo]: not finished yet - will not run!
-## FIXME[todo]: integrate with base class
 ## FIXME[todo]: check docstrings
 ## FIXME[todo]: not tested yet!
 ## FIXME[todo]: need to clean up
 
 ## FIXME[todo]: cuda activation (if available)
-## FIXME[todo]: channel last (like in RGB images)
-
-
-## * tensorflow default is to use channel last ("NHWC")
-##   (can be changed to channel first: data_format="NCHW")
-##   https://www.tensorflow.org/api_docs/python/tf/nn/conv2d
-##
-## * pytorch only supports channel first (N,C,H,W)
-##   http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d
-##
-## * ruediger claims that cuDNN requires channel first
-##
-## * default for RGB images seems to be channel last (H,W,C)
 
 
 class TorchNetwork(BaseNetwork):
@@ -45,6 +30,11 @@ class TorchNetwork(BaseNetwork):
       register hooks to be executed before or after the forward or
       backward propagation.  These hooks can be use to access and
       store input and output values.
+    
+    * The nn.Module (layers) does not have a name. I store the
+      key by which they have been registered in the parent Module
+      under the property _name. These names will also function
+      as layer_id to identify individual layers from the outside.
     """
 
     _model : nn.Module
@@ -114,98 +104,48 @@ class TorchNetwork(BaseNetwork):
     def _compute_layer_shapes(self, input_shape : tuple) -> None:
         """Compute the input and output shapes of all layers.
         The shapes are determined by probagating some dummy input through
-        the network."""
-        
-        first_layer = self._get_first_layer()
-        
-        if self.is_convolution(first_layer):
-            if input_shape[-1] != first_layer.in_channels:
-                input_shape = (*input_shape,first_layer.in_channels)
-            if len(input_shape) < 4:
-                input_shape = (1,*input_shape)
-            input_shape = (input_shape[0],input_shape[-1],*input_shape[1:-1])
-        elif len(input_shape) < 2:
-            input_shape = (1,*input_shape)
-        if input_shape[0] != 1:
-            input_shape = (1,*input_shape[1:])
+        the network.
 
+        input_shape:
+            The shape of an input sample. May or may not include batch (B)
+            or channel (C) dimension. If so, channel should be last, i.e.
+            (N,H,W,C)
+        """
+
+        input_shape = self._canonical_input_shape(input_shape)
+        ## Torch convolution follows the channel first scheme, that is
+        ## the shape of a 2D convolution is (batch, channel, height, width).
+        torch_input_shape = tuple(input_shape[_] for _ in [0,3,1,2])
         
-        print("_compute_layer_shapes: input_shape={}".format(input_shape))
         self._input_shapes = {}
         self._output_shapes = {}
         self._prepare_hooks(self._shape_hook)
-        _ = self._model(Variable(torch.zeros(*input_shape), volatile=True))
+        self._model(Variable(torch.zeros(*torch_input_shape), volatile=True))
         self._remove_hooks()
+    
 
-    def _compute_layer_shapes_old(self, input_shape : tuple) -> None:
-        """Compute the input and output shapes of all layers,
-        starting from an input signal of the given shape.
+    def _get_number_of_input_channels(self) -> int:
+        """Get the number of input channels for this network.
+        This is the number of channels each input given to the network
+        should have.  Usually this coincides with the number of
+        channels in the first layer of the network.
+
+        Returns
+        -------
+        int
+            The number of input channels or 0 if the network does not
+            have input channels.
         """
+        first = self._get_first_layer()
+        return first.in_channels if self.layer_is_convolutional(first) else 0
 
-        raise NotImplementedError("old code, not for use anymore")
-        ## Remark: probably it is more reliable to determine the
-        ## shapes once some real data is propagated through the
-        ## network (using some hook). The drawback is, that one can
-        ## not access this information before some 
-        
-        ## Remark: In general it is not possible to compute the input
-        ## and output shape for convolutional layers just from the
-        ## following dense layers. There are different theoretical
-        ## possibilities (unless one assumes a quadratic shape, which
-        ## we should not do as it reduces generality).
-        
-        ## According to the torch documentation, the output shape of a
-        ## 2D convolutional layer can be computed from the input shape
-        ## by the following formulae:
-        ##
-        ##  h_out = floor((h_in
-        ##                 + 2*padding[0]
-        ##                 - dilation[0]*(kernel_size[0]-1)
-        ##                 -1) / stride[0] + 1)
-        ##  w_out = floor((w_in
-        ##                 + 2*padding[1]
-        ##                 - dilation[1]*(kernel_size[1]-1)
-        ##                 -1) / stride[1] + 1)
-        ##
-        ## [http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d]
-
-        ## FIXME[bug]: this function will give wrong values if max
-        ## pooling or some other kind of shape changing operation is
-        ## performed in the forward() method.
-
-        ## FIXME[todo]: Possible solution: just create some dummy
-        ## input of apropriate input shape and propagate it through
-        ## the network to record the given shapes.
-        
-        #for name, module in self._model._modules.items():
-        #    if self.is_convolution(name):
-        #        self._input_shapes[name] = input_shape
-        #        out_channels = module.out_channels
-        #        out_h = floor((input_shape[0]
-        #                       + 2 * module.padding[0]
-        #                       - module.dilation[0]
-        #                       * (module.kernel_size[0]-1) -1)
-        #                      / moduel.stride[0] + 1)
-        #        out_w = floor((input_shape[1]
-        #                       + 2 * module.padding[1]
-        #                       - module.dilation[1]
-        #                       * (module.kernel_size[1]-1) -1)
-        #                      / moduel.stride[1] + 1)
-        #        self._output_shapes[name] = (out_h, out_w, out_channels)
-        #    else:
-        #        self._input_shapes[name] = (module.in_features,)
-        #        self._output_shapes[name] = (module.out_features,)
-        #    input_shape = self._output_shapes[name]
-
+    
     def _prepare_hooks(self, hook, layer_ids = None) -> None:
-        print('TorchNetwork._prepare_hooks: info: called with layer_ids = {}'.format(layer_ids))
 
         if layer_ids is None:
             layer_ids = self.layer_ids
-        print('TorchNetwork._prepare_hooks: info: using layer_ids = {}'.format(layer_ids))
     
         for id in layer_ids:
-            print('TorchNetwork._prepare_hooks: info: going to add hook for module "{}"'.format(id))
             module = self._model._modules[id]
             module._name = id # FIXME[hack]: how to acces the module name?
             self._hooks[id] = module.register_forward_hook(hook)
@@ -216,15 +156,16 @@ class TorchNetwork(BaseNetwork):
         for id in layer_ids:
             self._hooks[id].remove()
             del self._hooks[id]
-            print('TorchNetwork._remove_hooks: info: removed hook from module "{}"'.format(id))
 
 
     def _shape_hook(self, module, input, output):
         name = module._name # FIXME[hack]: how to acces the module name?
-        # input[0].size() will be (N, C, H, W) -> store (H ,W)
-        self._input_shapes[name] = tuple(input[0].size()[1:])
+        # input[0].size() will be (N, C, H, W) -> store (H ,W, C)
+        input_shape = input[0].size()
+        self._input_shapes[name] = (*input_shape[2:],input_shape[1])
         # output.size() will be (N, C, H, W) -> store (C, H ,W)
-        self._output_shapes[name] = tuple(output.size()[1:])
+        output_shape = output.size()
+        self._output_shapes[name] = (*output_shape[2:],output_shape[1])
         
     def _activation_hook(self, module, input, output):
         name = module._name # FIXME[hack]: how to acces the module name?
@@ -238,10 +179,6 @@ class TorchNetwork(BaseNetwork):
         self._activations[name] = output.data.numpy().copy()
         if len(output.data.size()) == 4: # convolution, (N,C,H,W)
             self._activations[name] = self._activations[name].transpose(0,2,3,1)
-
-    def _general_hook(self, module, input, output):
-        self._shape_hook(module, input, output)
-        self._activation_hook(module, input, output)
         
 
     def _get_layer(self, layer_id) -> nn.Module:
@@ -255,11 +192,19 @@ class TorchNetwork(BaseNetwork):
         Returns
         -------
         The layer for the given identifier.
-
         """
-        return self._model._modules[layer_id]
+        return (layer_id if isinstance(layer_id,torch.nn.Module)
+            else self._model._modules[layer_id])
+
 
     def _get_first_layer(self) -> nn.Module:
+        """Get a torch Module representing the first layer of this network.
+        
+        Returns
+        -------
+        nn.Module
+            The first layer of this network.
+        """
         return self._get_layer(self.layer_ids[0])
 
 
@@ -271,16 +216,17 @@ class TorchNetwork(BaseNetwork):
         Returns
         -------
         The list of layer identifiers.
-
         """
         return list(self._model._modules.keys())
 
 
-    def is_convolution(self, layer) -> bool:
+    def layer_is_convolutional(self, layer_id) -> bool:
         """Check if the given layer is a convolutional layer. If so,
         additional information can be obtained by the methods
-        get_kernel_size, get_channels, get_stride, get_padding, and
-        get_dilation.
+        get_layer_kernel_size, get_layer_input_channels,
+        get_layer_output_channels, get_layer_stride,
+        get_layer_padding, get_layer_output_padding, and
+        get_layer_dilation.
 
         Parameters
         ----------
@@ -289,29 +235,14 @@ class TorchNetwork(BaseNetwork):
 
         Returns
         -------
-        The layer for the given identifier.
+        bool
+            True for convolutional layers, else False.
+
         """
-        if not isinstance(layer,torch.nn.Module):
-            layer = self._get_layer(layer)
-        return isinstance(layer,nn.modules.conv.Conv2d)
+        return isinstance(self._get_layer(layer_id),nn.modules.conv.Conv2d)
 
-
-    def get_units(self, layer_id) -> int:
-        """The number of output units of this layer.
         
-        Parameters
-        ----------
-        layer_id:
-            Identifier of a layer in this network.
-
-        Raises
-        ------
-        ValueError:
-            If the layer_id fails to identify a layer in this network.
-        """
-        
-        
-    def get_kernel_size(self, layer_id) -> int:
+    def get_layer_kernel_size(self, layer_id) -> int:
         """The size of the kernel in a cross-correlation/convolution
         operation. This is just the spatial extension and does not
         include the number of channels.
@@ -326,14 +257,12 @@ class TorchNetwork(BaseNetwork):
         ValueError:
             If the layer_id fails to identify a convolutional layer.
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.kernel_size
-        else:
-            raise ValueError('No kernel size for "{}"'.format(layer_id))
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.kernel_size
 
 
-    def get_input_channels(self, layer_id) -> int:
+    def get_layer_input_channels(self, layer_id) -> int:
         """The number of input channels for a cross-correlation/convolution
         operation.
 
@@ -347,14 +276,12 @@ class TorchNetwork(BaseNetwork):
         ValueError:
             If the layer_id fails to identify a convolutional layer.
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.in_channels
-        else:
-            raise ValueError('No input channels for "{}"'.format(layer_id))
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.in_channels
 
 
-    def get_output_channels(self, layer_id) -> int:
+    def get_layer_output_channels(self, layer_id) -> int:
         """The number of output channels for a cross-correlation/convolution
         operation.
 
@@ -368,14 +295,12 @@ class TorchNetwork(BaseNetwork):
         ValueError:
             If the layer_id fails to identify a convolutional layer.
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.out_channels
-        else:
-            raise ValueError('No output channels for "{}"'.format(layer_id))
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.out_channels
 
 
-    def get_stride(self, layer_id) -> (int, int):
+    def get_layer_stride(self, layer_id) -> (int, int):
         """The stride for the cross-correlation/convolution operation.
 
         Parameters
@@ -389,14 +314,12 @@ class TorchNetwork(BaseNetwork):
             If the layer_id fails to identify a convolutional layer.
 
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.stride
-        else:
-            raise ValueError('No stride for "{}"'.format(layer_id))
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.stride
 
 
-    def get_padding(self, layer_id) -> (int,int):
+    def get_layer_padding(self, layer_id) -> (int,int):
         """The padding for the cross-correlation/convolution operation, i.e,
         the number of rows/columns (on both sides) by which the input
         is extended (padded with zeros) before the operation is
@@ -412,14 +335,12 @@ class TorchNetwork(BaseNetwork):
         ValueError:
             If the layer_id fails to identify a convolutional layer.
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.padding
-        else:
-            raise ValueError('No padding for "{}"'.format(layer_id))
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.padding
 
 
-    def get_output_padding(self, layer_id) -> (int,int):
+    def get_layer_output_padding(self, layer_id) -> (int,int):
         """The output padding for the cross-correlation/convolution operation.
 
         Parameters
@@ -432,14 +353,12 @@ class TorchNetwork(BaseNetwork):
         ValueError:
             If the layer_id fails to identify a convolutional layer.
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.output_padding
-        else:
-            raise ValueError('No output padding for "{}"'.format(layer_id))
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.output_padding
 
 
-    def get_dilation(self, layer_id) -> (int, int):
+    def get_layer_dilation(self, layer_id) -> (int, int):
         """The dilation for the cross-correlation/convolution operation, i.e,
         the horizontal/vertical offset between adjacent filter
         rows/columns.
@@ -454,16 +373,11 @@ class TorchNetwork(BaseNetwork):
         ValueError:
             If the layer_id fails to identify a convolutional layer.
         """
-        if self.is_convolution(layer_id):
-            layer = self._get_layer()
-            return layer.dilation
-        else:
-            raise ValueError('No dilation for "{}"'.format(layer_id))
-
+        layer = self._get_layer(layer_id)
+        self._check_layer_is_convolutional(layer)
+        return layer.dilation
+    
         
-        
-    # FIXME[design]: we should decide for a standard way to encode
-    # (e.g. convolution as (channel, width, height) or (width, height, channel), or (batch, height, channel), ...
     def get_layer_input_shape(self, layer_id) -> tuple:
         """
         Give the shape of the input of the given layer.
@@ -475,16 +389,18 @@ class TorchNetwork(BaseNetwork):
         Returns
         -------
         (units) for dense layers
-        (width, height, channels) for convolutional layers
+        (height, width, channels) for convolutional layers
 
         Raises
         ------
-        Runtim
+        RuntimeError
+            If the network shape is not determine yet.
         """
-        return self._get_layer(layer_id).get_input_shape_at(0)
+        if self._input_shapes is None:
+            raise RuntimeError("Network shapes have not been fixed yet.")
+        return self._input_shapes[layer_id]
 
 
-    # FIXME[design]: we should decide for a standard way to encode
     def get_layer_output_shape(self, layer_id) -> tuple:
         """
         Give the shape of the output of the given layer.
@@ -495,14 +411,20 @@ class TorchNetwork(BaseNetwork):
 
         Returns
         -------
+        (units) for dense layers
+        (height, width, channels) for convolutional layers
 
+        Raises
+        ------
+        RuntimeError
+            If the network shape is not determine yet.
         """
-        return self._get_layer(layer_id).get_output_shape_at(0)
+        if self._output_shapes is None:
+            raise RuntimeError("Network shapes have not been fixed yet.")
+        return self._output_shapes[layer_id]
 
 
-    # FIXME[design]: why list and not pair (weights, bias)?
-    # or two functions: weights and bias?
-    def get_layer_weights(self, layer_id) -> List[np.ndarray]:
+    def get_layer_weights(self, layer_id) -> np.ndarray:
         """
         Returns weights INCOMING to the
         layer of the model
@@ -517,11 +439,39 @@ class TorchNetwork(BaseNetwork):
         Returns
         -------
         ndarray
-            Weights of the layer.
+            Weights of the layer. For convolutional layers this will
+            be (H,W,C_in,C_out)
 
         """
-        return self._get_layer(layer_id).get_weights()
+        layer = self._get_layer(layer_id)
+        weights = layer.weight.data.numpy()
+        if self.layer_is_convolutional(layer):
+            weights = weights.transpose(2,3,0,1)
+        return weigths   
 
+
+    def get_layer_biases(self, layer_id) -> np.ndarray:
+        """
+        Returns weights INCOMING to the
+        layer of the model
+        shape of the weights variable should be
+        coherent with the get_layer_output_shape function.
+
+        Parameters
+        ----------
+        layer_id :
+             An identifier for a layer.
+
+        Returns
+        -------
+        ndarray
+            Bias values for the layer. For convolutional layers this will
+            be one bias value per (output) channel.
+        """
+        layer = self._get_layer(layer_id)
+        biases = layer.bias.data.numpy()
+        return biases
+        
 
 
     def get_activations(self, layer_ids, input_samples: np.ndarray) -> list:
@@ -540,110 +490,52 @@ class TorchNetwork(BaseNetwork):
         -------
 
         """
-
-
-        if self._input_shapes is None:
+        ## We need to know the network input shape to get a cannonical
+        ## representation of the input_samples.
+        if self._input_shapes is None or self._output_shapes is None:
             self._compute_layer_shapes(input_samples.shape)
-        input_channels = 1 # FIXME[todo]: get from first layer
+        
+        _layer_ids, _input_samples = \
+            super().get_activations(layer_ids, input_samples)
 
-        if (input_channels == 1 and
-            len(input_samples.shape) < 4 and
-            input_samples.shape[-1] != 1):
-            input_samples = np.expand_dims(input_samples, axis=-1)
-        no_batch = (len(input_samples.shape) == 3)
-        if no_batch:
-            input_samples = np.expand_dims(input_samples, axis=0)
+        ## pytorch expects channel first (N,C,H,W)
+        # FIXME[concept]: we may want to directly get the preferred order
+        # from the _canonical_input_data method!
+        _input_samples = _input_samples.transpose((0,3,1,2))
 
-        ## sanity check
-        if (len(input_samples.shape) != 4 or
-            input_samples.shape[-1] != input_channels):
-            raise ValueError("Input data have inapropriate shape: should be (batch, height, width, channel).")
+        torch_samples = torch.from_numpy(_input_samples)
+        torch_input =  Variable(torch_samples, volatile=True)
 
-        ## pytorch expects  channel first (N,C,H,W)
-        input_samples = input_samples.transpose((0,3,1,2)).copy()
-        torch_input =  Variable(torch.from_numpy(input_samples), volatile=True)
-
-        ## use GPU
+        ## FIXME[todo]: use GPU
         # if self._use_cuda:
         #    torch_input = torch_input.cuda()
 
         ## prepare to record the activations
         self._activations = {}
-        self._prepare_hooks(self._activation_hook, layer_ids)
+        self._prepare_hooks(self._activation_hook, _layer_ids)
 
         torch_output = self._model(torch_input)
 
         self._remove_hooks(layer_ids)
 
-        if no_batch:
+        ## if no batch data was provided, remove batch dimension from
+        ## activations
+        if (_input_samples.shape[0] == 1
+            and len(input_samples.shape) < 4
+            and input_samples.shape[0] != 1):
             for id in self._activations.keys():
                 self._activations[id] = self._activations[id].squeeze(0)
-                                       
-        return [self._activations[_] for _ in layer_ids]
 
-
-        # FIXME[todo]: there does not seem to be a standard way to
-        #
-        # Torch problems:
-        #
-        # * how to get layer_id?
-        #   -got myModuleIndex from visual (using the __tostring() metamethod).
-        # model:get(myModuleIndex).output
-
-        # you can access to a module with net.modules[n] (n is the
-        # index of the module, use print(net) to see your whole
-        # network and its modules). Then each module has to state
-        # variables output and gradInput (gradient of the module with
-        # respect to its input), then you can access the output of the
-        # nth intermediate layer with
-        #    net.modules[n].output
-
-        # Every layer in torch's models can be accessed using model.modules.
-        # Once you have made a forward pass, like this :
-        #   input  = torch.Tensor(5, 10)
-        #   model:forward(input)
-        # You can view the output dimension of each layer.
-        # If you want to view for a particular layer,
-        # say the second layer in the above case, you can simply do:
-        #   model.modules[2].output:size()
-        # _modules.items()
-        # _modules.keys()
+        ## if a single layer_id was given (not a list), then just return
+        ## a single activtion array
+        return ([self._activations[_] for _ in layer_ids]
+                if isinstance(layer_ids, list)
+                else self._activations[layer_ids])
 
 
 
-from torchvision import datasets, transforms
-import torch.nn.functional as F
-import os
 
-def main():
-    #model_file = "models/example_torch_mnist_model.pth.tar"
-    #network = TorchNetwork(model_file)
-    net_file = "models/example_torch_mnist_net.py"
-    parameter_file = "models/example_torch_mnist_model.pth"
-    network = TorchNetwork(net_file, parameter_file, net_class = 'Net', input_shape = (28,28))
-    print("main: {}".format(network.layer_ids))
-    print("main: input_shapes(1) = {}".format(network._input_shapes))
-    print("main: output_shapes(1) = {}".format(network._output_shapes))
 
-    batch_size = 1000
-    datadir = os.getenv('MNIST_DATA', '../data')
-    test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(datadir, train=False, transform=transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-            ])),
-        batch_size=batch_size, shuffle=True)
 
-    data, target = next(test_loader.__iter__())
-    
-    
-    input_data = data.numpy()
-    print(input_data.shape)
-    input_data = input_data[0].squeeze(0)
-    print(input_data.shape)
-    activations = network.get_activations(("conv1", "conv2"), input_data)
-    print("main: type={}, len={}".format(type(activations), len(activations)))
-    print("main: result 0: {} {}".format(type(activations[0]), activations[0].shape))
-    print("main: result 1: {} {}".format(type(activations[1]), activations[1].shape))
-    
-if __name__ == "__main__": main()
+
+

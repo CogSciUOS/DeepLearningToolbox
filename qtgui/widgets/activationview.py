@@ -14,8 +14,13 @@ class QActivationView(QWidget):
 
     activation : object = None
 
-    selected = pyqtSignal(int)
-
+    selected = pyqtSignal(object)
+    """A signal emitted whenever a unit is (de)selected in this
+    QActivationView. This will be an int (the index of the selected
+    unit) or None (if no unit is selected). We have to use object not
+    int here to allow for None values.
+    """
+    
     padding : int = 2
 
     selectedUnit : int = None
@@ -39,12 +44,21 @@ class QActivationView(QWidget):
         # get focus by "Tab" key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def setActivation(self, activation):
 
+    def setActivation(self, activation : np.ndarray) -> None:
+        """Set the activations to be displayed in this QActivationView.
+        Currently there are two possible types of activaitons that are
+        supported by this widget: 1D, and 2D convolutional.
+
+        Arguments
+        ---------
+        activation:
+            Either a 1D or a 3D array. The latter one will be displayed
+            in the convolutional mode.
+        """
+
+        old_shape = None if self.activation is None else self.activation.shape
         self.activation = activation
-
-        # unset selected entry
-        self.selectedUnit = None
 
         if self.activation is not None:
             self.isConvolution = (len(self.activation.shape)>2)
@@ -82,8 +96,15 @@ class QActivationView(QWidget):
             # change dtype to uint8
             self.activation = np.ascontiguousarray(self.activation*255, np.uint8)
 
+        ## unset selected entry if shape changed
+        if self.activation is None or old_shape != self.activation.shape:
+            self.selectUnit()
+        else:
+            self.selected.emit(self.selectedUnit)
+            
         self._computeGeometry()
         self.update()
+
 
     def selectUnit(self, unit = None):
         if self.activation is None:
@@ -95,12 +116,16 @@ class QActivationView(QWidget):
             self.selected.emit(self.selectedUnit)
             self.update()
 
-    def getUnitActivation(self, unit = None):
+
+    def getUnitActivation(self, unit = None) -> np.ndarray:
+        """Get the activation mask for a given unit.
+        """
         if unit is None:
             unit = self.selectedUnit
         if self.activation is None or unit is None or not self.isConvolution:
             return None
-        return self.activation[self.selectedUnit]
+        return self.activation[unit]
+
 
     def _computeGeometry(self):
         if self.activation is None:
