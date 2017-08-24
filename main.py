@@ -50,4 +50,6 @@ if __name__ == '__main__':
     mainWindow.setNetwork(network, data)
     mainWindow.show()
 
-    sys.exit(app.exec_())
+    rc = app.exec_()
+    print("Good bye ({})".format(rc))
+    sys.exit(rc)

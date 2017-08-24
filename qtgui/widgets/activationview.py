@@ -284,6 +284,19 @@ class QActivationView(QWidget):
         qp.drawText(self.rect(), Qt.AlignCenter, "No data!")
 
 
+    def resizeEvent(self, event):
+        '''Adapt to a change in size. The behavior dependes on the zoom
+        policy.
+
+        Arguments
+        ---------
+        event : QResizeEvent
+
+        '''
+        # This event handler is called after the Widget has been resized.
+        # providing the new .size() and the old .oldSize().
+        self._computeGeometry()
+
 
     def mousePressEvent(self, event):
         '''Process mouse event.

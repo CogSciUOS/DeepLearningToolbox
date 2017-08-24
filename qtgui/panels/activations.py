@@ -1,5 +1,6 @@
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QComboBox
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
 from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
@@ -48,6 +49,10 @@ class ActivationsPanel(QWidget):
         #self.activationview = PlotCanvas(None, width=9, height=9)
         self.activationview = QActivationView()
         self.activationview.selected.connect(self.setUnit)
+
+        # FIXME[layout]
+        self.activationview.setMinimumWidth(300)
+        self.activationview.resize(600, self.activationview.height())
 
         activationLayout = QVBoxLayout()
         activationLayout.addWidget(self.activationview)
@@ -124,14 +129,20 @@ class ActivationsPanel(QWidget):
         networkBox = QGroupBox("Network")
         networkBox.setLayout(networkLayout)
 
+        
+
 
         #
         # Putting all together
         #
 
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(activationBox)
+        splitter.addWidget(inputBox)
         layout = QHBoxLayout()
-        layout.addWidget(activationBox)
-        layout.addWidget(inputBox)
+        #layout.addWidget(activationBox)
+        #layout.addWidget(inputBox)
+        layout.addWidget(splitter)
         layout.addWidget(networkBox)
         self.setLayout(layout)
 
