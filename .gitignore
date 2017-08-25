@@ -8,3 +8,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Local files for private testiing
+test.py
+debug.py

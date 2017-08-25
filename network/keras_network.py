@@ -18,8 +18,9 @@ class KerasNetwork(BaseNetwork):
         modelfile_path
             Path to the .h5 model file.
         """
-        # Set learning phase to train in case setting to test would affect gradient computation.
-        keras.backend.set_learning_phase(1)
+        ## Set learning phase to train in case setting to test would affect gradient computation.
+        #TODO: Set it to test, to eliminate dropout, check for gradient computation later.
+        keras.backend.set_learning_phase(0)
         self._model = load_model(model_file)
         self._layer_ids = self._compute_layer_ids()
 
@@ -60,7 +61,7 @@ class KerasNetwork(BaseNetwork):
         """
         return self._model.get_layer(layer_id).get_output_shape_at(0)
 
-    def get_layer_weights(self, layer_id) -> List[np.ndarray]:
+    def get_layer_weights(self, layer_id) -> np.ndarray:
         """
         Returns weights INCOMING to the
         layer of the model
@@ -78,7 +79,10 @@ class KerasNetwork(BaseNetwork):
             Weights of the layer.
 
         """
-        return self._model.get_layer(layer_id).get_weights()
+        return self._model.get_layer(layer_id).get_weights()[0]
+
+    def get_layer_bias(self, layer_id) -> np.ndarray:
+        return self._model.get_layer(layer_id).get_weights()[1]
 
     def _compute_layer_ids(self):
         """

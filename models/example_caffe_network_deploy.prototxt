@@ -1,0 +1,104 @@
+name: "ExampleCaffeMNISTModelDeploy"
+layer {
+  name: "data"
+  type: "Input"
+  top: "data"
+  input_param {
+    shape: {
+      dim: 64
+      dim: 1
+      dim: 28
+      dim: 28
+    }
+  }
+}
+layer {
+  name: "conv2d_1"
+  type: "Convolution"
+  bottom: "data"
+  top: "conv2d_1"
+  convolution_param {
+    num_output: 32
+    kernel_size: 3
+    stride: 1
+
+  }
+}
+layer {
+  name: "relu_1"
+  type: "ReLU"
+  bottom: "conv2d_1"
+  top: "conv2d_1" # inplace computation
+}
+layer {
+  name: "max_pooling2d_1"
+  type: "Pooling"
+  bottom: "conv2d_1"
+  top: "max_pooling2d_1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
+}
+layer {
+  name: "conv2d_2"
+  type: "Convolution"
+  bottom: "max_pooling2d_1"
+  top: "conv2d_2"
+  convolution_param {
+    num_output: 32
+    kernel_size: 3
+    stride: 1
+
+  }
+}
+layer {
+  name: "relu_2"
+  type: "ReLU"
+  bottom: "conv2d_2"
+  top: "conv2d_2" # inplace computation
+}
+
+layer {
+  name: "dropout_1"
+  type: "Dropout"
+  bottom: "conv2d_2"
+  top: "dropout_1"
+}
+
+layer {
+  name: "dense_1"
+  type: "InnerProduct"
+    inner_product_param {
+    num_output: 64
+
+  }
+  bottom: "dropout_1"
+  top: "dense_1"
+}
+
+layer {
+  name: "dropout_2"
+  type: "Dropout"
+  bottom: "dense_1"
+  top: "dropout_2"
+}
+
+layer {
+  name: "dense_2"
+  type: "InnerProduct"
+    inner_product_param {
+    num_output: 10
+
+  }
+
+  bottom: "dropout_2"
+  top: "dense_2"
+}
+layer {
+  name: "prob"
+  type: "Softmax"
+  bottom: "dense_2"
+  top: "prob"
+}

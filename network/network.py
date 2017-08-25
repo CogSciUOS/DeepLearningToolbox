@@ -1,6 +1,6 @@
 
 import numpy as np
-from typing import Any
+from typing import Any, Union
 
 # FIXME[design]: we should decide on some points:
 #
@@ -144,6 +144,7 @@ class BaseNetwork:
             # provided have to match.
             first_layer_id = self.layer_ids[0]
             network_input_shape = self.get_layer_input_shape(first_layer_id)
+            print('network input shape: ', network_input_shape)
             if self._is_channel_provided(input_samples.shape, network_input_shape):
                 input_samples = input_samples[np.newaxis, ...]
             elif self._is_batch_provided(input_samples.shape, network_input_shape):
@@ -151,12 +152,11 @@ class BaseNetwork:
             else:
                 raise ValueError('Non matching input dimensions.')
         elif len(input_samples.shape) > 4:
-            raise ValueError('Too many input dimensions. Should be maximally four instead of {}.'.format(
+            raise ValueError('Too many input dimensions. Should be maximally 4 instead of {}.'.format(
                 len(input_samples.shape)
             ))
 
         return layer_ids, input_samples
-
 
     def _is_channel_provided(self, input_sample_shape: tuple, network_input_shape: tuple) -> bool:
         return input_sample_shape == network_input_shape[1:]
@@ -164,6 +164,62 @@ class BaseNetwork:
     def _is_batch_provided(self, input_sample_shape: tuple, network_input_shape: tuple) -> bool:
         return input_sample_shape[1:3] == network_input_shape[1:3]
 
+    def _convert_data_format(self, array_or_shape: Union[np.ndarray, tuple],
+                                input_format: str=None, output_format: str=None) -> Union[np.ndarray, tuple]:
+        """Convert channel first to channel last format or vice versa.
+
+        Parameters
+        ----------
+        array_or_shape
+            The array or shape tuple to be converted. Needs to be at least rank 3.
+        input_format
+            Either 'channels_first' or 'channels_last'. If not given, opposite of `output_format` is used.
+        output_format
+            Either 'channels_first' or 'channels_last'. If not given, opposite of `input_format` is used.
+
+        Returns
+        -------
+        The converted numpy array.
+
+        """
+        is_tuple = False
+        # Check inputs.
+        if isinstance(array_or_shape, np.ndarray):
+            print('found array')
+            if array_or_shape.ndim < 3:
+                raise ValueError('Tensor needs to be at least of rank 3 but is of rank {}.'.format(array_or_shape.ndim))
+        elif isinstance(array_or_shape, tuple):
+            # Convert to list for assignment later, but set a flag to remember it was a tuple.
+            array_or_shape = list(array_or_shape)
+            is_tuple = True
+            if len(array_or_shape) < 3:
+                raise ValueError('Shape needs to be at least of rank 3 but is of rank {}.'.format(len(array_or_shape)))
+        else:
+            raise TypeError('Input must be either tuple or ndarray but is {}'.format(type(array_or_shape)))
+        # Do the conversion based on the arguments.
+        if ((input_format == 'channels_first' and output_format == 'channels_last') or
+            (input_format == 'channels_first' and output_format is None) or
+            (input_format is None and output_format == 'channels_last')):
+            if isinstance(array_or_shape, np.ndarray):
+                return np.moveaxis(array_or_shape, 1, -1)
+            elif is_tuple:
+                num_channels = array_or_shape[1]
+                del array_or_shape[1]
+                array_or_shape.append(num_channels)
+                array_or_shape[-1] = num_channels
+                return tuple(array_or_shape)
+        elif ((input_format == 'channels_last' and output_format == 'channels_first') or
+              (input_format == 'channels_last' and output_format is None) or
+              (input_format is None and output_format == 'channels_first')):
+            if isinstance(array_or_shape, np.ndarray):
+                return np.moveaxis(array_or_shape, -1, 1)
+            elif is_tuple:
+                num_channels = array_or_shape[-1]
+                del array_or_shape[-1]
+                array_or_shape[1].insert(1, num_channels)
+                return tuple(array_or_shape)
+        else:
+            raise ValueError('Format must be eiher "channels_last" or "channels_first".')
 
 
 
