@@ -31,3 +31,14 @@ Installation process is just installing packages listed in the requirements.txt
         $pip install PyQt5 numpy scipy matplotlib h5py keras tensorflow
 
 
+
+Support for PyTorch
+-------------------
+
+Install PyTorch.
+
+   $ conda install pytorch torchvision cuda80 -c soumith
+
+Then run the PyTorch MNIST example, tpye
+
+   $ python main.py --framework=torch

@@ -1,5 +1,6 @@
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QComboBox
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
 from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
@@ -48,6 +49,10 @@ class ActivationsPanel(QWidget):
         #self.activationview = PlotCanvas(None, width=9, height=9)
         self.activationview = QActivationView()
         self.activationview.selected.connect(self.setUnit)
+
+        # FIXME[layout]
+        self.activationview.setMinimumWidth(300)
+        self.activationview.resize(600, self.activationview.height())
 
         activationLayout = QVBoxLayout()
         activationLayout.addWidget(self.activationview)
@@ -124,14 +129,20 @@ class ActivationsPanel(QWidget):
         networkBox = QGroupBox("Network")
         networkBox.setLayout(networkLayout)
 
+        
+
 
         #
         # Putting all together
         #
 
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(activationBox)
+        splitter.addWidget(inputBox)
         layout = QHBoxLayout()
-        layout.addWidget(activationBox)
-        layout.addWidget(inputBox)
+        #layout.addWidget(activationBox)
+        #layout.addWidget(inputBox)
+        layout.addWidget(splitter)
         layout.addWidget(networkBox)
         self.setLayout(layout)
 
@@ -166,11 +177,15 @@ class ActivationsPanel(QWidget):
 
 
     def setLayer(self, layer = None):
-        print("setLayer : {} -> {}".format(self.layer,layer))
         if layer != self.layer:
             self.layer = layer
             self.networkinfo.setLayer(self.layer)
-            self.updateActivation()
+
+        ## We update the activation on every invocation, no matter if
+        ## the selected layer changed. This allows for some dynamics
+        ## if layers like dropout are involved. However, if such
+        ## layers do not exist, it will only waste computing power ...
+        self.updateActivation()
 
 
     def updateActivation(self):
@@ -187,8 +202,15 @@ class ActivationsPanel(QWidget):
 
         self.activationview.setActivation(activations)
 
+
     def setUnit(self, unit : int = None):
-        self.inputview.setActivationMask(self.activationview.getUnitActivation(unit))
+        """This methode is involved when the currently selected unit (e.g., in
+        the activationview) has changed. This change should be
+        reflected in other widgets.
+        """
+        activationMask = self.activationview.getUnitActivation(unit)
+        self.inputview.setActivationMask(activationMask)
+
 
     def setInputData(self, data = None):
         '''Provide a collection of input data for the network.

@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 
-from PyQt5.QtWidgets import QMainWindow, QTabWidget
+from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtWidgets import QMainWindow, QTabWidget, QAction, QStatusBar
+from PyQt5.QtGui import QIcon
 
 from qtgui.panels import ActivationsPanel, ExperimentsPanel
 
@@ -36,21 +38,38 @@ class DeepVisMainWindow(QMainWindow):
     def initUI(self):
         '''Initialize the graphical components of this user interface.
         '''
-
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
 
+        ##
+        ## Initialize the menu bar
+        ##
+        exitAction = QAction(QIcon('exit.png'), '&Exit', self)
+        exitAction.setShortcut('Ctrl+Q')
+        exitAction.setStatusTip('Exit application')
+        exitAction.triggered.connect(QCoreApplication.quit)
+
+        menubar = self.menuBar()
+        fileMenu = menubar.addMenu('&File')
+        fileMenu.addAction(exitAction)
+
+        ##
+        ## Initialize the panels
+        ##
         self.activations = ActivationsPanel()
         self.experiments = ExperimentsPanel()
 
         self.tabs = QTabWidget(self);
-        # FIXME[layout]
-        #self.tabs.setFixedSize(self.width-5, self.height-5)
         self.tabs.addTab(self.activations, "Main")
         self.tabs.addTab(self.experiments, "Experiments")
 
-        # FIXME[question]: what is this?
         self.setCentralWidget(self.tabs)
+
+        ##
+        ## Initialize the status bar
+        ##
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
 
 
     # FIXME[hack]: split up into sensible functions or rename ...
@@ -58,3 +77,7 @@ class DeepVisMainWindow(QMainWindow):
         self.activations.addNetwork(network)
         self.activations.setInputData(data)
         self.update()
+
+
+    def showStatusMessage(self, message):
+        self.statusBar.showMessage(message, 2000)
