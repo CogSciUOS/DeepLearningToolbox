@@ -1,4 +1,4 @@
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QComboBox
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
@@ -23,6 +23,10 @@ class ActivationsPanel(QWidget):
     data : object = None
     dataIndex : int = None
 
+    inputSelected = pyqtSignal(object)
+    layerSelected = pyqtSignal(object)
+
+    
     def __init__(self, parent = None):
         '''Initialization of the ActivationsView.
 
@@ -185,6 +189,7 @@ class ActivationsPanel(QWidget):
         ## the selected layer changed. This allows for some dynamics
         ## if layers like dropout are involved. However, if such
         ## layers do not exist, it will only waste computing power ...
+        self.layerSelected.emit(layer)
         self.updateActivation()
 
 
@@ -234,6 +239,13 @@ class ActivationsPanel(QWidget):
         else:
             self.dataIndex = input
             self.updateInput()
+
+        if self.dataIndex is None:
+            self.inputSelected.emit(None)
+        else:
+            # FIXME[hack]: just provide image data without additional axes ...
+            self.inputSelected.emit(self.data[self.dataIndex:self.dataIndex+1,:,:,0:1])
+
 
     def updateInput(self):
         if self.dataIndex is not None:

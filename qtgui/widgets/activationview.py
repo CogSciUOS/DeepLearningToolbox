@@ -5,15 +5,53 @@ from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
+# FIXME[todo]: improve the display of the activations: check that the
+# space is used not only in a good, but in an optimal way. Check that
+# the aspect ratio is correct. Make it configurable to allow for
+# explicitly setting different aspects of display.
 
-# FIXME[todo]: add docstrings!
-
+# FIXME[todo]: we may display positive and negative activation in a
+# two-color scheme.
 
 class QActivationView(QWidget):
+    """A widget to diplay the activations of a given layer in a
+    network. Currently there are two types of layers that are
+    supported: (two-dimensional) convolutional layers and dense
+    (=fully connected) layers.
 
+    The QActivationView widget allows to select an individual unit in
+    the network layer by a single mouse click (this will either select
+    a single unit in a dense layer, or a channel in a convolutional
+    layer). The selection can be moved with the cursor keys and the
+    unit can be deselected by hitting escape. The widget will signal
+    such a (de)selection by emitting the "selected" signal.
 
-    activation : object = None
+    The QActivationView will try to make good use of the available
+    space by arranging and scaling the units. However, the current
+    implementation is still suboptimal and may be improved to allow
+    for further configuration.
+    """
 
+    activation : np.ndarray = None
+    """The activation values to be displayed in this activation view. None
+    means that no activation is assigned to this QActivationView and
+    will result in an empty widget.
+    """
+    
+    padding : int = 2
+    """Padding between the individual units in this QActivationView.
+    """
+
+    selectedUnit : int = None
+    """The currently selected unit. The value None means that no unit is
+    currently selected.
+    """
+
+    _isConvolution : bool = False
+    """A flag indicating if the current QActivationView is currently in
+    convolution mode (True) or not (False).
+    """
+    
     selected = pyqtSignal(object)
     """A signal emitted whenever a unit is (de)selected in this
     QActivationView. This will be an int (the index of the selected
@@ -21,18 +59,13 @@ class QActivationView(QWidget):
     int here to allow for None values.
     """
     
-    padding : int = 2
 
-    selectedUnit : int = None
-
-    def __init__(self, parent = None):
+    def __init__(self, parent : QWidget = None):
         '''Initialization of the QMatrixView.
 
         Arguments
         ---------
-        matrix : numpy.ndarray
-            The matrix to be displayed in this QMatrixView.
-        parent : QWidget
+        parent
             The parent argument is sent to the QWidget constructor.
         '''
         super().__init__(parent)
@@ -47,21 +80,23 @@ class QActivationView(QWidget):
 
     def setActivation(self, activation : np.ndarray) -> None:
         """Set the activations to be displayed in this QActivationView.
-        Currently there are two possible types of activaitons that are
+        Currently there are two possible types of activations that are
         supported by this widget: 1D, and 2D convolutional.
 
         Arguments
         ---------
         activation:
-            Either a 1D or a 3D array. The latter one will be displayed
-            in the convolutional mode.
+            Either a 1D or a 3D array. The latter one will be
+            displayed in the convolutional mode. The activation values
+            are expected to be float values. For display they
+            will be scaled and converted to 8-bit integers.
         """
 
         old_shape = None if self.activation is None else self.activation.shape
         self.activation = activation
 
         if self.activation is not None:
-            self.isConvolution = (len(self.activation.shape)>2)
+            self._isConvolution = (len(self.activation.shape)>2)
 
             # normalization (values should be between 0 and 1)
             min_value = self.activation.min()
@@ -72,7 +107,7 @@ class QActivationView(QWidget):
                 self.activation = self.activation/value_range
 
             # check the shape
-            if self.isConvolution:
+            if self._isConvolution:
                 # for convolution we want activtation to be of shape
                 # (output_channels, width, height)
                 if len(self.activation.shape) == 4:
@@ -106,7 +141,14 @@ class QActivationView(QWidget):
         self.update()
 
 
-    def selectUnit(self, unit = None):
+    def selectUnit(self, unit : int = None):
+        """(De)select a unit in this QActivationView.
+
+        Arguments
+        =========
+        unit:
+        
+        """
         if self.activation is None:
             unit = None
         elif unit is not None and (unit < 0 or unit >= self.activation.shape[0]):
@@ -122,7 +164,7 @@ class QActivationView(QWidget):
         """
         if unit is None:
             unit = self.selectedUnit
-        if self.activation is None or unit is None or not self.isConvolution:
+        if self.activation is None or unit is None or not self._isConvolution:
             return None
         return self.activation[unit]
 
@@ -139,9 +181,9 @@ class QActivationView(QWidget):
             # For fully connected (i.e., dense) layers, the axes are:
             # (batch_size, units)
             # In both cases, batch_size should be 1!
-            self.isConvolution = (len(self.activation.shape)>2)
+            self._isConvolution = (len(self.activation.shape)>2)
             n = self.activation.shape[0]
-            if self.isConvolution:
+            if self._isConvolution:
                 # unitRatio = width/height
                 unitRatio = self.activation.shape[1]/self.activation.shape[2]
             else:
@@ -179,7 +221,7 @@ class QActivationView(QWidget):
         qp.begin(self)
         if self.activation is None:
             self._drawNone(qp)
-        elif self.isConvolution:
+        elif self._isConvolution:
             self._drawConvolution(qp)
         else:
             self._drawDense(qp)
@@ -265,7 +307,12 @@ class QActivationView(QWidget):
 
 
     def _drawSelection(self, qp):
+        '''Mark the currently selected unit in the painter.
 
+        Arguments
+        ---------
+        qp : QPainter
+        '''
         pen_width = 4
         pen_color = Qt.red
         pen = QPen(pen_color)
@@ -331,12 +378,13 @@ class QActivationView(QWidget):
 
 
     def keyPressEvent(self, event):
-        '''Process special keys for this widget.
-        Allow moving selected entry using the cursor key.
+        '''Process special keys for this widget.  Allow moving selected entry
+        using the cursor keys. Deselect unit using the Escape key.
 
         Arguments
         ---------
         event : QKeyEvent
+
         '''
         key = event.key()
         # Space will toggle display of tooltips

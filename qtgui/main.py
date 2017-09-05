@@ -72,12 +72,30 @@ class DeepVisMainWindow(QMainWindow):
         self.setStatusBar(self.statusBar)
 
 
+        ##
+        ## Connect the signals
+        ##
+        self.activations.inputSelected.connect(self.setInputData)
+        self.activations.layerSelected.connect(self.setLayer)
+        #self.activations.networkSelected.connect(self.setNetwork)
+
+
     # FIXME[hack]: split up into sensible functions or rename ...
     def setNetwork(self, network, data):
         self.activations.addNetwork(network)
         self.activations.setInputData(data)
+        self.experiments.setNetwork(network)
         self.update()
 
 
     def showStatusMessage(self, message):
         self.statusBar.showMessage(message, 2000)
+
+        
+    def setLayer(self, layer = None) -> None:
+        self.experiments.setLayer(layer)
+
+    def setInputData(self, data = None):
+        '''Provide one data vector as input for the network.
+        '''
+        self.experiments.setInputData(data)
