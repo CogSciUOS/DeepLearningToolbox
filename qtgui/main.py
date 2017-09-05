@@ -4,7 +4,7 @@ from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QAction, QStatusBar
 from PyQt5.QtGui import QIcon
 
-from qtgui.panels import ActivationsPanel, ExperimentsPanel
+from qtgui.panels import ActivationsPanel, ExperimentsPanel, OcclusionPanel
 
 # FIXME[todo]: add docstrings!
 
