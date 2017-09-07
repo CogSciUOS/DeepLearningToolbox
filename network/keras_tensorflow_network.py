@@ -56,7 +56,7 @@ class KerasTensorFlowNetwork(KerasNetwork):
         print(self.get_layer_weights(self.layer_ids[-1])[0].shape)
 
 
-        heatmap=np.dot(np.asarray(heatmap)[0,:,:],self.get_layer_weights(self.layer_ids[-1])[0])[:,np.argmax(self._model.predict(input_sample))]
+        heatmap=np.dot(np.asarray(heatmap)[0,:,:],self.get_layer_weights(self.layer_ids[-1]))[:,np.argmax(self._model.predict(input_sample))]
         heatmap=heatmap-np.min(heatmap)
         heatmap=heatmap/(np.max(heatmap)-np.min(heatmap))
 
