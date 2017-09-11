@@ -34,6 +34,10 @@ see https://deeplearning4j.org/compare-dl4j-torch7-pylearn for an overview of de
 * https://pair-code.github.io/deeplearnjs/demos/imagenet/imagenet-demo.html  
 * https://github.com/PAIR-code/saliency
 
+## Other approaches at wrapping deep learning frameworks
+* https://github.com/onnx/onnx
+* https://github.com/netaz/caffe2any
+
 ## References
 * https://medium.com/@hint_fm/design-and-redesign-4ab77206cf9
 * http://cs231n.stanford.edu/
