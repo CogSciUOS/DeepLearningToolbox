@@ -3,47 +3,9 @@ import numpy as np
 import tensorflow as tf
 from collections import OrderedDict
 from network.network import BaseNetwork
+from network.exceptions import ParsingError
 
-
-class NonMatchingLayerDefinition(Exception):
-    pass
-
-
-class TensorFlowLayer:
-
-
-    def __init__(self, layer_type, ops):
-        self._type = layer_type
-        self._ops = ops
-
-    @property
-    def type(self):
-        return self._type
-
-    # Assume that there is only one input/output that matters.
-    @property
-    def input_shape(self):
-        return tuple(self._ops[0].inputs[0].get_shape.as_list())
-
-    @property
-    def output_shape(self):
-        return tuple(self._ops[-1].outputs[0].get_shape.as_list())
-
-    @property
-    def activation_tensor(self):
-        """The tensor that contains the activations of the layer."""
-        # For now assume that the last operation is the activation.
-        # Maybe differentiate with subclasses later.
-        return self.ops[-1].values()
-
-    @property
-    def weight_tensor(self):
-        return self._ops[0].inputs[-1]
-
-
-class TensorFlowNetwork(BaseNetwork):
-    """Network interface to TensorFlow."""
-    operation_types = {
+_OPERATION_TYPES = {
         'activation_functions': ['Relu',
                                   'Relu6',
                                   'Relu',
@@ -73,24 +35,76 @@ class TensorFlowNetwork(BaseNetwork):
         'recurrent_neural_networks': []
     }
 
-    layer_defs = {
+
+class NonMatchingLayerDefinition(Exception):
+    pass
+
+
+class TensorFlowLayer:
+
+
+    def __init__(self, layer_type, ops):
+        self._type = layer_type
+        self._ops = ops
+
+    @property
+    def type(self):
+        return self._type
+
+    # Assume that there is only one input/output that matters.
+    @property
+    def input_shape(self):
+        return tuple(self._ops[0].inputs[0].get_shape().as_list())
+
+    @property
+    def output_shape(self):
+        return tuple(self._ops[-1].outputs[0].get_shape().as_list())
+
+    @property
+    def activation_tensor(self):
+        """The tensor that contains the activations of the layer."""
+        # For now assume that the last operation is the activation.
+        # Maybe differentiate with subclasses later.
+        if self._ops[-1].type in _OPERATION_TYPES['activation_functions']:
+            return self.ops[-1].outputs[0]
+        else:
+            raise ValueError('No activation function')
+
+    @property
+    def net_input_tensor(self):
+        if self.ops[-3].type == 'MatMul':
+            return self.ops[-3].outputs[0]
+
+    @property
+    def weight_tensor(self):
+        # The last input of the first operation should correspond to the weights.
+        return self._ops[0].inputs[-1]
+
+
+
+
+class TensorFlowNetwork(BaseNetwork):
+    """Network interface to TensorFlow."""
+
+
+    _LAYER_DEFS = {
         'Conv2D': [
-            operation_types['convolution'],
+            _OPERATION_TYPES['convolution'],
             ['Add', 'BiasAdd'],
-            operation_types['activation_functions']
+            _OPERATION_TYPES['activation_functions']
         ],
         'MaxPooling2D': ['MaxPool'],
         'Dense': [
             ['MatMul'],
             ['Add', 'BiasAdd'],
-            operation_types['activation_functions']
+            _OPERATION_TYPES['activation_functions']
         ]
     }
 
     def __init__(self, model_file: str=None, sess: tf.Session=None):
         if model_file is not None and sess is None:
             # Restore the tensorflow model from a file.
-            self._sess = sess=tf.Session()
+            self._sess = tf.Session()
             saver = tf.train.import_meta_graph(os.path.join(model_file, '.meta'))
             saver.restore(sess, model_file)
         elif model_file is None and sess is not None:
@@ -98,7 +112,7 @@ class TensorFlowNetwork(BaseNetwork):
             self._sess = sess
 
         # Try to parse layers.
-        self._layers = self._compute_layers()
+        self._layers = self._create_layer_dict()
 
     @property
     def layer_ids(self) -> list:
@@ -139,7 +153,7 @@ class TensorFlowNetwork(BaseNetwork):
 
     def get_activations(self, layer_ids, input_samples: np.ndarray) -> list:
         """
-        Gives activations values of the network/model
+        Gives activations values of the loaded_network/model
         for a given layername and an input (inputsample).
         Parameters
         ----------
@@ -179,7 +193,7 @@ class TensorFlowNetwork(BaseNetwork):
         """
         return self._sess.run(self._layers[layer_id])
 
-    def _compute_layers(self) -> OrderedDict:
+    def _create_layer_dict(self) -> OrderedDict:
         """Try to find the sequences in operations of the graph that
         match the idea of a layer.
 
@@ -187,11 +201,11 @@ class TensorFlowNetwork(BaseNetwork):
         -------
         A mapping of layer_ids to layer objects.
         """
-        layers = OrderedDict
-        layer_counts = {layer_type: 0 for layer_type in self.layer_defs.keys()}
+        layers = OrderedDict()
+        layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
         for op_idx in range(len(self._sess.graph.get_operations())):
             try:
-                for layer_type, layer_def in self.layer_defs.items():
+                for layer_type, layer_def in self._LAYER_DEFS.items():
                     matching_ops = self._match_layer_def(op_idx, layer_def)
                     # Increment count for layer type.
                     layer_counts[layer_type] += 1
@@ -200,8 +214,8 @@ class TensorFlowNetwork(BaseNetwork):
             except NonMatchingLayerDefinition:
                 continue
 
-        if not self._layers:
-            raise ValueError('Could not find any layers in TensorFlow graph.')
+        if not layers:
+            raise ParsingError('Could not find any layers in TensorFlow graph.')
 
         return layers
 
@@ -222,9 +236,8 @@ class TensorFlowNetwork(BaseNetwork):
         ops = self._sess.graph.get_operations()
         num_matched_ops = 0
         num_ops_to_match = len(layer_def)
-        for op_group in layer_def:
-            if ops[op_idx] in op_group:
-                op_idx += 1
+        for i, op_group in enumerate(layer_def):
+            if ops[i] in op_group:
                 continue
             else:
                 raise NonMatchingLayerDefinition

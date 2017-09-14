@@ -1,8 +1,11 @@
-# Ignore all numpy data files.
+# Numpy data files.
 *.npy
-# Ignore keras model files.
+# Keras model files.
 *.h5
-#
+# Caffe model files.
+*.prototxt
+*.caffemodel
+# IDE files.
 .idea/
 # Byte-compiled / optimized / DLL files
 __pycache__/

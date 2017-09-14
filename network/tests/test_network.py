@@ -1,51 +1,89 @@
 from unittest import TestCase
-from network import build_keras_network
 import numpy as np
+from network import BaseNetwork
+from frozendict import FrozenOrderedDict
+
+class MockLayer:
+
+    def __init__(self, input_shape):
+        self.input_shape = input_shape
 
 
-
+class MockNetwork(BaseNetwork):
+    """Mock to allow instantiation."""
+    def __init__(self, **kwargs):
+        self._data_format = kwargs['data_format']
+        self.layer_dict = FrozenOrderedDict(input_layer=MockLayer(input_shape=kwargs['input_shape']))
 
 
 class TestBaseNetwork(TestCase):
     def setUp(self):
-        self.network = build_keras_network('../../models/example_keras_mnist_model_with_dropout.h5')
+        self.network_last = MockNetwork(data_format='channels_last', input_shape=(1, 28, 30, 1))
+        self.network_first = MockNetwork(data_format='channels_first', input_shape=(1, 1, 28, 30))
 
 
-    def test__check_activation_args(self):
+    def test_transform_input(self):
 
-        mock_input_sample = np.zeros((1, 28, 28, 1))
+        mock_input_sample = np.zeros((1, 28, 30, 1))
 
-        layer_ids, input_samples = self.network._check_get_activations_args(['dense_1'], mock_input_sample)
-        self.assertEqual(
-            layer_ids,
-            ['dense_1']
-        )
-        self.assertTrue(np.all(mock_input_sample == input_samples))
+        # Check that the data format is changed correctly.
+        input_sample = self.network_last._transform_input(mock_input_sample, data_format='channels_last')
+        self.assertTrue(np.all(mock_input_sample == input_sample))
 
-        layer_ids, input_samples = self.network._check_get_activations_args('dense_1', mock_input_sample)
-        self.assertEqual(
-            layer_ids,
-            ['dense_1']
-        )
-        self.assertTrue(np.all(mock_input_sample == input_samples))
+        input_sample = self.network_first._transform_input(mock_input_sample, data_format='channels_last')
+        self.assertTrue(input_sample.shape == (1, 1, 28, 30))
 
-        layer_ids, input_samples = self.network._check_get_activations_args(['dense_1', 'dense_2'], mock_input_sample)
-        self.assertEqual(
-            layer_ids,
-            ['dense_1', 'dense_2']
-        )
-        self.assertTrue(np.all(mock_input_sample == input_samples))
-
-        rank_2_input = np.zeros((28, 28))
-        layer_ids, input_samples = self.network._check_get_activations_args(['dense_1', 'dense_2'], rank_2_input)
-        self.assertEqual((1, 28, 28, 1), input_samples.shape)
-
-        batch_only_input = np.zeros((1, 28, 28))
-        layer_ids, input_samples = self.network._check_get_activations_args(['dense_1', 'dense_2'], batch_only_input)
-        self.assertEqual((1, 28, 28, 1), input_samples.shape)
-
-        gray_channel_only_input = np.zeros((28, 28, 1))
-        layer_ids, input_samples = self.network._check_get_activations_args(['dense_1', 'dense_2'], gray_channel_only_input)
-        self.assertEqual((1, 28, 28, 1), input_samples.shape)
+    def test_fill_up_ranks(self):
 
 
+        rank_2_input = np.zeros((28, 30))
+        input_samples = self.network_last._fill_up_ranks(rank_2_input)
+        self.assertEqual((1, 28, 30, 1), input_samples.shape)
+
+        batch_only_input = np.zeros((1, 28, 30))
+        input_samples = self.network_last._fill_up_ranks(batch_only_input)
+        self.assertEqual((1, 28, 30, 1), input_samples.shape)
+
+        gray_channel_only_input = np.zeros((28, 30, 1))
+        input_samples = self.network_last._fill_up_ranks(gray_channel_only_input)
+        self.assertEqual((1, 28, 30, 1), input_samples.shape)
+
+
+
+    #
+    # def test__check_activation_args(self):
+    #
+    #     mock_input_sample = np.zeros((1, 1, 28, 28))
+    #
+    #     layer_ids, input_samples = self.loaded_network._check_get_activations_args(['dense_1'], mock_input_sample)
+    #     self.assertEqual(
+    #         layer_ids,
+    #         ['dense_1']
+    #     )
+    #     self.assertTrue(np.all(mock_input_sample == input_samples))
+    #
+    #     layer_ids, input_samples = self.loaded_network._check_get_activations_args('dense_1', mock_input_sample)
+    #     self.assertEqual(
+    #         layer_ids,
+    #         ['dense_1']
+    #     )
+    #     self.assertTrue(np.all(mock_input_sample == input_samples))
+    #
+    #     layer_ids, input_samples = self.loaded_network._check_get_activations_args(['dense_1', 'dense_2'], mock_input_sample)
+    #     self.assertEqual(
+    #         layer_ids,
+    #         ['dense_1', 'dense_2']
+    #     )
+    #     self.assertTrue(np.all(mock_input_sample == input_samples))
+    #
+    #     rank_2_input = np.zeros((28, 28))
+    #     layer_ids, input_samples = self.loaded_network._check_get_activations_args(['dense_1', 'dense_2'], rank_2_input)
+    #     self.assertEqual((1, 1, 28, 28), input_samples.shape)
+    #
+    #     batch_only_input = np.zeros((1, 28, 28))
+    #     layer_ids, input_samples = self.loaded_network._check_get_activations_args(['dense_1', 'dense_2'], batch_only_input)
+    #     self.assertEqual((1, 1, 28, 28), input_samples.shape)
+    #
+    #     gray_channel_only_input = np.zeros((28, 28, 1))
+    #     layer_ids, input_samples = self.loaded_network._check_get_activations_args(['dense_1', 'dense_2'], gray_channel_only_input)
+    #     self.assertEqual((1, 1, 28, 28), input_samples.shape)

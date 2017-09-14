@@ -3,6 +3,9 @@ import keras
 from keras.models import Model, load_model
 import numpy as np
 from typing import List
+from collections import OrderedDict
+from frozendict import FrozenOrderedDict
+
 
 class KerasNetwork(BaseNetwork):
     """Abstract base class for the keras networks for the specific backends.
@@ -10,79 +13,24 @@ class KerasNetwork(BaseNetwork):
     Implements only the functionality that can be efficiently implemented in pure
     Keras.
     """
-    def __init__(self, model_file: str):
+    def __init__(self, **kwargs):
         """
         Load Keras model.
         Parameters
         ----------
-        modelfile_path
+        model_file
             Path to the .h5 model file.
         """
-        ## Set learning phase to train in case setting to test would affect gradient computation.
-        #TODO: Set it to test, to eliminate dropout, check for gradient computation later.
+        # Set learning phase to train in case setting to test would affect gradient computation.
+        # TODO: Set it to test, to eliminate dropout, check for gradient computation later.
         keras.backend.set_learning_phase(0)
-        self._model = load_model(model_file)
-        self._layer_ids = self._compute_layer_ids()
-
-    @property
-    def layer_ids(self) -> list:
-        """
-        Get list of layer ids.
-        Returns
-        -------
-
-        """
-        return self._layer_ids
-
-    def get_layer_input_shape(self, layer_id) -> tuple:
-        """
-        Give the shape of the input of the given layer.
-
-        Parameters
-        ----------
-        layer_id
-
-        Returns
-        -------
-        """
-        return self._model.get_layer(layer_id).get_input_shape_at(0)
-
-    def get_layer_output_shape(self, layer_id) -> tuple:
-        """
-        Give the shape of the output of the given layer.
-
-        Parameters
-        ----------
-        layer_id
-
-        Returns
-        -------
-
-        """
-        return self._model.get_layer(layer_id).get_output_shape_at(0)
-
-    def get_layer_weights(self, layer_id) -> np.ndarray:
-        """
-        Returns weights INCOMING to the
-        layer of the model
-        shape of the weights variable should be
-        coherent with the get_layer_output_shape function.
-
-        Parameters
-        ----------
-        layer_id :
-             An identifier for a layer.
-
-        Returns
-        -------
-        ndarray
-            Weights of the layer.
-
-        """
-        return self._model.get_layer(layer_id).get_weights()[0]
-
-    def get_layer_bias(self, layer_id) -> np.ndarray:
-        return self._model.get_layer(layer_id).get_weights()[1]
+        if 'model_file' in kwargs.keys():
+            self._model = load_model(kwargs.pop('model_file'))
+        elif 'model' in kwargs.keys():
+            self._model = kwargs['model']
+        # Check the data format.
+        kwargs['data_format'] = keras.backend.image_data_format()
+        super().__init__(**kwargs)
 
     def _compute_layer_ids(self):
         """
