@@ -33,6 +33,7 @@ see https://deeplearning4j.org/compare-dl4j-torch7-pylearn for an overview of de
 * https://cs.stanford.edu/people/karpathy/convnetjs/  
 * https://pair-code.github.io/deeplearnjs/demos/imagenet/imagenet-demo.html  
 * https://github.com/PAIR-code/saliency
+* https://github.com/InFoCusp/tf_cnnvis (visualizations for TensorFlow with static tensorboard integration)
 
 ## Other approaches at wrapping deep learning frameworks
 * https://github.com/onnx/onnx
