@@ -4,124 +4,232 @@ import tensorflow as tf
 from collections import OrderedDict
 from network.network import BaseNetwork
 from network.exceptions import ParsingError
+from frozendict import FrozenOrderedDict
+from layers import tensorflow_layers
+import re
 
-_OPERATION_TYPES = {
-        'activation_functions': ['Relu',
-                                  'Relu6',
-                                  'Relu',
-                                  'Elu',
-                                  'Softplus',
-                                  'Softsign',
-                                  'Sigmoid',
-                                  'Tanh'],
-        'classification': [],
-        'convolution': ['Conv2D',
-                     'DepthwiseConv2dNative',
-                     'DepthwiseConv2dNative',
-                     'Conv2DBackpropFilter',
-                     'Conv2DBackpropInput',
-                     'DepthwiseConv2dNativeBackpropFilter',
-                     'DepthwiseConv2dNativeBackpropInput'],
-        'embeddings': [],
-        'evaluation': ['TopKV2'],
-        'losses': ['L2Loss'],
-        'morphological_filtering': [],
-        'normalization': ['LRN'],
-        'pooling': ['AvgPool',
-                 'MaxPool',
-                 'MaxPoolWithArgmax',
-                 'FractionalAvgPool',
-                 'FractionalMaxPool'],
-        'recurrent_neural_networks': []
-    }
+
 
 
 class NonMatchingLayerDefinition(Exception):
     pass
 
 
-class TensorFlowLayer:
-
-
-    def __init__(self, layer_type, ops):
-        self._type = layer_type
-        self._ops = ops
-
-    @property
-    def type(self):
-        return self._type
-
-    # Assume that there is only one input/output that matters.
-    @property
-    def input_shape(self):
-        return tuple(self._ops[0].inputs[0].get_shape().as_list())
-
-    @property
-    def output_shape(self):
-        return tuple(self._ops[-1].outputs[0].get_shape().as_list())
-
-    @property
-    def activation_tensor(self):
-        """The tensor that contains the activations of the layer."""
-        # For now assume that the last operation is the activation.
-        # Maybe differentiate with subclasses later.
-        if self._ops[-1].type in _OPERATION_TYPES['activation_functions']:
-            return self.ops[-1].outputs[0]
-        else:
-            raise ValueError('No activation function')
-
-    @property
-    def net_input_tensor(self):
-        if self.ops[-3].type == 'MatMul':
-            return self.ops[-3].outputs[0]
-
-    @property
-    def weight_tensor(self):
-        # The last input of the first operation should correspond to the weights.
-        return self._ops[0].inputs[-1]
-
-
-
 
 class TensorFlowNetwork(BaseNetwork):
     """Network interface to TensorFlow."""
 
+    _OPERATION_TYPES = {
+        'activation_functions': {'Relu',
+                                 'Relu6',
+                                 'Relu',
+                                 'Elu',
+                                 'Softplus',
+                                 'Softsign',
+                                 'Sigmoid',
+                                 'Tanh',
+                                 'Softmax' # Should not really count as an activation function, as it is computed
+                                           # base on the whole layer inputs. It is convenient though.
+                                 },
+        'classification': [],
+        'convolution': {'Conv2D',
+                        'DepthwiseConv2dNative',
+                        'DepthwiseConv2dNative',
+                        'Conv2DBackpropFilter',
+                        'Conv2DBackpropInput',
+                        'DepthwiseConv2dNativeBackpropFilter',
+                        'DepthwiseConv2dNativeBackpropInput'},
+        'embeddings': set(),
+        'evaluation': {'TopKV2'},
+        'losses': {'L2Loss'},
+        'morphological_filtering': set(),
+        'normalization': {'LRN'},
+        'pooling': {'AvgPool',
+                    'MaxPool',
+                    'MaxPoolWithArgmax',
+                    'FractionalAvgPool',
+                    'FractionalMaxPool'},
+        'recurrent_neural_networks': set()
+    }
+
+
+
+    _LAYER_TYPES_TO_CLASSES = {
+        'Conv2D': tensorflow_layers.TensorFlowConv2D,
+        'Dense': tensorflow_layers.TensorFlowDense,
+        'MaxPooling2D': tensorflow_layers.TensorFlowMaxPooling2D,
+        'Dropout': tensorflow_layers.TensorFlowDropout,
+        'Flatten': tensorflow_layers.TensorFlowFlatten
+    }
 
     _LAYER_DEFS = {
         'Conv2D': [
             _OPERATION_TYPES['convolution'],
-            ['Add', 'BiasAdd'],
+            {'Add', 'BiasAdd'},
             _OPERATION_TYPES['activation_functions']
         ],
-        'MaxPooling2D': ['MaxPool'],
+        'MaxPooling2D': {'MaxPool'},
         'Dense': [
-            ['MatMul'],
-            ['Add', 'BiasAdd'],
-            _OPERATION_TYPES['activation_functions']
-        ]
+            {'MatMul'},
+            {'Add', 'BiasAdd'},
+            _OPERATION_TYPES['activation_functions'] | {'?'},
+        ],
+        'Flatten': ['Shape',
+                    'Const',
+                    'Const',
+                    'Slice',
+                    'Const',
+                    'Const',
+                    'Slice',
+                    'Const',
+                    'Prod',
+                    'Const',
+                    'ExpandDims',
+                    'Const',
+                    'ConcatV2',
+                    'Reshape'],
+        'Dropout': ['Shape',
+                    'Const',
+                    'Const',
+                    'RandomUniform',
+                    'Sub',
+                    'Mul',
+                    'Add',
+                    'Add',
+                    'Floor',
+                    'RealDiv',
+                    'Mul']
     }
 
-    def __init__(self, model_file: str=None, sess: tf.Session=None):
-        if model_file is not None and sess is None:
+
+    keras_name_regex = re.compile(r'(.)([A-Z][a-z0-9]+)')
+
+    def __init__(self, **kwargs):
+        checkpoint = kwargs.get('checkpoint', None)
+        sess = kwargs.get('session', None)
+        if checkpoint is not None and sess is None:
             # Restore the tensorflow model from a file.
             self._sess = tf.Session()
-            saver = tf.train.import_meta_graph(os.path.join(model_file, '.meta'))
-            saver.restore(sess, model_file)
-        elif model_file is None and sess is not None:
+            saver = tf.train.import_meta_graph(checkpoint + '.meta')
+            model_dir = os.path.split(checkpoint)[0]
+            saver.restore(self._sess, tf.train.latest_checkpoint(model_dir))
+        elif checkpoint is None and sess is not None:
             # Just store the session since the model is already there.
             self._sess = sess
+        # TensorFlow uses channels last as data format by default. This can however be changed
+        # by the user.
+        # TODO make this more flexible.
+        kwargs['data_format'] = 'channels_last'
+        super().__init__(**kwargs)
 
-        # Try to parse layers.
-        self._layers = self._create_layer_dict()
+    def _create_layer_dict(self) -> FrozenOrderedDict:
+        """Try to find the sequences in operations of the graph that
+        match the idea of a layer.
 
-    @property
-    def layer_ids(self) -> list:
-        """Get list of layer ids.
+        Returns
+        -------
+        A mapping of layer_ids to layer objects.
+        """
+        layer_dict = OrderedDict()
+        layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
+        op_idx = 0
+        while op_idx < len(self._sess.graph.get_operations()):
+
+            for layer_type, layer_def in self._LAYER_DEFS.items():
+                try:
+                    matching_ops = self._match_layer_def(op_idx, layer_def)
+                    # Increment count for layer type.
+                    layer_counts[layer_type] += 1
+                    layer_name = '{}_{}'.format(self._to_keras_name(layer_type), layer_counts[layer_type])
+                    layer_dict[layer_name] = self._LAYER_TYPES_TO_CLASSES[layer_type](self, matching_ops)
+                    # If the layer definition was successfully matched, advance the number of ops
+                    # that were matched. Don't try to match another layer definition at the same
+                    # op by breaking the for loop.
+                    op_idx += len(layer_def) - 1
+                    break
+                except NonMatchingLayerDefinition:
+                    continue
+            # Try to match at the next op.
+            op_idx += 1
+
+        if not layer_dict:
+            raise ParsingError('Could not find any layers in TensorFlow graph.')
+
+        layer_dict = FrozenOrderedDict(layer_dict)
+        return layer_dict
+
+    def _match_layer_def(self, op_idx: int, layer_def: dict) -> list:
+        """Check whether the layer definition match the operations starting from a
+        certain index.
+
+        Parameters
+        ----------
+        op_idx
+        layer_def
+
         Returns
         -------
 
         """
-        return list(self._layers.keys())
+        ops = self._sess.graph.get_operations()
+        matched_ops = []
+        for i, op_group in enumerate(layer_def):
+            if ops[op_idx + i].type in op_group:
+                matched_ops.append(ops[op_idx + i])
+                continue
+            # The operation at this position is optional. This is only the case if we are dealing with a linear
+            # activation function. In this case the last MatMul operation should just be duplicated as
+            # the activation.
+            elif '?' in op_group:
+                matched_ops.append(ops[op_idx + i - 1])
+                continue
+            else:
+                raise NonMatchingLayerDefinition
+        # If all operations could be matched, return the respective operations.
+        return matched_ops
+
+
+    def _to_keras_name(self, name):
+        return self.keras_name_regex.sub(r'\1_\2', name).lower()
+
+
+    def _compute_activations(self, layer_ids: list, input_samples: np.ndarray) -> list:
+        """
+        Parameters
+        ----------
+        layer_ids
+        input_samples
+
+        Returns
+        -------
+
+        """
+        # Get the tensors that actually hold the activations.
+        activation_tensors = []
+        for layer_id in layer_ids:
+            activation_tensors.append(self.layer_dict[layer_id].activation_tensor)
+        print('activation tensors', activation_tensors)
+        return self._feed_input(activation_tensors, input_samples)
+
+    def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
+        net_input_tensors = []
+        for layer_id in layer_ids:
+            net_input_tensors.append(self.layer_dict[layer_id].net_input_tensor)
+        print('net tensors', net_input_tensors)
+
+        return self._feed_input(net_input_tensors, input_samples)
+
+
+    def _feed_input(self, fetches: list, input_samples: np.ndarray):
+        network_input_tensor = self._sess.graph.get_operations()[0].outputs[0] # Assuming the first op is the input.
+        return self._sess.run(fetches=fetches, feed_dict={network_input_tensor: input_samples})
+
+
+
+
+
+
+
 
     def get_layer_input_shape(self, layer_id) -> tuple:
         """
@@ -134,7 +242,8 @@ class TensorFlowNetwork(BaseNetwork):
         Returns
         -------
         """
-        return tuple(self._layers[0].inputs[0].get_shape.as_list())
+        return self.layer_dict[layer_id].input_shape
+
 
     def get_layer_output_shape(self, layer_id) -> tuple:
         """
@@ -148,29 +257,7 @@ class TensorFlowNetwork(BaseNetwork):
         -------
 
         """
-        return tuple(self._layers[layer_id].output)
-
-
-    def get_activations(self, layer_ids, input_samples: np.ndarray) -> list:
-        """
-        Gives activations values of the loaded_network/model
-        for a given layername and an input (inputsample).
-        Parameters
-        ----------
-        layer_ids
-        input_samples
-
-        Returns
-        -------
-
-        """
-        layer_ids, input_samples = super().get_activations(layer_ids, input_samples)
-        # Get the tensors that actually hold the activations.
-        activation_tensors = []
-        for layer_id in layer_ids:
-            activation_tensors.append(self._layers[layer_id].activation_tensor)
-        network_input = self._sess.graph.get_operations()[0].values()
-        return self._sess.run(fetches=activation_tensors, feed_dict={network_input: input_samples})
+        return self.layer_dict[layer_id].output_shape
 
 
 
@@ -191,57 +278,6 @@ class TensorFlowNetwork(BaseNetwork):
             Weights of the layer.
 
         """
-        return self._sess.run(self._layers[layer_id])
-
-    def _create_layer_dict(self) -> OrderedDict:
-        """Try to find the sequences in operations of the graph that
-        match the idea of a layer.
-
-        Returns
-        -------
-        A mapping of layer_ids to layer objects.
-        """
-        layers = OrderedDict()
-        layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
-        for op_idx in range(len(self._sess.graph.get_operations())):
-            try:
-                for layer_type, layer_def in self._LAYER_DEFS.items():
-                    matching_ops = self._match_layer_def(op_idx, layer_def)
-                    # Increment count for layer type.
-                    layer_counts[layer_type] += 1
-                    layer_name = '{}_{}'.format(layer_type, layer_counts[layer_type]).lower()
-                    layers[layer_name] = TensorFlowLayer(layer_type, matching_ops)
-            except NonMatchingLayerDefinition:
-                continue
-
-        if not layers:
-            raise ParsingError('Could not find any layers in TensorFlow graph.')
-
-        return layers
-
-
-    def _match_layer_def(self, op_idx: int, layer_def: dict) -> list:
-        """Check whether the layer definition match the operations starting from a
-        certain index.
-
-        Parameters
-        ----------
-        op_idx
-        layer_def
-
-        Returns
-        -------
-
-        """
-        ops = self._sess.graph.get_operations()
-        num_matched_ops = 0
-        num_ops_to_match = len(layer_def)
-        for i, op_group in enumerate(layer_def):
-            if ops[i] in op_group:
-                continue
-            else:
-                raise NonMatchingLayerDefinition
-        # If all operations could be matched, return the respective operations.
-        return ops[op_idx - len(layer_def): op_idx]
+        return self.layer_dict[layer_id].weights
 
 

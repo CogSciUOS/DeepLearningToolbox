@@ -1,6 +1,5 @@
 from unittest import TestCase
 import keras
-import tensorflow as tf
 from network import KerasTensorFlowNetwork
 from layers import keras_tensorflow_layers
 import numpy as np
@@ -13,20 +12,17 @@ class TestKerasTensorFlowNetwork(TestCase):
     def setUpClass(cls):
         cls.loaded_network = KerasTensorFlowNetwork(model_file='../../models/example_keras_mnist_model_with_dropout.h5')
         cls.data = mnist.load_data()[1][0]
-        print(cls.loaded_network._model.summary())
 
 
     def test_get_net_input(self):
         input_image = self.data[0:1, :, :, np.newaxis]
         net_input = self.loaded_network.get_net_input('dense_2', input_image)
-        net_input_op = self.loaded_network._sess.graph.get_operation_by_name('dense_2/MatMul')
+        net_input_op = self.loaded_network._sess.graph.get_operation_by_name('dense_2/BiasAdd')
         input_tensor = self.loaded_network._sess.graph.get_operations()[0].values()
         net_input_tf = self.loaded_network._sess.run(fetches=net_input_op.outputs[0], feed_dict={input_tensor: input_image})
         self.assertTrue(
             np.allclose(
-                np.array([-1505.14733887, -1338.03356934, -486.38830566, 535.47344971,
-                        -441.35351562, -1079.85339355, -2718.96582031, 4316.87011719,
-                        -1242.92114258, 424.82171631], dtype='float32'),
+                net_input_tf,
                 net_input
             )
         )

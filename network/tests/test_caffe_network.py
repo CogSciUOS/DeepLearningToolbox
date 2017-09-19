@@ -9,14 +9,14 @@ from layers import caffe_layers
 
 class TestCaffeNetwork(TestCase):
 
-
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         model_def = '../../models/example_caffe_network_deploy.prototxt'
         model_weights = '../../models/mnist.caffemodel'
-        self.loaded_network = CaffeNetwork(model_def=model_def, model_weights=model_weights)
+        cls.loaded_network = CaffeNetwork(model_def=model_def, model_weights=model_weights)
         # Load the images from the test set and normalize.
-        self.data = mnist.load_data()[1][0]
-        self.data = self.data / self.data.max()
+        cls.data = mnist.load_data()[1][0]
+        cls.data = cls.data / cls.data.max()
 
     # Test layer properties from layer dict.
 
@@ -76,6 +76,7 @@ class TestCaffeNetwork(TestCase):
                          self.loaded_network.layer_dict['conv2d_2'].strides)
         self.assertEqual((2, 2),
                          self.loaded_network.layer_dict['max_pooling2d_1'].strides)
+
         with self.assertRaises(AttributeError):
             self.loaded_network.layer_dict['dense_1'].strides
 
@@ -111,13 +112,12 @@ class TestCaffeNetwork(TestCase):
         )
 
     def test_get_net_input(self):
-        # TODO look at no inplace network for this.
         input_image = self.data[0:1, :, :, np.newaxis]
         activations = self.loaded_network.get_net_input('dense_2', input_image)
         prediction = np.array([-1.36028111, -3.88575125, 2.72432756, 2.30506134,
                                -5.98569441, -2.92878628, -11.05670547, 18.10473251,
                                -2.4147923, 4.62582827], dtype='float32')
-        # Increase absolute tolerance a little to make in work.
+        # Increase absolute tolerance a little to make it work.
         self.assertTrue(
             np.allclose(prediction, activations, atol=1e-6)
         )

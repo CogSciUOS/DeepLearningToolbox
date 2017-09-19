@@ -101,14 +101,14 @@ class KerasTensorFlowNetwork(KerasNetwork):
         ops = self._sess.graph.get_operations()
         net_input_tensors = []
         # To get the net input of a layer we take the second to last operation as the net input.
-        # The last operation corresponds usually to the addition of the bias.
+        # This operation corresponds usually to the addition of the bias.
         for layer_id in layer_ids:
             output_op = self.layer_dict[layer_id].output.op
-            net_input_op = ops[ops.index(output_op) - 2]
+            net_input_op = ops[ops.index(output_op) - 1]
             # Assumes the second to last op is the matmaul / convolution operation.
             net_input_tensors.append(net_input_op.outputs[0])
             # Sanity check.
-            if net_input_op.type not in {'Conv2D', 'MatMul'}:
+            if net_input_op.type not in {'Add', 'BiasAdd'}:
                 raise ValueError('Operation of type {} does not provided net input.'.format(net_input_op.type))
         return self._feed_input(net_input_tensors, input_samples)
 

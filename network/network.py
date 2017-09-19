@@ -78,7 +78,7 @@ class BaseNetwork:
 
     def get_activations(self, layer_ids: Any,
                         input_samples: np.ndarray,
-                        data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray, ...]]:
+                        data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
         
@@ -114,7 +114,7 @@ class BaseNetwork:
 
     def get_net_input(self, layer_ids: Any,
                       input_samples: np.ndarray,
-                      data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray, ...]]:
+                      data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray]]:
         """Gives the net input (inner product + bias) values of the network
         for given layers and an input sample.
 
@@ -199,11 +199,6 @@ class BaseNetwork:
         inputs = self._fill_up_ranks(inputs)
         inputs = convert_data_format(inputs, input_format=data_format, output_format=self._data_format)
 
-        # Sanity check.
-        network_input_shape = self[0].input_shape
-        if inputs.shape[1:] != network_input_shape[1:]:
-            raise ValueError('Incorrect input shape: expect {}, got {}'.
-                             format(network_input_shape, inputs.shape))
         return inputs
 
 
