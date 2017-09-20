@@ -30,7 +30,7 @@ class QNetworkView(QWidget):
     """
 
     
-    def __init__(self, parent = None):
+    def __init__(self, parent=None):
         '''Initialization of the QNetworkView.
 
         Arguments
@@ -49,7 +49,7 @@ class QNetworkView(QWidget):
         self.setLayout(QVBoxLayout())
 
 
-    def setNetwork(self, network = None):
+    def setNetwork(self, network=None):
         '''Set the network to display in this widget
         '''
         self.network = network
@@ -170,7 +170,7 @@ class QNetworkInfoBox(QLabel):
         self.setLayer(layer_id)
 
 
-    def setLayer(self, layer_id = None) -> None:
+    def setLayer(self, layer_id=None) -> None:
         """Set the layer for which information are displayed.
 
         Arguments
@@ -195,36 +195,22 @@ class QNetworkInfoBox(QLabel):
 
         self.setText(self.networkText + self.layerText)
 
+    def _layerInfoString(self, layer: Layer) -> str:
+        """Provide a string with information about a network layer.
 
-    def _layerInfoString(self, layer : Layer):
-        """Provide a string with information on a network layer.
-
-        Arguments
-        ---------
+        Parameters
+        ----------
         layer
             The network layer.
 
         Returns
         -------
-        str
-            A string containing information on that layer.
+        A string containing information on that layer.
         """
-        print("debug: {}".format(type(layer)))
-        if isinstance(layer, Conv2D):
-            text = "Convolutional" + "<br>\n"
-            text += "FIXME[todo]"
-            #text += self._convolutionalLayerInfoString(layer)
-        else:
-            text = "Fully connected" + "<br>\n"
-            
-        try:
-            text += "FIXME[todo]"
-            #info = self.network.get_layer_info(layer)
-            #text += info['name'] + "<br>\n"
-        except NotImplementedError:
-            text += "The implementation provides no information for this layer.<br>\n"
-        return text
-
+        info_str = ''
+        for key, val in layer.info.items():
+            info_str += '<b>{}</b>: {}<br>\n'.format(key, val)
+        return info_str
 
     def _convolutionalLayerInfoString(self, layer_id) -> str:
         """Provide a string with information on a convolutional layer.
