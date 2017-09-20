@@ -109,6 +109,14 @@ class TestKerasTensorFlowNetwork(TestCase):
         with self.assertRaises(AttributeError):
             self.loaded_network.layer_dict['max_pooling2d_1'].kernel_size
 
+    def test_filters(self):
+        self.assertEqual(32,
+                         self.loaded_network.layer_dict['conv2d_2'].filters)
+        with self.assertRaises(AttributeError):
+            self.loaded_network.layer_dict['dense_1'].filters
+        with self.assertRaises(AttributeError):
+            self.loaded_network.layer_dict['max_pooling2d_1'].filters
+
     def test_pool_size(self):
         self.assertEqual(self.loaded_network._model.get_layer('max_pooling2d_1').pool_size, self.loaded_network.layer_dict['max_pooling2d_1'].pool_size)
         with self.assertRaises(AttributeError):

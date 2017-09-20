@@ -56,6 +56,9 @@ class KerasConv2D(KerasNeuralLayer, KerasStridingLayer, layers.Conv2D):
     def kernel_size(self):
         return self._keras_layer_objs[0].kernel_size
 
+    @property
+    def filters(self):
+        return self._keras_layer_objs[0].filters
 
 class KerasMaxPooling2D(KerasStridingLayer, layers.MaxPooling2D):
 

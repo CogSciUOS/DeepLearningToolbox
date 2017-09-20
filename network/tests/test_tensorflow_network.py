@@ -49,7 +49,6 @@ class TestTensorFlowNetwork(TestCase):
 
     def test_layer_dict(self):
         # Check the names.
-        print(list(self.loaded_network.layer_dict.keys()))
         self.assertEqual(list(self.loaded_network.layer_dict.keys()),
                          ['conv2d_1',
                           'max_pooling2d_1',
@@ -60,23 +59,16 @@ class TestTensorFlowNetwork(TestCase):
                           'dropout_2',
                           'dense_2'])
         # Check that the right types where selected.
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['conv2d_1'], tensorflow_layers.TensorFlowConv2D))
-        self.assertTrue(isinstance(self.loaded_network.layer_dict['max_pooling2d_1'],
-                                   tensorflow_layers.TensorFlowMaxPooling2D))
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['conv2d_2'], tensorflow_layers.TensorFlowConv2D))
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['dropout_1'], tensorflow_layers.TensorFlowDropout))
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['flatten_1'], tensorflow_layers.TensorFlowFlatten))
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['dense_1'], tensorflow_layers.TensorFlowDense))
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['dropout_2'], tensorflow_layers.TensorFlowDropout))
-        self.assertTrue(
-            isinstance(self.loaded_network.layer_dict['dense_2'], tensorflow_layers.TensorFlowDense))
-
+        self.assertIsInstance(
+            self.loaded_network.layer_dict['conv2d_1'], tensorflow_layers.TensorFlowConv2D)
+        self.assertIsInstance(self.loaded_network.layer_dict['max_pooling2d_1'],
+                                   tensorflow_layers.TensorFlowMaxPooling2D)
+        self.assertIsInstance(self.loaded_network.layer_dict['conv2d_2'], tensorflow_layers.TensorFlowConv2D)
+        self.assertIsInstance(self.loaded_network.layer_dict['dropout_1'], tensorflow_layers.TensorFlowDropout)
+        self.assertIsInstance(self.loaded_network.layer_dict['flatten_1'], tensorflow_layers.TensorFlowFlatten)
+        self.assertIsInstance(self.loaded_network.layer_dict['dense_1'], tensorflow_layers.TensorFlowDense)
+        self.assertIsInstance(self.loaded_network.layer_dict['dropout_2'], tensorflow_layers.TensorFlowDropout)
+        self.assertIsInstance(self.loaded_network.layer_dict['dense_2'], tensorflow_layers.TensorFlowDense)
 
 
 
@@ -133,6 +125,15 @@ class TestTensorFlowNetwork(TestCase):
             self.loaded_network.layer_dict['dense_1'].kernel_size
         with self.assertRaises(AttributeError):
             self.loaded_network.layer_dict['max_pooling2d_1'].kernel_size
+
+    def test_filters(self):
+        self.assertEqual(32,
+                         self.loaded_network.layer_dict['conv2d_2'].filters)
+        with self.assertRaises(AttributeError):
+            self.loaded_network.layer_dict['dense_1'].filters
+        with self.assertRaises(AttributeError):
+            self.loaded_network.layer_dict['max_pooling2d_1'].filters
+
 
     def test_pool_size(self):
         self.assertEqual((2, 2),

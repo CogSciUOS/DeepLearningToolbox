@@ -1,7 +1,7 @@
 from unittest import TestCase
 import os
 os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
-from network import CaffeNetwork
+from network.caffe_network import CaffeNetwork
 import numpy as np
 from keras.datasets import mnist
 from layers import caffe_layers
@@ -21,7 +21,6 @@ class TestCaffeNetwork(TestCase):
     # Test layer properties from layer dict.
 
     def test_layer_dict(self):
-        print(list(self.loaded_network.layer_dict.keys()))
         self.assertEqual(
             list(self.loaded_network.layer_dict.keys()),
             ['conv2d_1',
@@ -88,6 +87,15 @@ class TestCaffeNetwork(TestCase):
             self.loaded_network.layer_dict['dense_1'].kernel_size
         with self.assertRaises(AttributeError):
             self.loaded_network.layer_dict['max_pooling2d_1'].kernel_size
+
+    def test_filters(self):
+        self.assertEqual(32,
+                         self.loaded_network.layer_dict['conv2d_2'].filters)
+        with self.assertRaises(AttributeError):
+            self.loaded_network.layer_dict['dense_1'].filters
+        with self.assertRaises(AttributeError):
+            self.loaded_network.layer_dict['max_pooling2d_1'].filters
+
 
     def test_pool_size(self):
         self.assertEqual((3, 3),

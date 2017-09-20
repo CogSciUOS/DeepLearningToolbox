@@ -131,6 +131,10 @@ class CaffeConv2D(CaffeNeuralLayer, CaffeStridingLayer, layers.Conv2D):
         kernel_size = list(self._caffe_layer_proto.convolution_param.kernel_size)
         return self._create_kernel_tuple(kernel_size)
 
+    @property
+    def filters(self):
+        return self._caffe_layer_proto.convolution_param.num_output
+
 class CaffeMaxPooling2D(CaffeStridingLayer, layers.MaxPooling2D):
 
     @property

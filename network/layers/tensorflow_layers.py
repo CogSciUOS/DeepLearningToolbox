@@ -64,12 +64,14 @@ class TensorFlowNeuralLayer(TensorFlowLayer, layers.NeuralLayer):
 class TensorFlowStridingLayer(TensorFlowLayer, layers.StridingLayer):
     @property
     def strides(self):
-        strides = self._striding_op.node_def.attr['strides']
+        striding_op = self._ops[0]
+        strides = striding_op.node_def.attr['strides']
         return (strides.list.i[1], strides.list.i[2])
 
     @property
     def padding(self):
-       return self._striding_op.node_def.attr['padding'].s.decode('utf8')
+        striding_op = self._ops[0]
+        return striding_op.node_def.attr['padding'].s.decode('utf8')
 
 
 class TensorFlowDense(TensorFlowNeuralLayer, layers.Dense):
@@ -86,9 +88,8 @@ class TensorFlowConv2D(TensorFlowNeuralLayer, TensorFlowStridingLayer, layers.Co
         return tuple(self.weight_tensor.shape.as_list()[:2])
 
     @property
-    def _striding_op(self):
-        return self._ops[0]
-
+    def filters(self):
+        return self.output_shape[-1]
 
 class TensorFlowMaxPooling2D(TensorFlowStridingLayer, layers.MaxPooling2D):
 
@@ -96,10 +97,6 @@ class TensorFlowMaxPooling2D(TensorFlowStridingLayer, layers.MaxPooling2D):
     def pool_size(self):
         kernel = self._ops[0].node_def.attr['ksize']
         return (kernel.list.i[1], kernel.list.i[2])
-
-    @property
-    def _striding_op(self):
-        return self._ops[0]
 
 
 class TensorFlowDropout(TensorFlowLayer, layers.Dropout):
