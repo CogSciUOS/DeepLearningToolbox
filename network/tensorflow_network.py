@@ -9,11 +9,8 @@ from layers import tensorflow_layers
 import re
 
 
-
-
 class NonMatchingLayerDefinition(Exception):
     pass
-
 
 
 class TensorFlowNetwork(BaseNetwork):
@@ -101,7 +98,6 @@ class TensorFlowNetwork(BaseNetwork):
                     'Mul']
     }
 
-
     keras_name_regex = re.compile(r'(.)([A-Z][a-z0-9]+)')
 
     def __init__(self, **kwargs):
@@ -188,10 +184,8 @@ class TensorFlowNetwork(BaseNetwork):
         # If all operations could be matched, return the respective operations.
         return matched_ops
 
-
     def _to_keras_name(self, name):
         return self.keras_name_regex.sub(r'\1_\2', name).lower()
-
 
     def _compute_activations(self, layer_ids: list, input_samples: np.ndarray) -> list:
         """
@@ -219,65 +213,6 @@ class TensorFlowNetwork(BaseNetwork):
 
         return self._feed_input(net_input_tensors, input_samples)
 
-
     def _feed_input(self, fetches: list, input_samples: np.ndarray):
         network_input_tensor = self._sess.graph.get_operations()[0].outputs[0] # Assuming the first op is the input.
         return self._sess.run(fetches=fetches, feed_dict={network_input_tensor: input_samples})
-
-
-
-
-
-
-
-
-    def get_layer_input_shape(self, layer_id) -> tuple:
-        """
-        Give the shape of the input of the given layer.
-
-        Parameters
-        ----------
-        layer_id
-
-        Returns
-        -------
-        """
-        return self.layer_dict[layer_id].input_shape
-
-
-    def get_layer_output_shape(self, layer_id) -> tuple:
-        """
-        Give the shape of the output of the given layer.
-
-        Parameters
-        ----------
-        layer_id
-
-        Returns
-        -------
-
-        """
-        return self.layer_dict[layer_id].output_shape
-
-
-
-    def get_layer_weights(self, layer_id) -> np.ndarray:
-        """
-        Returns weights INCOMING to the
-        layer (layername) of the model
-        shape of the weights variable should be
-        coherent with the get_layer_output_shape function.
-        Parameters
-        ----------
-        layer_id :
-             An identifier for a layer.
-
-        Returns
-        -------
-        ndarray
-            Weights of the layer.
-
-        """
-        return self.layer_dict[layer_id].weights
-
-
