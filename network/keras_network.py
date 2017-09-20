@@ -1,4 +1,4 @@
-from network import BaseNetwork
+from network.network import BaseNetwork
 import keras
 from keras.models import Model, load_model
 import numpy as np

@@ -1,5 +1,6 @@
 from typing import Tuple
 import numpy as np
+from collections import OrderedDict
 
 
 # ------------ Base layers ----------------------
@@ -20,6 +21,12 @@ class Layer:
         """The shape of the tensor that is output to the layer."""
         raise NotImplementedError
 
+    @property
+    def info(self) -> OrderedDict:
+        info_dict = OrderedDict()
+        info_dict['input_shape'] = self.input_shape
+        info_dict['output_shape'] = self.output_shape
+        return info_dict
 
 class NeuralLayer(Layer):
     """A NeuralLayer is assumed to encapsulated three operations:
@@ -43,7 +50,11 @@ class NeuralLayer(Layer):
     def bias(self) -> np.ndarray:
         raise NotImplementedError
 
-
+    @property
+    def info(self) -> OrderedDict:
+        info_dict = super().info
+        info_dict['num_parameters'] = self.num_parameters
+        return info_dict
 
 class StridingLayer(Layer):
     @property
@@ -66,6 +77,13 @@ class StridingLayer(Layer):
         """
         raise NotImplementedError
 
+    @property
+    def info(self) -> OrderedDict:
+        info_dict = super().info
+        info_dict['strides'] = self.strides
+        info_dict['padding'] = self.padding
+        return info_dict
+
 
 # -------------- Neural layers ---------------
 
@@ -79,9 +97,8 @@ class Conv2D(NeuralLayer, StridingLayer):
     def kernel_size(self) -> Tuple[int, int]:
         raise NotImplementedError
 
-    # called filters in keras
     @property
-    def num_channels(self) -> int:
+    def filters(self) -> int:
         """
 
         Returns
@@ -89,6 +106,13 @@ class Conv2D(NeuralLayer, StridingLayer):
         The number of filter maps created by the convolution layer.
         """
         raise NotImplementedError
+
+    @property
+    def info(self) -> OrderedDict:
+        info_dict = super().info
+        info_dict['kernel_size'] = self.kernel_size
+        info_dict['filters'] = self.filters
+        return info_dict
 
 
 # --------------- Transformation layers ------------
@@ -103,6 +127,12 @@ class MaxPooling2D(StridingLayer):
         The number of pixels pooled in height and width direction in each pooling step.
         """
         raise NotImplementedError
+
+    @property
+    def info(self) -> OrderedDict:
+        info_dict = super().info
+        info_dict['pool_size'] = self.pool_size
+        return info_dict
 
 
 class Dropout(Layer):
