@@ -4,7 +4,8 @@ from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QAction, QStatusBar
 from PyQt5.QtGui import QIcon
 
-from qtgui.panels import ActivationsPanel, ExperimentsPanel, OcclusionPanel
+#from qtgui.panels import ActivationsPanel, ExperimentsPanel, OcclusionPanel
+from qtgui.panels import ActivationsPanel, ExperimentsPanel
 
 # FIXME[todo]: add docstrings!
 
@@ -58,12 +59,12 @@ class DeepVisMainWindow(QMainWindow):
         ##
         self.activations = ActivationsPanel()
         self.experiments = ExperimentsPanel()
-        self.occlusion = OcclusionPanel()
+#        self.occlusion = OcclusionPanel()
 
         self.tabs = QTabWidget(self);
         self.tabs.addTab(self.activations, "Main")
         self.tabs.addTab(self.experiments, "Experiments")
-        self.tabs.addTab(self.occlusion, "Occlusion")
+#        self.tabs.addTab(self.occlusion, "Occlusion")
 
         self.setCentralWidget(self.tabs)
 
@@ -87,8 +88,8 @@ class DeepVisMainWindow(QMainWindow):
         self.activations.addNetwork(network)
         self.activations.setInputData(data)
         self.experiments.setNetwork(network)
-        self.occlusion.addNetwork(network)
-        self.occlusion.setInputData(data)
+#        self.occlusion.addNetwork(network)
+#        self.occlusion.setInputData(data)
         self.update()
 
 

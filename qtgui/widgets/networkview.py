@@ -2,6 +2,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QWidget, QPushButton, QVBoxLayout
 
 from network import BaseNetwork
+from network.layers.layers import Layer, Conv2D
 
 
 class QNetworkView(QWidget):
@@ -67,7 +68,7 @@ class QNetworkView(QWidget):
 
         if self.network is not None:
             ## a column of buttons to select the network layer
-            for i,name in enumerate(self.network.layer_ids):
+            for name in self.network.layer_dict.keys():
                 button = QPushButton(name, self)
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
@@ -106,7 +107,7 @@ class QNetworkView(QWidget):
             ## assign the new active layer
             self.active = active
             if isinstance(self.active, str):
-                for index, label in enumerate(self.network.layer_ids):
+                for index, label in enumerate(self.network.layer_dict.keys()):
                     if active == label:
                         self.active = index
 
@@ -190,33 +191,36 @@ class QNetworkInfoBox(QLabel):
                 if self.layer_id is None:
                     self.layerText += "No layer selected"
                 else:
-                    self.layerText += self._layerInfoString(self.layer_id)
+                    self.layerText += self._layerInfoString(self.network.layer_dict[self.layer_id])
 
         self.setText(self.networkText + self.layerText)
 
 
-    def _layerInfoString(self, layer_id):
+    def _layerInfoString(self, layer : Layer):
         """Provide a string with information on a network layer.
 
         Arguments
         ---------
-        layer_id
-            The identifier of the network layer.
+        layer
+            The network layer.
 
         Returns
         -------
         str
             A string containing information on that layer.
         """
-        if self.network.layer_is_convolutional(layer_id):
+        print("debug: {}".format(type(layer)))
+        if isinstance(layer, Conv2D):
             text = "Convolutional" + "<br>\n"
-            text += self._convolutionalLayerInfoString(layer_id)
+            text += "FIXME[todo]"
+            #text += self._convolutionalLayerInfoString(layer)
         else:
             text = "Fully connected" + "<br>\n"
             
         try:
-            info = self.network.get_layer_info(self.layer_id)
-            text += info['name'] + "<br>\n"
+            text += "FIXME[todo]"
+            #info = self.network.get_layer_info(layer)
+            #text += info['name'] + "<br>\n"
         except NotImplementedError:
             text += "The implementation provides no information for this layer.<br>\n"
         return text

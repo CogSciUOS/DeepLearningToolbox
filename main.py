@@ -26,7 +26,7 @@ if __name__ == '__main__':
         #network = KerasNetwork(args.model)
         if not args.model:
             args.model = 'models/example_keras_mnist_model.h5'
-        network = KerasTensorFlowNetwork(args.model)
+        network = KerasTensorFlowNetwork(model_file=args.model)
     elif args.framework == 'torch':
         # FIXME[hack]: provide these parameter on the command line ...
         net_file = "models/example_torch_mnist_net.py"
