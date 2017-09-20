@@ -79,6 +79,13 @@ layer {
 }
 
 layer {
+  name: "relu_3"
+  type: "ReLU"
+  bottom: "dense_1"
+  top: "dense_1" # inplace computation
+}
+
+layer {
   name: "dropout_2"
   type: "Dropout"
   bottom: "dense_1"
