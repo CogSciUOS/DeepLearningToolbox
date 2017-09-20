@@ -104,52 +104,11 @@ class KerasTensorFlowNetwork(KerasNetwork):
         # This operation corresponds usually to the addition of the bias.
         for layer_id in layer_ids:
             output_op = self.layer_dict[layer_id].output.op
-            net_input_op = ops[ops.index(output_op) - 1]
-            # Assumes the second to last op is the matmaul / convolution operation.
-            net_input_tensors.append(net_input_op.outputs[0])
-            # Sanity check.
-            if net_input_op.type not in {'Add', 'BiasAdd'}:
-                raise ValueError('Operation of type {} does not provided net input.'.format(net_input_op.type))
+            # Assumes the input to the activation is the net input.
+            net_input_tensors.append(output_op.inputs[0])
         return self._feed_input(net_input_tensors, input_samples)
 
     def _feed_input(self, fetches: list, input_samples: np.ndarray):
-        network_input_tensor = self._sess.graph.get_operations()[0].outputs[0] # Assuming the first op is the input.
-        print('input_shape', network_input_tensor.get_shape())
+        network_input_tensor = self._model.layers[0].input
         return self._sess.run(fetches=fetches, feed_dict={network_input_tensor: input_samples})
 
-
-
-    def get_occlussion_map(self, input_sample: np.ndarray, kernel_size: int) -> np.ndarray:
-        """gives a heatmap of oclussion algorithm for maskes defined by kernel_shape
-
-        """
-        input_shape=input_sample.shape
-        heatmap=np.empty([input_shape[1]*input_shape[2]])
-
-        padded_input=np.lib.pad(input_sample,pad_width=((0,0),(kernel_size,kernel_size),(kernel_size,kernel_size),(0,0)) ,mode='constant')
-
-        maskmulti=np.ones([input_shape[1]*input_shape[2],input_shape[1]+(kernel_size)*2,input_shape[2]+(kernel_size)*2,1])
-        maskadd=np.zeros([input_shape[1]*input_shape[2],input_shape[1]+(kernel_size)*2,input_shape[2]+(kernel_size)*2,1])
-
-        for i in range(input_shape[1]*input_shape[2]):
-            maskmulti[i,i//input_shape[2]+kernel_size-(kernel_size):i//input_shape[2]+kernel_size+(kernel_size+1),i%input_shape[2]+kernel_size-(kernel_size):i%input_shape[2]+kernel_size+(kernel_size+1),0]=0
-            maskadd[i,i//input_shape[2]+kernel_size-(kernel_size):i//input_shape[2]+kernel_size+(kernel_size+1),i%input_shape[2]+kernel_size-(kernel_size):i%input_shape[2]+kernel_size+(kernel_size+1),0]=1
-        occluded_list=np.multiply(padded_input,maskmulti)+maskadd
-
-        
-        heatmap=self.get_activations([list(self.layer_dict.keys())[-3]],occluded_list[:,kernel_size:-kernel_size,kernel_size:-kernel_size])
-        #print(np.asarray(heatmap).shape)
-        #print(self.get_layer_weights(self.layer_dict.keys()[-1])[0].shape)
-
-
-        heatmap=np.dot(np.asarray(heatmap)[0,:,:],self.get_layer_weights(self.layer_ids[-1]))[:,np.argmax(self._model.predict(input_sample))]
-        heatmap=heatmap-np.min(heatmap)
-        heatmap=heatmap/(np.max(heatmap)-np.min(heatmap))
-
-
-
-        heatmap=heatmap*255
-        heatmap=(255-heatmap).astype(np.uint8)
-        #heatmap=((heatmap-np.min(heatmap))*255/(np.max(heatmap)-np.min(heatmap))).astype(int)
-
-        return np.reshape(heatmap,input_shape,order='A')

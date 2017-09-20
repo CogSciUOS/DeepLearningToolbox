@@ -10,7 +10,7 @@ class QNetworkView(QWidget):
     layer.
     """
 
-    network : BaseNetwork = None
+    network: BaseNetwork = None
     """The network currently displayed in this QNetworkView.
     """
 
