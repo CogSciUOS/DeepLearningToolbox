@@ -10,7 +10,7 @@ class TestKerasTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.loaded_network = KerasTensorFlowNetwork(model_file='../../models/example_keras_mnist_model_with_dropout.h5')
+        cls.loaded_network = KerasTensorFlowNetwork(model_file='../../models/example_keras_mnist_model.h5')
         cls.data = mnist.load_data()[1][0]
 
 
