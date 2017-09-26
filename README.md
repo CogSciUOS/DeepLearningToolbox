@@ -12,7 +12,7 @@ Development of this toolbox was motivated by the paper:
  =============
 
 Example of a network visualization that classifies different shapes 
-![alt text](https://github.com/Petr-By/qtpyvis/blob/master/docs/example_view.png "Example")
+![alt text](https://github.com/Petr-By/qtpyvis/blob/master/docs/example.png)
 
 The main window consists of activation maps for selected layer, the input and the structure of a network where the layers of interest can be chosen
 
