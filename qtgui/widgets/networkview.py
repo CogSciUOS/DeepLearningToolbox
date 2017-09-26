@@ -1,8 +1,7 @@
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QWidget, QPushButton, QVBoxLayout
 
-from network import BaseNetwork
-from network.layers.layers import Layer, Conv2D
+from network import Network, Layer, Conv2D
 
 
 class QNetworkView(QWidget):
@@ -10,7 +9,7 @@ class QNetworkView(QWidget):
     layer.
     """
 
-    network: BaseNetwork = None
+    network: Network = None
     """The network currently displayed in this QNetworkView.
     """
 
@@ -132,14 +131,14 @@ class QNetworkView(QWidget):
 
 from PyQt5.QtWidgets import QLabel
 from collections import OrderedDict
-from network import BaseNetwork
+from network import Network
 
 class QNetworkInfoBox(QLabel):
     """A simple widget to display information on a network and a selected
     layer.
     """
     
-    network : BaseNetwork = None
+    network : Network = None
     networkText = ""
 
     layer_id = None
@@ -151,7 +150,7 @@ class QNetworkInfoBox(QLabel):
         self.setNetwork()
 
 
-    def setNetwork(self, network : BaseNetwork = None, layer_id = None) -> None:
+    def setNetwork(self, network : Network = None, layer_id = None) -> None:
         """Set the network for which information are displayed.
 
         Arguments

@@ -1,9 +1,17 @@
+from __future__ import absolute_import
 from unittest import TestCase
-import keras
-from network import KerasTensorFlowNetwork
-from layers import keras_tensorflow_layers
+
 import numpy as np
+import keras
 from keras.datasets import mnist
+
+## The following lines allow the test to be run from within the test
+## directory (and provide the MODELS_DIRECTORY):
+if __package__: from . import MODELS_DIRECTORY
+else: from __init__ import MODELS_DIRECTORY
+
+from network.keras_tensorflow import KerasTensorFlowNetwork
+from network.layers import keras_tensorflow_layers
 from network.exceptions import ParsingError
 
 class TestKerasTensorFlowNetwork(TestCase):

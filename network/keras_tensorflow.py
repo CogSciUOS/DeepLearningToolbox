@@ -1,5 +1,5 @@
-from keras_network import KerasNetwork
-from layers import keras_tensorflow_layers
+from __future__ import absolute_import
+
 import keras
 import numpy as np
 
@@ -7,8 +7,10 @@ from collections import OrderedDict
 from frozendict import FrozenOrderedDict
 from network.exceptions import ParsingError
 
+from .keras import Network as KerasNetwork
+from .layers import keras_tensorflow_layers
 
-class KerasTensorFlowNetwork(KerasNetwork):
+class Network(KerasNetwork):
 
     _layer_types_to_classes = {
         'Conv2D': keras_tensorflow_layers.KerasTensorFlowConv2D,

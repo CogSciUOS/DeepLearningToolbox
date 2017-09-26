@@ -1,9 +1,12 @@
+from typing import Tuple, Any, Union, List
+
 import functools
 import operator
-from typing import Any, Union, List
-
 import numpy as np
+
 from frozendict import FrozenOrderedDict
+
+from .util import convert_data_format
 
 # FIXME[design]: we should decide on some points:
 #
@@ -13,11 +16,9 @@ from frozendict import FrozenOrderedDict
 #     - GPU usage
 #
 #  * provide some information on the layer
-#
-from util import convert_data_format
-from typing import Tuple
 
-class BaseNetwork:
+
+class Network:
     """Abstract loaded_network interface for all frameworks.
 
     The loaded_network API will allow for to order the dimensions in data
@@ -60,7 +61,7 @@ class BaseNetwork:
                 The place of the color channels in the tensors.
         """
         # Prohibited instantiation of base class.
-        if self.__class__ == BaseNetwork:
+        if self.__class__ == Network:
             raise NotImplementedError
 
         # Every loaded_network should now which data format it is using. Default is channels_last.

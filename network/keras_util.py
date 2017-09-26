@@ -1,7 +1,12 @@
-from network import BaseNetwork, KerasTensorFlowNetwork
+from __future__ import absolute_import
+
 import keras
 
-def build_keras_network(model_file: str) -> BaseNetwork:
+from . import Network
+from .keras_tensorflow import Network as KerasTensorFlowNetwork
+
+
+def build_keras_network(model_file: str) -> Network:
     """
     Wrapper for the more low-level KerasNetwork classes. Figures out the backend and
     returns an istance of the appropriate class.

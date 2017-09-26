@@ -1,19 +1,27 @@
+from __future__ import absolute_import
+
 import os
+import re
 import numpy as np
 import tensorflow as tf
 from collections import OrderedDict
-from network.network import BaseNetwork
-from network.exceptions import ParsingError
 from frozendict import FrozenOrderedDict
-from layers import tensorflow_layers
-import re
 
+from . import Network as BaseNetwork
+from .exceptions import ParsingError
+from .layers.tensorflow_layers import TensorFlowLayer as Layer
+from .layers.tensorflow_layers import TensorFlowNeuralLayer as NeuralLayer
+from .layers.tensorflow_layers import TensorFlowStridingLayer as StridingLayer
+from .layers.tensorflow_layers import TensorFlowDense as Dense
+from .layers.tensorflow_layers import TensorFlowConv2D as Conv2D
+from .layers.tensorflow_layers import TensorFlowMaxPooling2D as MaxPooling2D
+from .layers.tensorflow_layers import TensorFlowDropout as Dropout
+from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
 
 class NonMatchingLayerDefinition(Exception):
     pass
 
-
-class TensorFlowNetwork(BaseNetwork):
+class Network(BaseNetwork):
     """Network interface to TensorFlow."""
 
     _OPERATION_TYPES = {
@@ -52,11 +60,11 @@ class TensorFlowNetwork(BaseNetwork):
 
 
     _LAYER_TYPES_TO_CLASSES = {
-        'Conv2D': tensorflow_layers.TensorFlowConv2D,
-        'Dense': tensorflow_layers.TensorFlowDense,
-        'MaxPooling2D': tensorflow_layers.TensorFlowMaxPooling2D,
-        'Dropout': tensorflow_layers.TensorFlowDropout,
-        'Flatten': tensorflow_layers.TensorFlowFlatten
+        'Conv2D': Conv2D,
+        'Dense': Dense,
+        'MaxPooling2D': MaxPooling2D,
+        'Dropout': Dropout,
+        'Flatten': Flatten
     }
 
     _LAYER_DEFS = {
@@ -138,9 +146,11 @@ class TensorFlowNetwork(BaseNetwork):
                     layer_counts[layer_type] += 1
                     layer_name = '{}_{}'.format(self._to_keras_name(layer_type), layer_counts[layer_type])
                     layer_dict[layer_name] = self._LAYER_TYPES_TO_CLASSES[layer_type](self, matching_ops)
-                    # If the layer definition was successfully matched, advance the number of ops
-                    # that were matched. Don't try to match another layer definition at the same
-                    # op by breaking the for loop.
+                    # If the layer definition was successfully
+                    # matched, advance the number of ops that were
+                    # matched. Don't try to match another layer
+                    # definition at the same op by breaking the for
+                    # loop.
                     op_idx += len(layer_def) - 1
                     break
                 except NonMatchingLayerDefinition:

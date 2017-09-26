@@ -1,7 +1,13 @@
 from unittest import TestCase
+
 import numpy as np
-from network import BaseNetwork
 from frozendict import FrozenOrderedDict
+
+## The following line allows the test to be run from within the test
+## directory:
+if not __package__: import __init__
+
+from network import Network as BaseNetwork
 
 class MockLayer:
 

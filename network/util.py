@@ -1,9 +1,6 @@
 from typing import Union
 
-import keras
 import numpy as np
-
-
 
 
 def remove_batch_dimension(shape: tuple) -> tuple:

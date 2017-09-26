@@ -1,16 +1,27 @@
+from __future__ import absolute_import
 from unittest import TestCase
-from layers import tensorflow_layers
+
+import os
 import numpy as np
 from keras.datasets import mnist
+
+## The following lines allow the test to be run from within the test
+## directory (and provide the MODELS_DIRECTORY):
+if __package__: from . import MODELS_DIRECTORY
+else: from __init__ import MODELS_DIRECTORY
+
+import network.tensorflow
+from network.tensorflow import Network as TensorFlowNetwork
 from network.exceptions import ParsingError
-from network import TensorFlowNetwork
 
 
 class TestTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.loaded_network = TensorFlowNetwork(checkpoint='../../models/example_tf_mnist_model/tf_mnist_model.ckpt')
+        checkpoints = os.path.join(MODELS_DIRECTORY, 'example_tf_mnist_model',
+                                   'tf_mnist_model.ckpt')
+        cls.loaded_network = TensorFlowNetwork(checkpoint=checkpoints)
         cls.data = mnist.load_data()[1][0].astype('float32')
         cls.data = cls.data / cls.data.max()
 
@@ -59,16 +70,22 @@ class TestTensorFlowNetwork(TestCase):
                           'dropout_2',
                           'dense_2'])
         # Check that the right types where selected.
-        self.assertIsInstance(
-            self.loaded_network.layer_dict['conv2d_1'], tensorflow_layers.TensorFlowConv2D)
+        self.assertIsInstance(self.loaded_network.layer_dict['conv2d_1'],
+                              network.tensorflow.Conv2D)
         self.assertIsInstance(self.loaded_network.layer_dict['max_pooling2d_1'],
-                                   tensorflow_layers.TensorFlowMaxPooling2D)
-        self.assertIsInstance(self.loaded_network.layer_dict['conv2d_2'], tensorflow_layers.TensorFlowConv2D)
-        self.assertIsInstance(self.loaded_network.layer_dict['dropout_1'], tensorflow_layers.TensorFlowDropout)
-        self.assertIsInstance(self.loaded_network.layer_dict['flatten_1'], tensorflow_layers.TensorFlowFlatten)
-        self.assertIsInstance(self.loaded_network.layer_dict['dense_1'], tensorflow_layers.TensorFlowDense)
-        self.assertIsInstance(self.loaded_network.layer_dict['dropout_2'], tensorflow_layers.TensorFlowDropout)
-        self.assertIsInstance(self.loaded_network.layer_dict['dense_2'], tensorflow_layers.TensorFlowDense)
+                              network.tensorflow.MaxPooling2D)
+        self.assertIsInstance(self.loaded_network.layer_dict['conv2d_2'],
+                              network.tensorflow.Conv2D)
+        self.assertIsInstance(self.loaded_network.layer_dict['dropout_1'],
+                              network.tensorflow.Dropout)
+        self.assertIsInstance(self.loaded_network.layer_dict['flatten_1'],
+                              network.tensorflow.Flatten)
+        self.assertIsInstance(self.loaded_network.layer_dict['dense_1'],
+                              network.tensorflow.Dense)
+        self.assertIsInstance(self.loaded_network.layer_dict['dropout_2'],
+                              network.tensorflow.Dropout)
+        self.assertIsInstance(self.loaded_network.layer_dict['dense_2'],
+                              network.tensorflow.Dense)
 
 
 

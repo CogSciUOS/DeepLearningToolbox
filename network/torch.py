@@ -1,13 +1,16 @@
-from network import BaseNetwork
+from __future__ import absolute_import
+from typing import List
+
+from collections import OrderedDict
+import importlib.util
+import numpy as np
 
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-import numpy as np
-from collections import OrderedDict
-from typing import List
-import importlib.util
+from . import Network as BaseNetwork
+
 
 ## FIXME[todo]: check docstrings
 ## FIXME[todo]: not tested yet!
@@ -16,7 +19,7 @@ import importlib.util
 ## FIXME[todo]: cuda activation (if available)
 
 
-class TorchNetwork(BaseNetwork):
+class Network(BaseNetwork):
     """
     A class implmeenting the network interface (BaseNetwork)
     to access feed forward networks implemented in (py)Torch.

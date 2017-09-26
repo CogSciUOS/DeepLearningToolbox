@@ -1,19 +1,31 @@
 from unittest import TestCase
+
 import os
-os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
-from network.caffe_network import CaffeNetwork
 import numpy as np
+
 from keras.datasets import mnist
-from layers import caffe_layers
+
+os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
+
+## The following lines allow the test to be run from within the test
+## directory (and provide the MODELS_DIRECTORY):
+if not __package__: import __init__
+if __package__: from . import MODELS_DIRECTORY
+else: from __init__ import MODELS_DIRECTORY
+
+from network.caffe import Network as CaffeNetwork
+from network.layers import caffe_layers
 
 
 class TestCaffeNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_def = '../../models/example_caffe_network_deploy.prototxt'
-        model_weights = '../../models/mnist.caffemodel'
-        cls.loaded_network = CaffeNetwork(model_def=model_def, model_weights=model_weights)
+        model_def = os.path.join(MODELS_DIRECTORY,
+                                 'example_caffe_network_deploy.prototxt')
+        model_weights = os.path.join(MODELS_DIRECTORY,'mnist.caffemodel')
+        cls.loaded_network = CaffeNetwork(model_def=model_def,
+                                          model_weights=model_weights)
         # Load the images from the test set and normalize.
         cls.data = mnist.load_data()[1][0]
         cls.data = cls.data / cls.data.max()
