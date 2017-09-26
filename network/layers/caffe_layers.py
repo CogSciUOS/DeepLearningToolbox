@@ -1,7 +1,7 @@
 """
 See https://github.com/netaz/caffe2any/blob/master/topology.py for some inspiration.
 """
-import layers.layers as layers
+from . import layers
 from caffe.proto import caffe_pb2
 import google.protobuf.text_format
 from network.util import remove_batch_dimension, convert_data_format

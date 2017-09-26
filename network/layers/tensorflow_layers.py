@@ -1,4 +1,4 @@
-from layers import layers
+from . import layers
 
 
 class TensorFlowLayer(layers.Layer):

@@ -1,13 +1,18 @@
-from network.network import BaseNetwork
-import keras
-from keras.models import Model, load_model
-import numpy as np
+from __future__ import absolute_import
 from typing import List
+
+import numpy as np
 from collections import OrderedDict
 from frozendict import FrozenOrderedDict
 
+import keras
+from keras.models import Model, load_model
 
-class KerasNetwork(BaseNetwork):
+
+from . import Network as BaseNetwork
+
+
+class Network(BaseNetwork):
     """Abstract base class for the keras networks for the specific backends.
 
     Implements only the functionality that can be efficiently implemented in pure

@@ -1,4 +1,4 @@
-import layers.layers as layers
+from . import layers
 
 class KerasLayer(layers.Layer):
 

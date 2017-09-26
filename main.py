@@ -7,9 +7,8 @@ import numpy as np
 from PyQt5.QtWidgets import QApplication
 
 from qtgui.main import DeepVisMainWindow
-#from list_of_funnctions import KerasNetwork
-from network import KerasTensorFlowNetwork
-from network import TorchNetwork
+from network.keras_tensorflow import Network as KerasTensorFlowNetwork
+from network.torch import Network as TorchNetwork
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Neural network analysis.')
