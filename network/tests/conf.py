@@ -1,10 +1,3 @@
-# from os.path import dirname, join
-# import sys
-#
-# BASE_DIRECTORY = dirname(dirname(dirname(__file__)))
-# MODELS_DIRECTORY = join(BASE_DIRECTORY, 'models')
-#
-
 from os import getcwd
 from os.path import dirname, join
 import sys

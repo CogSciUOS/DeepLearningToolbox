@@ -21,9 +21,6 @@ class TestTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Destroy possible old tensorflow graphs.
-        tf.reset_default_graph()
-
         checkpoints = os.path.join(MODELS_DIRECTORY, 'example_tf_mnist_model',
                                    'tf_mnist_model.ckpt')
         cls.loaded_network = TensorFlowNetwork(checkpoint=checkpoints)
