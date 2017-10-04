@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from .conf import MODELS_DIRECTORY
 from unittest import TestCase
 
 import os
@@ -7,23 +7,33 @@ from keras.datasets import mnist
 
 ## The following lines allow the test to be run from within the test
 ## directory (and provide the MODELS_DIRECTORY):
-if __package__: from . import MODELS_DIRECTORY
-else: from __init__ import MODELS_DIRECTORY
+# if __package__: from . import MODELS_DIRECTORY
+# else: from __init__ import MODELS_DIRECTORY
+
 
 import network.tensorflow
 from network.tensorflow import Network as TensorFlowNetwork
 from network.exceptions import ParsingError
-
+import tensorflow as tf
+import keras
 
 class TestTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # Destroy possible old tensorflow graphs.
+        tf.reset_default_graph()
+
         checkpoints = os.path.join(MODELS_DIRECTORY, 'example_tf_mnist_model',
                                    'tf_mnist_model.ckpt')
         cls.loaded_network = TensorFlowNetwork(checkpoint=checkpoints)
         cls.data = mnist.load_data()[1][0].astype('float32')
         cls.data = cls.data / cls.data.max()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.loaded_network._sess.close()
+        tf.reset_default_graph()
 
     def test_get_net_input(self):
         input_image = self.data[0:1, :, :, np.newaxis]

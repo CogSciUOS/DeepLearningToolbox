@@ -114,7 +114,7 @@ class Network(BaseNetwork):
         if checkpoint is not None and sess is None:
             # Restore the tensorflow model from a file.
             self._sess = tf.Session()
-            saver = tf.train.import_meta_graph(checkpoint + '.meta')
+            saver = tf.train.import_meta_graph(checkpoint + '.meta', clear_devices=True)
             model_dir = os.path.split(checkpoint)[0]
             saver.restore(self._sess, tf.train.latest_checkpoint(model_dir))
         elif checkpoint is None and sess is not None:
@@ -212,14 +212,12 @@ class Network(BaseNetwork):
         activation_tensors = []
         for layer_id in layer_ids:
             activation_tensors.append(self.layer_dict[layer_id].activation_tensor)
-        print('activation tensors', activation_tensors)
         return self._feed_input(activation_tensors, input_samples)
 
     def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
         net_input_tensors = []
         for layer_id in layer_ids:
             net_input_tensors.append(self.layer_dict[layer_id].net_input_tensor)
-        print('net tensors', net_input_tensors)
 
         return self._feed_input(net_input_tensors, input_samples)
 

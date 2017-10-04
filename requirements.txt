@@ -6,4 +6,5 @@ ipython>=3.0.0
 h5py>=2.2.0
 keras>=2.0.3
 tensorflow>=1.0
-frozendict
+frozendict>=1.2
+pytest>=3.2.2

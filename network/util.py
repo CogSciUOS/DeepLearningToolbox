@@ -75,8 +75,3 @@ def convert_data_format(array_or_shape: Union[np.ndarray, tuple],
         raise ValueError('Data format must be either "channels_last" or "channels_first,"'
                          ' but is input_format="{}" and output_format="{}".'.format(input_format, output_format))
 
-
-
-
-
-# ------------------ evalute whether this is needed ---------------------------------

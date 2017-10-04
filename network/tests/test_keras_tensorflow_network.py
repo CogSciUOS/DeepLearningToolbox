@@ -1,5 +1,7 @@
 from __future__ import absolute_import
+from .conf import MODELS_DIRECTORY
 from unittest import TestCase
+import os
 
 import numpy as np
 import keras
@@ -7,10 +9,12 @@ from keras.datasets import mnist
 
 ## The following lines allow the test to be run from within the test
 ## directory (and provide the MODELS_DIRECTORY):
-if __package__: from . import MODELS_DIRECTORY
-else: from __init__ import MODELS_DIRECTORY
+# if __package__: from . import MODELS_DIRECTORY
+# else: from __init__ import MODELS_DIRECTORY
 
-from network.keras_tensorflow import KerasTensorFlowNetwork
+
+
+from network.keras_tensorflow import Network as  KerasTensorFlowNetwork
 from network.layers import keras_tensorflow_layers
 from network.exceptions import ParsingError
 
@@ -18,9 +22,12 @@ class TestKerasTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.loaded_network = KerasTensorFlowNetwork(model_file='../../models/example_keras_mnist_model.h5')
+        cls.loaded_network = KerasTensorFlowNetwork(model_file=os.path.join(MODELS_DIRECTORY, 'example_keras_mnist_model.h5'))
         cls.data = mnist.load_data()[1][0]
 
+    @classmethod
+    def tearDownClass(cls):
+        keras.backend.clear_session()
 
     def test_get_net_input(self):
         input_image = self.data[0:1, :, :, np.newaxis]
@@ -149,11 +156,13 @@ class TestKerasTensorFlowNetwork(TestCase):
         )
 
 class TestKerasTensorFlowParser(TestCase):
-    # Test model parsing.
+    """Test model parsing."""
+
+    def tearDown(self):
+        keras.backend.clear_session()
 
     def test_separate_activations(self):
         # Create a model with separate activation functions, to check if they will get merged.
-        keras.backend.clear_session()
         model = keras.models.Sequential()
         model.add(keras.layers.Convolution2D(32, (3, 3), input_shape=(28, 28, 1), activation='relu'))
         model.add(keras.layers.Dense(1024))
@@ -169,7 +178,6 @@ class TestKerasTensorFlowParser(TestCase):
 
     def test_missing_activation(self):
         # Create a model with missing activation function to check that that raises an error.
-        keras.backend.clear_session()
         model = keras.models.Sequential()
         model.add(keras.layers.Convolution2D(32, (3, 3), input_shape=(28, 28, 1)))
         model.add(keras.layers.Dense(1024))
@@ -180,7 +188,6 @@ class TestKerasTensorFlowParser(TestCase):
 
     def test_double_activation_function(self):
         # Create a model with two consectutive activation functions to check that that raises an error.
-        keras.backend.clear_session()
         model = keras.models.Sequential()
         model.add(keras.layers.Convolution2D(32, (3, 3), input_shape=(28, 28, 1), activation='relu'))
         model.add(keras.layers.Dense(1024))

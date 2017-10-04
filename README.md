@@ -8,11 +8,11 @@ Development of this toolbox was motivated by the paper:
  - Jason Yosinski, Jeff Clune, Anh Nguyen, Thomas Fuchs, and Hod Lipson. [Understanding neural networks through deep visualization](http://arxiv.org/abs/1506.06579/ "Computer Science > Computer Vision and Pattern Recognition") Presented at the Deep Learning Workshop, International Conference on Machine Learning (ICML), 2015.
 
 
- Functionality
- =============
+Functionality
+=============
 
 Example of a network visualization that classifies different shapes 
-![alt text](https://github.com/Petr-By/qtpyvis/blob/master/docs/example.png)
+![screenshot](docs/example.png)
 
 The main window consists of activation maps for selected layer, the input and the structure of a network where the layers of interest can be chosen
 
@@ -28,7 +28,7 @@ Installation process is just installing packages listed in the requirements.txt
   2) After activating the enviroment, run the command to install necessary libraries:
 
 
-        $pip install PyQt5 numpy scipy matplotlib h5py keras tensorflow
+        $pip install -r requirements.txt
 
 
 
@@ -37,8 +37,13 @@ Support for PyTorch
 
 Install PyTorch.
 
-   $ conda install pytorch torchvision cuda80 -c soumith
+   `$ conda install pytorch torchvision cuda80 -c soumith`
 
 Then run the PyTorch MNIST example, tpye
 
-   $ python main.py --framework=torch
+   `$ python main.py --framework=torch`
+
+
+Testing
+=======
+Run `$ pytest` to execute all tests.

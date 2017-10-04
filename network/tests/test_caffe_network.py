@@ -1,3 +1,4 @@
+from .conf import MODELS_DIRECTORY
 from unittest import TestCase
 
 import os
@@ -5,13 +6,14 @@ import numpy as np
 
 from keras.datasets import mnist
 
+
 os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
 
 ## The following lines allow the test to be run from within the test
 ## directory (and provide the MODELS_DIRECTORY):
-if not __package__: import __init__
-if __package__: from . import MODELS_DIRECTORY
-else: from __init__ import MODELS_DIRECTORY
+# if not __package__: import __init__
+# if __package__: from . import MODELS_DIRECTORY
+# else: from __init__ import MODELS_DIRECTORY
 
 from network.caffe import Network as CaffeNetwork
 from network.layers import caffe_layers
