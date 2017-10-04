@@ -22,7 +22,7 @@ install:
   # Getting the source code 
  
   # Replace dep1 dep2 ... with your dependencies
-  - conda env create -q --filen environment.yml
+  - conda env create -q --file environment.yml
   - source activate qtpyviz
 
 script: pytest
