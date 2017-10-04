@@ -14,7 +14,10 @@ MODELS_DIRECTORY = join(BASE_DIRECTORY, 'models')
 # packages with same name as our networks and hence prevent
 # importing those packages, like "keras".
 # Hence we remove NETWORK_PACKAGE_DIRECTORY from sys.path ...
-if getcwd() == NETWORK_PACKAGE_DIRECTORY and '' in sys.path: sys.path.remove('')
-if NETWORK_PACKAGE_DIRECTORY in sys.path: sys.path.remove(NETWORK_PACKAGE_DIRECTORY)
+if getcwd() == NETWORK_PACKAGE_DIRECTORY and '' in sys.path:
+    sys.path.remove('')
+if NETWORK_PACKAGE_DIRECTORY in sys.path:
+    sys.path.remove(NETWORK_PACKAGE_DIRECTORY)
 # ... and make sure that the BASE_DIRECTOR is included.
-BASE_DIRECTORY in sys.path or sys.path.insert(0,BASE_DIRECTORY)
+if BASE_DIRECTORY not in sys.path and getcwd() != BASE_DIRECTORY:
+    sys.path.insert(2,BASE_DIRECTORY)
