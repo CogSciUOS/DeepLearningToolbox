@@ -1,6 +1,7 @@
-from __future__ import absolute_import
 from .conf import MODELS_DIRECTORY
 from unittest import TestCase
+import os
+
 import os
 
 import numpy as np
@@ -13,8 +14,7 @@ from keras.datasets import mnist
 # else: from __init__ import MODELS_DIRECTORY
 
 
-
-from network.keras_tensorflow import Network as  KerasTensorFlowNetwork
+from network.keras_tensorflow import Network as KerasTensorFlowNetwork
 from network.layers import keras_tensorflow_layers
 from network.exceptions import ParsingError
 
@@ -22,7 +22,9 @@ class TestKerasTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.loaded_network = KerasTensorFlowNetwork(model_file=os.path.join(MODELS_DIRECTORY, 'example_keras_mnist_model.h5'))
+
+        model_file = os.path.join(MODELS_DIRECTORY, 'example_keras_mnist_model.h5')
+        cls.loaded_network = KerasTensorFlowNetwork(model_file=model_file)
         cls.data = mnist.load_data()[1][0]
 
     @classmethod
