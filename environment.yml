@@ -1,4 +1,4 @@
-name: qtpyviz2
+name: qtpyviz
 channels:
 - soumith
 - anaconda
