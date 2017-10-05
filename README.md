@@ -1,3 +1,5 @@
+![travis-ci](https://travis-ci.org/JarnoRFB/qtpyvis.svg?branch=master)
+
 PyQt5 visualization of Deep Neural Networks (Development stage)
 ===============================================================
 One can use this code to visualize DNNs (activations, filters, network structure).
@@ -11,7 +13,7 @@ Development of this toolbox was motivated by the paper:
 Functionality
 =============
 
-Example of a network visualization that classifies different shapes 
+Example of a network visualization that classifies different shapes
 ![screenshot](docs/example.png)
 
 The main window consists of activation maps for selected layer, the input and the structure of a network where the layers of interest can be chosen
