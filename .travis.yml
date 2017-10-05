@@ -4,6 +4,9 @@ python:
   - "3.6"
 install:
   - sudo apt-get update
+  # Caffe system dependencies.
+  - sudo apt-get install libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libhdf5-serial-dev protobuf-compiler
+  - sudo apt-get install --no-install-recommends libboost-all-dev
   # We do this conditionally because it saves us some downloading if the
   # version is the same.
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
@@ -16,12 +19,9 @@ install:
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
-  # Useful for debugging any issues with conda
+  # Useful for debugging any issues with conda.
   - conda info -a
-  
-  # Getting the source code 
- 
-  # Replace dep1 dep2 ... with your dependencies
+  # Create and activate environment.
   - conda env create -q --file environment.yml
   - source activate qtpyviz
 
