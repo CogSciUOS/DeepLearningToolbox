@@ -1,6 +1,7 @@
-name: qtpyviz
+name: qtpyviz2
 channels:
 - soumith
+- anaconda
 - conda-forge
 - defaults
 dependencies:
