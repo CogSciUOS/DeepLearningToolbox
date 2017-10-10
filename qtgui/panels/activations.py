@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 from qtgui.widgets import QActivationView
 from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
 from qtgui.widgets import QNetworkView, QNetworkInfoBox
+import numpy as np
 
 # FIXME[todo]: rearrange the layer selection on network change!
 # FIXME[todo]: add docstrings!
@@ -26,7 +27,7 @@ class ActivationsPanel(QWidget):
     inputSelected = pyqtSignal(object)
     layerSelected = pyqtSignal(object)
 
-    
+
     def __init__(self, parent = None):
         '''Initialization of the ActivationsView.
 
@@ -133,7 +134,7 @@ class ActivationsPanel(QWidget):
         networkBox = QGroupBox("Network")
         networkBox.setLayout(networkLayout)
 
-        
+
 
 
         #
@@ -213,8 +214,14 @@ class ActivationsPanel(QWidget):
         the activationview) has changed. This change should be
         reflected in other widgets.
         """
+
         activationMask = self.activationview.getUnitActivation(unit)
-        self.inputview.setActivationMask(activationMask)
+        if activationMask is None:
+            activationMask=None
+        else:
+            if self.data.shape[1]//activationMask.shape[0]>1:
+                activationMask=self.resizemask(activationMask,self.data.shape[1]//activationMask.shape[0])
+            self.inputview.setActivationMask(activationMask)
 
 
     def setInputData(self, data = None):
@@ -256,3 +263,11 @@ class ActivationsPanel(QWidget):
             self.updateActivation()
         else:
             print("FIXME: no input data selected!")
+    def resizemask(self,mask,factor):
+        newmask=np.zeros([mask.shape[0]*factor,mask.shape[1]*factor])
+
+        for i in range(mask.shape[1]):
+            for j in range(mask.shape[0]):
+                newmask[i*factor:(i+1)*factor,j*factor:(j+1)*factor]=mask[i,j]
+        newmask=newmask.astype('uint8')
+        return newmask
