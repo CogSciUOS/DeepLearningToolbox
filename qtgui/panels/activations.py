@@ -264,10 +264,5 @@ class ActivationsPanel(QWidget):
         else:
             print("FIXME: no input data selected!")
     def resizemask(self,mask,factor):
-        newmask=np.zeros([mask.shape[0]*factor,mask.shape[1]*factor])
-
-        for i in range(mask.shape[1]):
-            for j in range(mask.shape[0]):
-                newmask[i*factor:(i+1)*factor,j*factor:(j+1)*factor]=mask[i,j]
-        newmask=newmask.astype('uint8')
+        newmask=np.repeat(np.repeat(mask,factor,0),factor,1)
         return newmask
