@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 
 from PyQt5.QtCore import QCoreApplication
@@ -78,19 +79,40 @@ class DeepVisMainWindow(QMainWindow):
         ##
         ## Connect the signals
         ##
+        # FIXME[concept]:
+        self.activations.inputselector.selected.connect(self.setInputData)
         self.activations.inputSelected.connect(self.setInputData)
         self.activations.layerSelected.connect(self.setLayer)
         #self.activations.networkSelected.connect(self.setNetwork)
 
 
     # FIXME[hack]: split up into sensible functions or rename ...
-    def setNetwork(self, network, data):
+    def setNetwork(self, network):
         self.activations.addNetwork(network)
-        self.activations.setInputData(data)
         self.experiments.setNetwork(network)
 #        self.occlusion.addNetwork(network)
+
+
+    def setInputDataArray(self, data : np.ndarray):
+        '''Set the input data to be used. 
+        '''
+        self.activations.setInputDataArray(data)
 #        self.occlusion.setInputData(data)
-        self.update()
+
+    def setInputDataFile(self, filename : str):
+        '''Set the input data to be used. 
+        '''
+        self.activations.setInputDataFile(data)
+
+    def setInputDataDirectory(self, dirname : str):
+        '''Set the input data to be used. 
+        '''
+        self.activations.setInputDataDirectory(dirname)
+
+    def setInputDataSet(self, name : str):
+        '''Set the input data to be used. 
+        '''
+        self.activations.setInputDataSet(name)
 
 
     def showStatusMessage(self, message):
@@ -100,7 +122,12 @@ class DeepVisMainWindow(QMainWindow):
     def setLayer(self, layer = None) -> None:
         self.experiments.setLayer(layer)
 
-    def setInputData(self, data = None):
+
+    def setInputData(self, data : np.ndarray = None, description : str = None):
         '''Provide one data vector as input for the network.
         '''
+        # FIXME[hack]: there seems to be a bug in PyQt forbidding to emit
+        # signals with None parameter. See code in "widget/inputselector.py"
+        if not data.ndim: data = None
+        self.activations.setInputData(data, description)
         self.experiments.setInputData(data)

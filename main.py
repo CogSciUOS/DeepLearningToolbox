@@ -16,6 +16,7 @@ if __name__ == '__main__':
                         default = 'models/example_keras_mnist_model.h5')
     parser.add_argument("--data", help = 'filename of dataset to visualize',
                         default = 'mnist')
+    parser.add_argument("--datadir", help = 'directory containing input images')
     parser.add_argument("--framework", help = 'the framework to use '
                         '(keras-tensorflow, torch)',
                         default = 'keras-tensorflow')
@@ -36,17 +37,15 @@ if __name__ == '__main__':
                                net_class = net_class,
                                input_shape = input_shape)
 
-    if args.data=='mnist':
-        from keras.datasets import mnist
-        data = mnist.load_data()[0][0]
-    else:
-        data = np.load(args.data)
-
-    data = data.reshape(data.shape[0],data.shape[1],data.shape[2],1)
 
     app = QApplication(sys.argv)
     mainWindow = DeepVisMainWindow()
-    mainWindow.setNetwork(network, data)
+    mainWindow.setNetwork(network)
+    if args.data=='mnist':
+        mainWindow.setInputDataSet(args.data)
+    else:
+        mainWindow.setInputDataFile(args.data)
+    
     mainWindow.show()
 
     rc = app.exec_()

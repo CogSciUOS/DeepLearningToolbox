@@ -26,10 +26,18 @@ class QImageView(QWidget):
     def setImage(self, image : np.ndarray):
         self.image = image
         if image is not None:
-            # To construct a 8-bit monochrome QImage, we need a uint8
-            # numpy array
+            # To construct a 8-bit monochrome QImage, we need a
+            # 2-dimensional, uint8 numpy array
+            print("OLD image format: {} ({})".format(image.shape, image.dtype))
+            if image.ndim == 4:
+                image = image[0]
+            if image.ndim == 3:
+                image = image[:,:,0]          
             if image.dtype != np.uint8:
                 image = (image*255).astype(np.uint8)
+            image = np.copy(image)
+            print("NEW image format: {} ({})".format(image.shape, image.dtype))
+
             self.image = QImage(image, image.shape[1], image.shape[0],
                                 QImage.Format_Grayscale8)
         else:
@@ -76,9 +84,11 @@ class QImageView(QWidget):
         self._drawMask(painter)
         painter.end()
 
+
     def _drawImage(self, painter : QPainter):
         if self.image is not None:
             painter.drawImage(self.rect(),self.image)
+
 
     def _drawMask(self, painter : QPainter):
         '''Display the given image. Image is supposed to be a numpy array.

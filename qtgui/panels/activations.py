@@ -12,19 +12,35 @@ import numpy as np
 
 class ActivationsPanel(QWidget):
     '''A complex panel containing elements to display activations in
-    different layer of a network. The panel offers controls to select
+    different layers of a network. The panel offers controls to select
     different input stimuli, and to select a specific network layer.
     '''
 
+    '''The current network. This network is used for all computations
+    in this ActivationsPanel. Can be None if no network is selected.
+    '''
     network : object = None
+
+
+    '''The current network layer. Activations are shown for the respective
+    layer. The layer can be None if no layer is selected.
+    '''
     # FIXME[question]: int (index) or str (label)?
     layer : str = None
 
-    # FIXME[move]: not part of the action view, but rather input handling ...
-    data : object = None
-    dataIndex : int = None
 
-    inputSelected = pyqtSignal(object)
+    '''The current input data. This data should always map the input size
+    of the current network. May be None if no input data is available.'''
+    _data : np.ndarray = None
+
+
+    '''A signal that is emitted each time some new input data have been
+    selected via the GUI. (np.ndarray, str)'''
+    inputSelected = pyqtSignal(object, str)
+
+
+    '''A signal that is emitted each time a new network layer has been
+    selected via the GUI.'''    
     layerSelected = pyqtSignal(object)
 
 
@@ -80,14 +96,12 @@ class ActivationsPanel(QWidget):
         #self.inputview.setMinimumWidth(200)
         self.inputview.heightForWidth = lambda w : w
         self.inputview.hasHeightForWidth = lambda : True
-        #print("heightForWidth({})={} [{}]".format(200,self.inputview.heightForWidth(200), self.inputview.hasHeightForWidth()))
 
         # inputselect: a widget to select the input to the network
         # (data array, image directory, webcam, ...)
         # the "next" button: used to load the next image
         self.inputselector = QInputSelector()
-        self.inputselector.setNumberOfElements(20) # FIXME[hack]
-        self.inputselector.selected.connect(self.setInput)
+        #self.inputselector.selected = self.inputSelected
 
         self.inputinfo = QInputInfoBox()
         # FIXME[layout]
@@ -195,16 +209,18 @@ class ActivationsPanel(QWidget):
 
 
     def updateActivation(self):
-
+        '''Update this panel in response to a new activation values.
+        New activation values can be caused by the selection of another
+        layer in the network, but also by the change of the input image.
+        '''
         if self.network is None:
             activations = None
         elif self.layer is None:
             activations = None
-        elif self.dataIndex is None:
+        elif self._data is None:
             activations = None
         else:
-            input = self.data[self.dataIndex:self.dataIndex+1,:,:,0:1]
-            activations = self.network.get_activations([self.layer], input)[0]
+            activations = self.network.get_activations([self.layer], self._data)[0]
 
         self.activationview.setActivation(activations)
 
@@ -219,20 +235,36 @@ class ActivationsPanel(QWidget):
         if activationMask is None:
             activationMask=None
         else:
-            if self.data.shape[1]//activationMask.shape[0]>1:
-                activationMask=self.resizemask(activationMask,self.data.shape[1]//activationMask.shape[0])
+            ratio = self._data.shape[1]//activationMask.shape[0]
+            if ratio > 1:
+                activationMask = self.resizemask(activationMask, ratio)
             self.inputview.setActivationMask(activationMask)
 
 
-    def setInputData(self, data = None):
-        '''Provide a collection of input data for the network.
+
+
+    def setInputDataArray(self, data : np.ndarray = None):
+        '''Set the input data to be used. 
         '''
-        number = None if data is None else len(data)
-        self.data = data
-        self.inputselector.setNumberOfElements(number)
+        self.inputselector.setDataArray(data)        
+
+    def setInputDataFile(self, filename : str):
+        '''Set the input data to be used. 
+        '''
+        self.inputselector.setDataFile(filename)
+
+    def setInputDataDirectory(self, dirname : str):
+        '''Set the input data to be used. 
+        '''
+        self.inputselector.setDataDirectory(dirname)
+
+    def setInputDataSet(self, name : str):
+        '''Set the input data set to be used. 
+        '''
+        self.inputselector.setDataSet(name)
 
 
-    def setInput(self, input : int = None):
+    def setInputData(self, data : np.ndarray = None, description : str = None):
         '''Set the current input stimulus for the network.
         The input stimulus is take from the internal data collection.
 
@@ -241,28 +273,13 @@ class ActivationsPanel(QWidget):
         input:
             The index of the input stimulus in the data collection.
         '''
-        if input is None or self.data is None:
-            self.dataIndex = None
-        else:
-            self.dataIndex = input
-            self.updateInput()
 
-        if self.dataIndex is None:
-            self.inputSelected.emit(None)
-        else:
-            # FIXME[hack]: just provide image data without additional axes ...
-            self.inputSelected.emit(self.data[self.dataIndex:self.dataIndex+1,:,:,0:1])
+        self._data = data
+        self.inputview.setImage(data)
+        self.inputinfo.showInfo(data, description)
+        self.updateActivation()
 
 
-    def updateInput(self):
-        if self.dataIndex is not None:
-            self.inputview.setImage(self.data[self.dataIndex,:,:,0])
-            self.inputinfo.showInfo("{}/{}".
-                                    format(self.dataIndex,len(self.data)),
-                                    self.data.shape[1:3])
-            self.updateActivation()
-        else:
-            print("FIXME: no input data selected!")
-    def resizemask(self,mask,factor):
-        newmask=np.repeat(np.repeat(mask,factor,0),factor,1)
+    def resizemask(self, mask, factor):
+        newmask = np.repeat(np.repeat(mask,factor,0),factor,1)
         return newmask
