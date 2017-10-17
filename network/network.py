@@ -352,6 +352,11 @@ class Network:
 
 ###------------------------- methods for accessing layer attributes ---------
 
+    def get_input_shape(self, include_batch = True) -> tuple:
+        """Get the shape of the input data for the network.
+        """
+        shape = self.get_layer_input_shape(next(iter(self.layer_dict.keys())))
+        return shape if include_batch else shape[1:]
 
     def get_layer_input_shape(self, layer_id) -> tuple:
         """
@@ -401,6 +406,9 @@ class Network:
             this will be channel last (H,W,C_in,C_out).
         """
         return self.layer_dict[layer_id].weights
+
+
+
 
     def _get_layer_weights_shape(self, layer_id) -> tuple:
         weights = self.get_layer_weights(layer_id)
