@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 from qtgui.widgets import QActivationView
 from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
 from qtgui.widgets import QNetworkView, QNetworkInfoBox
+
 import numpy as np
 
 # FIXME[todo]: rearrange the layer selection on network change!
@@ -264,19 +265,24 @@ class ActivationsPanel(QWidget):
         self.inputselector.setDataSet(name)
 
 
-    def setInputData(self, data : np.ndarray = None, description : str = None):
+    def setInputData(self, raw: np.ndarray = None, fitted : np.ndarray = None, description : str = None):
         '''Set the current input stimulus for the network.
         The input stimulus is take from the internal data collection.
 
         Argruments
         ----------
-        input:
-            The index of the input stimulus in the data collection.
+        raw:
+            The raw input data, as provided by the data source.
+        fitted:
+            The input data transformed to fit the network. 
+        description:
+            A string describing where the origin of the input data.
         '''
 
-        self._data = data
-        self.inputview.setImage(data)
-        self.inputinfo.showInfo(data, description)
+        self.inputview.setImage(raw)
+        self.inputinfo.showInfo(raw, description)
+
+        self._data = fitted
         self.updateActivation()
 
 

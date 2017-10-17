@@ -28,18 +28,25 @@ class QImageView(QWidget):
         if image is not None:
             # To construct a 8-bit monochrome QImage, we need a
             # 2-dimensional, uint8 numpy array
-            print("OLD image format: {} ({})".format(image.shape, image.dtype))
             if image.ndim == 4:
                 image = image[0]
+
+            format = QImage.Format_Grayscale8
+            byter_per_line = image.shape[1]
             if image.ndim == 3:
-                image = image[:,:,0]          
+                if image.shape[2] == 3:
+                    format = QImage.Format_RGB888
+                    byter_per_line *= 3
+                else:
+                    image = image[:,:,0]
+
             if image.dtype != np.uint8:
                 image = (image*255).astype(np.uint8)
             image = np.copy(image)
-            print("NEW image format: {} ({})".format(image.shape, image.dtype))
-
-            self.image = QImage(image, image.shape[1], image.shape[0],
-                                QImage.Format_Grayscale8)
+            
+            self.image = QImage(image,
+                                image.shape[1], image.shape[0],
+                                byter_per_line, format)
         else:
             self.image = None
 
@@ -87,7 +94,27 @@ class QImageView(QWidget):
 
     def _drawImage(self, painter : QPainter):
         if self.image is not None:
-            painter.drawImage(self.rect(),self.image)
+            w = self.image.width()
+            h = self.image.height()
+            if False:
+                # Scale to full size
+                painter.drawImage(self.rect(),self.image)
+
+            elif True:
+                # scale maximally while maintaining aspect ratio
+                w_ratio = self.width()/w
+                h_ratio = self.height()/h
+                ratio = min(w_ratio, h_ratio)
+                rect = QRect((self.width()-w*ratio)//2,
+                             (self.height()-h*ratio)//2,
+                             w*ratio,h*ratio)
+                painter.drawImage(rect, self.image)
+
+            elif False:
+                # Original image size
+                x = (self.width()-self.image.width()) // 2
+                y = (self.height()-self.image.height()) // 2
+                painter.drawImage(x,y,self.image)
 
 
     def _drawMask(self, painter : QPainter):

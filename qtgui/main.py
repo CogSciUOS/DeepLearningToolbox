@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.misc import imresize
 import matplotlib.pyplot as plt
 
 from PyQt5.QtCore import QCoreApplication
@@ -86,8 +87,8 @@ class DeepVisMainWindow(QMainWindow):
         #self.activations.networkSelected.connect(self.setNetwork)
 
 
-    # FIXME[hack]: split up into sensible functions or rename ...
     def setNetwork(self, network):
+        self._network = network
         self.activations.addNetwork(network)
         self.experiments.setNetwork(network)
 #        self.occlusion.addNetwork(network)
@@ -102,7 +103,7 @@ class DeepVisMainWindow(QMainWindow):
     def setInputDataFile(self, filename : str):
         '''Set the input data to be used. 
         '''
-        self.activations.setInputDataFile(data)
+        self.activations.setInputDataFile(filename)
 
     def setInputDataDirectory(self, dirname : str):
         '''Set the input data to be used. 
@@ -129,5 +130,38 @@ class DeepVisMainWindow(QMainWindow):
         # FIXME[hack]: there seems to be a bug in PyQt forbidding to emit
         # signals with None parameter. See code in "widget/inputselector.py"
         if not data.ndim: data = None
-        self.activations.setInputData(data, description)
+
+        raw_data = data
+        if self._network is not None and data is not None:
+            network_shape = self._network.get_input_shape(include_batch=False)
+            invalid = None
+            if data.ndim > 4 or data.ndim < 2:
+                data = None
+                invalid = "Do not understand {}-dimensional data".format(data.ndim)
+
+            if data is not None and data.ndim == 4:
+                if data.shape[0] == 1:
+                    data = data.squeeze(0)
+                else:
+                    data = None
+                    invalid = "Cannot visualize batch of images"
+                    
+            if data is not None and data.ndim == 2:
+                data = data[..., np.newaxis].repeat(3,axis=2).copy()
+
+            if data is not None and data.shape[0:2] != network_shape[0:2]:
+                data = imresize(data, network_shape[0:2])
+
+            if data is not None and data.shape[2] != network_shape[2]:
+                # FIXME[hack]: find better way to doe RGB <-> grayscale conversion
+                if network_shape[2] == 1:
+                    data = data[:,:,0:1]
+                elif network_shape[2] == 3 and data.shape[2] == 1:
+                    data = data.repeat(3,axis=2)
+                else:
+                    invalid = "Cannot map {}-data to {}-network.".format(data.shape, network_shape)
+                    data = None
+
+        
+        self.activations.setInputData(raw_data, data, description)
         self.experiments.setInputData(data)

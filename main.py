@@ -14,9 +14,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Neural network analysis.')
     parser.add_argument("--model", help = 'filename of model to use',
                         default = 'models/example_keras_mnist_model.h5')
-    parser.add_argument("--data", help = 'filename of dataset to visualize',
-                        default = 'mnist')
+    parser.add_argument("--data", help = 'filename of dataset to visualize')
     parser.add_argument("--datadir", help = 'directory containing input images')
+    parser.add_argument("--dataset", help = 'name of a dataset (currently only "mnist")',
+                        default = 'mnist')
     parser.add_argument("--framework", help = 'the framework to use '
                         '(keras-tensorflow, torch)',
                         default = 'keras-tensorflow')
@@ -41,10 +42,12 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     mainWindow = DeepVisMainWindow()
     mainWindow.setNetwork(network)
-    if args.data=='mnist':
-        mainWindow.setInputDataSet(args.data)
-    else:
+    if args.data:
         mainWindow.setInputDataFile(args.data)
+    elif args.dataset:
+        mainWindow.setInputDataSet(args.dataset)
+    if args.datadir:
+        mainWindow.setInputDataDirectory(args.datadir)
     
     mainWindow.show()
 
