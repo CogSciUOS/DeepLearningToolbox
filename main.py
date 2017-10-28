@@ -64,7 +64,8 @@ if __name__ == '__main__':
         input_shape = (28, 28)
         network = TorchNetwork(net_file, parameter_file,
                                net_class=net_class,
-                               input_shape=input_shape)
+                               input_shape=input_shape,
+                               use_cuda=not args.cpu)
 
     app = QApplication(sys.argv)
     mainWindow = DeepVisMainWindow()

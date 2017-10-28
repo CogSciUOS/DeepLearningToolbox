@@ -33,7 +33,7 @@ class Network(BaseNetwork):
       register hooks to be executed before or after the forward or
       backward propagation.  These hooks can be use to access and
       store input and output values.
-    
+
     * The nn.Module (layers) does not have a name. I store the
       key by which they have been registered in the parent Module
       under the property _name. These names will also function
@@ -48,7 +48,7 @@ class Network(BaseNetwork):
     def __init__(self, *args, **kwargs):
         """
         Load Torch model.
-        
+
         Parameters
         ----------
         model_file
@@ -64,7 +64,7 @@ class Network(BaseNetwork):
 
         if len(args) < 1:
             raise TypeError("TorchNetwork requires at least one argument")
-        
+
         if isinstance(args[i], nn.Module):
             self._model = args[i]
             i += 1
@@ -77,7 +77,7 @@ class Network(BaseNetwork):
             net_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(net_module)
             net_class_name = kwargs.get('network_class', 'Net')
-            net_class = getattr(net_module, net_class_name) 
+            net_class = getattr(net_module, net_class_name)
             self._model = net_class()
             i += 1
         else:
@@ -86,7 +86,7 @@ class Network(BaseNetwork):
         ##
         ## Load model parameter if specified:
         ##
-        
+
         if i < len(args) and not data_loaded:
             if isinstance(args[i], str) and args[i].endswith(".pth"):
                 self._model.load_state_dict(torch.load(args[i]))
@@ -96,7 +96,8 @@ class Network(BaseNetwork):
         #self._model.eval()
 
         ## FIXME[todo]: activate gpu support if available
-        # self._use_cuda = torch.cuda.is_available()
+        self._use_cuda = torch.cuda.is_available() and kwargs.get('use_cuda',
+                                                                  True)
         # if self._use_cuda:
         #    self._model.cuda()
 
@@ -119,13 +120,13 @@ class Network(BaseNetwork):
         ## Torch convolution follows the channel first scheme, that is
         ## the shape of a 2D convolution is (batch, channel, height, width).
         torch_input_shape = tuple(input_shape[_] for _ in [0,3,1,2])
-        
+
         self._input_shapes = {}
         self._output_shapes = {}
         self._prepare_hooks(self._shape_hook)
         self._model(Variable(torch.zeros(*torch_input_shape), volatile=True))
         self._remove_hooks()
-    
+
 
     def _get_number_of_input_channels(self) -> int:
         """Get the number of input channels for this network.
@@ -142,17 +143,17 @@ class Network(BaseNetwork):
         first = self._get_first_layer()
         return first.in_channels if self.layer_is_convolutional(first) else 0
 
-    
+
     def _prepare_hooks(self, hook, layer_ids = None) -> None:
 
         if layer_ids is None:
             layer_ids = self.layer_ids
-    
+
         for id in layer_ids:
             module = self._model._modules[id]
             module._name = id # FIXME[hack]: how to acces the module name?
             self._hooks[id] = module.register_forward_hook(hook)
-            
+
     def _remove_hooks(self, layer_ids = None) -> None:
         if layer_ids is None:
             layer_ids = list(self._hooks.keys())
@@ -169,7 +170,7 @@ class Network(BaseNetwork):
         # output.size() will be (N, C, H, W) -> store (C, H ,W)
         output_shape = output.size()
         self._output_shapes[name] = (*output_shape[2:],output_shape[1])
-        
+
     def _activation_hook(self, module, input, output):
         name = module._name # FIXME[hack]: how to acces the module name?
         # output is a torch.autograd.variable.Variable,
@@ -182,11 +183,11 @@ class Network(BaseNetwork):
         self._activations[name] = output.data.numpy().copy()
         if len(output.data.size()) == 4: # convolution, (N,C,H,W)
             self._activations[name] = self._activations[name].transpose(0,2,3,1)
-        
+
 
     def _get_layer(self, layer_id) -> nn.Module:
         """Get a torch Module representing the layer for the given identifier.
-        
+
         Parameters
         ----------
         layer_id:
@@ -202,7 +203,7 @@ class Network(BaseNetwork):
 
     def _get_first_layer(self) -> nn.Module:
         """Get a torch Module representing the first layer of this network.
-        
+
         Returns
         -------
         nn.Module
@@ -215,7 +216,7 @@ class Network(BaseNetwork):
     def layer_ids(self) -> list:
         """Get list of layer ids. These ids can be used to access layers via
         this Network API.
-        
+
         Returns
         -------
         The list of layer identifiers.
@@ -244,7 +245,7 @@ class Network(BaseNetwork):
         """
         return isinstance(self._get_layer(layer_id),nn.modules.conv.Conv2d)
 
-        
+
     def get_layer_kernel_size(self, layer_id) -> int:
         """The size of the kernel in a cross-correlation/convolution
         operation. This is just the spatial extension and does not
@@ -379,8 +380,8 @@ class Network(BaseNetwork):
         layer = self._get_layer(layer_id)
         self._check_layer_is_convolutional(layer)
         return layer.dilation
-    
-        
+
+
     def get_layer_input_shape(self, layer_id) -> tuple:
         """
         Give the shape of the input of the given layer.
@@ -450,7 +451,7 @@ class Network(BaseNetwork):
         weights = layer.weight.data.numpy()
         if self.layer_is_convolutional(layer):
             weights = weights.transpose(2,3,0,1)
-        return weigths   
+        return weigths
 
 
     def get_layer_biases(self, layer_id) -> np.ndarray:
@@ -474,7 +475,7 @@ class Network(BaseNetwork):
         layer = self._get_layer(layer_id)
         biases = layer.bias.data.numpy()
         return biases
-        
+
 
 
     def get_activations(self, layer_ids, input_samples: np.ndarray) -> list:
@@ -497,7 +498,7 @@ class Network(BaseNetwork):
         ## representation of the input_samples.
         if self._input_shapes is None or self._output_shapes is None:
             self._compute_layer_shapes(input_samples.shape)
-        
+
         _layer_ids, _input_samples = \
             super().get_activations(layer_ids, input_samples)
 
