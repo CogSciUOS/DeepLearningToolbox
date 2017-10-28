@@ -15,3 +15,12 @@ __pycache__/
 # Local files for private testiing
 test.py
 debug.py
+
+# core dump default name
+core
+
+# I think this is for one of my linters
+.ropeproject/
+ 
+# I think this is for one of my linters
+.cache/
