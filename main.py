@@ -20,16 +20,36 @@ if __name__ == '__main__':
     parser.add_argument("--framework", help='the framework to use.',
                         choices=['keras-tensorflow', 'keras-theano', 'torch'],
                         default='keras-tensorflow')
+    parser.add_argument("--cpu", help='Do not attempt to use GPUs',
+                        action='store_true',
+                        default=False)
     args = parser.parse_args()
 
     if args.framework.startswith('keras'):
         # the only way to configure the keras backend appears to be via env vars
-        # we thus inject one for this process. Keras must be laoded after this
+        # we thus inject one for this process. Keras must be loaded after this
         # is done
         if args.framework == 'keras-tensorflow':
             os.environ['KERAS_BACKEND'] = 'tensorflow'
+            if args.cpu:
+                # TODO: I don't know if this actually works
+                print('Running in CPU-only mode.')
+                import tensorflow as tf
+                from multiprocessing import cpu_count
+                from keras import backend as K
+                num_cpus = cpu_count()
+                config = tf.ConfigProto(intra_op_parallelism_threads=num_cpus,
+                                        inter_op_parallelism_threads=num_cpus,
+                                        allow_soft_placement=True,
+                                        device_count={'CPU': num_cpus,
+                                                      'GPU': 0}
+                                        )
+                session = tf.Session(config=config)
+                K.set_session(session)
         if args.framework == 'keras-theano':
             os.environ['KERAS_BACKEND'] = 'theano'
+            print("Currently, only TF backend is supported", file=sys.stderr)
+            exit(1)
         # network = KerasNetwork(args.model)
         if not args.model:
             args.model = 'models/example_keras_mnist_model.h5'
