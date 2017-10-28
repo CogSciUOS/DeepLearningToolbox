@@ -2,7 +2,6 @@
 
 import sys
 import argparse
-import numpy as np
 
 from PyQt5.QtWidgets import QApplication
 
@@ -12,15 +11,15 @@ from network.torch import Network as TorchNetwork
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Neural network analysis.')
-    parser.add_argument("--model", help = 'filename of model to use',
-                        default = 'models/example_keras_mnist_model.h5')
-    parser.add_argument("--data", help = 'filename of dataset to visualize')
-    parser.add_argument("--datadir", help = 'directory containing input images')
-    parser.add_argument("--dataset", help = 'name of a dataset (currently only "mnist")',
-                        default = 'mnist')
-    parser.add_argument("--framework", help = 'the framework to use '
+    parser.add_argument("--model", help='filename of model to use',
+                        default='models/example_keras_mnist_model.h5')
+    parser.add_argument("--data", help='filename of dataset to visualize')
+    parser.add_argument("--datadir", help='directory containing input images')
+    parser.add_argument("--dataset", help='name of a dataset (currently only "mnist")',
+                        default='mnist')
+    parser.add_argument("--framework", help='the framework to use '
                         '(keras-tensorflow, torch)',
-                        default = 'keras-tensorflow')
+                        default='keras-tensorflow')
     args = parser.parse_args()
 
     if args.framework == 'keras-tensorflow':
@@ -33,11 +32,10 @@ if __name__ == '__main__':
         net_file = "models/example_torch_mnist_net.py"
         net_class = "Net"
         parameter_file = "models/example_torch_mnist_model.pth"
-        input_shape = (28,28)
+        input_shape = (28, 28)
         network = TorchNetwork(net_file, parameter_file,
-                               net_class = net_class,
-                               input_shape = input_shape)
-
+                               net_class=net_class,
+                               input_shape=input_shape)
 
     app = QApplication(sys.argv)
     mainWindow = DeepVisMainWindow()
@@ -48,7 +46,7 @@ if __name__ == '__main__':
         mainWindow.setInputDataSet(args.dataset)
     if args.datadir:
         mainWindow.setInputDataDirectory(args.datadir)
-    
+
     mainWindow.show()
 
     rc = app.exec_()
