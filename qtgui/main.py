@@ -95,23 +95,23 @@ class DeepVisMainWindow(QMainWindow):
 
 
     def setInputDataArray(self, data : np.ndarray):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
         self.activations.setInputDataArray(data)
 #        self.occlusion.setInputData(data)
 
     def setInputDataFile(self, filename : str):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
         self.activations.setInputDataFile(filename)
 
     def setInputDataDirectory(self, dirname : str):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
         self.activations.setInputDataDirectory(dirname)
 
     def setInputDataSet(self, name : str):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
         self.activations.setInputDataSet(name)
 
@@ -119,7 +119,7 @@ class DeepVisMainWindow(QMainWindow):
     def showStatusMessage(self, message):
         self.statusBar.showMessage(message, 2000)
 
-        
+
     def setLayer(self, layer = None) -> None:
         self.experiments.setLayer(layer)
 
@@ -145,7 +145,7 @@ class DeepVisMainWindow(QMainWindow):
                 else:
                     data = None
                     invalid = "Cannot visualize batch of images"
-                    
+
             if data is not None and data.ndim == 2:
                 data = data[..., np.newaxis].repeat(3,axis=2).copy()
 
@@ -162,6 +162,6 @@ class DeepVisMainWindow(QMainWindow):
                     invalid = "Cannot map {}-data to {}-network.".format(data.shape, network_shape)
                     data = None
 
-        
+
         self.activations.setInputData(raw_data, data, description)
         self.experiments.setInputData(data)
