@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import QApplication
 
 from qtgui.main import DeepVisMainWindow
 
+
 def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
     """
     Visualise a Keras-based network
@@ -66,6 +67,7 @@ def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
     else:
         raise RuntimeError("Unknown backend %s" % backend)
 
+
 def torch(cpu, model, net_class, parameter_file, input_shape):
     """
     Visualise a Torch-based network
@@ -97,8 +99,10 @@ def torch(cpu, model, net_class, parameter_file, input_shape):
     return TorchNetwork(model, parameter_file, net_class=net_class,
                         input_shape=input_shape, use_cuda=not cpu)
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Visual neural network analysis.')
+    parser = argparse.ArgumentParser(
+        description='Visual neural network analysis.')
     parser.add_argument("--model", help='Filename of model to use',
                         default='models/example_keras_mnist_model.h5')
     parser.add_argument("--data", help='filename of dataset to visualize')
@@ -116,7 +120,7 @@ def main():
 
     if args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
-        backend = args.framework[dash_idx+1:]
+        backend = args.framework[dash_idx + 1:]
         network = keras(backend, args.cpu, model=args.model)
     elif args.framework == 'torch':
         # FIXME[hack]: provide these parameter on the command line ...
@@ -124,7 +128,8 @@ def main():
         net_class = "Net"
         parameter_file = "models/example_torch_mnist_model.pth"
         input_shape = (28, 28)
-        network = torch(args.cpu, net_file, net_class, parameter_file, input_shape)
+        network = torch(args.cpu, net_file, net_class,
+                        parameter_file, input_shape)
 
     if network:
         app = QApplication(sys.argv)
@@ -141,6 +146,7 @@ def main():
 
         rc = app.exec_()
         sys.exit(rc)
+
 
 if __name__ == '__main__':
     main()
