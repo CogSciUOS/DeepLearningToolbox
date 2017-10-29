@@ -56,6 +56,7 @@ if __name__ == '__main__':
         from network.keras_tensorflow import Network as KerasTensorFlowNetwork
         network = KerasTensorFlowNetwork(model_file=args.model)
     elif args.framework == 'torch':
+        # TODO Fix errors when running torch network
         from network.torch import Network as TorchNetwork
         # FIXME[hack]: provide these parameter on the command line ...
         net_file = "models/example_torch_mnist_net.py"

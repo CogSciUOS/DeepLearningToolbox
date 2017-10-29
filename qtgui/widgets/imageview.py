@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush
@@ -22,6 +23,7 @@ class QImageView(QWidget):
         # an alternative may be to call
         #     pixmap.scaled(self.size(), Qt.KeepAspectRatio)
         # in the myplot method.
+        self._imageRect = None
 
     def setImage(self, image : np.ndarray):
         self.image = image
@@ -43,7 +45,7 @@ class QImageView(QWidget):
             if image.dtype != np.uint8:
                 image = (image*255).astype(np.uint8)
             image = np.copy(image)
-            
+
             self.image = QImage(image,
                                 image.shape[1], image.shape[0],
                                 byter_per_line, format)
@@ -62,6 +64,8 @@ class QImageView(QWidget):
         mask : numpy.ndarray
 
         '''
+        mask = imresize(mask, (self.image.height(), self.image.width()),
+                                interp='nearest')
         if mask is None:
             self.activationMask = None
         else:
@@ -108,6 +112,7 @@ class QImageView(QWidget):
                 rect = QRect((self.width()-w*ratio)//2,
                              (self.height()-h*ratio)//2,
                              w*ratio,h*ratio)
+                self._imageRect = rect
                 painter.drawImage(rect, self.image)
 
             elif False:
@@ -121,16 +126,17 @@ class QImageView(QWidget):
         '''Display the given image. Image is supposed to be a numpy array.
         '''
         if self.image is not None and self.activationMask is not None:
-            scale_width = self.width() / self.image.width()
-            scale_height = self.height() / self.image.height()
-            delta = (self.image.size() - self.activationMask.size())/2
-            target = QRect(delta.width()*scale_width,
-                           delta.height()*scale_height,
-                           self.activationMask.width()*scale_width,
-                           self.activationMask.height()*scale_height)
+            # __import__('ipdb').set_trace()
+            # scale_width = self.width() / self.image.width()
+            # scale_height = self.height() / self.image.height()
+            # delta = (self.image.size() - self.activationMask.size())/2
+            # target = QRect(delta.width()*scale_width,
+            #                delta.height()*scale_height,
+            #                self.activationMask.width()*scale_width,
+            #                self.activationMask.height()*scale_height)
 
             #source = QRect(QPoint(),self.activationMask.size())
-            painter.drawImage(target, self.activationMask)
+            painter.drawImage(self._imageRect, self.activationMask)
 
 
 
