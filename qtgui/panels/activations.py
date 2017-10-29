@@ -41,7 +41,7 @@ class ActivationsPanel(QWidget):
 
 
     '''A signal that is emitted each time a new network layer has been
-    selected via the GUI.'''    
+    selected via the GUI.'''
     layerSelected = pyqtSignal(object)
 
 
@@ -245,22 +245,22 @@ class ActivationsPanel(QWidget):
 
 
     def setInputDataArray(self, data : np.ndarray = None):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
-        self.inputselector.setDataArray(data)        
+        self.inputselector.setDataArray(data)
 
     def setInputDataFile(self, filename : str):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
         self.inputselector.setDataFile(filename)
 
     def setInputDataDirectory(self, dirname : str):
-        '''Set the input data to be used. 
+        '''Set the input data to be used.
         '''
         self.inputselector.setDataDirectory(dirname)
 
     def setInputDataSet(self, name : str):
-        '''Set the input data set to be used. 
+        '''Set the input data set to be used.
         '''
         self.inputselector.setDataSet(name)
 
@@ -274,7 +274,7 @@ class ActivationsPanel(QWidget):
         raw:
             The raw input data, as provided by the data source.
         fitted:
-            The input data transformed to fit the network. 
+            The input data transformed to fit the network.
         description:
             A string describing where the origin of the input data.
         '''

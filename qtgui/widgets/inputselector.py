@@ -22,11 +22,11 @@ class DataSource:
 
     def __init__(self, description = None):
         self._description = description
-    
+
     def __getitem__(self, index : int):
         """Provide access to the records in this data source."""
         pass
-    
+
     def __len__(self):
         """Get the number of entries in this data source."""
         pass
@@ -51,7 +51,7 @@ class DataArray(DataSource):
         if array is not None:
             self.setArray(array,description)
 
-    def setArray(self, array, description = "array"):       
+    def setArray(self, array, description = "array"):
         self._array = array
         self._description = description
 
@@ -81,7 +81,7 @@ class DataFile(DataArray):
             self.setFile(filename)
 
     def setFile(self, filename : str):
-        """Set the data file to be used. 
+        """Set the data file to be used.
         """
         self._filename = filename
 
@@ -214,7 +214,7 @@ class QInputSelector(QWidget):
     seems more plausible to just maintain a list of data sources.
     """
 
-    
+
     """The current mode: can be 'array' or 'dir'
     """
     _mode : str = None
@@ -237,7 +237,7 @@ class QInputSelector(QWidget):
     """
     selected = pyqtSignal(object, str)
 
-    
+
     def __init__(self, number : int = None, parent = None):
         """Initialization of the QNetworkView.
 
@@ -261,15 +261,15 @@ class QInputSelector(QWidget):
         button.clicked.connect(self._navigationButtonClicked)
         button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         return button
-        
+
     def initUI(self):
         """Initialize the user interface.
         """
 
-        self.firstButton = self._newNavigationButton('|<','go-first')        
-        self.prevButton = self._newNavigationButton('<<','go-previous')        
-        self.nextButton = self._newNavigationButton('>>','go-next')        
-        self.lastButton = self._newNavigationButton('>|','go-last')        
+        self.firstButton = self._newNavigationButton('|<','go-first')
+        self.prevButton = self._newNavigationButton('<<','go-previous')
+        self.nextButton = self._newNavigationButton('>>','go-next')
+        self.lastButton = self._newNavigationButton('>|','go-last')
         self.randomButton = self._newNavigationButton('random')
 
         self._indexField = QLineEdit()
@@ -280,7 +280,7 @@ class QInputSelector(QWidget):
         self._indexField.textEdited.connect(self._editIndex)
         self._indexField.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self._indexField.setMinimumWidth(QFontMetrics(self.font()).width("8")*8)
-        
+
         self.infoLabel = QLabel()
         self.infoLabel.setMinimumWidth(QFontMetrics(self.font()).width("8")*8)
         self.infoLabel.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Expanding)
@@ -288,10 +288,10 @@ class QInputSelector(QWidget):
         self._modeButton = {}
         self._modeButton['array'] = QRadioButton("Array")
         self._modeButton['array'].clicked.connect(lambda:self._setMode('array'))
-		
+
         self._modeButton['dir'] = QRadioButton("Directory")
         self._modeButton['dir'].clicked.connect(lambda:self._setMode('dir'))
-        
+
 
         self._openButton = QPushButton('Open...')
         self._openButton.clicked.connect(self._openButtonClicked)
@@ -317,7 +317,7 @@ class QInputSelector(QWidget):
         navigationLayout.addWidget(self.randomButton)
         navigationBox.setLayout(navigationLayout)
 
-        
+
         layout = QHBoxLayout()
         layout.addWidget(sourceBox)
         layout.addWidget(navigationBox)
@@ -395,12 +395,12 @@ class QInputSelector(QWidget):
             self.infoLabel.setText("of " + str(elements) if valid else "*")
             if valid:
                 self._indexField.setValidator(QIntValidator(0,elements))
-            
+
             if mode is not None:
                 self._modeButton[mode].setChecked(True)
 
             self._index = None
-            self.setIndex(0 if valid else None)            
+            self.setIndex(0 if valid else None)
 
 
     def _setSource(self, source : DataSource):
@@ -428,7 +428,7 @@ class QInputSelector(QWidget):
 
 
     def setDataArray(self, data : np.ndarray = None):
-        """Set the data array to be used. 
+        """Set the data array to be used.
 
         Arguments
         ---------
@@ -440,13 +440,13 @@ class QInputSelector(QWidget):
 
 
     def setDataFile(self, filename : str):
-        """Set the data file to be used. 
+        """Set the data file to be used.
         """
         self._setSource(DataFile(filename))
 
 
     def setDataDirectory(self, dirname : str = None):
-        """Set the directory to be used for loading data. 
+        """Set the directory to be used for loading data.
         """
         self._setSource(DataDirectory(dirname))
 
@@ -477,9 +477,9 @@ class QInputSelector(QWidget):
             index = 0
         elif index >= len(source):
             index = len(source)- 1
-            
-        if self._index != index:           
-                
+
+        if self._index != index:
+
             self._index = index
             if source is None or index is None:
                 data, info = None, None
@@ -494,7 +494,7 @@ class QInputSelector(QWidget):
 
         self._indexField.setText("" if index is None else str(index))
 
-    
+
 
 
 
@@ -503,7 +503,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 
 class QInputInfoBox(QWidget):
-    
+
     def __init__(self, parent = None):
         super().__init__(parent)
         self._initUI()
@@ -516,16 +516,16 @@ class QInputInfoBox(QWidget):
         self._button.setCheckable(True)
         self._button.toggled.connect(self.update)
         self._button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Expanding)
-        
+
         layout = QHBoxLayout()
         layout.addWidget(self._metaLabel)
         layout.addWidget(self._dataLabel)
         layout.addWidget(self._button)
         self.setLayout(layout)
-        
+
     def showInfo(self, data : np.ndarray = None, description : str = None):
         """Show info for the given (image) data.
-        
+
         Arguments
         ---------
         data:
