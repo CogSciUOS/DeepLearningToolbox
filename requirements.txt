@@ -8,3 +8,4 @@ keras>=2.0.3
 tensorflow>=1.0
 frozendict>=1.2
 pytest>=3.2.2
+numpydoc>=0.7.0
