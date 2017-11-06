@@ -8,6 +8,7 @@ from PyQt5.QtGui import QIcon
 from qtgui.panels import ActivationsPanel
 from util import ArgumentError
 
+
 class DeepVisMainWindow(QMainWindow):
     '''The main window of the deep visualization toolbox. The window is
     intended to hold different panels that allow for different kinds
@@ -120,7 +121,24 @@ class DeepVisMainWindow(QMainWindow):
         self._statusBar.showMessage(message, 2000)
 
     def setInputData(self, data: np.ndarray=None, description: str=None):
-        '''Provide one data vector as input for the network.'''
+        '''Provide one data vector as input for the network.
+        The input data must have 2, 3, or 4 dimensions.
+            - 2 dimensions means a single gray value image
+            - 3 dimensions means a single three-channel image. The channels will
+                be repeated thrice to form a three-dimensional input
+            - 4 dimensions are only supported insofar as the shape must be
+                (1, A, B, C), meaning the fist dimension is singular and can be
+                dropped. Actual batches are not supported
+        The input image shape will be adapted for the chosen network by resizing
+        the images
+
+        Parameters
+        ----------
+        data    :   np.ndarray
+                    The data array
+        description :   str
+                        Data description
+        '''
         # FIXME[hack]: there seems to be a bug in PyQt forbidding to emit
         # signals with None parameter. See code in 'widget/inputselector.py'
 
@@ -131,7 +149,8 @@ class DeepVisMainWindow(QMainWindow):
         if self._network is not None and data is not None:
             network_shape = self._network.get_input_shape(include_batch=False)
             if data.ndim > 4 or data.ndim < 2:
-                raise ArgumentError('Data must have between 2 and 4 dimensions.')
+                raise ArgumentError('Data must have between 2 '
+                                    'and 4 dimensions.')
 
             if data.ndim == 4:
                 if data.shape[0] == 1:
@@ -141,19 +160,22 @@ class DeepVisMainWindow(QMainWindow):
                     raise ArgumentError('Cannot visualize batch of images')
 
             if data.ndim == 2:
-                data = data[..., np.newaxis].repeat(3, axis=2).copy()
+                # Blow up to three dimensions by repeating the channel
+                data = data[..., np.newaxis].repeat(3, axis=2)
 
-            if data is not None and data.shape[0:2] != network_shape[0:2]:
+            if data.shape[0:2] != network_shape[0:2]:
+                # Image does not fit into network -> resize
                 data = imresize(data, network_shape[0:2])
 
-            if data is not None and data.shape[2] != network_shape[2]:
-                # FIXME[hack]: find better way to doe RGB <-> grayscale
+            if data.shape[2] != network_shape[2]:
+                # different number of channels
+                # FIXME[hack]: find better way to do RGB <-> grayscale
                 # conversion
                 if network_shape[2] == 1:
-                    data = data[:, :, 0:1]
+                    data = np.mean(data, axis=2)
                 elif network_shape[2] == 3 and data.shape[2] == 1:
                     data = data.repeat(3, axis=2)
                 else:
-                    data = None
+                    raise ArgumentError('Incompatible network input shape.')
 
         self._activations.setInputData(raw_data, data, description)
