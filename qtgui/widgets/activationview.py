@@ -37,7 +37,7 @@ class QActivationView(QWidget):
     means that no activation is assigned to this QActivationView and
     will result in an empty widget.
     """
-    
+
     padding : int = 2
     """Padding between the individual units in this QActivationView.
     """
@@ -51,14 +51,14 @@ class QActivationView(QWidget):
     """A flag indicating if the current QActivationView is currently in
     convolution mode (True) or not (False).
     """
-    
+
     selected = pyqtSignal(object)
     """A signal emitted whenever a unit is (de)selected in this
     QActivationView. This will be an int (the index of the selected
     unit) or None (if no unit is selected). We have to use object not
     int here to allow for None values.
     """
-    
+
 
     def __init__(self, parent : QWidget = None):
         '''Initialization of the QMatrixView.
@@ -136,7 +136,7 @@ class QActivationView(QWidget):
             self.selectUnit()
         else:
             self.selected.emit(self.selectedUnit)
-            
+
         self._computeGeometry()
         self.update()
 
@@ -147,7 +147,7 @@ class QActivationView(QWidget):
         Arguments
         =========
         unit:
-        
+
         """
         if self.activation is None:
             unit = None
@@ -185,7 +185,8 @@ class QActivationView(QWidget):
             n = self.activation.shape[0]
             if self._isConvolution:
                 # unitRatio = width/height
-                unitRatio = self.activation.shape[1]/self.activation.shape[2]
+                unitRatio = self.activation.shape[2]/self.activation.shape[1]
+                print(unitRatio)
             else:
                 unitRatio = 1
 
@@ -283,9 +284,10 @@ class QActivationView(QWidget):
         '''
 
         # image size: filter size (or a single pixel per neuron)
-        map_width, map_height = self.activation.shape[1:3]
+        map_height, map_width = self.activation.shape[1:3]
 
         for unit in range(self.activation.shape[0]):
+            print(map_width)
             image = QImage(self.activation[unit],
                            map_width, map_height,
                            map_width,
