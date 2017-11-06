@@ -83,21 +83,8 @@ class DataFile(DataArray):
         """
         self._filename = filename
 
-        # FIXME[hack]: use mmap_mode for reading (large) files.
-        # This works for some files
-        # (e.g. /net/store/cv/projects/datasets/objects/running/petrB/4x4mnist/4x4.npy)
-        # but for other it leads to a
-        # ValueError: mmap length is greater than file size
-        # (e.g. /net/store/cv/projects/datasets/objects/running/petrB/2shapes/2x2data.npy)
-        # But also conventional loading does not work for that file:
-        # ValueError: cannot reshape array of size 376822 into shape (10000,64,64)
-        # What does that mean?
-        statinfo = stat(filename)
-        size = statinfo.st_size
-        if size > 3014656:
-            data = np.load(filename, mmap_mode='r')
-        else:
-            data = np.load(filename)
+        data = np.load(filename, mmap_mode='r')
+        data = np.load(filename)
         self.setArray(data, basename(self._filename))
 
     def getFile(self) -> str:
