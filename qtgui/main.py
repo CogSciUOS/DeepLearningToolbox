@@ -1,148 +1,146 @@
 import numpy as np
 from scipy.misc import imresize
-import matplotlib.pyplot as plt
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QAction, QStatusBar
 from PyQt5.QtGui import QIcon
 
-#from qtgui.panels import ActivationsPanel, ExperimentsPanel, OcclusionPanel
-from qtgui.panels import ActivationsPanel, ExperimentsPanel
-
-# FIXME[todo]: add docstrings!
-
+from qtgui.panels import ActivationsPanel
+from util import ArgumentError
 
 class DeepVisMainWindow(QMainWindow):
-    '''The main window of the deep visualization toolbox.  The window is
+    '''The main window of the deep visualization toolbox. The window is
     intended to hold different panels that allow for different kinds
     of visualizations.
 
     This class also provides central entry points to programmatically
     set certain aspects, like loading a network or input data,
     switching between different panels, etc.
+
+    Attributes
+    ----------
+    _title   :   str
+                Window title
+
     '''
 
-    def __init__(self, network=None, data=None):
+    def __init__(self, network=None, data=None, title='QtPyVis'):
         super().__init__()
 
-        # FIXME[matplotlib]: only needed if using matplotlib for ploting ...
-        # prepare matplotlib for interactive plotting on the screen
-        plt.ion()
-
-        self.title = 'Activations'
-
-        self.left = 10
-        self.top = 10
-        self.width = 1800
-        self.height = 900
+        self._title = title
 
         self.initUI()
 
     def initUI(self):
-        '''Initialize the graphical components of this user interface.
-        '''
-        self.setWindowTitle(self.title)
-        self.setGeometry(self.left, self.top, self.width, self.height)
+        '''Initialize the graphical components of this user interface.'''
+        self.setWindowTitle(self._title)
 
-        ##
-        # Initialize the menu bar
-        ##
+        menubar = self.menuBar()
+        ########################################################################
+        #                            Add exit menu                             #
+        ########################################################################
         exitAction = QAction(QIcon('exit.png'), '&Exit', self)
-        exitAction.setShortcut('Ctrl+Q')
+        exitAction.setShortcuts(['Ctrl+W', 'Ctrl+Q'])
         exitAction.setStatusTip('Exit application')
         exitAction.triggered.connect(QCoreApplication.quit)
 
-        menubar = self.menuBar()
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(exitAction)
 
         ##
-        # Initialize the panels
-        ##
-        self.activations = ActivationsPanel()
-        self.experiments = ExperimentsPanel()
-#        self.occlusion = OcclusionPanel()
+        # Initialize the panels ##
+        self._activations = ActivationsPanel()
+        self.initActivationPanel()
 
-        self.tabs = QTabWidget(self)
-        self.tabs.addTab(self.activations, "Main")
-        self.tabs.addTab(self.experiments, "Experiments")
-#        self.tabs.addTab(self.occlusion, "Occlusion")
+        self._tabs = QTabWidget(self)
+        self._tabs.addTab(self._activations, 'Main')
 
-        self.setCentralWidget(self.tabs)
+        self.setCentralWidget(self._tabs)
 
         ##
         # Initialize the status bar
         ##
-        self.statusBar = QStatusBar()
-        self.setStatusBar(self.statusBar)
+        self._statusBar = QStatusBar()
+        self.setStatusBar(self._statusBar)
 
-        ##
-        # Connect the signals
-        ##
-        # FIXME[concept]:
-        self.activations.inputselector.selected.connect(self.setInputData)
-        self.activations.inputSelected.connect(self.setInputData)
-        self.activations.layerSelected.connect(self.setLayer)
-        # self.activations.networkSelected.connect(self.setNetwork)
+    def initActivationPanel(self):
+        '''Initialiase the actiations panel.
+        This will connect the Input button and the Layer buttons
+        '''
+        self._activations.inputselector.selected.connect(self.setInputData)
+        self._activations.inputSelected.connect(self.setInputData)
 
     def setNetwork(self, network):
+        '''Set the model to visualise
+        Parameters
+        ----------
+        network :   network.network.Network
+                    The network to use
+        '''
         self._network = network
-        self.activations.addNetwork(network)
-        self.experiments.setNetwork(network)
-#        self.occlusion.addNetwork(network)
+        self._activations.addNetwork(network)
 
     def setInputDataArray(self, data: np.ndarray):
         '''Set the input data to be used.
+
+        Parameters
+        ----------
+        data    :   np.ndarray
+                    Input data array
         '''
-        self.activations.setInputDataArray(data)
-#        self.occlusion.setInputData(data)
+        self._activations.setInputDataArray(data)
 
     def setInputDataFile(self, filename: str):
-        '''Set the input data to be used.
+        '''Set the input data to be used (read from file)
+
+        Parameters
+        ----------
+        filename    :   str
+                        Input filename
+
         '''
-        self.activations.setInputDataFile(filename)
+        self._activations.setInputDataFile(filename)
 
     def setInputDataDirectory(self, dirname: str):
-        '''Set the input data to be used.
+        '''Set input data directory.
+
+        Parameters
+        ----------
+        dirname     :   str
+                        Directory to read from
+
         '''
-        self.activations.setInputDataDirectory(dirname)
+        self._activations.setInputDataDirectory(dirname)
 
     def setInputDataSet(self, name: str):
-        '''Set the input data to be used.
-        '''
-        self.activations.setInputDataSet(name)
+        '''Set the input data to be used.'''
+        self._activations.setInputDataSet(name)
 
     def showStatusMessage(self, message):
-        self.statusBar.showMessage(message, 2000)
+        self._statusBar.showMessage(message, 2000)
 
-    def setLayer(self, layer=None) -> None:
-        self.experiments.setLayer(layer)
-
-    def setInputData(self, data: np.ndarray = None, description: str = None):
-        '''Provide one data vector as input for the network.
-        '''
+    def setInputData(self, data: np.ndarray=None, description: str=None):
+        '''Provide one data vector as input for the network.'''
         # FIXME[hack]: there seems to be a bug in PyQt forbidding to emit
-        # signals with None parameter. See code in "widget/inputselector.py"
+        # signals with None parameter. See code in 'widget/inputselector.py'
+
         if not data.ndim:
-            data = None
+            raise ArgumentError('Data cannot be none.')
 
         raw_data = data
         if self._network is not None and data is not None:
             network_shape = self._network.get_input_shape(include_batch=False)
-            invalid = None
             if data.ndim > 4 or data.ndim < 2:
-                data = None
-                invalid = "Do not understand {}-dimensional data".format(
-                    data.ndim)
+                raise ArgumentError('Data must have between 2 and 4 dimensions.')
 
-            if data is not None and data.ndim == 4:
+            if data.ndim == 4:
                 if data.shape[0] == 1:
+                    # first dimension has size of 1 -> remove
                     data = data.squeeze(0)
                 else:
-                    data = None
-                    invalid = "Cannot visualize batch of images"
+                    raise ArgumentError('Cannot visualize batch of images')
 
-            if data is not None and data.ndim == 2:
+            if data.ndim == 2:
                 data = data[..., np.newaxis].repeat(3, axis=2).copy()
 
             if data is not None and data.shape[0:2] != network_shape[0:2]:
@@ -156,9 +154,6 @@ class DeepVisMainWindow(QMainWindow):
                 elif network_shape[2] == 3 and data.shape[2] == 1:
                     data = data.repeat(3, axis=2)
                 else:
-                    invalid = "Cannot map {}-data to {}-network.".format(
-                        data.shape, network_shape)
                     data = None
 
-        self.activations.setInputData(raw_data, data, description)
-        self.experiments.setInputData(data)
+        self._activations.setInputData(raw_data, data, description)
