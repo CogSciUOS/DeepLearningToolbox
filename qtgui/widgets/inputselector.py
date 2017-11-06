@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QWidget, QFileDialog
 
 # FIXME[todo]: add docstrings!
 
+
 class DataSource:
     """An abstract base class for different types of data sources.  The
     individual elements of a data source can be accessed using an
@@ -17,13 +18,12 @@ class DataSource:
 
     """A shot description of the dataset.
     """
-    _description : np.ndarray = None
+    _description: np.ndarray = None
 
-
-    def __init__(self, description = None):
+    def __init__(self, description=None):
         self._description = description
 
-    def __getitem__(self, index : int):
+    def __getitem__(self, index: int):
         """Provide access to the records in this data source."""
         pass
 
@@ -34,28 +34,27 @@ class DataSource:
     def getDescription(self) -> str:
         return self._description
 
+
 class DataArray(DataSource):
     """A DataSource the stores all entries in an array (like the MNIST
     character data). That means, that all entries will have the same
     sizes.
     """
 
-
     """An array of input data. Can be None.
     """
-    _array : np.ndarray = None
+    _array: np.ndarray = None
 
-
-    def __init__(self, array : np.ndarray = None, description : str = None):
+    def __init__(self, array: np.ndarray = None, description: str = None):
         super().__init__(description)
         if array is not None:
-            self.setArray(array,description)
+            self.setArray(array, description)
 
-    def setArray(self, array, description = "array"):
+    def setArray(self, array, description="array"):
         self._array = array
         self._description = description
 
-    def __getitem__(self, index : int):
+    def __getitem__(self, index: int):
         if self._array is None or index is None:
             return None, None
         data = self._array[index]
@@ -68,36 +67,35 @@ class DataArray(DataSource):
         return len(self._array)
 
 
-
 class DataFile(DataArray):
 
     """The name of the file from which the data are read.
     """
-    _filename : str = None
+    _filename: str = None
 
-    def __init__(self, filename : str = None):
+    def __init__(self, filename: str = None):
         super().__init__()
         if filename is not None:
             self.setFile(filename)
 
-    def setFile(self, filename : str):
+    def setFile(self, filename: str):
         """Set the data file to be used.
         """
         self._filename = filename
 
-        ## FIXME[hack]: use mmap_mode for reading (large) files.
-        ## This works for some files
-        ## (e.g. /net/store/cv/projects/datasets/objects/running/petrB/4x4mnist/4x4.npy)
-        ## but for other it leads to a
-        ## ValueError: mmap length is greater than file size
-        ## (e.g. /net/store/cv/projects/datasets/objects/running/petrB/2shapes/2x2data.npy)
-        ## But also conventional loading does not work for that file:
-        ## ValueError: cannot reshape array of size 376822 into shape (10000,64,64)
-        ## What does that mean?
+        # FIXME[hack]: use mmap_mode for reading (large) files.
+        # This works for some files
+        # (e.g. /net/store/cv/projects/datasets/objects/running/petrB/4x4mnist/4x4.npy)
+        # but for other it leads to a
+        # ValueError: mmap length is greater than file size
+        # (e.g. /net/store/cv/projects/datasets/objects/running/petrB/2shapes/2x2data.npy)
+        # But also conventional loading does not work for that file:
+        # ValueError: cannot reshape array of size 376822 into shape (10000,64,64)
+        # What does that mean?
         statinfo = stat(filename)
         size = statinfo.st_size
         if size > 3014656:
-            data = np.load(filename, mmap_mode = 'r')
+            data = np.load(filename, mmap_mode='r')
         else:
             data = np.load(filename)
         self.setArray(data, basename(self._filename))
@@ -105,7 +103,7 @@ class DataFile(DataArray):
     def getFile(self) -> str:
         return self._filename
 
-    def selectFile(self, parent : QWidget = None):
+    def selectFile(self, parent: QWidget = None):
         filters = "Numpy Array (*.npy);; All Files (*)"
         filename, filter = \
             QFileDialog.getOpenFileName(parent,
@@ -115,13 +113,14 @@ class DataFile(DataArray):
             raise FileNotFoundError()
         self.setFile(filename)
 
+
 class DataSet(DataArray):
 
-    def __init__(self, name : str = None):
+    def __init__(self, name: str = None):
         super().__init__()
         self.load(name)
 
-    def load(self, name : str):
+    def load(self, name: str):
         if name == 'mnist':
             from keras.datasets import mnist
             data = mnist.load_data()[0][0]
@@ -132,29 +131,27 @@ class DataSet(DataArray):
     def getName(self) -> str:
         return "MNIST"
 
+
 class DataDirectory(DataSource):
     """A data directory contains data entries (e.g., images), in
     individual files. Each files is only read when accessed.
     """
 
-
     """A directory containing input data files. Can be None.
     """
-    _dirname : str = None
-
+    _dirname: str = None
 
     """A list of filenames in the dataDir. Will be None if no
     directory was selected. An empty list indicates that no
     suitable files where found in the directory.
     """
-    _filenames : list = None
+    _filenames: list = None
 
-
-    def __init__(self, dirname : str = None):
+    def __init__(self, dirname: str = None):
         super().__init__()
         self.setDirectory(dirname)
 
-    def setDirectory(self, dirname : int):
+    def setDirectory(self, dirname: int):
         self._dirname = dirname
         if self._dirname is None:
             self._filenames = None
@@ -172,25 +169,16 @@ class DataDirectory(DataSource):
         data = imread(join(self._dirname, filename))
         return data, filename
 
-
     def __len__(self):
         if self._filenames is None:
             return 0
         return len(self._filenames)
 
-
-    def selectDirectory(self, parent : QWidget = None):
+    def selectDirectory(self, parent: QWidget = None):
         dirname = QFileDialog.getExistingDirectory(parent, "Select Directory")
         if dirname is None or not isdir(dirname):
             raise FileNotFoundError()
         self.setDirectory(dirname)
-
-
-
-
-
-
-
 
 
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
@@ -198,6 +186,7 @@ from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
 from PyQt5.QtWidgets import QWidget, QPushButton, QRadioButton, QLineEdit
 from PyQt5.QtWidgets import QLabel, QGroupBox
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
+
 
 class QInputSelector(QWidget):
     """A Widget to select input data (probably images).  There are
@@ -214,22 +203,18 @@ class QInputSelector(QWidget):
     seems more plausible to just maintain a list of data sources.
     """
 
-
     """The current mode: can be 'array' or 'dir'
     """
-    _mode : str = None
-
+    _mode: str = None
 
     """The available data sources. A dictionary with mode names as keys
     and DataSource objects as values.
     """
-    _sources : dict = {}
-
+    _sources: dict = {}
 
     """The index of the current data entry.
     """
-    _index : int = None
-
+    _index: int = None
 
     """A signal emitted when new input data are selected.
     The signal will carry the new data and some text explaining
@@ -237,8 +222,7 @@ class QInputSelector(QWidget):
     """
     selected = pyqtSignal(object, str)
 
-
-    def __init__(self, number : int = None, parent = None):
+    def __init__(self, number: int = None, parent=None):
         """Initialization of the QNetworkView.
 
         Arguments
@@ -251,13 +235,13 @@ class QInputSelector(QWidget):
 
         self.initUI()
 
-    def _newNavigationButton(self, label : str, icon : str = None):
+    def _newNavigationButton(self, label: str, icon: str = None):
         button = QPushButton()
-        icon = QIcon.fromTheme(icon,QIcon())
+        icon = QIcon.fromTheme(icon, QIcon())
         if icon.isNull():
             button.setText(label)
         else:
-            button.setIcon(icon);
+            button.setIcon(icon)
         button.clicked.connect(self._navigationButtonClicked)
         button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         return button
@@ -266,10 +250,10 @@ class QInputSelector(QWidget):
         """Initialize the user interface.
         """
 
-        self.firstButton = self._newNavigationButton('|<','go-first')
-        self.prevButton = self._newNavigationButton('<<','go-previous')
-        self.nextButton = self._newNavigationButton('>>','go-next')
-        self.lastButton = self._newNavigationButton('>|','go-last')
+        self.firstButton = self._newNavigationButton('|<', 'go-first')
+        self.prevButton = self._newNavigationButton('<<', 'go-previous')
+        self.nextButton = self._newNavigationButton('>>', 'go-next')
+        self.lastButton = self._newNavigationButton('>|', 'go-last')
         self.randomButton = self._newNavigationButton('random')
 
         self._indexField = QLineEdit()
@@ -287,11 +271,11 @@ class QInputSelector(QWidget):
 
         self._modeButton = {}
         self._modeButton['array'] = QRadioButton("Array")
-        self._modeButton['array'].clicked.connect(lambda:self._setMode('array'))
+        self._modeButton['array'].clicked.connect(
+            lambda: self._setMode('array'))
 
         self._modeButton['dir'] = QRadioButton("Directory")
-        self._modeButton['dir'].clicked.connect(lambda:self._setMode('dir'))
-
+        self._modeButton['dir'].clicked.connect(lambda: self._setMode('dir'))
 
         self._openButton = QPushButton('Open...')
         self._openButton.clicked.connect(self._openButtonClicked)
@@ -317,18 +301,18 @@ class QInputSelector(QWidget):
         navigationLayout.addWidget(self.randomButton)
         navigationBox.setLayout(navigationLayout)
 
-
         layout = QHBoxLayout()
         layout.addWidget(sourceBox)
         layout.addWidget(navigationBox)
         self.setLayout(layout)
-
 
     def _editIndex(self, text):
         """Event handler for the edit field.
         """
         try:
             index = int(text)
+            if index < 0:
+                raise ValueError
         except ValueError:
             index = self._index
             self._indexField.setText(str(index))
@@ -372,7 +356,7 @@ class QInputSelector(QWidget):
         except FileNotFoundError:
             pass
 
-    def _setMode(self, mode : str):
+    def _setMode(self, mode: str):
         """Set the current mode.
 
         Arguments
@@ -392,9 +376,9 @@ class QInputSelector(QWidget):
             self.lastButton.setEnabled(valid)
             self.randomButton.setEnabled(valid)
             self._indexField.setEnabled(valid)
-            self.infoLabel.setText("of " + str(elements) if valid else "*")
+            self.infoLabel.setText("of " + str(elements-1) if valid else "*")
             if valid:
-                self._indexField.setValidator(QIntValidator(0,elements))
+                self._indexField.setValidator(QIntValidator(0, elements))
 
             if mode is not None:
                 self._modeButton[mode].setChecked(True)
@@ -402,8 +386,7 @@ class QInputSelector(QWidget):
             self._index = None
             self.setIndex(0 if valid else None)
 
-
-    def _setSource(self, source : DataSource):
+    def _setSource(self, source: DataSource):
         if source is None:
             return
         if isinstance(source, DataArray):
@@ -411,9 +394,11 @@ class QInputSelector(QWidget):
             info = (source.getFile()
                     if isinstance(source, DataFile)
                     else source.getDescription())
-            if info is None: info = ""
+            if info is None:
+                info = ""
             if len(info) > 40:
-                info = info[0:info.find('/',10)+1] + '...' + info[info.rfind('/',0,-20):]
+                info = info[0:info.find(
+                    '/', 10)+1] + '...' + info[info.rfind('/', 0, -20):]
             self._modeButton['array'].setText("Array: " + info)
         elif isinstance(source, DataDirectory):
             mode = 'dir'
@@ -426,8 +411,7 @@ class QInputSelector(QWidget):
         self._mode = None
         self._setMode(mode)
 
-
-    def setDataArray(self, data : np.ndarray = None):
+    def setDataArray(self, data: np.ndarray = None):
         """Set the data array to be used.
 
         Arguments
@@ -438,20 +422,17 @@ class QInputSelector(QWidget):
         """
         self._setSource(DataArray(data))
 
-
-    def setDataFile(self, filename : str):
+    def setDataFile(self, filename: str):
         """Set the data file to be used.
         """
         self._setSource(DataFile(filename))
 
-
-    def setDataDirectory(self, dirname : str = None):
+    def setDataDirectory(self, dirname: str = None):
         """Set the directory to be used for loading data.
         """
         self._setSource(DataDirectory(dirname))
 
-
-    def setDataSet(self, name : str):
+    def setDataSet(self, name: str):
         """Set a data set to be used.
 
         Arguments
@@ -462,8 +443,7 @@ class QInputSelector(QWidget):
         """
         self._setSource(DataSet(name))
 
-
-    def setIndex(self, index = None):
+    def setIndex(self, index=None):
         """Set the index of the entry in the current data source.
 
         The method will emit the "selected" signal, if a new(!) entry
@@ -476,7 +456,7 @@ class QInputSelector(QWidget):
         elif index < 0:
             index = 0
         elif index >= len(source):
-            index = len(source)- 1
+            index = len(source) - 1
 
         if self._index != index:
 
@@ -488,23 +468,22 @@ class QInputSelector(QWidget):
 
             # FIXME[bug]: there is an error in PyQt forbidding to emit None
             # signals.
-            if data is None: data = np.ndarray(())
-            if info is None: info = ""
+            if data is None:
+                data = np.ndarray(())
+            if info is None:
+                info = ""
             self.selected.emit(data, info)
 
         self._indexField.setText("" if index is None else str(index))
 
 
-
-
-
-
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 
+
 class QInputInfoBox(QWidget):
 
-    def __init__(self, parent = None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self._initUI()
         self.showInfo()
@@ -523,7 +502,7 @@ class QInputInfoBox(QWidget):
         layout.addWidget(self._button)
         self.setLayout(layout)
 
-    def showInfo(self, data : np.ndarray = None, description : str = None):
+    def showInfo(self, data: np.ndarray = None, description: str = None):
         """Show info for the given (image) data.
 
         Arguments
@@ -538,14 +517,13 @@ class QInputInfoBox(QWidget):
 
         self._data_text = ''
         if data is not None:
-            self._data_text += "Input shape: {}, dtype={}<br>\n".format(data.shape, data.dtype)
-            self._data_text += "min = {}, max={}, mean={:5.2f}, std={:5.2f}\n".format(data.min(),data.max(),data.mean(),data.std())
+            self._data_text += "Input shape: {}, dtype={}<br>\n".format(
+                data.shape, data.dtype)
+            self._data_text += "min = {}, max={}, mean={:5.2f}, std={:5.2f}\n".format(
+                data.min(), data.max(), data.mean(), data.std())
         self.update()
-
 
     def update(self):
         self._metaLabel.setText(self._meta_text)
-        self._dataLabel.setText(self._data_text if self._button.isChecked() else '')
-
-
-
+        self._dataLabel.setText(
+            self._data_text if self._button.isChecked() else '')
