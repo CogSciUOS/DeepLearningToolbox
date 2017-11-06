@@ -44,7 +44,6 @@ def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
     if backend == 'tensorflow':
         os.environ['KERAS_BACKEND'] = 'tensorflow'
         if cpu:
-            # TODO: I don't know if this actually works
             print('Running in CPU-only mode.')
             import tensorflow as tf
             from multiprocessing import cpu_count
