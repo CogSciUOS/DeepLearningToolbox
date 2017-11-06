@@ -11,6 +11,7 @@ import numpy as np
 # FIXME[todo]: rearrange the layer selection on network change!
 # FIXME[todo]: add docstrings!
 
+
 class ActivationsPanel(QWidget):
     '''A complex panel containing elements to display activations in
     different layers of a network. The panel offers controls to select
@@ -20,32 +21,27 @@ class ActivationsPanel(QWidget):
     '''The current network. This network is used for all computations
     in this ActivationsPanel. Can be None if no network is selected.
     '''
-    network : object = None
-
+    network: object = None
 
     '''The current network layer. Activations are shown for the respective
     layer. The layer can be None if no layer is selected.
     '''
     # FIXME[question]: int (index) or str (label)?
-    layer : str = None
-
+    layer: str = None
 
     '''The current input data. This data should always map the input size
     of the current network. May be None if no input data is available.'''
-    _data : np.ndarray = None
-
+    _data: np.ndarray = None
 
     '''A signal that is emitted each time some new input data have been
     selected via the GUI. (np.ndarray, str)'''
     inputSelected = pyqtSignal(object, str)
 
-
     '''A signal that is emitted each time a new network layer has been
     selected via the GUI.'''
     layerSelected = pyqtSignal(object)
 
-
-    def __init__(self, parent = None):
+    def __init__(self, parent=None):
         '''Initialization of the ActivationsView.
 
         Arguments
@@ -59,7 +55,6 @@ class ActivationsPanel(QWidget):
         self.setInputData()
 
         self.sample_index = 0
-
 
     def initUI(self):
 
@@ -82,7 +77,6 @@ class ActivationsPanel(QWidget):
         activationBox = QGroupBox("Activation")
         activationBox.setLayout(activationLayout)
 
-
         #
         # Input
         #
@@ -94,9 +88,9 @@ class ActivationsPanel(QWidget):
         # (mayb be more efficient - check!)
         self.inputview = QImageView(self)
         # FIXME[layout]
-        #self.inputview.setMinimumWidth(200)
-        self.inputview.heightForWidth = lambda w : w
-        self.inputview.hasHeightForWidth = lambda : True
+        # self.inputview.setMinimumWidth(200)
+        self.inputview.heightForWidth = lambda w: w
+        self.inputview.hasHeightForWidth = lambda: True
 
         # inputselect: a widget to select the input to the network
         # (data array, image directory, webcam, ...)
@@ -111,15 +105,13 @@ class ActivationsPanel(QWidget):
         inputLayout = QVBoxLayout()
         # FIXME[layout]
         inputLayout.setSpacing(0)
-        inputLayout.setContentsMargins(0,0,0,0)
+        inputLayout.setContentsMargins(0, 0, 0, 0)
         inputLayout.addWidget(self.inputview)
         inputLayout.addWidget(self.inputinfo)
         inputLayout.addWidget(self.inputselector)
 
         inputBox = QGroupBox("Input")
         inputBox.setLayout(inputLayout)
-
-
 
         #
         # Network
@@ -129,12 +121,14 @@ class ActivationsPanel(QWidget):
         self.networkview = QNetworkView()
         self.networkview.selected.connect(self.setLayer)
         # FIXME[hack]
-        #self.networkview.setMinimumSize(300,400)
+        # self.networkview.setMinimumSize(300,400)
 
         self.networkselector = QComboBox()
-        self.networks = { 'None': None }
+        self.networks = {'None': None}
         self.networkselector.addItems(self.networks.keys())
-        self.networkselector.activated.connect(lambda i:self.setNetwork(self.networks[self.networkselector.currentText()]))
+        self.networkselector.activated.connect(
+            lambda i: self.setNetwork(
+                self.networks[self.networkselector.currentText()]))
 
         # layerinfo: display input and layer info
         self.networkinfo = QNetworkInfoBox()
@@ -149,9 +143,6 @@ class ActivationsPanel(QWidget):
         networkBox = QGroupBox("Network")
         networkBox.setLayout(networkLayout)
 
-
-
-
         #
         # Putting all together
         #
@@ -160,19 +151,17 @@ class ActivationsPanel(QWidget):
         splitter.addWidget(activationBox)
         splitter.addWidget(inputBox)
         layout = QHBoxLayout()
-        #layout.addWidget(activationBox)
-        #layout.addWidget(inputBox)
+        # layout.addWidget(activationBox)
+        # layout.addWidget(inputBox)
         layout.addWidget(splitter)
         layout.addWidget(networkBox)
         self.setLayout(layout)
-
 
     def addNetwork(self, network):
         name = "Network " + str(self.networkselector.count())
         self.networks[name] = network
         self.networkselector.addItem(name)
         self.setNetwork(network)
-
 
     def getNetworkName(self, network):
         name = None
@@ -181,8 +170,7 @@ class ActivationsPanel(QWidget):
                 name = n
         return name
 
-
-    def setNetwork(self, network = None):
+    def setNetwork(self, network=None):
 
         if self.network != network:
             self.network = network
@@ -195,19 +183,17 @@ class ActivationsPanel(QWidget):
             self.networkinfo.setNetwork(network)
             self.setLayer(None)
 
-
-    def setLayer(self, layer = None):
+    def setLayer(self, layer=None):
         if layer != self.layer:
             self.layer = layer
             self.networkinfo.setLayer(self.layer)
 
-        ## We update the activation on every invocation, no matter if
-        ## the selected layer changed. This allows for some dynamics
-        ## if layers like dropout are involved. However, if such
-        ## layers do not exist, it will only waste computing power ...
+        # We update the activation on every invocation, no matter if
+        # the selected layer changed. This allows for some dynamics
+        # if layers like dropout are involved. However, if such
+        # layers do not exist, it will only waste computing power ...
         self.layerSelected.emit(layer)
         self.updateActivation()
-
 
     def updateActivation(self):
         '''Update this panel in response to a new activation values.
@@ -221,12 +207,12 @@ class ActivationsPanel(QWidget):
         elif self._data is None:
             activations = None
         else:
-            activations = self.network.get_activations([self.layer], self._data)[0]
+            activations = self.network.get_activations(
+                [self.layer], self._data)[0]
 
         self.activationview.setActivation(activations)
 
-
-    def setUnit(self, unit : int = None):
+    def setUnit(self, unit: int = None):
         """This methode is involved when the currently selected unit (e.g., in
         the activationview) has changed. This change should be
         reflected in other widgets.
@@ -234,38 +220,38 @@ class ActivationsPanel(QWidget):
 
         activationMask = self.activationview.getUnitActivation(unit)
         if activationMask is None:
-            activationMask=None
+            activationMask = None
         else:
             ratio = self._data.shape[1]//activationMask.shape[0]
             if ratio > 1:
                 activationMask = self.resizemask(activationMask, ratio)
             self.inputview.setActivationMask(activationMask)
 
-
-
-
-    def setInputDataArray(self, data : np.ndarray = None):
+    def setInputDataArray(self, data: np.ndarray = None):
         '''Set the input data to be used.
         '''
         self.inputselector.setDataArray(data)
 
-    def setInputDataFile(self, filename : str):
+    def setInputDataFile(self, filename: str):
         '''Set the input data to be used.
         '''
         self.inputselector.setDataFile(filename)
 
-    def setInputDataDirectory(self, dirname : str):
+    def setInputDataDirectory(self, dirname: str):
         '''Set the input data to be used.
         '''
         self.inputselector.setDataDirectory(dirname)
 
-    def setInputDataSet(self, name : str):
+    def setInputDataSet(self, name: str):
         '''Set the input data set to be used.
         '''
         self.inputselector.setDataSet(name)
 
-
-    def setInputData(self, raw: np.ndarray = None, fitted : np.ndarray = None, description : str = None):
+    def setInputData(
+            self,
+            raw: np.ndarray = None,
+            fitted: np.ndarray = None,
+            description: str = None):
         '''Set the current input stimulus for the network.
         The input stimulus is take from the internal data collection.
 
@@ -285,7 +271,6 @@ class ActivationsPanel(QWidget):
         self._data = fitted
         self.updateActivation()
 
-
     def resizemask(self, mask, factor):
-        newmask = np.repeat(np.repeat(mask,factor,0),factor,1)
+        newmask = np.repeat(np.repeat(mask, factor, 0), factor, 1)
         return newmask
