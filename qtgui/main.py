@@ -68,8 +68,7 @@ class DeepVisMainWindow(QMainWindow):
         '''Initialiase the actiations panel.
         This will connect the Input button and the Layer buttons
         '''
-        self._activations.inputselector.selected.connect(self.setInputData)
-        self._activations.inputSelected.connect(self.setInputData)
+        self._activations.on_input_selected(self.setInputData)
 
     def setNetwork(self, network):
         '''Set the model to visualise
