@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush
@@ -64,8 +63,6 @@ class QImageView(QWidget):
         mask : numpy.ndarray
 
         '''
-        mask = imresize(mask, (self.image.height(), self.image.width()),
-                                interp='nearest')
         if mask is None:
             self.activationMask = None
         else:
