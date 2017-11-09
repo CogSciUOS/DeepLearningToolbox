@@ -142,7 +142,7 @@ class DeepVisMainWindow(QMainWindow):
         # signals with None parameter. See code in 'widget/inputselector.py'
 
         if not data.ndim:
-            raise ArgumentError('Data cannot be none.')
+            raise ArgumentError('Data cannot be None.')
 
         raw_data = data
         if self._network is not None and data is not None:
