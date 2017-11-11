@@ -49,3 +49,11 @@ Then run the PyTorch MNIST example, tpye
 Testing
 =======
 Run `$ pytest` to execute all tests.
+
+Documentation
+=======
+
+In order to build the Sphinx documentation, `cd` into the `doc` directory and
+run `make html`. Then open `build/html/index.html`. __Note__: Sphinx executes
+all found modules, which can exhibit side-effects. For instance, loading
+TensorFlow takes a lot of time, and so building the documentation does as well.
