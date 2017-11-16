@@ -291,7 +291,7 @@ class Network:
         layer shapes for networks, that do not provide this
         information.
 
-        Arguments
+        Parameters
         ---------
         input_shape:
             The shape of an input sample. May or may not include batch (B)
