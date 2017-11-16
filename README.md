@@ -53,7 +53,19 @@ Run `$ pytest` to execute all tests.
 Documentation
 =======
 
+Building
+--------
 In order to build the Sphinx documentation, `cd` into the `doc` directory and
 run `make html`. Then open `build/html/index.html`. __Note__: Sphinx executes
 all found modules, which can exhibit side-effects. For instance, loading
 TensorFlow takes a lot of time, and so building the documentation does as well.
+
+You will see and abundance of warnings and errors, those are expected ``¯\_(ツ)_/¯``
+
+Adding files
+--------
+When adding a new python file, run ``sphinx-apidoc <folder> -o doc/source`` to
+generate an `.rst` file indexing the modules. When the apidoc tool finds modules
+it has already created indexes for, it will complain that those already exist.
+It may be neccessary to delete them and regenerate them if you add a submodule,
+I'm not currently sure.
