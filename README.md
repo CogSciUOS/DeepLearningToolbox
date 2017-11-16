@@ -60,8 +60,6 @@ run `make html`. Then open `build/html/index.html`. __Note__: Sphinx executes
 all found modules, which can exhibit side-effects. For instance, loading
 TensorFlow takes a lot of time, and so building the documentation does as well.
 
-You will see and abundance of warnings and errors, those are expected ``¯\_(ツ)_/¯``
-
 Adding files
 --------
 When adding a new python file, run ``sphinx-apidoc <folder> -o doc/source`` to
