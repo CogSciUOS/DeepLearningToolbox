@@ -12,7 +12,7 @@ import os
 
 from PyQt5.QtWidgets import QApplication
 
-from qtgui.main import DeepVisMainWindow
+from qtgui.mainwindow import DeepVisMainWindow
 
 
 def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
