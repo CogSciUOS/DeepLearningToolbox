@@ -212,7 +212,7 @@ class QInputSelector(QWidget):
     def __init__(self, number: int = None, parent=None):
         """Initialization of the QNetworkView.
 
-        Arguments
+        Parameters
         ---------
         parent : QWidget
         parent : QWidget
@@ -346,7 +346,7 @@ class QInputSelector(QWidget):
     def _setMode(self, mode: str):
         """Set the current mode.
 
-        Arguments
+        Parameters
         ---------
         mode: the mode (currently either 'array' or 'dir').
         """
@@ -401,7 +401,7 @@ class QInputSelector(QWidget):
     def setDataArray(self, data: np.ndarray = None):
         """Set the data array to be used.
 
-        Arguments
+        Parameters
         ---------
         data:
             An array of data. The first axis is used to select the
@@ -422,7 +422,7 @@ class QInputSelector(QWidget):
     def setDataSet(self, name: str):
         """Set a data set to be used.
 
-        Arguments
+        Parameters
         ---------
         name:
             The name of the dataset. The only dataset supported up to now
@@ -492,7 +492,7 @@ class QInputInfoBox(QWidget):
     def showInfo(self, data: np.ndarray = None, description: str = None):
         """Show info for the given (image) data.
 
-        Arguments
+        Parameters
         ---------
         data:
             the actual data

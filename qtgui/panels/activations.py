@@ -43,8 +43,9 @@ class ActivationsPanel(QWidget):
 
     def on_input_selected(self, callback):
         '''Connect a callback to the input selector.
+
         Parameters
-        ---------
+        ----------
         callback    :   function
                         Function to call when input selector receives selected
                         event
@@ -53,18 +54,19 @@ class ActivationsPanel(QWidget):
 
     def on_activation_view_selected(self, callback):
         '''Connect a callback to the activation view.
+
         Parameters
-        ---------
+        ----------
         callback    :   function
                         Function to call when activation view gets selected
         '''
-        self._activation_view.selected.connect(callback)
+        self._activation_view.on_unit_selected(callback)
 
     def __init__(self, parent=None):
         '''Initialization of the ActivationsView.
 
         Parameters
-        ---------
+        ----------
         parent  :   QWidget
                     The parent argument is sent to the QWidget constructor.
         '''
@@ -83,11 +85,13 @@ class ActivationsPanel(QWidget):
 
     def initUI(self):
         '''Initialise all UI elements. These are
-            - an ActivationView for the activation overlay
-            - a QImageView for the input image
-            - a QGroupBox for the unit selection
-            - a QInputSelector for stepping through the input samples in the set
-            - a QNetworkView for selecting networks and layers
+
+            * an ``ActivationView`` for the activation overlay
+            * a `QImageView` for the input image
+            * a `QGroupBox` for the unit selection
+            * a `QInputSelector` for stepping through the input samples in the set
+            * a `QNetworkView` for selecting networks and layers
+
         '''
 
         ########################################################################
@@ -177,6 +181,7 @@ class ActivationsPanel(QWidget):
     def addNetwork(self, network):
         '''Add a model to visualise. This will add the network to the list of
         choices and make it the currently selcted one
+
         Parameters
         ----------
         network     :   network.network.Network
@@ -191,7 +196,8 @@ class ActivationsPanel(QWidget):
     def getNetworkName(self, network):
         '''Get the name of the currently selected network. Note: This runs in
         O(n).
-        Paramaters
+
+        Parameters
         ----------
         network     :   network.network.Network
                         The network to visualise.
@@ -204,7 +210,8 @@ class ActivationsPanel(QWidget):
 
     def setNetwork(self, network=None):
         '''Set the current network. This will deselect all layers.
-        Paramaters
+
+        Parameters
         ----------
         network     :   network.network.Network
                         Network instance to display
@@ -223,6 +230,7 @@ class ActivationsPanel(QWidget):
 
     def setLayer(self, layer=None):
         '''Set the current layer to choose units from.
+
         Parameters
         ----------
         layer       :   network.layers.layers.Layer
@@ -256,6 +264,7 @@ class ActivationsPanel(QWidget):
         '''Change the currently visualised unit. This should be called when the
         user clicks on a unit in the ActivationView. The activation mask will be
         nearest-neighbour-interpolated to the shape of the input data.
+
         Parameters
         ----------
         unit    :   int
@@ -270,6 +279,7 @@ class ActivationsPanel(QWidget):
 
     def setInputDataArray(self, data: np.ndarray=None):
         '''Set the input data to be used.
+
         Parameters
         ----------
         data    :   np.ndarray
@@ -280,6 +290,7 @@ class ActivationsPanel(QWidget):
 
     def setInputDataFile(self, filename: str):
         '''Set the input data to be used via file name.
+
         Parameters
         ----------
         filename    :   str
@@ -291,6 +302,7 @@ class ActivationsPanel(QWidget):
 
     def setInputDataDirectory(self, dirname: str):
         '''Set the input data to be used via dir name.
+
         Parameters
         ----------
         dirname    :   str
@@ -302,6 +314,7 @@ class ActivationsPanel(QWidget):
 
     def setInputDataSet(self, name: str):
         '''Set the input data to be used via name
+
         Parameters
         ----------
         name    :   str
@@ -315,10 +328,10 @@ class ActivationsPanel(QWidget):
                      description: str=None):
         '''Set the current input stimulus for the network.
         The input stimulus should be taken from the internal data collection.
-        THis method will display the input data in the ImageView, set the
+        This method will display the input data in the ImageView, set the
         current input data to the fitted version and update the activation.
 
-        Argruments
+        Parameters
         ----------
         raw     :   np.ndarray
                     The raw input data, as provided by the data source.

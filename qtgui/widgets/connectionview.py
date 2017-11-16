@@ -19,7 +19,7 @@ class QConnectionView(QWidget):
     def __init__(self, parent = None):
         '''Initialization of the QMatrixView.
 
-        Arguments
+        Parameters
         ---------
         parent : QWidget
             The parent argument is sent to the QWidget constructor.
@@ -90,7 +90,7 @@ class QConnectionDisplay(QWidget):
     def __init__(self, parent = None):
         '''Initialization of the QMatrixView.
 
-        Arguments
+        Parameters
         ---------
         matrix : numpy.ndarray
             The matrix to be displayed in this QMatrixView.
@@ -112,7 +112,7 @@ class QConnectionDisplay(QWidget):
         Currently there are two possible types of activations that are
         supported by this widget: 1D, and 2D convolutional.
 
-        Arguments
+        Parameters
         ---------
         activation:
             Either a 1D or a 3D array. The latter one will be displayed
@@ -253,7 +253,7 @@ class QConnectionDisplay(QWidget):
     def paintEvent(self, event):
         '''Process the paint event by repainting this Widget.
 
-        Arguments
+        Parameters
         ---------
         event : QPaintEvent
         '''
@@ -276,7 +276,7 @@ class QConnectionDisplay(QWidget):
         unit.
 
 
-        Arguments
+        Parameters
         ---------
         unit : index of the unit of interest
         left
@@ -306,7 +306,7 @@ class QConnectionDisplay(QWidget):
     def _unitAtPosition(self, position : QPoint):
         '''Compute the entry corresponding to some point in this widget.
 
-        Arguments
+        Parameters
         ---------
         position
             The position of the point in question (in Widget coordinates).
@@ -333,7 +333,7 @@ class QConnectionDisplay(QWidget):
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer.
 
-        Arguments
+        Parameters
         ---------
         qp : QPainter
         '''
@@ -376,7 +376,7 @@ class QConnectionDisplay(QWidget):
     def _drawDense(self, qp):
         '''Draw activation values for a dense layer.
 
-        Arguments
+        Parameters
         ---------
         qp : QPainter
         '''
@@ -402,7 +402,7 @@ class QConnectionDisplay(QWidget):
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.
 
-        Arguments
+        Parameters
         ---------
         qp : QPainter
         '''
@@ -413,7 +413,7 @@ class QConnectionDisplay(QWidget):
         '''Adapt to a change in size. The behavior dependes on the zoom
         policy.
 
-        Arguments
+        Parameters
         ---------
         event : QResizeEvent
 
@@ -426,7 +426,7 @@ class QConnectionDisplay(QWidget):
     def mousePressEvent(self, event):
         '''Process mouse event.
 
-        Arguments
+        Parameters
         ---------
         event : QMouseEvent
         '''
@@ -435,7 +435,7 @@ class QConnectionDisplay(QWidget):
 
     def mouseReleaseEvent(self, event):
         '''Process mouse event.
-        Arguments
+        Parameters
         ---------
         event : QMouseEvent
         '''
@@ -448,7 +448,7 @@ class QConnectionDisplay(QWidget):
         '''Process a double click. We use double click to select a
         matrix entry.
 
-        Arguments
+        Parameters
         ---------
         event : QMouseEvent
         '''
@@ -459,7 +459,7 @@ class QConnectionDisplay(QWidget):
         '''Process special keys for this widget.
         Allow moving selected entry using the cursor key.
 
-        Arguments
+        Parameters
         ---------
         event : QKeyEvent
         '''

@@ -18,7 +18,7 @@ class ExperimentsPanel(QWidget):
     def __init__(self, parent = None):
         '''Initialization of the ExperimentsView.
 
-        Arguments
+        Parameters
         ---------
         parent : QWidget
             The parent argument is sent to the QWidget constructor.

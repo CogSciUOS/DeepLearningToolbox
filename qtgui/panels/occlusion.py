@@ -24,7 +24,7 @@ class OcclusionPanel(QWidget):
     def __init__(self, parent=None):
         '''Initialization of the ExperimentsView.
 
-        Arguments
+        Parameters
         ---------
         parent : QWidget
             The parent argument is sent to the QWidget constructor.
@@ -164,7 +164,7 @@ class OcclusionPanel(QWidget):
         '''Set the current input stimulus for the network.
         The input stimulus is take from the internal data collection.
 
-        Argruments
+        Parameters
         ----------
         input:
             The index of the input stimulus in the data collection.

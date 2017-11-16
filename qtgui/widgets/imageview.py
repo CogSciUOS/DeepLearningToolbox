@@ -58,7 +58,7 @@ class QImageView(QWidget):
         '''Set an (activation) mask to be displayed on top of
         the actual image. The mask should be
 
-        Arguments
+        Parameters
         ---------
         mask : numpy.ndarray
 
@@ -82,7 +82,7 @@ class QImageView(QWidget):
     def paintEvent(self, event):
         '''Process the paint event by repainting this Widget.
 
-        Arguments
+        Parameters
         ---------
         event : QPaintEvent
         '''
