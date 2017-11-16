@@ -72,6 +72,7 @@ class DeepVisMainWindow(QMainWindow):
 
     def setNetwork(self, network):
         '''Set the model to visualise
+
         Parameters
         ----------
         network :   network.network.Network
@@ -122,12 +123,14 @@ class DeepVisMainWindow(QMainWindow):
     def setInputData(self, data: np.ndarray=None, description: str=None):
         '''Provide one data vector as input for the network.
         The input data must have 2, 3, or 4 dimensions.
-            - 2 dimensions means a single gray value image
-            - 3 dimensions means a single three-channel image. The channels will
-                be repeated thrice to form a three-dimensional input
-            - 4 dimensions are only supported insofar as the shape must be
-                (1, A, B, C), meaning the fist dimension is singular and can be
-                dropped. Actual batches are not supported
+
+        - 2 dimensions means a single gray value image
+        - 3 dimensions means a single three-channel image. The channels will
+          be repeated thrice to form a three-dimensional input
+        - 4 dimensions are only supported insofar as the shape must be
+          (1, A, B, C), meaning the fist dimension is singular and can be
+          dropped. Actual batches are not supported
+
         The input image shape will be adapted for the chosen network by resizing
         the images
 

@@ -16,6 +16,7 @@ from .util import convert_data_format
 #     - GPU usage
 #
 #  * provide some information on the layer
+#
 
 
 class Network:

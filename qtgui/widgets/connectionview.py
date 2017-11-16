@@ -20,7 +20,7 @@ class QConnectionView(QWidget):
         '''Initialization of the QMatrixView.
 
         Parameters
-        ---------
+        ----------
         parent : QWidget
             The parent argument is sent to the QWidget constructor.
         '''
@@ -32,7 +32,7 @@ class QConnectionView(QWidget):
         self._inputScrollBar.setValue(0)
 
         self._connections = QConnectionDisplay()
-        
+
         self._outputScrollBar = QScrollBar(Qt.Vertical)
         self._outputScrollBar.setFocusPolicy(Qt.StrongFocus)
         self._outputScrollBar.setMaximum(0)
@@ -58,7 +58,7 @@ class QConnectionView(QWidget):
 class QConnectionDisplay(QWidget):
 
     connections : np.ndarray = None
-    
+
     _input : np.ndarray = None
 
     _output : np.ndarray = None
@@ -75,23 +75,23 @@ class QConnectionDisplay(QWidget):
 
     _outputOrder : list
 
-    
+
     padding : int = 2
     """Padding between the individual units in a layer."""
-    
+
     selected = pyqtSignal(object)
     """A signal emitted whenever a unit is (de)selected in this
     QConnectionDisplay. This will be an int (the index of the selected
     unit) or None (if no unit is selected). [We have to use object not
     int here to allow for None values.]
     """
-    
+
 
     def __init__(self, parent = None):
         '''Initialization of the QMatrixView.
 
         Parameters
-        ---------
+        ----------
         matrix : numpy.ndarray
             The matrix to be displayed in this QMatrixView.
         parent : QWidget
@@ -113,7 +113,7 @@ class QConnectionDisplay(QWidget):
         supported by this widget: 1D, and 2D convolutional.
 
         Parameters
-        ---------
+        ----------
         activation:
             Either a 1D or a 3D array. The latter one will be displayed
             in the convolutional mode.
@@ -165,7 +165,7 @@ class QConnectionDisplay(QWidget):
             self.selectUnit()
         else:
             self.selected.emit(self.selectedUnit)
-            
+
         self._computeGeometry()
         self.update()
 
@@ -244,7 +244,7 @@ class QConnectionDisplay(QWidget):
             self._inputUnitWidth = unitWidth
             self._inputUnitHeight = unitHeight
             self._outputUnitWidth = unitWidth
-            self._outputUnitHeight = unitHeight 
+            self._outputUnitHeight = unitHeight
 
         self.update()
 
@@ -254,7 +254,7 @@ class QConnectionDisplay(QWidget):
         '''Process the paint event by repainting this Widget.
 
         Parameters
-        ---------
+        ----------
         event : QPaintEvent
         '''
         qp = QPainter()
@@ -277,11 +277,11 @@ class QConnectionDisplay(QWidget):
 
 
         Parameters
-        ---------
+        ----------
         unit : index of the unit of interest
         left
             A flag indicating if the unit indicates an input (True,
-            left side) or an outupt (False, right side).            
+            left side) or an outupt (False, right side).
         padding: padding of the unit.
             If None is given, standard padding value of this QActivationView
             will be use.
@@ -307,7 +307,7 @@ class QConnectionDisplay(QWidget):
         '''Compute the entry corresponding to some point in this widget.
 
         Parameters
-        ---------
+        ----------
         position
             The position of the point in question (in Widget coordinates).
 
@@ -329,15 +329,15 @@ class QConnectionDisplay(QWidget):
         return unit
 
 
-    
+
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer.
 
         Parameters
-        ---------
+        ----------
         qp : QPainter
         '''
-        
+
         r2 = self._getUnitRect(False,0)
         p2 = r2.center()
         p2.setX(r2.left())
@@ -345,7 +345,7 @@ class QConnectionDisplay(QWidget):
         pen_color = Qt.red
         pen = QPen(pen_color)
         pen.setWidth(pen_width)
-        
+
         map_width, map_height = self._input.shape[1:3]
         for unit in range(self._input.shape[0]):
             rect = self._getUnitRect(True,unit)
@@ -377,7 +377,7 @@ class QConnectionDisplay(QWidget):
         '''Draw activation values for a dense layer.
 
         Parameters
-        ---------
+        ----------
         qp : QPainter
         '''
         for unit, value in enumerate(self._input):
@@ -403,7 +403,7 @@ class QConnectionDisplay(QWidget):
         '''Draw a view when no activation values are available.
 
         Parameters
-        ---------
+        ----------
         qp : QPainter
         '''
         qp.drawText(self.rect(), Qt.AlignCenter, "No data!")
@@ -414,7 +414,7 @@ class QConnectionDisplay(QWidget):
         policy.
 
         Parameters
-        ---------
+        ----------
         event : QResizeEvent
 
         '''
@@ -427,7 +427,7 @@ class QConnectionDisplay(QWidget):
         '''Process mouse event.
 
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
         '''
         self.selectUnit(self._unitAtPosition(event.pos()))
@@ -436,7 +436,7 @@ class QConnectionDisplay(QWidget):
     def mouseReleaseEvent(self, event):
         '''Process mouse event.
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
         '''
         # As we implement .mouseDoubleClickEvent(), we
@@ -449,7 +449,7 @@ class QConnectionDisplay(QWidget):
         matrix entry.
 
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
         '''
         self.selectUnit(self._unitAtPosition(event.pos()))
@@ -460,7 +460,7 @@ class QConnectionDisplay(QWidget):
         Allow moving selected entry using the cursor key.
 
         Parameters
-        ---------
+        ----------
         event : QKeyEvent
         '''
         key = event.key()

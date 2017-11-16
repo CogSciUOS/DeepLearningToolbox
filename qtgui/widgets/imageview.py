@@ -59,7 +59,7 @@ class QImageView(QWidget):
         the actual image. The mask should be
 
         Parameters
-        ---------
+        ----------
         mask : numpy.ndarray
 
         '''
@@ -83,7 +83,7 @@ class QImageView(QWidget):
         '''Process the paint event by repainting this Widget.
 
         Parameters
-        ---------
+        ----------
         event : QPaintEvent
         '''
         painter = QPainter()

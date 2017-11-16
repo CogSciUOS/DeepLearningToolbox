@@ -28,12 +28,12 @@ class QNetworkView(QWidget):
     the current network.
     """
 
-    
+
     def __init__(self, parent=None):
         '''Initialization of the QNetworkView.
 
         Parameters
-        ---------
+        ----------
         parent : QWidget
             The parent argument is sent to the QWidget constructor.
         '''
@@ -92,7 +92,7 @@ class QNetworkView(QWidget):
         '''Set the active layer.
 
         Parameters
-        ---------
+        ----------
         layer : int or string
             The index or the name of the layer to activate.
         '''
@@ -137,7 +137,7 @@ class QNetworkInfoBox(QLabel):
     """A simple widget to display information on a network and a selected
     layer.
     """
-    
+
     network : Network = None
     networkText = ""
 
@@ -154,7 +154,7 @@ class QNetworkInfoBox(QLabel):
         """Set the network for which information are displayed.
 
         Parameters
-        ---------
+        ----------
         network
             The network.
         """
@@ -173,7 +173,7 @@ class QNetworkInfoBox(QLabel):
         """Set the layer for which information are displayed.
 
         Parameters
-        ---------
+        ----------
         layer_id
             The identifier of the network layer.
         """
@@ -198,7 +198,7 @@ class QNetworkInfoBox(QLabel):
         """Provide a string with information about a network layer.
 
         Parameters
-        ----------
+        -----------
         layer
             The network layer.
 
@@ -215,7 +215,7 @@ class QNetworkInfoBox(QLabel):
         """Provide a string with information on a convolutional layer.
 
         Parameters
-        ---------
+        ----------
         layer_id
             The identifier of the network layer. The layer should be
             convolutional.

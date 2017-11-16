@@ -213,7 +213,7 @@ class QInputSelector(QWidget):
         """Initialization of the QNetworkView.
 
         Parameters
-        ---------
+        ----------
         parent : QWidget
         parent : QWidget
             The parent argument is sent to the QWidget constructor.
@@ -347,7 +347,7 @@ class QInputSelector(QWidget):
         """Set the current mode.
 
         Parameters
-        ---------
+        ----------
         mode: the mode (currently either 'array' or 'dir').
         """
         if self._mode != mode:
@@ -402,7 +402,7 @@ class QInputSelector(QWidget):
         """Set the data array to be used.
 
         Parameters
-        ---------
+        ----------
         data:
             An array of data. The first axis is used to select the
             data record, the other axes belong to the actual data.
@@ -423,7 +423,7 @@ class QInputSelector(QWidget):
         """Set a data set to be used.
 
         Parameters
-        ---------
+        ----------
         name:
             The name of the dataset. The only dataset supported up to now
             is "mnist".
@@ -493,7 +493,7 @@ class QInputInfoBox(QWidget):
         """Show info for the given (image) data.
 
         Parameters
-        ---------
+        ----------
         data:
             the actual data
         description:

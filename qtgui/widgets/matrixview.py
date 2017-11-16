@@ -4,7 +4,7 @@ import numpy as np
 
 from PyQt5.QtCore import Qt, QPoint, QPointF, QSize, QRect, pyqtSignal
 from PyQt5.QtGui import QImage, QPainter, QPen
-from PyQt5.QtWidgets import QWidget, QToolTip   
+from PyQt5.QtWidgets import QWidget, QToolTip
 
 
 # FIXME[todo]
@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import QWidget, QToolTip
 class QMatrixView(QWidget):
     '''An experimental class to display a matrix (e.g. a correlation
     matrix between two networks).
+
         - The MatrixView allows to select an individual entry
           by a mouse click.
         - Once an entry is selected, it can be moved by the using
@@ -27,7 +28,7 @@ class QMatrixView(QWidget):
           with some zoom element.
 
     Implementation
-    --------------
+    ---------------
     Zoom: we have decided to include the zoom functionality into this widget.
     That is, on every change of zoom parameters (zoom factor or offset)
     we compute an image depicting the selected region and display it
@@ -65,7 +66,7 @@ class QMatrixView(QWidget):
 
 
     Attributes
-    ----------
+    -----------
     matrix : numpy.ndarray
         The matrix to be displayed in this widget. None if no
         matrix is assigned.
@@ -110,12 +111,12 @@ class QMatrixView(QWidget):
     '''The zoom policy to apply to this widget.'''
     zoomPolicy = 0
 
-    
+
     def __init__(self, matrix, parent = None):
         '''Initialization of the QMatrixView.
 
         Parameters
-        ---------
+        ----------
         matrix : numpy.ndarray
             The matrix to be displayed in this QMatrixView.
         parent : QWidget
@@ -147,20 +148,20 @@ class QMatrixView(QWidget):
         control how the QMatrixView behaves on zooming.
 
         Parameters
-        ---------
+        ----------
         zoomPolicy : QMatrixView.ZoomPolicy...
         '''
         self.zoomPolicy = zoomPolicy
         self.resetZoom()
 
-        
+
     def setToolTip(self, active = True):
         '''Turn on/off the tooltips for this Widget.
         The tooltip will display the index and value for the matrix
         at the current mouse position.
-        
+
         Parameters
-        ---------
+        ----------
         active : bool or str
             Will turn the tooltips on or off. When a string is provided
             that string will be used as tooltip. The string can have
@@ -169,7 +170,7 @@ class QMatrixView(QWidget):
         '''
 
         self.toolTipActive = active != False
-        
+
         if isinstance(active, str):
             self.toolTipText = active
         elif active:
@@ -186,9 +187,9 @@ class QMatrixView(QWidget):
     def setMatrix(self, matrix):
         '''Set the matrix to be displayed. Setting the matrix will
         reset the zoom and trigger a repaint.
-        
+
         Parameters
-        ---------
+        ----------
         matrix : numpy.ndarray
             The matrix to be displayed in this QMatrixView. Can
             be None to indicate that no data should be displayed.
@@ -208,14 +209,14 @@ class QMatrixView(QWidget):
         self.resetZoom()
         self.setSelection(None)
         self.update()
-        
+
 
     def setSelection(self, selection = None):
         '''Set the selected matrix entry. This will trigger a repaint
         to also display the selected entry.
 
         Parameters
-        ---------
+        ----------
         selection : (int,int)
             The row and column of the selected entry. None can be
             be provided to cancel the selection.
@@ -251,7 +252,7 @@ class QMatrixView(QWidget):
         display a matrix entry (zoom = n means n*n pixels).
 
         Parameters
-        ---------
+        ----------
         selection : float
             The new zoom factor. If the factor is out of range, the
             closest valid value is taken instead.
@@ -264,7 +265,7 @@ class QMatrixView(QWidget):
                 zoom = self.minZoom
             if zoom > self.maxZoom:
                 zoom = self.maxZoom
-                
+
         if zoom != self.zoom:
             self.zoom = zoom
             if (self.zoomPolicy == QMatrixView.ZoomPolicyResize and
@@ -294,7 +295,7 @@ class QMatrixView(QWidget):
         y = max(0, offset.y())
         if self._image:
             if self.zoom * self._image.width() - self.width() < x:
-                x = self.zoom * self._image.width() - self.width() 
+                x = self.zoom * self._image.width() - self.width()
             if self.zoom * self._image.height() - self.height() < y:
                 y = self.zoom * self._image.height() - self.height()
 
@@ -332,12 +333,12 @@ class QMatrixView(QWidget):
         The updated version of the image is stored in the
         private field _ZoomedImage.
         '''
-        
+
         # emit the "zoomed" signal and update the display
         self.zoomed.emit(self.zoom)
         self.update()
 
-    
+
     def zoomedSize(self):
         '''Return the size of the zoomed image. If the zoom policy is set
         to ZoomPolicyResize, this is equivalent to self.size().
@@ -354,7 +355,7 @@ class QMatrixView(QWidget):
         policy.
 
         Parameters
-        ---------
+        ----------
         event : QResizeEvent
 
         '''
@@ -368,8 +369,8 @@ class QMatrixView(QWidget):
         '''Process the paint event by repainting this Widget.
 
         Parameters
-        ---------
-        event : QPaintEvent       
+        ----------
+        event : QPaintEvent
         '''
         qp = QPainter()
         qp.begin(self)
@@ -380,7 +381,7 @@ class QMatrixView(QWidget):
     def _drawWidget(self, qp, rect):
         '''Draw a given portion of this widget.
         Parameters
-        ---------
+        ----------
         qp : QPainter
         rect : QRect
         '''
@@ -409,7 +410,7 @@ class QMatrixView(QWidget):
         '''Create a zoomed version of the matrix image.
 
         Parameters
-        ---------
+        ----------
         rect : QRect
             A rectangle describing the visible region.
 
@@ -430,13 +431,13 @@ class QMatrixView(QWidget):
             w = min(math.ceil(1+rect.width()/self.zoom),
                     self._image.width()-x)
             h = min(math.ceil(1+rect.height()/self.zoom),
-                    self._image.height()-y) 
+                    self._image.height()-y)
             smallImage = self._image.copy(x,y,w,h)
 
             # 2. Zoom the image to the desired size.
             #    We have to really zoom the Image, rather than
             #    just displaying a resized version of it,
-            #    to get a "pixeled" (i.e. not interpolated) zoom 
+            #    to get a "pixeled" (i.e. not interpolated) zoom
             imageSize = QSize(self.zoom * w, self.zoom * h)
             scaledImage = smallImage.scaled(imageSize)
 
@@ -450,12 +451,12 @@ class QMatrixView(QWidget):
 
         return zoomedImage if self._image is not None else None
 
-    
+
     def entryAtPosition(self, position):
         '''Compute the entry corresponding to some point in this widget.
 
         Parameters
-        ---------
+        ----------
         position : QPoint
             The position of the point in question (in Widget coordinates).
 
@@ -465,7 +466,7 @@ class QMatrixView(QWidget):
             (i,j) the indices of the entry at the given position,
             or None if no entry corresponds to that position.
         '''
-        
+
         if self.matrix is None:
             return None
         p = (self.offset + position) / self.zoom
@@ -479,12 +480,12 @@ class QMatrixView(QWidget):
         '''Compute the position of a given entry in this widget.
 
         Parameters
-        ---------
+        ----------
         row : int
             The row of the entry.
         col : int
             The column of the entry.
-        
+
         Returns
         -------
         QPoint : The left upper corner of the region in this widget, at
@@ -510,10 +511,10 @@ class QMatrixView(QWidget):
     def keyPressEvent(self, event):
         '''Process special keys for this widgets.
         Allow moving selected entry using the cursor key.
-        Allow to move the visible 
+        Allow to move the visible
 
         Parameters
-        ---------
+        ----------
         event : QKeyEvent
         '''
         key = event.key()
@@ -565,7 +566,7 @@ class QMatrixView(QWidget):
         other widgets.
 
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
         '''
         pass
@@ -576,7 +577,7 @@ class QMatrixView(QWidget):
         other widgets.
 
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
         '''
         pass
@@ -586,7 +587,7 @@ class QMatrixView(QWidget):
         matrix entry.
 
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
         '''
         self.setSelection(self.entryAtPosition(event.pos()))
@@ -597,7 +598,7 @@ class QMatrixView(QWidget):
         zooming.
 
         Parameters
-        ---------
+        ----------
         event : QWheelEvent
             The event providing the angle delta.
         '''
@@ -624,7 +625,7 @@ class QMatrixView(QWidget):
         the entry at the current mouse position are displayed.
 
         Parameters
-        ---------
+        ----------
         event : QMouseEvent
             The mouse event, providing local and global coordinates.
         '''
@@ -641,9 +642,9 @@ class QMatrixView(QWidget):
         '''Handle the mouse leave event.
         When tooltips are shown in this widgets, they should
         be removed when the mouse leaves the widget.
-        
+
         Parameters
-        ---------
+        ----------
         event : QEvent
         '''
         if self.toolTipActive:
