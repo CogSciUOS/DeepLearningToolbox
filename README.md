@@ -14,7 +14,7 @@ Functionality
 =============
 
 Example of a network visualization that classifies different shapes
-![screenshot](docs/example.png)
+![screenshot](doc/source/_static/example.png)
 
 The main window consists of activation maps for selected layer, the input and the structure of a network where the layers of interest can be chosen
 
