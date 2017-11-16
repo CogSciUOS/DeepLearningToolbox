@@ -257,6 +257,10 @@ class ActivationsPanel(QWidget):
         else:
             activations = self._network.get_activations(
                 [self._layer], self._data)[0]
+            # ff or conv layer w/ batch dim
+            if activations.ndim in {2, 4}:
+                assert activations.shape[0] == 1, 'Attempting to visualiase batch.'
+                activations = np.squeeze(activations, axis=0)
 
         self._activation_view.setActivation(activations)
 
