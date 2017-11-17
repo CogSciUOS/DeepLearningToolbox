@@ -186,7 +186,6 @@ class QActivationView(QWidget):
             if self._isConvolution:
                 # unitRatio = width/height
                 unitRatio = self.activation.shape[2]/self.activation.shape[1]
-                print(unitRatio)
             else:
                 unitRatio = 1
 
@@ -287,7 +286,6 @@ class QActivationView(QWidget):
         map_height, map_width = self.activation.shape[1:3]
 
         for unit in range(self.activation.shape[0]):
-            print(map_width)
             image = QImage(self.activation[unit],
                            map_width, map_height,
                            map_width,
