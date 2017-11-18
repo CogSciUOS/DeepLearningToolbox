@@ -24,6 +24,7 @@ class ActivationsPanel(QWidget):
     '''A complex panel containing elements to display activations in
     different layers of a network. The panel offers controls to select
     different input stimuli, and to select a specific network layer.
+<<<<<<< Updated upstream
 
     Attributes
     ----------
@@ -86,14 +87,15 @@ class ActivationsPanel(QWidget):
     def initUI(self):
         '''Initialise all UI elements. These are
 
-            * an ``ActivationView`` for the activation overlay
-            * a `QImageView` for the input image
-            * a `QGroupBox` for the unit selection
-            * a `QInputSelector` for stepping through the input samples in the set
-            * a `QNetworkView` for selecting networks and layers
+            * The ``QActivationView`` showing the unit activations on the left
+            * The ``QImageView`` showing the current input image
+            * A ``QInputSelector`` to show input controls
+            * A ``QNetworkView``, a widget to select a layer in a network
+            * A ``QInputInfoBox`` to display information about the input
+            * A ``QComboBox`` to allow choosing networks
+            * A `QGroupBox` for the unit selection
 
         '''
-
         ########################################################################
         #                             Activations                              #
         ########################################################################
