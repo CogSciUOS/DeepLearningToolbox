@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QMainWindow, QTabWidget, QAction, QStatusBar
 from PyQt5.QtGui import QIcon
 
 from qtgui.panels import ActivationsPanel
+from qtgui.panels import OcclusionPanel
 from util import ArgumentError
 
 
@@ -27,9 +28,7 @@ class DeepVisMainWindow(QMainWindow):
 
     def __init__(self, network=None, data=None, title='QtPyVis'):
         super().__init__()
-
         self._title = title
-
         self.initUI()
 
     def initUI(self):
@@ -48,13 +47,14 @@ class DeepVisMainWindow(QMainWindow):
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(exitAction)
 
-        ##
-        # Initialize the panels ##
+        # Initialize the panels
         self._activations = ActivationsPanel()
+        self._occlusions = OcclusionPanel()
         self.initActivationPanel()
 
         self._tabs = QTabWidget(self)
-        self._tabs.addTab(self._activations, 'Main')
+        self._tabs.addTab(self._activations, 'Activations')
+        self._tabs.addTab(self._occlusions, 'Occlusion')
 
         self.setCentralWidget(self._tabs)
 
@@ -80,6 +80,7 @@ class DeepVisMainWindow(QMainWindow):
         '''
         self._network = network
         self._activations.addNetwork(network)
+        self._occlusions.addNetwork(network)
 
     def setInputDataArray(self, data: np.ndarray):
         '''Set the input data to be used.
@@ -90,6 +91,7 @@ class DeepVisMainWindow(QMainWindow):
                     Input data array
         '''
         self._activations.setInputDataArray(data)
+        self._occlusions.setInputDataArray(data)
 
     def setInputDataFile(self, filename: str):
         '''Set the input data to be used (read from file)
@@ -101,6 +103,7 @@ class DeepVisMainWindow(QMainWindow):
 
         '''
         self._activations.setInputDataFile(filename)
+        self._occlusions.setInputDataFile(filename)
 
     def setInputDataDirectory(self, dirname: str):
         '''Set input data directory.
@@ -112,10 +115,12 @@ class DeepVisMainWindow(QMainWindow):
 
         '''
         self._activations.setInputDataDirectory(dirname)
+        self._occlusions.setInputDataDirectory(dirname)
 
     def setInputDataSet(self, name: str):
         '''Set the input data to be used.'''
         self._activations.setInputDataSet(name)
+        self._occlusions.setInputDataSet(name)
 
     def showStatusMessage(self, message):
         self._statusBar.showMessage(message, 2000)
@@ -181,3 +186,4 @@ class DeepVisMainWindow(QMainWindow):
                     raise ArgumentError('Incompatible network input shape.')
 
         self._activations.setInputData(raw_data, data, description)
+        self._occlusions.setInputData(raw_data, data, description)
