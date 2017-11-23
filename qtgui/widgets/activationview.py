@@ -195,7 +195,8 @@ class QActivationView(QWidget):
             n = activation.shape[0]
             self._isConvolution = (activation.ndim == 3)
             if self._isConvolution:
-                unitRatio = activation.shape[1] / activation.shape[2]
+                unitRatio = activation.shape[2] / activation.shape[1]
+                # unitRatio = width/height
             else:
                 unitRatio = 1
 
@@ -291,7 +292,7 @@ class QActivationView(QWidget):
         qp : QPainter
         '''
         # image size: filter size (or a single pixel per neuron)
-        map_width, map_height = self._activation.shape[1:3]
+        map_height, map_width = self._activation.shape[1:3]
 
         for unit in range(self._activation.shape[0]):
             image = QImage(self._activation[unit],
