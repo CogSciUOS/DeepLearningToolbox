@@ -12,8 +12,6 @@ from qtgui.widgets import QNetworkInfoBox
 
 from .panel import Panel
 
-# FIXME[todo]: add docstrings!
-
 
 class OcclusionPanel(Panel):
     '''Panel for visualization of unit occlusion.'''
@@ -65,7 +63,6 @@ class OcclusionPanel(Panel):
         else:
             win_size = 1
             occlusion = self._network.get_occlusion_map(self._data, win_size)
-            __import__('ipdb').set_trace()
 
             self._occlusion_view.setImage(self._data)
             self._occlusion_view.setActivationMask(occlusion[0, :, :, 0])
