@@ -7,7 +7,6 @@ from scipy.misc import imread
 
 from PyQt5.QtWidgets import QWidget, QFileDialog
 
-# FIXME[todo]: add docstrings!
 
 
 class DataSource:
@@ -285,7 +284,7 @@ class QInputSelector(QWidget):
 
 
     def __init__(self, number : int=None, parent=None):
-        '''Initialization of the QNetworkView.
+        '''Initialization of the QInputSelector.
 
         Parameters
         ---------
@@ -297,6 +296,16 @@ class QInputSelector(QWidget):
         self.initUI()
 
     def _newNavigationButton(self, label : str, icon : str=None):
+        '''Create a new navigation button. Optionally, it is assigned an icon,
+        or the string label.
+
+        Parameters
+        ----------
+        label   :   str
+                    The button's label
+        icon    :   str
+                    String denoting an icon's name (see ``QIcon#fromTheme()``)
+        '''
         button = QPushButton()
         icon = QIcon.fromTheme(icon, QIcon())
         if icon.isNull():
@@ -366,7 +375,12 @@ class QInputSelector(QWidget):
         self.setLayout(layout)
 
     def _editIndex(self, text):
-        '''Event handler for the edit field.
+        '''Event handler for the edit field. Will do nothing on invalid input.
+
+        Parameters
+        ----------
+        text    :   str
+                    Text input by the user.
         '''
         try:
             index = int(text)
@@ -380,8 +394,7 @@ class QInputSelector(QWidget):
             self.setIndex(index)
 
     def _navigationButtonClicked(self):
-        '''Callback for clicking the 'next' and 'prev' sample button.
-        '''
+        '''Callback for clicking the 'next' and 'prev' sample buttons.'''
         if self._index is None:
             index = None
         elif self.sender() == self.firstButton:
@@ -399,8 +412,7 @@ class QInputSelector(QWidget):
         self.setIndex(index)
 
     def _openButtonClicked(self):
-        '''An event handler for the 'Open' button.
-        '''
+        '''An event handler for the 'Open' button.'''
         try:
             source = self._sources.get(self._mode)
             if self._mode == 'array':
@@ -416,7 +428,7 @@ class QInputSelector(QWidget):
             pass
 
     def _setMode(self, mode : str):
-        '''Set the current mode.
+        '''Set the current mode. This will disable all buttons on invalid mode.
 
         Parameters
         ----------
@@ -426,9 +438,9 @@ class QInputSelector(QWidget):
         if self._mode != mode:
             self._mode = mode
 
-            source = self._sources.get(mode)
-            elements = 0 if source is None else len(source)
-            valid = (elements > 1)
+            source = self._sources.get(mode, None)
+            elements = 0 if not source else len(source)
+            valid = (elements >= 1)
 
             self.firstButton.setEnabled(valid)
             self.prevButton.setEnabled(valid)
@@ -440,21 +452,21 @@ class QInputSelector(QWidget):
             if valid:
                 self._indexField.setValidator(QIntValidator(0, elements))
 
-            if mode is not None:
+            if mode:
                 self._modeButton[mode].setChecked(True)
 
             self._index = None
             self.setIndex(0 if valid else None)
 
     def _setSource(self, source: DataSource):
-        if source is None:
-            return
+        '''Set a new ``DataSource`` to get images from.'''
         if isinstance(source, DataArray):
             mode = 'array'
             info = (source.getFile()
                     if isinstance(source, DataFile)
                     else source.getDescription())
-            if info is None: info = ''
+            info = info or ''
+            # shorten the path if necessary
             if len(info) > 40:
                 info = info[0:info.find('/',10)+1] + '...' + info[info.rfind('/',0,-20):]
             self._modeButton['array'].setText('Array: ' + info)
@@ -469,26 +481,25 @@ class QInputSelector(QWidget):
         self._mode = None
         self._setMode(mode)
 
-    def setDataArray(self, data : np.ndarray = None):
+    def setDataArray(self, data : np.ndarray=None):
         '''Set the data array to be used.
 
         Parameters
         ----------
-        data:
-            An array of data. The first axis is used to select the
-            data record, the other axes belong to the actual data.
+        data    :   np.ndarray
+                    An array of data in >=2 dimensions. The first axis is used
+                    to select the data record, the other axes belong to the
+                    actual data.
         '''
         self._setSource(DataArray(data))
 
     def setDataFile(self, filename : str):
-        '''Set the data file to be used.
-        '''
+        '''Set the data file to be used.'''
         self._setSource(DataFile(filename))
 
 
     def setDataDirectory(self, dirname : str = None):
-        '''Set the directory to be used for loading data.
-        '''
+        '''Set the directory to be used for loading data.'''
         self._setSource(DataDirectory(dirname))
 
 
@@ -497,21 +508,26 @@ class QInputSelector(QWidget):
 
         Parameters
         ----------
-        name:
+        name    :   str
             The name of the dataset. The only dataset supported up to now
             is 'mnist'.
         '''
         self._setSource(DataSet(name))
 
-    def setIndex(self, index = None):
+    def setIndex(self, index=None):
         '''Set the index of the entry in the current data source.
 
         The method will emit the 'selected' signal, if a new(!) entry
-        was selected.
+        was selected. Out-of-bounds indeces will be clipped.
+
+        Parameters
+        ----------
+        index   :   int
+                    Index of the new sample to show
         '''
 
         source = self._sources.get(self._mode)
-        if index is None or source is None or len(source) < 1:
+        if not index or not source or len(source) < 1:
             index = None
         elif index < 0:
             index = 0
@@ -521,18 +537,18 @@ class QInputSelector(QWidget):
         if self._index != index:
 
             self._index = index
-            if source is None or index is None:
-                data, info = None, None
+            if not source or not index:
+                data = info = None
             else:
                 data, info = source[index]
 
             # FIXME[bug]: there is an error in PyQt forbidding to emit None
             # signals.
             if data is None: data = np.ndarray(())
-            if info is None: info = ''
+            info = info or ''
             self.selected.emit(data, info)
 
-        self._indexField.setText('' if index is None else str(index))
+        self._indexField.setText(str(index) if index else '')
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
@@ -540,6 +556,7 @@ from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 
 
 class QInputInfoBox(QWidget):
+    '''A widget for displaying model information.'''
 
     def __init__(self, parent=None):
         '''Create a new QInputInfoBox.
@@ -571,21 +588,31 @@ class QInputInfoBox(QWidget):
 
         Parameters
         ----------
-        data:
-            the actual data
-        description:
-            some string describing the origin of the data
+        data    :   np.ndarray
+                    The current data
+        description :   str
+                        Some string describing the origin of the data
         '''
-        self._meta_text = '<b>Input image:</b><br>\n'
-        self._meta_text += 'Description: {}\n'.format(description)
+        self._meta_text = ('<b>Input image:</b><br>\n'
+                           f'Description: {description}\n')
 
-        self._data_text = ''
         if data is not None:
-            self._data_text += 'Input shape: {}, dtype={}<br>\n'.format(data.shape, data.dtype)
-            self._data_text += 'min = {}, max={}, mean={:5.2f}, std={:5.2f}\n'.format(data.min(),data.max(),data.mean(),data.std())
+            shape = data.shape
+            dtype = data.dtype
+            min = data.min()
+            max = data.max()
+            mean = data.mean()
+            std = data.std()
+            self._data_text = (f'Input shape: {shape}, dtype={dtype}<br>\n'
+                               f'min = {min}, max={max}, '
+                               f'mean={mean:5.2f}, std={std:5.2f}\n')
+        else:
+            self._data_text = ''
+
         self.update()
 
     def update(self):
+        '''Update the image description and data info.'''
         self._metaLabel.setText(self._meta_text)
         self._dataLabel.setText(
             self._data_text if self._button.isChecked() else '')
