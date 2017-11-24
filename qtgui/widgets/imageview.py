@@ -58,7 +58,7 @@ class QImageView(QWidget):
 
         self.update()
 
-    def setActivationMask(self, mask, position=None):
+    def setActivationMask(self, mask):
         '''Set an (activation) mask to be displayed on top of
         the actual image.
 
@@ -103,13 +103,14 @@ class QImageView(QWidget):
         painter :   QPainter
         '''
         if self._image is not None:
-            __import__('ipdb').set_trace()
             w = self._image.width()
             h = self._image.height()
             # scale maximally while maintaining aspect ratio
             w_ratio = self.width() / w
             h_ratio = self.height() / h
             ratio = min(w_ratio, h_ratio)
+            # the rect is created such that it is centered on the current widget
+            # pane both horizontally and vertically
             self._imageRect = QRect((self.width() - w * ratio) // 2,
                     (self.height() - h * ratio) // 2,
                     w * ratio, h * ratio)
