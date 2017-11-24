@@ -5,28 +5,33 @@ from network import Network, Layer, Conv2D
 
 
 class QNetworkView(QWidget):
-    """A simple widget to display information on a network and select a
+    '''A simple widget to display information on a network and select a
     layer.
-    """
 
-    network: Network = None
-    """The network currently displayed in this QNetworkView.
-    """
+    Attributes
+    ----------
+    _network :  network.Network
+                The network currently displayed in this ``QNetworkView``.
 
-    active = None
-    """The identifier of the currently selected layer.  The actual type of
-    the identifier depends on the network implementation. The value
-    None indicates that no layer is currently selectd.
-    """
+    _active :   str  or int
+                The identifier of the currently selected layer.  The actual type
+                of the identifier depends on the network implementation. The
+                value None indicates that no layer is currently selectd.
+
+    selected    :   pyqtSignal(object)
+                    A signal that will be emitted everytime a layer is selected
+                    in this view. The signal will be emitted multiple times if
+                    the same layer is pressed multiple times in a row, as some
+                    layers (like dropout), may change on every activation. The
+                    argument provided by the signal will be the layer_id, i.e.
+                    the identifier of the layer in the current network.
+    '''
+
+    _network    :   Network = None
+
+    _active     :   str = None
 
     selected = pyqtSignal(object)
-    """A signal that will be emitted everytime a layer is selected in this
-    view. The signal will be emitted multiple times if the same layer
-    is pressed multiple times in a raw, as some layers (like dropout),
-    may change on every activation. The argument provided by the
-    signal will be the layer_id, i.e. the identifier of the label in
-    the current network.
-    """
 
 
     def __init__(self, parent=None):
@@ -43,16 +48,20 @@ class QNetworkView(QWidget):
 
 
     def initUI(self) -> None:
-        '''Initialize the user interface.
-        '''
+        '''Initialize the user interface.'''
         self.setLayout(QVBoxLayout())
 
 
     def setNetwork(self, network=None):
         '''Set the network to display in this widget
+
+        Parameters
+        ----------
+        network :   network.Network
+                    Network to display
         '''
-        self.network = network
-        self.active = None
+        self._network = network
+        self._active = None
 
         layout = self.layout()
 
@@ -65,9 +74,9 @@ class QNetworkView(QWidget):
             if item.widget() is not None:
                 item.widget().deleteLater()
 
-        if self.network is not None:
+        if self._network is not None:
             ## a column of buttons to select the network layer
-            for name in self.network.layer_dict.keys():
+            for name in self._network.layer_dict.keys():
                 button = QPushButton(name, self)
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
@@ -96,32 +105,32 @@ class QNetworkView(QWidget):
         layer : int or string
             The index or the name of the layer to activate.
         '''
-        if active != self.active:
+        if active != self._active:
             ## unmark the previously active layer
-            if self.active is not None:
-                oldItem = self.layout().itemAt(self.active)
+            if self._active is not None:
+                oldItem = self.layout().itemAt(self._active)
                 if oldItem is not None:
-                    oldItem.widget().setStyleSheet("")
+                    oldItem.widget().setStyleSheet('')
 
             ## assign the new active layer
-            self.active = active
-            if isinstance(self.active, str):
-                for index, label in enumerate(self.network.layer_dict.keys()):
+            self._active = active
+            if isinstance(self._active, str):
+                for index, label in enumerate(self._network.layer_dict.keys()):
                     if active == label:
-                        self.active = index
+                        self._active = index
 
-                if isinstance(self.active, str):
-                    self.active = None
+                if isinstance(self._active, str):
+                    self._active = None
                     # FIXME: Maybe throw exception!
 
             ## and mark the new active layer
-            if self.active is not None:
-                newItem = self.layout().itemAt(self.active)
+            if self._active is not None:
+                newItem = self.layout().itemAt(self._active)
                 if newItem is not None:
-                    newItem.widget().setStyleSheet("background-color: red")
+                    newItem.widget().setStyleSheet('background-color: red')
 
         # FIXME[question]: what to emit: index or label?
-        #self.selected.emit(self.active)
+        #self.selected.emit(self._active)
         self.selected.emit(active)
 
 
@@ -134,117 +143,96 @@ from collections import OrderedDict
 from network import Network
 
 class QNetworkInfoBox(QLabel):
-    """A simple widget to display information on a network and a selected
+    '''A simple widget to display information on a network and a selected
     layer.
-    """
 
-    network : Network = None
-    networkText = ""
+    Attributes
+    ----------
+    _network    :   Network
+                    Network to show info about
+    _network_text    :   str
+                        Info string
+    _layer_id   :   str
+                    Identifier of the current layer.
+    _layer_text  :   str
+                    Info text about the current layer
 
-    layer_id = None
-    layerText = ""
+    '''
+
+    _network : Network = None
+    _network_text = ''
+
+    _layer_id = None
+    _layer_text = ''
 
     def __init__(self, parent = None):
+        '''Create a new ``QNetworkInfoBox``'''
         super().__init__(parent)
         self.setWordWrap(True)
         self.setNetwork()
 
 
     def setNetwork(self, network : Network = None, layer_id = None) -> None:
-        """Set the network for which information are displayed.
+        '''Set the network for which information is displayed.
 
         Parameters
         ----------
-        network
-            The network.
-        """
-        if self.network != network or not self.networkText:
-            self.network = network
-            self.networkText = "<b>Network info:</b> "
-            if self.network is None:
-                self.networkText += "No network selected"
+        network :   network.Network
+                    The network
+        layer_id    :   str
+                        Identifier of the layer to show
+        '''
+        if self._network != network or not self._network_text:
+            self._network = network
+            self._network_text = '<b>Network info:</b> '
+            if self._network is None:
+                self._network_text += 'No network selected'
             else:
-                self.networkText += "FIXME[todo]: obtain network information ..."
-                self.networkText += "<br>\n<b>class:</b> {}".format(type(self.network).__name__)
+                network_name = type(self._network).__name__
+                self._network_text += 'FIXME[todo]: obtain network information ...'
+                self._network_text += f'<br>\n<b>class:</b> {network_name}'
+
         self.setLayer(layer_id)
 
 
     def setLayer(self, layer_id=None) -> None:
-        """Set the layer for which information are displayed.
+        '''Set the layer for which information is displayed.
 
         Parameters
         ----------
-        layer_id
-            The identifier of the network layer.
-        """
+        layer_id    :   str
+                        The identifier of the network layer.
+        '''
 
-        if layer_id != self.layer_id or not self.layerText:
-            if self.network is None:
-                self.layerText = ""
-                self.layer_id = None
+        if layer_id != self._layer_id or not self._layer_text:
+            if not self._network:
+                self._layer_text = ''
+                self._layer_id = None
             else:
-                self.layer_id = layer_id
-                self.layerText = "<br>\n<br>\n"
-                self.layerText += "<b>Layer info:</b><br>\n"
+                self._layer_id = layer_id
+                self._layer_text = '<br>\n<br>\n'
+                self._layer_text += '<b>Layer info:</b><br>\n'
 
-                if self.layer_id is None:
-                    self.layerText += "No layer selected"
+                if self._layer_id is None:
+                    self._layer_text += 'No layer selected'
                 else:
-                    self.layerText += self._layerInfoString(self.network.layer_dict[self.layer_id])
+                    layer = self._network.layer_dict[self._layer_id]
+                    self._layer_text += self._layerInfoString(layer)
 
-        self.setText(self.networkText + self.layerText)
+        self.setText(self._network_text + self._layer_text)
 
     def _layerInfoString(self, layer: Layer) -> str:
-        """Provide a string with information about a network layer.
+        '''Provide a string with information about a network layer.
 
         Parameters
         -----------
-        layer
-            The network layer.
-
-        Returns
-        -------
-        A string containing information on that layer.
-        """
-        info_str = ''
-        for key, val in layer.info.items():
-            info_str += '<b>{}</b>: {}<br>\n'.format(key, val)
-        return info_str
-
-    def _convolutionalLayerInfoString(self, layer_id) -> str:
-        """Provide a string with information on a convolutional layer.
-
-        Parameters
-        ----------
-        layer_id
-            The identifier of the network layer. The layer should be
-            convolutional.
+        layer   :   network.Layer
+                    The network layer
 
         Returns
         -------
         str
             A string containing information on that layer.
-        """
-        features = OrderedDict()
-        features['Input shape'] = 'get_layer_input_shape'
-        features['Output shape'] = 'get_layer_output_shape'
-        features['Input channels'] = 'get_layer_input_channels'
-        features['Output channels'] = 'get_layer_output_channels'
-        features['Input units'] = 'get_layer_input_units'
-        features['Output units'] = 'get_layer_output_units'
-        features['Kernel size'] = 'get_layer_kernel_size'
-        features['Stride'] = 'get_layer_stride'
-        features['Padding'] = 'get_layer_padding'
-        features['Output padding'] = 'get_layer_output_padding'
-        features['Dilation'] = 'get_layer_dilation'
-
-        text = ""
-        for feature, method in features.items():
-            try:
-                method_to_call = getattr(self.network, method)
-                text += ("{}: {}<br>\n".
-                     format(feature, method_to_call(layer_id)))
-            except NotImplementedError:
-                text += ("{}: not implemented ({})<br>\n".
-                     format(feature, format(type(self.network).__name__)))
-        return text
+        '''
+        return '\n'.join('<b>{}</b>: {}<br>'.format(key, val) for key, val in
+                         layer.info.items())
