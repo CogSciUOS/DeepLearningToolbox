@@ -63,6 +63,8 @@ class DeepVisMainWindow(QMainWindow):
         ##
         self._statusBar = QStatusBar()
         self.setStatusBar(self._statusBar)
+
+        # add an icon
         self.setWindowIcon(QIcon('logo.png'))
 
     def initActivationPanel(self):

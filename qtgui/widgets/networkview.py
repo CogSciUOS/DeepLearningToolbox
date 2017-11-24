@@ -27,12 +27,11 @@ class QNetworkView(QWidget):
                     the identifier of the layer in the current network.
     '''
 
-    _network    :   Network = None
+    _network:   Network = None
 
-    _active     :   str = None
+    _active:   str = None
 
     selected = pyqtSignal(object)
-
 
     def __init__(self, parent=None):
         '''Initialization of the QNetworkView.
@@ -46,11 +45,9 @@ class QNetworkView(QWidget):
         self.initUI()
         self.setNetwork()
 
-
     def initUI(self) -> None:
         '''Initialize the user interface.'''
         self.setLayout(QVBoxLayout())
-
 
     def setNetwork(self, network=None):
         '''Set the network to display in this widget
@@ -65,7 +62,7 @@ class QNetworkView(QWidget):
 
         layout = self.layout()
 
-        ## remove the old network buttons
+        # remove the old network buttons
         # FIXME[todo]: (still not sure what is the correct way to do:
         # widget.deleteLater(), widget.close(), widget.setParent(None), or
         # layout.removeWidget(widget) + widget.setParent(None))
@@ -75,27 +72,25 @@ class QNetworkView(QWidget):
                 item.widget().deleteLater()
 
         if self._network is not None:
-            ## a column of buttons to select the network layer
+            # a column of buttons to select the network layer
             for name in self._network.layer_dict.keys():
                 button = QPushButton(name, self)
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
                 button.clicked.connect(self.layerClicked)
 
-            ## choose the active layer for the new network
-            #self.setActiveLayer(0)
+            # choose the active layer for the new network
+            # self.setActiveLayer(0)
             self.setActiveLayer(None)
         else:
             self.setActiveLayer(None)
 
         self.update()
 
-
     def layerClicked(self):
         '''Callback for clicking one of the layer buttons.
         '''
         self.setActiveLayer(self.sender().text())
-
 
     def setActiveLayer(self, active):
         '''Set the active layer.
@@ -106,13 +101,13 @@ class QNetworkView(QWidget):
             The index or the name of the layer to activate.
         '''
         if active != self._active:
-            ## unmark the previously active layer
+            # unmark the previously active layer
             if self._active is not None:
                 oldItem = self.layout().itemAt(self._active)
                 if oldItem is not None:
                     oldItem.widget().setStyleSheet('')
 
-            ## assign the new active layer
+            # assign the new active layer
             self._active = active
             if isinstance(self._active, str):
                 for index, label in enumerate(self._network.layer_dict.keys()):
@@ -123,24 +118,25 @@ class QNetworkView(QWidget):
                     self._active = None
                     # FIXME: Maybe throw exception!
 
-            ## and mark the new active layer
+            # and mark the new active layer
             if self._active is not None:
                 newItem = self.layout().itemAt(self._active)
                 if newItem is not None:
                     newItem.widget().setStyleSheet('background-color: red')
 
         # FIXME[question]: what to emit: index or label?
-        #self.selected.emit(self._active)
+        # self.selected.emit(self._active)
         self.selected.emit(active)
 
 
 ##
-## QNetworkInfoBox
+# QNetworkInfoBox
 ##
 
 from PyQt5.QtWidgets import QLabel
 from collections import OrderedDict
 from network import Network
+
 
 class QNetworkInfoBox(QLabel):
     '''A simple widget to display information on a network and a selected
@@ -159,20 +155,19 @@ class QNetworkInfoBox(QLabel):
 
     '''
 
-    _network : Network = None
+    _network: Network = None
     _network_text = ''
 
     _layer_id = None
     _layer_text = ''
 
-    def __init__(self, parent = None):
+    def __init__(self, parent=None):
         '''Create a new ``QNetworkInfoBox``'''
         super().__init__(parent)
         self.setWordWrap(True)
         self.setNetwork()
 
-
-    def setNetwork(self, network : Network = None, layer_id = None) -> None:
+    def setNetwork(self, network: Network = None, layer_id=None) -> None:
         '''Set the network for which information is displayed.
 
         Parameters
@@ -193,7 +188,6 @@ class QNetworkInfoBox(QLabel):
                 self._network_text += f'<br>\n<b>class:</b> {network_name}'
 
         self.setLayer(layer_id)
-
 
     def setLayer(self, layer_id=None) -> None:
         '''Set the layer for which information is displayed.
