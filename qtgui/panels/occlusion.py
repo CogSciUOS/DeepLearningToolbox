@@ -62,10 +62,10 @@ class OcclusionPanel(Panel):
             occlusion = None
         else:
             win_size = 1
-            occlusion = self._network.get_occlusion_map(self._data, win_size)
+            # occlusion = self._network.get_occlusion_map(self._data, win_size)
 
-            self._occlusion_view.setImage(self._data)
-            self._occlusion_view.setActivationMask(occlusion[0, :, :, 0])
+            # self._occlusion_view.setImage(self._data)
+            # self._occlusion_view.setActivationMask(occlusion[0, :, :, 0])
 
     def setInput(self, input: int = None):
         '''Set the current input stimulus for the network.
