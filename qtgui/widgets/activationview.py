@@ -105,8 +105,7 @@ class QActivationView(QWidget):
 
         if activation is not None:
             assert activation.dtype == np.float32, 'Activations must be floats.'
-            assert all((activation.ndim in {1, 3},
-                'Unexpected shape {}'.format(activation.shape)))
+            assert activation.ndim in {1, 3}, 'Unexpected shape {}'.format(activation.shape)
         old_shape = None if self._activation is None else self._activation.shape
         self._activation = activation
 

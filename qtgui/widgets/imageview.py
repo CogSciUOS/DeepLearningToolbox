@@ -22,7 +22,7 @@ class QImageView(QWidget):
 
     _image: QImage = None
 
-    activationMask: QImage = None
+    _overlay: QImage = None
 
     def __init__(self, parent):
         super().__init__(parent)
