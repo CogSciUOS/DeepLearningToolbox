@@ -105,7 +105,8 @@ class QActivationView(QWidget):
 
         if activation is not None:
             assert activation.dtype == np.float32, 'Activations must be floats.'
-            assert activation.ndim in {1, 3}, 'Unexpected shape {}'.format(activation.shape)
+            assert activation.ndim in {
+                1, 3}, 'Unexpected shape {}'.format(activation.shape)
         old_shape = None if self._activation is None else self._activation.shape
         self._activation = activation
 
@@ -397,13 +398,13 @@ class QActivationView(QWidget):
             row = self._selectedUnit % self.columns
             col = self._selectedUnit // self.columns
             if key == Qt.Key_Left:
-                self.selectUnit(self._selectedUnit-1)
+                self.selectUnit(self._selectedUnit - 1)
             elif key == Qt.Key_Up:
-                self.selectUnit(self._selectedUnit-self.columns)
+                self.selectUnit(self._selectedUnit - self.columns)
             elif key == Qt.Key_Right:
-                self.selectUnit(self._selectedUnit+1)
+                self.selectUnit(self._selectedUnit + 1)
             elif key == Qt.Key_Down:
-                self.selectUnit(self._selectedUnit+self.columns)
+                self.selectUnit(self._selectedUnit + self.columns)
             elif key == Qt.Key_Escape:
                 self.selectUnit(None)
             else:

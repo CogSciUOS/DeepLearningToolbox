@@ -112,8 +112,8 @@ class QImageView(QWidget):
             # the rect is created such that it is centered on the current widget
             # pane both horizontally and vertically
             self._imageRect = QRect((self.width() - w * ratio) // 2,
-                    (self.height() - h * ratio) // 2,
-                    w * ratio, h * ratio)
+                                    (self.height() - h * ratio) // 2,
+                                    w * ratio, h * ratio)
             painter.drawImage(self._imageRect, self._image)
 
     def _drawMask(self, painter: QPainter):
