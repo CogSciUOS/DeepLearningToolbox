@@ -6,12 +6,10 @@ Github: https://github.com/themightyoarfish
 '''
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QComboBox
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
-from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
-from qtgui.widgets import QNetworkView, QNetworkInfoBox
+from qtgui.widgets import QNetworkInfoBox
 from .panel import Panel
 
 import numpy as np
@@ -97,8 +95,6 @@ class ActivationsPanel(Panel):
         layout.addWidget(self._network_box)
         self.setLayout(layout)
 
-
-
     def setLayer(self, layer=None):
         super().setLayer(layer=layer)
         # We update the activation on every invocation, no matter if
@@ -108,7 +104,7 @@ class ActivationsPanel(Panel):
         self.updateActivation()
 
     def updateActivation(self):
-        '''Update this panel in response to a new activation values.
+        '''Update this panel in response to new activation values.
         New activation values can be caused by the selection of another
         layer in the network, but also by the change of the input image.
         '''
@@ -119,7 +115,7 @@ class ActivationsPanel(Panel):
                 [self._layer], self._data)[0]
             # ff or conv layer w/ batch dim
             if activations.ndim in {2, 4}:
-                assert activations.shape[0] == 1, 'Attempting to visualiase batch.'
+                assert activations.shape[0] == 1, 'Attempting to visualise batch.'
                 activations = np.squeeze(activations, axis=0)
 
         self._activation_view.setActivation(activations)
@@ -139,7 +135,7 @@ class ActivationsPanel(Panel):
             if activation_mask.shape == self._data.shape:
                 activation_mask = imresize(activation_mask, self._data.shape,
                                            interp='nearest')
-            self._input_view.setActivationMask(activation_mask)
+        self._input_view.setActivationMask(activation_mask)
 
     def setInputData(self, raw: np.ndarray=None, fitted: np.ndarray=None,
                      description: str=None):
