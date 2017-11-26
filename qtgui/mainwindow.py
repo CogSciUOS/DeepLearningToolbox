@@ -65,7 +65,7 @@ class DeepVisMainWindow(QMainWindow):
         self.setStatusBar(self._statusBar)
 
         # add an icon
-        self.setWindowIcon(QIcon('logo.png'))
+        self.setWindowIcon(QIcon('assets/logo.png'))
 
     def initActivationPanel(self):
         '''Initialiase the actiations panel.
