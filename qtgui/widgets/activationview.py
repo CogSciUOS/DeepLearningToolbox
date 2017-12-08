@@ -1,5 +1,7 @@
 import math
 import numpy as np
+import controller
+from util import ArgumentError
 
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
@@ -59,21 +61,13 @@ class QActivationView(QWidget):
                         values.
     '''
 
-    _activation: np.ndarray = None
-
-    _padding: int = 2
-
-    _selectedUnit: int = None
-
-    _isConvolution: bool = False
-
-    _selected = pyqtSignal(object)
-
-    def on_unit_selected(self, callback):
-        self._selected.connect(callback)
+    _padding:         int = 2
+    _isConvolution:   bool = False
+    _selected:        pyqtSignal = pyqtSignal(object)
+    _controller:      controller.ActivationsController = None
 
     def __init__(self, parent: QWidget=None):
-        '''Initialization of the QMatrixView.
+        '''Initialization of the QActivationView.
 
         Parameters
         -----------
@@ -82,17 +76,21 @@ class QActivationView(QWidget):
         '''
         super().__init__(parent)
 
-        self._selectedUnit = None
-
         # By default, a QWidget does not accept the keyboard focus, so
         # we need to enable it explicitly: Qt.StrongFocus means to
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def setActivation(self, activation: np.ndarray) -> None:
-        '''Set the activations to be displayed in this QActivationView.
-        Currently there are two possible types of activations that are
-        supported by this widget: 1D, and 2D convolutional.
+    def setController(self, controller):
+        # TODO: Disconnect before reconnecting?
+        self._controller = controller
+        self._selected.connect(controller.on_unit_selected)
+
+    def modelChanged(self, model):
+        '''Get the current activations from the model and set the activations to
+        be displayed in this QActivationView.  Currently there are two possible
+        types of activations that are supported by this widget: 1D, and 2D
+        convolutional.
 
         Parameters
         -----------
@@ -103,61 +101,42 @@ class QActivationView(QWidget):
                         will be scaled and converted to 8-bit integers.
         '''
 
-        if activation is not None:
-            assert activation.dtype == np.float32, 'Activations must be floats.'
-            assert activation.ndim in {
-                1, 3}, 'Unexpected shape {}'.format(activation.shape)
-        old_shape = None if self._activation is None else self._activation.shape
-        self._activation = activation
+        activation = model._activation
 
-        if self._activation is not None:
-            self._isConvolution = (self._activation.ndim == 3)
+        if activation is not None:
+            if activation.dtype != np.float32:
+                raise ArgumentError('Activations must be floats.')
+            if activation.ndim not in {1, 3}:
+                raise ArgumentError(f'Unexpected shape {activation.shape}')
+        old_shape = None if activation is None else activation.shape
+
+        if activation is not None:
+            self._isConvolution = (activation.ndim == 3)
 
             # normalization (values should be between 0 and 1)
-            min_value = self._activation.min()
-            max_value = self._activation.max()
+            min_value = activation.min()
+            max_value = activation.max()
             value_range = max_value - min_value
-            self._activation = (self._activation - min_value)
+            activation = (activation - min_value)
             if value_range > 0:
-                self._activation = self._activation / value_range
+                activation = activation / value_range
 
             if self._isConvolution:
                 # for convolution we want activtation to be of shape
                 # (output_channels, width, height) but it comes in
                 # (width, height, output_channels)
-                self._activation = self._activation.transpose([2, 0, 1])
+                activation = activation.transpose([2, 0, 1])
 
             # change dtype to uint8
-            self._activation = np.ascontiguousarray(
-                self._activation * 255, np.uint8
+            activation = np.ascontiguousarray(
+                activation * 255, np.uint8
             )
 
         # unset selected entry if shape changed
-        if self._activation is None or old_shape != self._activation.shape:
-            self.selectUnit()
-        else:
-            self._selected.emit(self._selectedUnit)
+        self._controller.on_unit_selected(None, self)
 
         self._computeGeometry()
-        self.update()
 
-    def selectUnit(self, unit: int=None):
-        '''(De)select a unit in this QActivationView.
-
-        Parameters
-        -----------
-        unit    :   int
-                    index of the unit in the layer
-
-        '''
-        if self._activation is None:
-            unit = None
-        elif unit is not None and (unit < 0 or unit >= self._activation.shape[0]):
-            unit = None
-        if self._selectedUnit != unit:
-            self._selectedUnit = unit
-            self._selected.emit(self._selectedUnit)
-            self.update()
 
     def getUnitActivation(self, unit: int=None) -> np.ndarray:
         '''Get the activation mask for a given unit.
@@ -174,25 +153,25 @@ class QActivationView(QWidget):
                 activations (the channel) for 2d conv layers
 
         '''
-        if self._activation is None or unit is None or not self._isConvolution:
+        if self._controller._activation is None or unit is None or not self._isConvolution:
             return None
         else:
             if unit is None:
                 unit = self._selectedUnit
-            return self._activation[unit]
+            return self._controller._activation[unit]
 
     def _computeGeometry(self):
-        if self._activation is None:
-            self.rows = None
-            self.columns = None
-            self.unitWidth = None
-            self.unitHeight = None
+        if self._controller._activation is None:
+            self._rows = None
+            self._columns = None
+            self._unitWidth = None
+            self._unitHeight = None
         else:
             # In case of a convolutional layer, the axes of activation are:
             # (width, height, output_channels)
             # For fully connected (i.e., dense) layers, the axes are:
             # (units,)
-            activation = self._activation
+            activation = self._controller._activation
             n = activation.shape[0]
             self._isConvolution = (activation.ndim == 3)
             if self._isConvolution:
@@ -209,12 +188,12 @@ class QActivationView(QWidget):
             unitSize = (self.width() * self.height()) / n
 
             unitHeight = math.floor(math.sqrt(unitSize / unitRatio))
-            self.rows = math.ceil(self.height() / unitHeight)
-            self.unitHeight = math.floor(self.height() / self.rows)
+            self._rows = math.ceil(self.height() / unitHeight)
+            self._unitHeight = math.floor(self.height() / self._rows)
 
-            unitWidth = math.floor(unitRatio * self.unitHeight)
-            self.columns = math.ceil(self.width() / unitWidth)
-            self.unitWidth = math.floor(self.width() / self.columns)
+            unitWidth = math.floor(unitRatio * self._unitHeight)
+            self._columns = math.ceil(self.width() / unitWidth)
+            self._unitWidth = math.floor(self.width() / self._columns)
 
     def paintEvent(self, event):
         '''Process the paint event by repainting this Widget.
@@ -225,13 +204,13 @@ class QActivationView(QWidget):
         '''
         qp = QPainter()
         qp.begin(self)
-        if self._activation is None:
+        if self._controller._activation is None:
             self._drawNone(qp)
         elif self._isConvolution:
             self._drawConvolution(qp)
         else:
             self._drawDense(qp)
-        if self._selectedUnit is not None:
+        if self._controller._selectedUnit is not None:
             self._drawSelection(qp)
 
         qp.end()
@@ -253,10 +232,10 @@ class QActivationView(QWidget):
         '''
         if padding is None:
             padding = self._padding
-        return QRect(self.unitWidth * (unit % self.columns) + padding,
-                     self.unitHeight * (unit // self.columns) + padding,
-                     self.unitWidth - 2 * padding,
-                     self.unitHeight - 2 * padding)
+        return QRect(self._unitWidth * (unit % self._columns) + padding,
+                     self._unitHeight * (unit // self._columns) + padding,
+                     self._unitWidth - 2 * padding,
+                     self._unitHeight - 2 * padding)
 
     def _unitAtPosition(self, position: QPoint):
         '''Compute the entry corresponding to some point in this widget.
@@ -274,11 +253,11 @@ class QActivationView(QWidget):
             to that position.
         '''
 
-        if self._activation is None:
+        if self._controller._activation is None:
             return None
-        unit = ((position.y() // self.unitHeight) * self.columns +
-                (position.x() // self.unitWidth))
-        if unit >= self._activation.shape[0]:
+        unit = ((position.y() // self._unitHeight) * self._columns +
+                (position.x() // self._unitWidth))
+        if unit >= self._controller._activation.shape[0]:
             # selected something which may be on the grid, but where there's no
             # unit anymore
             unit = None
@@ -293,10 +272,10 @@ class QActivationView(QWidget):
         qp : QPainter
         '''
         # image size: filter size (or a single pixel per neuron)
-        map_height, map_width = self._activation.shape[1:3]
+        map_height, map_width = self._controller._activation.shape[1:3]
 
-        for unit in range(self._activation.shape[0]):
-            image = QImage(self._activation[unit],
+        for unit in range(self._controller._activation.shape[0]):
+            image = QImage(self._controller._activation[unit],
                            map_width, map_height,
                            map_width,
                            QImage.Format_Grayscale8)
@@ -309,7 +288,7 @@ class QActivationView(QWidget):
         ----------
         qp : QPainter
         '''
-        for unit, value in enumerate(self._activation):
+        for unit, value in enumerate(self._controller._activation):
             qp.fillRect(self._getUnitRect(unit),
                         QBrush(QColor(value, value, value)))
 
@@ -325,7 +304,7 @@ class QActivationView(QWidget):
         pen = QPen(pen_color)
         pen.setWidth(pen_width)
         qp.setPen(pen)
-        qp.drawRect(self._getUnitRect(self._selectedUnit, 0))
+        qp.drawRect(self._getUnitRect(self._controller._selectedUnit, 0))
 
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.
@@ -356,7 +335,8 @@ class QActivationView(QWidget):
         ----------
         event : QMouseEvent
         '''
-        self.selectUnit(self._unitAtPosition(event.pos()))
+        unit = self._unitAtPosition(event.pos())
+        self._controller.on_unit_selected(unit, self)
 
     def mouseReleaseEvent(self, event):
         '''Process mouse event.
@@ -378,7 +358,7 @@ class QActivationView(QWidget):
         ----------
         event : QMouseEvent
         '''
-        self.selectUnit(self._unitAtPosition(event.pos()))
+        self.mousePressEvent(event)
 
     def keyPressEvent(self, event):
         '''Process special keys for this widget.  Allow moving selected entry
@@ -395,18 +375,18 @@ class QActivationView(QWidget):
             self.setToolTip(not self.toolTipActive)
         # Arrow keyes will move the selected entry
         elif self._selectedUnit is not None:
-            row = self._selectedUnit % self.columns
-            col = self._selectedUnit // self.columns
+            row = self._selectedUnit % sender.columns
+            col = self._selectedUnit // sender.columns
             if key == Qt.Key_Left:
-                self.selectUnit(self._selectedUnit - 1)
+                self._controller.on_unit_selected(self._selectedUnit - 1, self)
             elif key == Qt.Key_Up:
-                self.selectUnit(self._selectedUnit - self.columns)
+                self._controller.on_unit_selected(self._selectedUnit - self._columns, self)
             elif key == Qt.Key_Right:
-                self.selectUnit(self._selectedUnit + 1)
+                self._controller.on_unit_selected(self._selectedUnit + 1, self)
             elif key == Qt.Key_Down:
-                self.selectUnit(self._selectedUnit + self.columns)
+                self._controller.on_unit_selected(self._selectedUnit + self._columns, self)
             elif key == Qt.Key_Escape:
-                self.selectUnit(None)
+                self._controller.on_unit_selected(None, self)
             else:
                 event.ignore()
         else:

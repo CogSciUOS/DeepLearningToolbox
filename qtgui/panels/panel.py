@@ -95,31 +95,23 @@ class Panel(QWidget):
         ########################################################################
         #                            Network                                   #
         ########################################################################
-        # networkview: a widget to select a layer in a network
+        # networkview: a widget to select a network
         self._network_view = QNetworkView()
-        self._network_view.selected.connect(self.setLayer)
 
         self._network_selector = QComboBox()
         self._networks = {}
         self._network_selector.addItems(self._networks.keys())
         self._network_selector.activated.connect(
-            lambda index: self.setNetwork(
+            lambda _: self.setNetwork(
                 self._networks[self._network_selector.currentText()]))
 
-        # layerinfo: display input and layer info
-        self._network_info = QNetworkInfoBox()
-        # FIXME[layout]
-        self._network_info.setMinimumWidth(300)
+        self._network_layout = QVBoxLayout()
+        self._network_layout.addWidget(self._network_selector)
+        self._network_layout.addWidget(self._network_view)
 
-        network_layout = QVBoxLayout()
-        network_layout.addWidget(self._network_selector)
-        network_layout.addWidget(self._network_view)
-        network_layout.addWidget(self._network_info)
+        self._network_box = QGroupBox('Network')
+        self._network_box.setLayout(self._network_layout)
 
-        network_box = QGroupBox('Network')
-        network_box.setLayout(network_layout)
-
-        self._network_box = network_box
 
     def addNetwork(self, network):
         '''Add a model to visualise. This will add the network to the list of
@@ -168,21 +160,6 @@ class Panel(QWidget):
             self._network_selector.setCurrentIndex(index)
 
             self._network_view.setNetwork(network)
-            self._network_info.setNetwork(network)
-            self.setLayer(None)
-
-    def setLayer(self, layer=None):
-        '''Set the current layer to choose units from.
-
-        Parameters
-        ----------
-        layer       :   network.layers.layers.Layer
-                        Layer instance to display
-
-        '''
-        if self._layer != layer:
-            self._layer = layer
-            self._network_info.setLayer(layer)
 
     def setInputDataArray(self, data: np.ndarray=None):
         '''Set the input data to be used.

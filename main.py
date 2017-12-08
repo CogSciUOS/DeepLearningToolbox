@@ -135,8 +135,7 @@ def main():
 
     if network:
         app = QApplication(sys.argv)
-        mainWindow = DeepVisMainWindow()
-        mainWindow.setNetwork(network)
+        mainWindow = DeepVisMainWindow(network)
         if args.data:
             mainWindow.setInputDataFile(args.data)
         elif args.dataset:
