@@ -27,3 +27,8 @@ core
 
 # do not accidentally check in vim temp files
 *.swp
+doc/build/
+
+ # nfs files
+.fuse_hidden*
+.ipynb_checkpoints
