@@ -46,7 +46,9 @@ def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
         if cpu:
             # unless we do this, TF still checks and finds gpus (not sure if it
             # actually uses them)
-            os.environ['CUDA_VISIBLE_DEVICES'] = '-1'   # note that 0 or empty string are not sufficient
+            # UPDATE: TF now still loads CUDA, there seems to be no way around this
+            os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+            os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
             print('Running in CPU-only mode.')
             import tensorflow as tf
             from multiprocessing import cpu_count
@@ -137,7 +139,7 @@ def main():
         app = QApplication(sys.argv)
         mainWindow = DeepVisMainWindow(network)
         if args.data:
-            mainWindow.setInputDataFile(args.data)
+            mainWindow.getModel().setInputDataFile(args.data)
         elif args.dataset:
             mainWindow.setInputDataSet(args.dataset)
         elif args.datadir:

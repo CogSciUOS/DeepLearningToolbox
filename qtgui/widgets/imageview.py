@@ -4,10 +4,12 @@ from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QImage, QPainter, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
+from observer import Observer
+
 # FIXME[todo]: add docstrings!
 
 
-class QImageView(QWidget):
+class QImageView(QWidget, Observer):
     '''An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.

@@ -12,13 +12,14 @@ from qtgui.widgets import QActivationView
 from qtgui.widgets import QNetworkInfoBox
 from .panel import Panel
 from controller import ActivationsController
+from observer import Observer
 
 import numpy as np
 
 # FIXME[todo]: rearrange the layer selection on network change!
 
 
-class ActivationsPanel(Panel):
+class ActivationsPanel(Panel, Observer):
     '''A complex panel containing elements to display activations in
     different layers of a network. The panel offers controls to select
     different input stimuli, and to select a specific network layer.
@@ -40,7 +41,7 @@ class ActivationsPanel(Panel):
     '''
 
     def __init__(self, model, parent=None):
-        '''Initialization of the ActivationsView.
+        '''Initialization of the ActivationsPael.
 
         Parameters
         ----------
@@ -50,8 +51,17 @@ class ActivationsPanel(Panel):
                     The backing model. Communication will be handled by a
                     controller.
         '''
-        self._controller = ActivationsController(model)
         super().__init__(parent)
+        self.setController(ActivationsController(model))
+
+    def setController(self, controller):
+        self._controller = controller
+        widgets = {self._activation_view,
+            self._network_view,
+            self._input_view,
+            self._network_view}
+        for widget in widgets:
+            widget.setController(controller)
 
     def initUI(self):
         '''Add additional UI elements
@@ -65,7 +75,6 @@ class ActivationsPanel(Panel):
         ########################################################################
         # ActivationView: a canvas to display a layer activation
         self._activation_view = QActivationView()
-        self._activation_view.setController(self._controller)
 
         # FIXME[layout]
         self._activation_view.setMinimumWidth(300)
@@ -80,7 +89,6 @@ class ActivationsPanel(Panel):
         ########################################################################
         #                            Network stuff                             #
         ########################################################################
-        self._network_view.selected.connect(self.setLayer)
 
         # network info: a widget to select a layer
         self._network_info = QNetworkInfoBox()
@@ -98,16 +106,3 @@ class ActivationsPanel(Panel):
         layout.addWidget(splitter)
         layout.addWidget(self._network_box)
         self.setLayout(layout)
-
-    def updateActivation(self, activations):
-        '''Update this panel in response to new activation values.
-        New activation values can be caused by the selection of another
-        layer in the network, but also by the change of the input image.
-        '''
-        self._activation_view.setActivation(activations)
-
-
-    def setInputData(self, raw: np.ndarray=None, fitted: np.ndarray=None,
-                     description: str=None):
-        super().setInputData(raw, fitted, description)
-        self.updateActivation()

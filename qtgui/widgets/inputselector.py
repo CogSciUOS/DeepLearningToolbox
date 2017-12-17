@@ -244,8 +244,10 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QRadioButton, QLineEdit
 from PyQt5.QtWidgets import QLabel, QGroupBox
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
+from observer import Observer
 
-class QInputSelector(QWidget):
+
+class QInputSelector(QWidget, Observer):
     '''A Widget to select input data (probably images).  There are
     different modes of selection: from an array, from a file, from a
     directory or from some predefined dataset.
@@ -260,12 +262,6 @@ class QInputSelector(QWidget):
 
     Attributes
     ----------
-    _mode   :   str
-                The current mode: can be 'array' or 'dir'
-    _sources    :   dict
-                    The available data sources. A dictionary with mode names as
-                    keys and DataSource objects as values.
-
     _index  :   int
                 The index of the current data entry.
     selected    :   pyqtSignal
@@ -273,10 +269,6 @@ class QInputSelector(QWidget):
                     signal will carry the new data and some text explaining the
                     data origin. (np.ndarray, str)
     '''
-    _mode: str = None
-
-    _sources: dict = {}
-
     _index: int = None
 
     selected = pyqtSignal(object, str)
@@ -382,8 +374,7 @@ class QInputSelector(QWidget):
             self.setIndex(index)
 
     def _navigationButtonClicked(self):
-        '''Callback for clicking the 'next' and 'prev' sample button.
-        '''
+        '''Callback for clicking the 'next' and 'prev' sample button.'''
         if self._index is None:
             index = None
         elif self.sender() == self.firstButton:
@@ -413,7 +404,7 @@ class QInputSelector(QWidget):
                 if not isinstance(source, DataDirectory):
                     source = DataDirectory()
                 source.selectDirectory(self)
-            self._setSource(source)
+            self._controller.source_selected(source)
         except FileNotFoundError:
             pass
 
@@ -472,38 +463,6 @@ class QInputSelector(QWidget):
         self._sources[mode] = source
         self._mode = None
         self._setMode(mode)
-
-    def setDataArray(self, data: np.ndarray = None):
-        '''Set the data array to be used.
-
-        Parameters
-        ----------
-        data:
-            An array of data. The first axis is used to select the
-            data record, the other axes belong to the actual data.
-        '''
-        self._setSource(DataArray(data))
-
-    def setDataFile(self, filename: str):
-        '''Set the data file to be used.
-        '''
-        self._setSource(DataFile(filename))
-
-    def setDataDirectory(self, dirname: str = None):
-        '''Set the directory to be used for loading data.
-        '''
-        self._setSource(DataDirectory(dirname))
-
-    def setDataSet(self, name: str):
-        '''Set a data set to be used.
-
-        Parameters
-        ----------
-        name:
-            The name of the dataset. The only dataset supported up to now
-            is 'mnist'.
-        '''
-        self._setSource(DataSet(name))
 
     def setIndex(self, index=None):
         '''Set the index of the entry in the current data source.

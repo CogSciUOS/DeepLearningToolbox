@@ -42,17 +42,6 @@ class Panel(QWidget):
 
         self._data = None
 
-    def on_input_selected(self, callback):
-        '''Connect a callback to the input selector.
-
-        Parameters
-        ----------
-        callback    :   function
-                        Function to call when input selector receives selected
-                        event
-        '''
-        self._input_selector.selected.connect(callback)
-
     def initUI(self):
         '''Initialise all UI elements. These are
 
@@ -100,10 +89,6 @@ class Panel(QWidget):
 
         self._network_selector = QComboBox()
         self._networks = {}
-        self._network_selector.addItems(self._networks.keys())
-        self._network_selector.activated.connect(
-            lambda _: self.setNetwork(
-                self._networks[self._network_selector.currentText()]))
 
         self._network_layout = QVBoxLayout()
         self._network_layout.addWidget(self._network_selector)
@@ -112,21 +97,20 @@ class Panel(QWidget):
         self._network_box = QGroupBox('Network')
         self._network_box.setLayout(self._network_layout)
 
+    # def addNetwork(self, network):
+    #     '''Add a model to visualise. This will add the network to the list of
+    #     choices and make it the currently selcted one
 
-    def addNetwork(self, network):
-        '''Add a model to visualise. This will add the network to the list of
-        choices and make it the currently selcted one
-
-        Parameters
-        ----------
-        network     :   network.network.Network
-                        A network  (should be of the same class as currently
-                        selected ones)
-        '''
-        name = 'Network ' + str(self._network_selector.count())
-        self._networks[name] = network
-        self._network_selector.addItem(name)
-        self.setNetwork(network)
+    #     Parameters
+    #     ----------
+    #     network     :   network.network.Network
+    #                     A network  (should be of the same class as currently
+    #                     selected ones)
+    #     '''
+    #     name = 'Network ' + str(self._network_selector.count())
+    #     self._networks[name] = network
+    #     self._network_selector.addItem(name)
+    #     self.setNetwork(network)
 
     def getNetworkName(self, network):
         '''Get the name of the currently selected network. Note: This runs in
@@ -160,53 +144,6 @@ class Panel(QWidget):
             self._network_selector.setCurrentIndex(index)
 
             self._network_view.setNetwork(network)
-
-    def setInputDataArray(self, data: np.ndarray=None):
-        '''Set the input data to be used.
-
-        Parameters
-        ----------
-        data    :   np.ndarray
-                    The input data (for valid shapes see DeepVisMainWindow)
-
-        '''
-        self._input_selector.setDataArray(data)
-
-    def setInputDataFile(self, filename: str):
-        '''Set the input data to be used via file name.
-
-        Parameters
-        ----------
-        filename    :   str
-                    The input data in serialised numpy (for valid shapes see
-                    DeepVisMainWindow)
-
-        '''
-        self._input_selector.setDataFile(filename)
-
-    def setInputDataDirectory(self, dirname: str):
-        '''Set the input data to be used via dir name.
-
-        Parameters
-        ----------
-        dirname    :   str
-                    The input data directory containing serialised numpy (for
-                    valid shapes see DeepVisMainWindow)
-
-        '''
-        self._input_selector.setDataDirectory(dirname)
-
-    def setInputDataSet(self, name: str):
-        '''Set the input data to be used via name
-
-        Parameters
-        ----------
-        name    :   str
-                    Name of the input data set (must be known to the
-                    application)
-
-        '''
-        self._input_selector.setDataSet(name)
 
     def setInputData(self, raw: np.ndarray=None, fitted: np.ndarray=None,
                      description: str=None):

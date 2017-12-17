@@ -1,7 +1,6 @@
 import numpy as np
-from PyQt5.QtCore import Qt
+from .networkcontroller import NetworkController
 
-from controller import NetworkController
 
 class ActivationsController(NetworkController):
     '''Controller for ``ActivationsPanel``'''
@@ -31,3 +30,23 @@ class ActivationsController(NetworkController):
 
     def on_key_pressed(self, sender):
         pass
+
+    def set_input_data(self, raw: np.ndarray=None, fitted: np.ndarray=None,
+                       description: str=None):
+        pass
+
+    def on_layer_selected(self, layer):
+        '''Set the active layer.
+
+        Parameters
+        ----------
+        layer : int or string
+            The index or the name of the layer to activate.
+        '''
+        self._model.setLayer(layer)
+
+    def on_network_selected(self, network_str):
+        self._model.setNetwork(network_str)
+
+    def source_selected(self, source):
+        self._model.setDataSource(source)

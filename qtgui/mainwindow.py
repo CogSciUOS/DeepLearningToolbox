@@ -32,7 +32,9 @@ class DeepVisMainWindow(QMainWindow):
         self._title = title
         self._model = Model(network)
         self.initUI()
-        self.setNetwork(network)
+
+    def getModel(self):
+        return self._model
 
     def initUI(self):
         '''Initialize the graphical components of this user interface.'''
@@ -42,7 +44,6 @@ class DeepVisMainWindow(QMainWindow):
 
         # Initialize the panels
         self.initActivationPanel()
-        self.initOcclusionPanel()
 
         self._createTabWidget()
 
@@ -55,7 +56,6 @@ class DeepVisMainWindow(QMainWindow):
         self._tabs = QTabWidget(self)
         self._tabs.currentChanged.connect(self._controller.on_tab_selected)
         self._tabs.addTab(self._activations, 'Activations')
-        self._tabs.addTab(self._occlusions, 'Occlusion')
 
     def getTab(self, index: int) -> QWidget:
         '''Get tab for index.
@@ -101,64 +101,6 @@ class DeepVisMainWindow(QMainWindow):
         self._activations = ActivationsPanel(self._model)
         self._controller.add_child_controller(self._activations,
                                               self._activations._controller)
-        self._activations.on_input_selected(self.setInputData)
-
-    def initOcclusionPanel(self):
-        self._occlusions = OcclusionPanel()
-        # self._controller.add_child_controller(self._occlusions,
-        #         self._occlusions._controller)
-
-    # def setNetwork(self, network):
-    #     '''Set the model to visualise
-
-    #     Parameters
-    #     ----------
-    #     network :   network.network.Network
-    #                 The network to use
-    #     '''
-    #     self._network = network
-    #     self._activations.addNetwork(network)
-    #     self._occlusions.addNetwork(network)
-
-    # def setInputDataArray(self, data: np.ndarray):
-    #     '''Set the input data to be used.
-
-    #     Parameters
-    #     ----------
-    #     data    :   np.ndarray
-    #                 Input data array
-    #     '''
-    #     self._activations.setInputDataArray(data)
-    #     self._occlusions.setInputDataArray(data)
-
-    # def setInputDataFile(self, filename: str):
-    #     '''Set the input data to be used (read from file)
-
-    #     Parameters
-    #     ----------
-    #     filename    :   str
-    #                     Input filename
-
-    #     '''
-    #     self._activations.setInputDataFile(filename)
-    #     self._occlusions.setInputDataFile(filename)
-
-    # def setInputDataDirectory(self, dirname: str):
-    #     '''Set input data directory.
-
-    #     Parameters
-    #     ----------
-    #     dirname     :   str
-    #                     Directory to read from
-
-    #     '''
-    #     self._activations.setInputDataDirectory(dirname)
-    #     self._occlusions.setInputDataDirectory(dirname)
-
-    # def setInputDataSet(self, name: str):
-    #     '''Set the input data to be used.'''
-    #     self._activations.setInputDataSet(name)
-    #     self._occlusions.setInputDataSet(name)
 
     def showStatusMessage(self, message):
         self._statusBar.showMessage(message, 2000)

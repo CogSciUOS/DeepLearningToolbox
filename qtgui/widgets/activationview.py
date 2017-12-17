@@ -7,6 +7,8 @@ from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
+from observer import Observer
+
 # FIXME[todo]: improve the display of the activations: check that the
 # space is used not only in a good, but in an optimal way. Check that
 # the aspect ratio is correct. Make it configurable to allow for
@@ -16,7 +18,7 @@ from PyQt5.QtWidgets import QWidget
 # two-color scheme.
 
 
-class QActivationView(QWidget):
+class QActivationView(QWidget, Observer):
     '''A widget to diplay the activations of a given layer in a
     network. Currently there are two types of layers that are
     supported: (two-dimensional) convolutional layers and dense
@@ -83,7 +85,7 @@ class QActivationView(QWidget):
 
     def setController(self, controller):
         # TODO: Disconnect before reconnecting?
-        self._controller = controller
+        super().setController(controller)
         self._selected.connect(controller.on_unit_selected)
 
     def modelChanged(self, model):

@@ -1,10 +1,11 @@
+import numpy as np
 
 
 class NetworkController(object):
     '''Base controller backed by a network.'''
 
     _parent = None
-    _data   :   np.ndarray = None
+    _data:   np.ndarray = None
 
     def __init__(self, model):
         self._model = model
