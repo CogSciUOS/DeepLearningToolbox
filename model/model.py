@@ -22,7 +22,7 @@ class Model(object):
                 Currently selected unit in the layer
     _network    :   Network
                 Currently active network
-    _mode   :   str
+    _current_mode   :   str
                 The current mode: can be 'array' or 'dir'
     _sources    :   dict
                     The available data sources. A dictionary with mode names as
@@ -35,8 +35,9 @@ class Model(object):
     _network:     Network = None
     _layer:       Layer = None
     _unit:        Layer = None
-    _mode:        str = None
     _sources:     dict = {}
+    _data_valid:  bool = False
+    _current_mode: str = None
 
     def __init__(self, network: Network):
         '''Create a new Model instance.
@@ -52,12 +53,12 @@ class Model(object):
         if not source:
             return
         if isinstance(source, DataArray):
-            self._mode = 'array'
+            self._current_mode = 'array'
         elif isinstance(source, DataDirectory):
-            self._mode = 'dir'
+            self._current_mode = 'dir'
         else:
             return
-        self._sources[self._mode] = source
+        self._sources[self._current_mode] = source
 
     def setDataArray(self, data: np.ndarray = None):
         '''Set the data array to be used.
@@ -246,3 +247,125 @@ class Model(object):
                 activation_mask = imresize(activation_mask, self._data.shape,
                                            interp='nearest')
         return activation_mask
+
+    def setMode(self, mode: str):
+        '''Set the current mode.
+
+        Parameters
+        ----------
+        mode    :   str
+                    the mode (currently either 'array' or 'dir').
+        '''
+        self.current_current_mode = mode
+        if self._current_mode != mode:
+            self._current_mode = mode
+
+            source = self._sources.get(mode)
+            elements = len(source or [])
+            self._data_valid = (elements > 1)
+            self.elements = elements
+
+
+            self._index = None
+            self.setIndex(0 if self._data_valid else None)
+
+    def editIndex(self, index)
+        try:
+            index = int(text)
+            if index < 0:
+                raise ValueError('Index out of range')
+        except ValueError:
+            index = self._index
+
+        if index != self._index:
+            self.setIndex(index)
+
+    def setIndex(self, index=None):
+        '''Set the index of the entry in the current data source.
+
+        The method will emit the 'selected' signal, if a new(!) entry
+        was selected.
+        '''
+
+        source = self._sources.get(self._current_mode)
+        if index is None or source is None or len(source) < 1:
+            index = None
+        elif index < 0:
+            index = 0
+        elif index >= len(source):
+            index = len(source) - 1
+
+        if self._index != index:
+
+            self._index = index
+            if source is None or index is None:
+                data, info = None, None
+            else:
+                data, info = source[index]
+
+            # FIXME[bug]: there is an error in PyQt forbidding to emit None
+            # signals.
+            if data is None:
+                data = np.ndarray(())
+            if info is None:
+                info = ''
+            self.selected.emit(data, info)
+
+        self._indexField.setText('' if index is None else str(index))
+
+    def _setSource(self, source: DataSource):
+        if source is None:
+            return
+        if isinstance(source, DataArray):
+            mode = 'array'
+            info = (source.getFile()
+                    if isinstance(source, DataFile)
+                    else source.getDescription())
+            if info is None:
+                info = ''
+            if len(info) > 40:
+                info = info[0:info.find('/', 10) + 1] + \
+                    '...' + info[info.rfind('/', 0, -20):]
+            self._modeButton['array'].setText('Array: ' + info)
+        elif isinstance(source, DataDirectory):
+            mode = 'dir'
+            self._modeButton['dir'].setText('Directory: ' +
+                                            source.getDirectory())
+        else:
+            return
+
+        self._sources[mode] = source
+        self._mode = None
+        self._setMode(mode)
+
+    def setDataArray(self, data: np.ndarray = None):
+        '''Set the data array to be used.
+
+        Parameters
+        ----------
+        data:
+            An array of data. The first axis is used to select the
+            data record, the other axes belong to the actual data.
+        '''
+        self._setSource(DataArray(data))
+
+    def setDataFile(self, filename: str):
+        '''Set the data file to be used.
+        '''
+        self._setSource(DataFile(filename))
+
+    def setDataDirectory(self, dirname: str = None):
+        '''Set the directory to be used for loading data.
+        '''
+        self._setSource(DataDirectory(dirname))
+
+    def setDataSet(self, name: str):
+        '''Set a data set to be used.
+
+        Parameters
+        ----------
+        name:
+            The name of the dataset. The only dataset supported up to now
+            is 'mnist'.
+        '''
+        self._setSource(DataSet(name))

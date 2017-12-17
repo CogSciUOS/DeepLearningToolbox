@@ -271,9 +271,11 @@ class QInputSelector(QWidget, Observer):
     '''
     _index: int = None
 
+    _controller = None
+
     selected = pyqtSignal(object, str)
 
-    def __init__(self, number: int=None, parent=None):
+    def __init__(self, parent=None):
         '''Initialization of the QNetworkView.
 
         Parameters
@@ -285,6 +287,27 @@ class QInputSelector(QWidget, Observer):
 
         self.initUI()
 
+    def setController(self, controller):
+        self._controller = controller
+
+    def modelChanged(self, model):
+        source = model._sources[model._current_source]
+        if isinstance(source, DataArray):
+            mode = 'array'
+            info = (source.getFile()
+                    if isinstance(source, DataFile)
+                    else source.getDescription())
+            if info is None:
+                info = ''
+            if len(info) > 40:
+                info = info[0:info.find('/', 10) + 1] + \
+                    '...' + info[info.rfind('/', 0, -20):]
+            self._modeButton['array'].setText('Array: ' + info)
+        elif isinstance(source, DataDirectory):
+            mode = 'dir'
+            self._modeButton['dir'].setText('Directory: ' +
+                                            source.getDirectory())
+
     def _newNavigationButton(self, label: str, icon: str=None):
         button = QPushButton()
         icon = QIcon.fromTheme(icon, QIcon())
@@ -292,8 +315,8 @@ class QInputSelector(QWidget, Observer):
             button.setText(label)
         else:
             button.setIcon(icon)
-        button.clicked.connect(self._navigationButtonClicked)
         button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        button.clicked.connect(self._navigationButtonClicked)
         return button
 
     def initUI(self):
@@ -325,10 +348,10 @@ class QInputSelector(QWidget, Observer):
         self._modeButton = {}
         self._modeButton['array'] = QRadioButton('Array')
         self._modeButton['array'].clicked.connect(
-            lambda: self._setMode('array'))
+            lambda: self._controller.mode_changed('array'))
 
         self._modeButton['dir'] = QRadioButton('Directory')
-        self._modeButton['dir'].clicked.connect(lambda: self._setMode('dir'))
+        self._modeButton['dir'].clicked.connect(lambda: self._controller.mode_changed('dir'))
 
         self._openButton = QPushButton('Open...')
         self._openButton.clicked.connect(self._openButtonClicked)
@@ -359,37 +382,49 @@ class QInputSelector(QWidget, Observer):
         layout.addWidget(navigationBox)
         self.setLayout(layout)
 
-    def _editIndex(self, text):
-        '''Event handler for the edit field.
-        '''
-        try:
-            index = int(text)
-            if index < 0:
-                raise ValueError
-        except ValueError:
-            index = self._index
-            self._indexField.setText(str(index))
+    def modelChanged(self, model):
+        valid = model._data_valid
+        self.firstButton.setEnabled(valid)
+        self.prevButton.setEnabled(valid)
+        self.nextButton.setEnabled(valid)
+        self.lastButton.setEnabled(valid)
+        self.randomButton.setEnabled(valid)
+        self._indexField.setEnabled(valid)
+        elements = model.elements
+        self.infoLabel.setText("of " + str(elements - 1) if valid else "*")
+        if valid:
+            self._indexField.setValidator(QIntValidator(0, elements))
 
-        if index != self._index:
-            self.setIndex(index)
+        mode = model.current_mode
+        self._modeButton[mode].setChecked(True)
+
+    def _editIndex(self, text):
+        '''Event handler for the edit field.'''
+        self._controller.editIndex(text)
+
 
     def _navigationButtonClicked(self):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
         if self._index is None:
             index = None
         elif self.sender() == self.firstButton:
+            self._controller.rewind()
             index = 0
         elif self.sender() == self.prevButton:
             index = self._index - 1
+            self._controller.rewind_one()
         elif self.sender() == self.nextButton:
             index = self._index + 1
+            self._controller.advance_one()
         elif self.sender() == self.lastButton:
             index = len(self._sources[self._mode])
+            self._controller.advance()
         elif self.sender() == self.randomButton:
             index = randint(0, len(self._sources[self._mode]))
+            self._controller.random()
         else:
             index = None
-        self.setIndex(index)
+        self._controller.editIndex(index)
 
     def _openButtonClicked(self):
         '''An event handler for the 'Open' button.
@@ -495,8 +530,6 @@ class QInputSelector(QWidget, Observer):
                 info = ''
             self.selected.emit(data, info)
 
-        self._indexField.setText('' if index is None else str(index))
-
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
@@ -540,12 +573,11 @@ class QInputInfoBox(QWidget):
             some string describing the origin of the data
         '''
         self._meta_text = '<b>Input image:</b><br>\n'
-        self._meta_text += 'Description: {}\n'.format(description)
+        self._meta_text += f'Description: {description}\n'
 
         self._data_text = ''
         if data is not None:
-            self._data_text += 'Input shape: {}, dtype={}<br>\n'.format(
-                data.shape, data.dtype)
+            self._data_text += f'Input shape: {data.shape}, dtype={data.dtype}<br>\n'
             self._data_text += 'min = {}, max={}, mean={:5.2f}, std={:5.2f}\n'.format(
                 data.min(), data.max(), data.mean(), data.std())
         self.update()

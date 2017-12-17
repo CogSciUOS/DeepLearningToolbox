@@ -29,6 +29,13 @@ class ActivationsController(NetworkController):
             sender.update()
 
     def on_key_pressed(self, sender):
+        '''Callback for handling keyboard events.
+
+        Parameters
+        ----------
+        sender  :   QWidget
+                    Widget receiving the event
+        '''
         pass
 
     def set_input_data(self, raw: np.ndarray=None, fitted: np.ndarray=None,
