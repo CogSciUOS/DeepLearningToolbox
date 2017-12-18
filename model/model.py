@@ -4,7 +4,11 @@ from scipy.misc import imresize
 from network import Network
 from network.layers import Layer
 from util import ArgumentError
-from qtgui.widgets.networkselector import *
+from qtgui.widgets.networkselector import (DataSource,
+                                           DataArray,
+                                           DataDirectory,
+                                           DataFile,
+                                           DataSet)
 
 
 class Model(object):
@@ -50,8 +54,6 @@ class Model(object):
         self._network = Network
 
     def setDataSource(self, source: DataSource):
-        if not source:
-            return
         if isinstance(source, DataArray):
             self._current_mode = 'array'
         elif isinstance(source, DataDirectory):
@@ -136,11 +138,11 @@ class Model(object):
     def id_for_layer(self, layer_str):
         layer_id = -1
         for index, label in enumerate(self._network.layer_dict.keys()):
-            if layer == label:
+            if layer_str == label:
                 layer_id = index
 
         if layer_id <= -1:
-            raise RuntimeError(f'Layer for string {layer} not found.')
+            raise RuntimeError(f'Layer for string {layer_str} not found.')
         else:
             return layer_id
 
@@ -149,7 +151,7 @@ class Model(object):
 
         Parameters
         ----------
-        layer       :   network.layers.layers.Layer
+        layer       :   network.layers.Layer
                         Layer instance to display
 
         '''
@@ -164,10 +166,10 @@ class Model(object):
         for o in self._observers:
             o.modelChanged(self)
 
-    def setInputDataFile(self, filename):
+    # def setInputDataFile(self, filename):
 
-    def setInputDataSet(self, data_set):
-    def setInputDataDirectory(self, directory):
+    # def setInputDataSet(self, data_set):
+    # def setInputDataDirectory(self, directory):
 
     def setInputData(self, data: np.ndarray=None, description: str=None):
         '''Provide one data vector as input for the network.

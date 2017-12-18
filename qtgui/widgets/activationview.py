@@ -63,10 +63,11 @@ class QActivationView(QWidget, Observer):
                         values.
     '''
 
-    _padding:         int = 2
-    _isConvolution:   bool = False
-    _selected:        pyqtSignal = pyqtSignal(object)
-    _controller:      controller.ActivationsController = None
+    _padding:               int = 2
+    _isConvolution:         bool = False
+    _selected:              pyqtSignal = pyqtSignal(object)
+    _controller:            controller.ActivationsController = None
+    _current_activation:    np.ndarray = None
 
     def __init__(self, parent: QWidget=None):
         '''Initialization of the QActivationView.
@@ -82,6 +83,7 @@ class QActivationView(QWidget, Observer):
         # we need to enable it explicitly: Qt.StrongFocus means to
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
+
 
     def setController(self, controller):
         # TODO: Disconnect before reconnecting?
@@ -110,6 +112,7 @@ class QActivationView(QWidget, Observer):
                 raise ArgumentError('Activations must be floats.')
             if activation.ndim not in {1, 3}:
                 raise ArgumentError(f'Unexpected shape {activation.shape}')
+        # TODO: Not used? Investigate
         old_shape = None if activation is None else activation.shape
 
         if activation is not None:
@@ -133,12 +136,12 @@ class QActivationView(QWidget, Observer):
             activation = np.ascontiguousarray(
                 activation * 255, np.uint8
             )
+        self._current_activation = activation
 
         # unset selected entry if shape changed
         self._controller.on_unit_selected(None, self)
 
         self._computeGeometry()
-
 
     def getUnitActivation(self, unit: int=None) -> np.ndarray:
         '''Get the activation mask for a given unit.
@@ -155,15 +158,15 @@ class QActivationView(QWidget, Observer):
                 activations (the channel) for 2d conv layers
 
         '''
-        if self._controller._activation is None or unit is None or not self._isConvolution:
+        if self._current_activation is None or unit is None or not self._isConvolution:
             return None
         else:
             if unit is None:
                 unit = self._selectedUnit
-            return self._controller._activation[unit]
+            return self._current_activation[unit]
 
     def _computeGeometry(self):
-        if self._controller._activation is None:
+        if self._current_activation is None:
             self._rows = None
             self._columns = None
             self._unitWidth = None
@@ -173,7 +176,7 @@ class QActivationView(QWidget, Observer):
             # (width, height, output_channels)
             # For fully connected (i.e., dense) layers, the axes are:
             # (units,)
-            activation = self._controller._activation
+            activation = self._current_activation
             n = activation.shape[0]
             self._isConvolution = (activation.ndim == 3)
             if self._isConvolution:
@@ -206,7 +209,7 @@ class QActivationView(QWidget, Observer):
         '''
         qp = QPainter()
         qp.begin(self)
-        if self._controller._activation is None:
+        if self._current_activation is None:
             self._drawNone(qp)
         elif self._isConvolution:
             self._drawConvolution(qp)
@@ -255,11 +258,11 @@ class QActivationView(QWidget, Observer):
             to that position.
         '''
 
-        if self._controller._activation is None:
+        if self._current_activation is None:
             return None
         unit = ((position.y() // self._unitHeight) * self._columns +
                 (position.x() // self._unitWidth))
-        if unit >= self._controller._activation.shape[0]:
+        if unit >= self._current_activation.shape[0]:
             # selected something which may be on the grid, but where there's no
             # unit anymore
             unit = None
@@ -274,10 +277,10 @@ class QActivationView(QWidget, Observer):
         qp : QPainter
         '''
         # image size: filter size (or a single pixel per neuron)
-        map_height, map_width = self._controller._activation.shape[1:3]
+        map_height, map_width = self._current_activation.shape[1:3]
 
-        for unit in range(self._controller._activation.shape[0]):
-            image = QImage(self._controller._activation[unit],
+        for unit in range(self._current_activation.shape[0]):
+            image = QImage(self._current_activation[unit],
                            map_width, map_height,
                            map_width,
                            QImage.Format_Grayscale8)
@@ -290,7 +293,7 @@ class QActivationView(QWidget, Observer):
         ----------
         qp : QPainter
         '''
-        for unit, value in enumerate(self._controller._activation):
+        for unit, value in enumerate(self._current_activation):
             qp.fillRect(self._getUnitRect(unit),
                         QBrush(QColor(value, value, value)))
 

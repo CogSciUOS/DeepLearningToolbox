@@ -474,30 +474,6 @@ class QInputSelector(QWidget, Observer):
             self._index = None
             self.setIndex(0 if valid else None)
 
-    def _setSource(self, source: DataSource):
-        if source is None:
-            return
-        if isinstance(source, DataArray):
-            mode = 'array'
-            info = (source.getFile()
-                    if isinstance(source, DataFile)
-                    else source.getDescription())
-            if info is None:
-                info = ''
-            if len(info) > 40:
-                info = info[0:info.find('/', 10) + 1] + \
-                    '...' + info[info.rfind('/', 0, -20):]
-            self._modeButton['array'].setText('Array: ' + info)
-        elif isinstance(source, DataDirectory):
-            mode = 'dir'
-            self._modeButton['dir'].setText('Directory: ' +
-                                            source.getDirectory())
-        else:
-            return
-
-        self._sources[mode] = source
-        self._mode = None
-        self._setMode(mode)
 
     def setIndex(self, index=None):
         '''Set the index of the entry in the current data source.
