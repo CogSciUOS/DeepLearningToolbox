@@ -4,11 +4,11 @@ from scipy.misc import imresize
 from network import Network
 from network.layers import Layer
 from util import ArgumentError
-from qtgui.widgets.networkselector import (DataSource,
-                                           DataArray,
-                                           DataDirectory,
-                                           DataFile,
-                                           DataSet)
+from qtgui.widgets.inputselector import (DataSource,
+                                         DataArray,
+                                         DataDirectory,
+                                         DataFile,
+                                         DataSet)
 
 
 class Model(object):
@@ -20,6 +20,8 @@ class Model(object):
                     Objects observing this class for changes
     _data   :   np.ndarray
                 Current input data
+    _current_index  :   int
+                Index of _data in the data set
     _layer  :   Layer
                 Currently selected layer
     _unit   :   int
@@ -40,8 +42,8 @@ class Model(object):
     _layer:       Layer = None
     _unit:        Layer = None
     _sources:     dict = {}
-    _data_valid:  bool = False
     _current_mode: str = None
+    _current_index: int = None
 
     def __init__(self, network: Network):
         '''Create a new Model instance.
@@ -52,6 +54,9 @@ class Model(object):
                     Network instance backing the model
         '''
         self._network = Network
+
+    def __len__(self):
+        return 0 if self._data is None else len(self._data)
 
     def setDataSource(self, source: DataSource):
         if isinstance(source, DataArray):
@@ -263,17 +268,14 @@ class Model(object):
             self._current_mode = mode
 
             source = self._sources.get(mode)
-            elements = len(source or [])
-            self._data_valid = (elements > 1)
-            self.elements = elements
-
+            n_elems = len(source or [])
 
             self._index = None
-            self.setIndex(0 if self._data_valid else None)
+            self.setIndex(0 if n_elems > 0 else None)
 
-    def editIndex(self, index)
+    def editIndex(self, index):
         try:
-            index = int(text)
+            index = int(index)
             if index < 0:
                 raise ValueError('Index out of range')
         except ValueError:
@@ -297,48 +299,24 @@ class Model(object):
         elif index >= len(source):
             index = len(source) - 1
 
-        if self._index != index:
+        self._current_index = index
+        if source is None or index is None:
+            self._data, _info = None, None
+        else:
+            self._data, _info = source[index]
 
-            self._index = index
-            if source is None or index is None:
-                data, info = None, None
-            else:
-                data, info = source[index]
-
-            # FIXME[bug]: there is an error in PyQt forbidding to emit None
-            # signals.
-            if data is None:
-                data = np.ndarray(())
-            if info is None:
-                info = ''
-            self.selected.emit(data, info)
-
-        self._indexField.setText('' if index is None else str(index))
+        self.notifyObservers()
 
     def _setSource(self, source: DataSource):
-        if source is None:
-            return
         if isinstance(source, DataArray):
             mode = 'array'
-            info = (source.getFile()
-                    if isinstance(source, DataFile)
-                    else source.getDescription())
-            if info is None:
-                info = ''
-            if len(info) > 40:
-                info = info[0:info.find('/', 10) + 1] + \
-                    '...' + info[info.rfind('/', 0, -20):]
-            self._modeButton['array'].setText('Array: ' + info)
         elif isinstance(source, DataDirectory):
             mode = 'dir'
-            self._modeButton['dir'].setText('Directory: ' +
-                                            source.getDirectory())
         else:
             return
 
         self._sources[mode] = source
-        self._mode = None
-        self._setMode(mode)
+        self._current_mode = mode
 
     def setDataArray(self, data: np.ndarray = None):
         '''Set the data array to be used.

@@ -293,7 +293,6 @@ class QInputSelector(QWidget, Observer):
     def modelChanged(self, model):
         source = model._sources[model._current_source]
         if isinstance(source, DataArray):
-            mode = 'array'
             info = (source.getFile()
                     if isinstance(source, DataFile)
                     else source.getDescription())
@@ -304,9 +303,27 @@ class QInputSelector(QWidget, Observer):
                     '...' + info[info.rfind('/', 0, -20):]
             self._modeButton['array'].setText('Array: ' + info)
         elif isinstance(source, DataDirectory):
-            mode = 'dir'
             self._modeButton['dir'].setText('Directory: ' +
                                             source.getDirectory())
+        ############################################################################################
+        #                              Disable buttons, if necessary                               #
+        ############################################################################################
+        valid = len(model) > 0
+        for elem in {self.firstButton,
+                     self.prevButton,
+                     self.nextButton,
+                     self.lastButton,
+                     self.randomButton,
+                     self._indexField}:
+            elem.setEnabled(valid)
+
+        n_elems = len(model)
+        self.infoLabel.setText('of ' + str(n_elems - 1) if valid else '*')
+        if valid:
+            self._indexField.setValidator(QIntValidator(0, n_elems))
+
+        mode = model.current_mode
+        self._modeButton[mode].setChecked(True)
 
     def _newNavigationButton(self, label: str, icon: str=None):
         button = QPushButton()
@@ -382,22 +399,6 @@ class QInputSelector(QWidget, Observer):
         layout.addWidget(navigationBox)
         self.setLayout(layout)
 
-    def modelChanged(self, model):
-        valid = model._data_valid
-        self.firstButton.setEnabled(valid)
-        self.prevButton.setEnabled(valid)
-        self.nextButton.setEnabled(valid)
-        self.lastButton.setEnabled(valid)
-        self.randomButton.setEnabled(valid)
-        self._indexField.setEnabled(valid)
-        elements = model.elements
-        self.infoLabel.setText("of " + str(elements - 1) if valid else "*")
-        if valid:
-            self._indexField.setValidator(QIntValidator(0, elements))
-
-        mode = model.current_mode
-        self._modeButton[mode].setChecked(True)
-
     def _editIndex(self, text):
         '''Event handler for the edit field.'''
         self._controller.editIndex(text)
@@ -420,7 +421,7 @@ class QInputSelector(QWidget, Observer):
             index = len(self._sources[self._mode])
             self._controller.advance()
         elif self.sender() == self.randomButton:
-            index = randint(0, len(self._sources[self._mode]))
+            self._controller.random()
             self._controller.random()
         else:
             index = None
@@ -442,69 +443,6 @@ class QInputSelector(QWidget, Observer):
             self._controller.source_selected(source)
         except FileNotFoundError:
             pass
-
-    def _setMode(self, mode: str):
-        '''Set the current mode.
-
-        Parameters
-        ----------
-        mode    :   str
-                    the mode (currently either 'array' or 'dir').
-        '''
-        if self._mode != mode:
-            self._mode = mode
-
-            source = self._sources.get(mode)
-            elements = 0 if source is None else len(source)
-            valid = (elements > 1)
-
-            self.firstButton.setEnabled(valid)
-            self.prevButton.setEnabled(valid)
-            self.nextButton.setEnabled(valid)
-            self.lastButton.setEnabled(valid)
-            self.randomButton.setEnabled(valid)
-            self._indexField.setEnabled(valid)
-            self.infoLabel.setText("of " + str(elements - 1) if valid else "*")
-            if valid:
-                self._indexField.setValidator(QIntValidator(0, elements))
-
-            if mode is not None:
-                self._modeButton[mode].setChecked(True)
-
-            self._index = None
-            self.setIndex(0 if valid else None)
-
-
-    def setIndex(self, index=None):
-        '''Set the index of the entry in the current data source.
-
-        The method will emit the 'selected' signal, if a new(!) entry
-        was selected.
-        '''
-
-        source = self._sources.get(self._mode)
-        if index is None or source is None or len(source) < 1:
-            index = None
-        elif index < 0:
-            index = 0
-        elif index >= len(source):
-            index = len(source) - 1
-
-        if self._index != index:
-
-            self._index = index
-            if source is None or index is None:
-                data, info = None, None
-            else:
-                data, info = source[index]
-
-            # FIXME[bug]: there is an error in PyQt forbidding to emit None
-            # signals.
-            if data is None:
-                data = np.ndarray(())
-            if info is None:
-                info = ''
-            self.selected.emit(data, info)
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel

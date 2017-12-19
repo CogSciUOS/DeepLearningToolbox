@@ -33,14 +33,11 @@ class Panel(QWidget):
         '''
         super().__init__(parent)
 
-        self.initUI()
-
         self._network = None
-
         # FIXME[question]: int (index) or str (label)?
         self._layer = None
-
         self._data = None
+
 
     def initUI(self):
         '''Initialise all UI elements. These are

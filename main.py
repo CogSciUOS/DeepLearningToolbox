@@ -139,11 +139,11 @@ def main():
         app = QApplication(sys.argv)
         mainWindow = DeepVisMainWindow(network)
         if args.data:
-            mainWindow.getModel().setInputDataFile(args.data)
+            mainWindow.getModel().setDataFile(args.data)
         elif args.dataset:
-            mainWindow.setInputDataSet(args.dataset)
+            mainWindow.getModel().setDataSet(args.dataset)
         elif args.datadir:
-            mainWindow.setInputDataDirectory(args.datadir)
+            mainWindow.getModel().setDataDirectory(args.datadir)
 
         mainWindow.show()
 

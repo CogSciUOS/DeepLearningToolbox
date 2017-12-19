@@ -52,6 +52,7 @@ class ActivationsPanel(Panel, Observer):
                     controller.
         '''
         super().__init__(parent)
+        self.initUI()
         self.setController(ActivationsController(model))
 
     def setController(self, controller):
@@ -59,6 +60,7 @@ class ActivationsPanel(Panel, Observer):
         widgets = {self._activation_view,
             self._network_view,
             self._input_view,
+            self._input_selector,
             self._network_view}
         for widget in widgets:
             widget.setController(controller)
