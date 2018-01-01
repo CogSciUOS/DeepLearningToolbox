@@ -38,7 +38,6 @@ class Model(object):
     _current_activation :   np.ndarray
                             The last computed activations
     '''
-
     _observers:     set        = set()
     _data:          np.ndarray = None
     _network:       Network    = None
@@ -47,6 +46,7 @@ class Model(object):
     _sources:       dict       = {}
     _current_mode:  str        = None
     _current_index: int        = None
+    _current_source: DataSource = None
     _current_activation: np.ndarray = None
 
     def __init__(self, network: Network):
@@ -61,7 +61,6 @@ class Model(object):
 
     def __len__(self):
         return 0 if self._data is None else len(self._data)
-
 
     ################################################################################################
     #                                      OBSERVER HANDLING                                       #
@@ -144,7 +143,7 @@ class Model(object):
         mode    :   str
                     the mode (currently either 'array' or 'dir').
         '''
-        self.current_current_mode = mode
+        self._current_mode = mode
         if self._current_mode != mode:
             self._current_mode = mode
 

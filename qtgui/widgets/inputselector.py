@@ -246,7 +246,6 @@ from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
 from observer import Observer
 
-
 class QInputSelector(QWidget, Observer):
     '''A Widget to select input data (probably images).  There are
     different modes of selection: from an array, from a file, from a
@@ -422,27 +421,14 @@ class QInputSelector(QWidget, Observer):
             self._controller.advance()
         elif self.sender() == self.randomButton:
             self._controller.random()
-            self._controller.random()
         else:
             index = None
         self._controller.editIndex(index)
 
     def _openButtonClicked(self):
-        '''An event handler for the 'Open' button.
-        '''
-        try:
-            source = self._sources.get(self._mode)
-            if self._mode == 'array':
-                if not isinstance(source, DataFile):
-                    source = DataFile()
-                source.selectFile(self)
-            elif self._mode == 'dir':
-                if not isinstance(source, DataDirectory):
-                    source = DataDirectory()
-                source.selectDirectory(self)
-            self._controller.source_selected(source)
-        except FileNotFoundError:
-            pass
+        '''An event handler for the 'Open' button. We need to pass this widget as parent in case a
+        file must be selected.'''
+        self._controller.on_open_button_clicked(self)
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel

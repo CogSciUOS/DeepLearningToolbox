@@ -65,7 +65,7 @@ class ActivationsPanel(Panel, Observer):
         for widget in controllable_widgets:
             widget.setController(controller)
 
-        self._network_selector.activated.connect(controller.onNetworkSelected)
+        self._network_selector.activated.connect(controller.on_network_selected)
 
     def initUI(self):
         '''Add additional UI elements

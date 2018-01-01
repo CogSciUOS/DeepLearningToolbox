@@ -1,5 +1,6 @@
 import numpy as np
-from .networkcontroller import NetworkController
+from controller import NetworkController
+from network import Network
 
 
 class ActivationsController(NetworkController):
@@ -52,11 +53,29 @@ class ActivationsController(NetworkController):
         '''
         self._model.setLayer(layer)
 
-    def on_network_selected(self, network_str):
-        self._model.setNetwork(network_str)
-
     def source_selected(self, source):
         self._model.setDataSource(source)
 
-    def onNetworkSelected(self, index):
-        print(f'Selecting network {index}')
+    def on_network_selected(self, network):
+        if isinstance(network, Network):
+            raise ValueError('Setting network via object is not supported.')
+        if isinstance(network, int) or isinstance(network, str):
+            print(f'Selecting network {network}')
+            self._model.setNetwork(network)
+
+    def on_open_button_clicked(self, sender=None):
+        from qtgui.widgets.inputselector import DataDirectory, DataFile
+        try:
+            source = self._model._current_source
+            mode = self._model._current_mode
+            if mode == 'array':
+                if not isinstance(source, DataFile):
+                    source = DataFile()
+                source.selectFile(sender)
+            elif mode == 'dir':
+                if not isinstance(source, DataDirectory):
+                    source = DataDirectory()
+                source.selectDirectory(sender)
+            self.source_selected(source)
+        except FileNotFoundError:
+            pass

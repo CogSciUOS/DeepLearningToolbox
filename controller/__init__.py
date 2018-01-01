@@ -1,3 +1,3 @@
+from .networkcontroller import NetworkController
 from .mainwindowcontroller import MainWindowController
 from .activationscontroller import ActivationsController
-from .networkcontroller import NetworkController

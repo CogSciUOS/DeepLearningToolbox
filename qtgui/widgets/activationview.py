@@ -8,6 +8,7 @@ from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
 from observer import Observer
+from controller import ActivationsController
 
 # FIXME[todo]: improve the display of the activations: check that the
 # space is used not only in a good, but in an optimal way. Check that
@@ -63,11 +64,11 @@ class QActivationView(QWidget, Observer):
                         values.
     '''
 
-    _padding:               int = 2
-    _isConvolution:         bool = False
-    _selected:              pyqtSignal = pyqtSignal(object)
-    _controller:            controller.ActivationsController = None
-    _current_activation:    np.ndarray = None
+    _padding:            int = 2
+    _isConvolution:      bool = False
+    _selected:           pyqtSignal = pyqtSignal(object)
+    _controller:         ActivationsController = None
+    _current_activation: np.ndarray = None
 
     def __init__(self, parent: QWidget=None):
         '''Initialization of the QActivationView.
