@@ -20,7 +20,7 @@ class ActivationsController(NetworkController):
                     index of the unit in the layer
 
         '''
-        if self._model._activation is None:
+        if self._model._current_activation is None:
             unit = None
         elif unit is not None and (unit < 0 or unit >= self._model._activation.shape[0]):
             unit = None
@@ -57,3 +57,6 @@ class ActivationsController(NetworkController):
 
     def source_selected(self, source):
         self._model.setDataSource(source)
+
+    def onNetworkSelected(self, index):
+        print(f'Selecting network {index}')

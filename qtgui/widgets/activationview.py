@@ -105,7 +105,7 @@ class QActivationView(QWidget, Observer):
                         will be scaled and converted to 8-bit integers.
         '''
 
-        activation = model._activation
+        activation = model._current_activation
 
         if activation is not None:
             if activation.dtype != np.float32:

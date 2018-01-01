@@ -48,38 +48,37 @@ class QNetworkView(QWidget, Observer):
         self._controller.on_layer_selected(self.sender().text())
 
     def modelChanged(self, model):
-        ############################################################################################
-        #                                 Respond to layer change                                  #
-        ############################################################################################
-
+        #############################
+        #  Respond to layer change  #
+        #############################
         layer = model._layer
-        layer_id = model.id_for_layer(layer)
-        # unmark the previously active layer
-        oldItem = self.layout().itemAt(layer_id)
-        if oldItem is not None:
-            oldItem.widget().setStyleSheet('')
+        if layer:
+            layer_id = model.id_for_layer(layer)
+            # unmark the previously active layer
+            oldItem = self.layout().itemAt(layer_id)
+            if oldItem is not None:
+                oldItem.widget().setStyleSheet('')
 
-        # and mark the new layer
-        newItem = self.layout().itemAt(layer_id)
-        if newItem is not None:
-            newItem.widget().setStyleSheet('background-color: red')
+            # and mark the new layer
+            newItem = self.layout().itemAt(layer_id)
+            if newItem is not None:
+                newItem.widget().setStyleSheet('background-color: red')
 
-        ############################################################################################
-        #                                Respond to network change                                 #
-        ############################################################################################
+        ################################
+        #  Respond to network changed  #
+        ################################
         layout = self.layout()
         network = model._network
-
-        # remove the old network buttons
-        # FIXME[todo]: (still not sure what is the correct way to do:
-        # widget.deleteLater(), widget.close(), widget.setParent(None), or
-        # layout.removeWidget(widget) + widget.setParent(None))
-        while layout.count():
-            item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
         if network:
+            # remove the old network buttons
+            # FIXME[todo]: (still not sure what is the correct way to do:
+            # widget.deleteLater(), widget.close(), widget.setParent(None), or
+            # layout.removeWidget(widget) + widget.setParent(None))
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+
             # a column of buttons to select the network layer
             for name in network.layer_dict.keys():
                 button = QPushButton(name, self)
@@ -89,7 +88,7 @@ class QNetworkView(QWidget, Observer):
 
             # choose the active layer for the new network
             # self.setActiveLayer(0)
-            self._controller.setLayer(None)
+            self._controller.on_layer_selected(None)
 
         self.update()
 
