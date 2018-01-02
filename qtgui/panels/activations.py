@@ -56,7 +56,7 @@ class ActivationsPanel(Panel, Observer):
         self.setController(ActivationsController(model))
 
     def setController(self, controller):
-        self._controller = controller
+        super().setController(controller)
         controllable_widgets = [self._activation_view,
                    self._network_view,
                    self._input_view,
@@ -112,6 +112,3 @@ class ActivationsPanel(Panel, Observer):
         layout.addWidget(splitter)
         layout.addWidget(self._network_box)
         self.setLayout(layout)
-
-    def modelChanged(self, model):
-        current_input = model.get_input(model._current_index)
