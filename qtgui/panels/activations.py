@@ -66,6 +66,8 @@ class ActivationsPanel(Panel, Observer):
             widget.setController(controller)
 
         self._network_selector.activated.connect(controller.on_network_selected)
+        for n in controller._model._networks.keys():
+            self._network_selector.addItem(n)
 
     def initUI(self):
         '''Add additional UI elements
@@ -110,3 +112,7 @@ class ActivationsPanel(Panel, Observer):
         layout.addWidget(splitter)
         layout.addWidget(self._network_box)
         self.setLayout(layout)
+
+    def modelChanged(self, model):
+        current_input = model.get_input(model._current_index)
+        __import__('ipdb').set_trace()
