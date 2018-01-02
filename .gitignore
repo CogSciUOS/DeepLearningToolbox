@@ -32,3 +32,5 @@ doc/build/
  # nfs files
 .fuse_hidden*
 .ipynb_checkpoints
+
+.DS_Store
