@@ -290,10 +290,10 @@ class QInputSelector(QWidget, Observer):
         self.initUI()
 
     def setController(self, controller):
-        self._controller = controller
+        super().setController(controller)
 
     def modelChanged(self, model):
-        source = model._sources[model._current_source]
+        source = model._sources[model._current_mode]
         if isinstance(source, DataArray):
             info = (source.getFile()
                     if isinstance(source, DataFile)
@@ -323,8 +323,9 @@ class QInputSelector(QWidget, Observer):
         self.infoLabel.setText('of ' + str(n_elems - 1) if valid else '*')
         if valid:
             self._indexField.setValidator(QIntValidator(0, n_elems))
+            self._indexField.setText(str(model._current_index))
 
-        mode = model.current_mode
+        mode = model._current_mode
         self._modeButton[mode].setChecked(True)
 
     def _newNavigationButton(self, label: str, icon: str=None):
@@ -364,12 +365,12 @@ class QInputSelector(QWidget, Observer):
         self.infoLabel.setSizePolicy(
             QSizePolicy.Maximum, QSizePolicy.Expanding)
 
-        self._modeButton = {}
-        self._modeButton['array'] = QRadioButton('Array')
+        self._modeButton = {
+            'array': QRadioButton('Array'),
+            'dir': QRadioButton('Directory')
+        }
         self._modeButton['array'].clicked.connect(
             lambda: self._controller.mode_changed('array'))
-
-        self._modeButton['dir'] = QRadioButton('Directory')
         self._modeButton['dir'].clicked.connect(lambda: self._controller.mode_changed('dir'))
 
         self._openButton = QPushButton('Open...')
@@ -405,28 +406,18 @@ class QInputSelector(QWidget, Observer):
         '''Event handler for the edit field.'''
         self._controller.editIndex(text)
 
-
     def _navigationButtonClicked(self):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
-        if self._index is None:
-            index = None
-        elif self.sender() == self.firstButton:
+        if self.sender() == self.firstButton:
             self._controller.rewind()
-            index = 0
         elif self.sender() == self.prevButton:
-            index = self._index - 1
             self._controller.rewind_one()
         elif self.sender() == self.nextButton:
-            index = self._index + 1
             self._controller.advance_one()
         elif self.sender() == self.lastButton:
-            index = len(self._sources[self._mode])
             self._controller.advance()
         elif self.sender() == self.randomButton:
             self._controller.random()
-        else:
-            index = None
-        self._controller.editIndex(index)
 
     def _openButtonClicked(self):
         '''An event handler for the 'Open' button. We need to pass this widget as parent in case a
