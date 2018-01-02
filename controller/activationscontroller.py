@@ -7,6 +7,7 @@ class ActivationsController(NetworkController):
     '''Controller for ``ActivationsPanel``'''
 
     _parent = None
+    # TODO: Move this into the model
     _selectedUnit: int = None
 
     def __init__(self, model):
@@ -23,8 +24,12 @@ class ActivationsController(NetworkController):
         '''
         if self._model._current_activation is None:
             unit = None
-        elif unit is not None and (unit < 0 or unit >= self._model._current_activation.shape[0]):
-            unit = None
+        elif unit is not None:
+            if (unit < 0):
+                unit = 0
+            elif unit >= self._model._current_activation.shape[-1]:
+                unit = self._model._current_activation.shape[-1] - 1
+
         if self._selectedUnit != unit:
             self._selectedUnit = unit
             sender.update()

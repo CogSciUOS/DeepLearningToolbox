@@ -170,7 +170,6 @@ class Model(object):
 
     def setIndex(self, index=None):
         '''Set the index of the entry in the current data source.'''
-
         source = self._sources[self._current_mode]
         if index is None or source is None or len(source) < 1:
             index = None
