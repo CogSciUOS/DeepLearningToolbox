@@ -41,6 +41,7 @@ class Model(object):
     _observers:     set        = set()
     _data:          np.ndarray = None
     _network:       Network    = None
+    _networks:      dict       = {}
     _layer:         Layer      = None
     _unit:          Layer      = None
     _sources:       dict       = {}
@@ -58,6 +59,7 @@ class Model(object):
                     Network instance backing the model
         '''
         self._network = network
+        self._networks[str(network)] = network
 
     def __len__(self):
         return 0 if self._data is None else len(self._data)
@@ -89,7 +91,6 @@ class Model(object):
         if isinstance(network, str):
             raise ArgumentError(f'Cannot look up network by name "({network})".')
         if self._network != network:
-            self._network_info.setNetwork(network)
             self.setLayer(None)
             self.notifyObservers()
 
@@ -115,7 +116,9 @@ class Model(object):
         '''
         if self._layer != layer:
             self._layer = layer
-            self.notifyObservers()
+            if self._data is not None and layer:
+                self._current_activation = self.activations_for_layers([layer], self._data)
+                self.notifyObservers()
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised unit. This should be called when the
@@ -128,12 +131,12 @@ class Model(object):
                     Index of the unit in the layer (0-based)
         '''
         self._unit = unit
-        activation_mask = self.activations_for_layers(self._layer, self._data)
-        if activation_mask is not None:
-            if activation_mask.shape == self._data.shape:
-                activation_mask = imresize(activation_mask, self._data.shape,
-                                           interp='nearest')
-        return activation_mask
+        if self._layer:
+            activation_mask = self.activations_for_layers([self._layer], self._data)
+            if activation_mask is not None:
+                if activation_mask.shape == self._data.shape:
+                    self._current_activation = imresize(activation_mask, self._data.shape,
+                                            interp='nearest')
 
     def setMode(self, mode: str):
         '''Set the current mode.
@@ -150,18 +153,19 @@ class Model(object):
             source = self._sources.get(mode)
             n_elems = len(source or [])
 
-            self._index = None
+            self._current_index = None
             self.setIndex(0 if n_elems > 0 else None)
 
     def editIndex(self, index):
-        try:
-            index = int(index)
-            if index < 0:
-                raise ValueError('Index out of range')
-        except ValueError:
-            index = self._index
+        if index is not None:
+            try:
+                index = int(index)
+                if index < 0:
+                    raise ValueError('Index out of range')
+            except ValueError:
+                index = self._current_index
 
-        if index != self._index:
+        if index != self._current_index:
             self.setIndex(index)
 
     def setIndex(self, index=None):
@@ -198,6 +202,8 @@ class Model(object):
         else:
             return
         self._sources[self._current_mode] = source
+        self._current_index = 0
+        self.setInputData(source[0].data)
         self.notifyObservers()
 
     def setDataArray(self, data: np.ndarray = None):
@@ -232,21 +238,6 @@ class Model(object):
         '''
         self.setDataSource(DataSet(name))
 
-    def addNetwork(self, network):
-        '''Add a model to visualise. This will add the network to the list of
-        choices and make it the currently selcted one
-
-        Parameters
-        ----------
-        network     :   network.network.Network
-                        A network  (should be of the same class as currently
-                        selected ones)
-        '''
-        name = 'Network ' + str(self._network_selector.count())
-        self._networks[name] = network
-        self.setNetwork(network)
-        self.notifyObservers()
-
     def setInputData(self, data: np.ndarray=None, description: str=None):
         '''Provide one data vector as input for the network.
         The input data must have 2, 3, or 4 dimensions.
@@ -276,8 +267,8 @@ class Model(object):
             network_shape = self._network.get_input_shape(include_batch=False)
 
             if data.ndim > 4 or data.ndim < 2:
-                raise ArgumentError('Data must have between 2 '
-                                    'and 4 dimensions.')
+                raise ArgumentError(f'Data must have between 2 '
+                                    'and 4 dimensions (has {data.ndim}).')
 
             if data.ndim == 4:
                 if data.shape[0] == 1:
@@ -308,6 +299,21 @@ class Model(object):
 
         self._data = data
 
+    def addNetwork(self, network):
+        '''Add a model to visualise. This will add the network to the list of
+        choices and make it the currently selcted one
+
+        Parameters
+        ----------
+        network     :   network.network.Network
+                        A network  (should be of the same class as currently
+                        selected ones)
+        '''
+        name = 'Network ' + str(self._network_selector.count())
+        self._networks[name] = network
+        self.setNetwork(network)
+        self.notifyObservers()
+
     ################################################################################################
     #                                          UTILITIES                                           #
     ################################################################################################
@@ -321,6 +327,9 @@ class Model(object):
         data    :   np.ndarray
                     Data to pump through the net.
         '''
+        if not isinstance(layers, list):
+            raise ArgumentError(f'Input must be list, is {type(layers)}')
+
         activations = self._network.get_activations(
             list(layers), data)[0]
 
@@ -328,8 +337,6 @@ class Model(object):
             if activations.shape[0] != 1:
                 raise RuntimeError('Attempting to visualise batch.')
             activations = np.squeeze(activations, axis=0)
-
-        self._activations = activations
 
         return activations
 
@@ -348,3 +355,17 @@ class Model(object):
                 name = n
         return name
 
+    def get_input(self, index):
+        '''Obtain input at index.
+
+        Parameters
+        ----------
+        index : int
+                Index into the current dataset
+
+        Returns
+        -------
+        np.ndarray
+
+        '''
+        return self._sources[self._current_mode][index]
