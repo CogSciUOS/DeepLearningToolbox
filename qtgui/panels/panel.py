@@ -76,3 +76,10 @@ class Panel(QWidget):
 
         self._network_box = QGroupBox('Network')
         self._network_box.setLayout(self._network_layout)
+
+    def updateInput(self, data):
+        self._input_view.setImage(data)
+
+    def modelChanged(self, model):
+        current_input = model.get_input(model._current_index)
+        self.updateInput(current_input.data)
