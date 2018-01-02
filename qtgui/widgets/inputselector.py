@@ -5,10 +5,13 @@ from random import randint
 import numpy as np
 from scipy.misc import imread
 
+from collections import namedtuple
+
 from PyQt5.QtWidgets import QWidget, QFileDialog
 
 # FIXME[todo]: add docstrings!
 
+InputData = namedtuple('Data', ['data', 'name'])
 
 class DataSource:
     '''An abstract base class for different types of data sources.  The
@@ -90,7 +93,7 @@ class DataArray(DataSource):
             return None, None
         data = self._array[index]
         info = 'Image ' + str(index) + ' from ' + self._description
-        return data, info
+        return InputData(data, info)
 
     def __len__(self):
         if self._array is None:
@@ -223,7 +226,7 @@ class DataDirectory(DataSource):
             # TODO: This can be much improved by caching and/or prefetching
             filename = self._filenames[index]
             data = imread(join(self._dirname, filename))
-            return data, filename
+            return InputData(data, filename)
 
     def __len__(self):
         if not self._filenames:
