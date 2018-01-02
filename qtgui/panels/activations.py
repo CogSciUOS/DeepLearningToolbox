@@ -115,4 +115,3 @@ class ActivationsPanel(Panel, Observer):
 
     def modelChanged(self, model):
         current_input = model.get_input(model._current_index)
-        __import__('ipdb').set_trace()

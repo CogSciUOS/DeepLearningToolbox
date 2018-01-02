@@ -20,12 +20,12 @@ class QNetworkView(QWidget, Observer):
                 The identifier of the currently selected layer.  The actual type
                 of the identifier depends on the network implementation. The
                 value None indicates that no layer is currently selectd.
+    _controller :   NetworkController
+                    Controller for this UI element
     '''
 
     _network:   Network = None
-
     _active:   str = None
-
     _controller:   NetworkController = None
 
     def __init__(self, parent=None):
