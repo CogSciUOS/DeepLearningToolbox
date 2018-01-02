@@ -12,15 +12,6 @@ class Panel(QWidget):
     '''Base class for different visualisation panels. In the future, the type of
     visualisation should be a component in the panel, not a separate panel
     class.
-
-    Attributes
-    ----------
-    network :   network.network.Network
-                Network to run occlusion on
-    data    :   np.ndarray
-                Input dataset
-    layer   :   str
-                Identifier of the currently selected layer
     '''
 
     def __init__(self, parent=None):
@@ -32,12 +23,6 @@ class Panel(QWidget):
                     The parent argument is sent to the QWidget constructor.
         '''
         super().__init__(parent)
-
-        self._network = None
-        # FIXME[question]: int (index) or str (label)?
-        self._layer = None
-        self._data = None
-
 
     def initUI(self):
         '''Initialise all UI elements. These are
@@ -84,7 +69,6 @@ class Panel(QWidget):
         self._network_view = QNetworkView()
 
         self._network_selector = QComboBox()
-        self._networks = {}
 
         self._network_layout = QVBoxLayout()
         self._network_layout.addWidget(self._network_selector)
