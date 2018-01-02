@@ -47,7 +47,6 @@ class Model(object):
     _sources:       dict       = {}
     _current_mode:  str        = None
     _current_index: int        = None
-    _current_source: DataSource = None
     _current_activation: np.ndarray = None
 
     def __init__(self, network: Network):
@@ -73,14 +72,14 @@ class Model(object):
         Parameters
         ----------
         observer    :   object
-                        Object which wants to be notified of changes
+                        Object which wants to be notified of changes. Must supply a
+                        ``modelChanged(model)`` method.
 
         '''
         self._observers.add(observer)
 
     def notifyObservers(self):
         '''Notify all observers that the state of this model has changed.'''
-
         for o in self._observers:
             o.modelChanged(self)
 
@@ -133,10 +132,11 @@ class Model(object):
         self._unit = unit
         if self._layer:
             activation_mask = self.activations_for_layers([self._layer], self._data)
-            if activation_mask is not None:
-                if activation_mask.shape == self._data.shape:
-                    self._current_activation = imresize(activation_mask, self._data.shape,
-                                            interp='nearest')
+            if (activation_mask is not None
+                and activation_mask.shape == self._data.shape):
+                self._current_activation = imresize(activation_mask, self._data.shape,
+                                                    interp='nearest')
+        self.notifyObservers()
 
     def setMode(self, mode: str):
         '''Set the current mode.
@@ -169,11 +169,7 @@ class Model(object):
             self.setIndex(index)
 
     def setIndex(self, index=None):
-        '''Set the index of the entry in the current data source.
-
-        The method will emit the 'selected' signal, if a new(!) entry
-        was selected.
-        '''
+        '''Set the index of the entry in the current data source.'''
 
         source = self._sources[self._current_mode]
         if index is None or source is None or len(source) < 1:
@@ -188,6 +184,7 @@ class Model(object):
             self._data, _info = None, None
         else:
             self._data, _info = source[index]
+            self.setInputData(source[index].data)
 
         self.notifyObservers()
 
@@ -196,14 +193,14 @@ class Model(object):
     ################################################################################################
     def setDataSource(self, source: DataSource):
         if isinstance(source, DataArray):
-            self._current_mode = 'array'
+            mode = 'array'
         elif isinstance(source, DataDirectory):
-            self._current_mode = 'dir'
+            mode = 'dir'
         else:
             return
-        self._sources[self._current_mode] = source
-        self._current_index = 0
-        self.setInputData(source[0].data)
+        self._current_mode = mode
+        self._sources[mode] = source
+        self.setIndex(0)
         self.notifyObservers()
 
     def setDataArray(self, data: np.ndarray = None):
