@@ -13,7 +13,7 @@ class ActivationsController(NetworkController):
         self._model = model
 
     def on_unit_selected(self, unit: int, sender):
-        '''(De)select a unit in this QActivationView.
+        '''(De)select a unit in this ``QActivationView``.
 
         Parameters
         -----------
@@ -23,7 +23,7 @@ class ActivationsController(NetworkController):
         '''
         if self._model._current_activation is None:
             unit = None
-        elif unit is not None and (unit < 0 or unit >= self._model._activation.shape[0]):
+        elif unit is not None and (unit < 0 or unit >= self._model._current_activation.shape[0]):
             unit = None
         if self._selectedUnit != unit:
             self._selectedUnit = unit
