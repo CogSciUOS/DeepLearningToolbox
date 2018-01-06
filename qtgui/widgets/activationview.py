@@ -48,7 +48,7 @@ class QActivationView(QWidget, Observer):
                     Padding between the individual units in this
                     QActivationView.
 
-    _current_index   :   int
+    _current_unit   :   int
                         The currently selected unit. The value None means that
                         no unit is currently selected.
 
@@ -68,7 +68,7 @@ class QActivationView(QWidget, Observer):
 
     _padding          : int                   = 2
     _isConvolution    : bool                  = False
-    _current_index    : int                   = None
+    _current_unit    : int                   = None
     _controller       : ActivationsController = None
     _unit_activations : np.ndarray            = None
     _n_units          : int                   = 0
@@ -163,7 +163,7 @@ class QActivationView(QWidget, Observer):
             return None
         else:
             if unit is None:
-                unit = self._current_index
+                unit = self._current_unit
             return self._unit_activations[unit]
 
     def _computeGeometry(self):
@@ -216,7 +216,7 @@ class QActivationView(QWidget, Observer):
             self._drawConvolution(qp)
         else:
             self._drawDense(qp)
-        if self._controller._selectedUnit is not None:
+        if self._current_unit is not None:
             self._drawSelection(qp)
 
         qp.end()
@@ -343,7 +343,7 @@ class QActivationView(QWidget, Observer):
         '''
         unit = self._unitAtPosition(event.pos())
         self._controller.on_unit_selected(unit, self)
-        self._current_index = unit
+        self._current_unit = unit
 
     def mouseReleaseEvent(self, event):
         '''Process mouse event.
@@ -381,24 +381,24 @@ class QActivationView(QWidget, Observer):
         if key == Qt.Key_Space:
             self.setToolTip(not self.toolTipActive)
         # Arrow keyes will move the selected entry
-        elif self._current_index is not None:
-            row = self._current_index % self._columns
-            col = self._current_index // self._columns
+        elif self._current_unit is not None:
+            row = self._current_unit % self._columns
+            col = self._current_unit // self._columns
             if key == Qt.Key_Left:
-                self._controller.on_unit_selected(self._current_index - 1, self)
-                self._current_index = max(0, self._current_index - 1)
+                self._controller.on_unit_selected(self._current_unit - 1, self)
+                self._current_unit = max(0, self._current_unit - 1)
             elif key == Qt.Key_Up:
-                self._controller.on_unit_selected(self._current_index - self._columns, self)
-                self._current_index = max(0, self._current_index - self._columns)
+                self._controller.on_unit_selected(self._current_unit - self._columns, self)
+                self._current_unit = max(0, self._current_unit - self._columns)
             elif key == Qt.Key_Right:
-                self._controller.on_unit_selected(self._current_index + 1, self)
-                self._current_index = min(self._n_units - 1, self._current_index + 1)
+                self._controller.on_unit_selected(self._current_unit + 1, self)
+                self._current_unit = min(self._n_units - 1, self._current_unit + 1)
             elif key == Qt.Key_Down:
-                self._controller.on_unit_selected(self._current_index + self._columns, self)
-                self._current_index = min(self._n_units - 1, self._current_index + self._columns)
+                self._controller.on_unit_selected(self._current_unit + self._columns, self)
+                self._current_unit = min(self._n_units - 1, self._current_unit + self._columns)
             elif key == Qt.Key_Escape:
                 self._controller.on_unit_selected(None, self)
-                self._current_index = None
+                self._current_unit = None
             else:
                 event.ignore()
         else:
