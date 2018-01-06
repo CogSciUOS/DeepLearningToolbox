@@ -7,8 +7,6 @@ class ActivationsController(NetworkController):
     '''Controller for ``ActivationsPanel``'''
 
     _parent = None
-    # TODO: Move this into the model
-    _selectedUnit: int = None
 
     def __init__(self, model):
         self._model = model
@@ -25,14 +23,7 @@ class ActivationsController(NetworkController):
         if self._model._current_activation is None:
             unit = None
         elif unit is not None:
-            if (unit < 0):
-                unit = 0
-            elif unit >= self._model._current_activation.shape[-1]:
-                unit = self._model._current_activation.shape[-1] - 1
-
-        if self._selectedUnit != unit:
-            self._selectedUnit = unit
-            sender.update()
+            self._model.setUnit(unit)
 
     def on_key_pressed(self, sender):
         '''Callback for handling keyboard events.
