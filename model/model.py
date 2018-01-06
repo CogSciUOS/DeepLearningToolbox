@@ -120,7 +120,7 @@ class Model(object):
                 self.notifyObservers()
 
     def setUnit(self, unit: int=None):
-        '''Change the currently visualised unit. This should be called when the
+        '''Change the currently visualised channel/unit. This should be called when the
         user clicks on a unit in the ActivationView. The activation mask will be
         nearest-neighbour-interpolated to the shape of the input data.
 

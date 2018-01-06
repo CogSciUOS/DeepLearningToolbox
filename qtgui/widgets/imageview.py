@@ -127,3 +127,9 @@ class QImageView(QWidget, Observer):
         '''
         if self._image is not None and self._overlay is not None:
             painter.drawImage(self._imageRect, self._overlay)
+
+    def modelChanged(self, model):
+        all_activations = model._current_activation
+        if all_activations is not None:
+            unit = model._unit
+            self.setActivationMask(all_activations[..., unit])
