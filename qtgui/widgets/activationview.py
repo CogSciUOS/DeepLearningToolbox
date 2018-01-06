@@ -68,7 +68,7 @@ class QActivationView(QWidget, Observer):
 
     _padding          : int                   = 2
     _isConvolution    : bool                  = False
-    _current_unit    : int                   = None
+    _current_unit     : int                   = None
     _controller       : ActivationsController = None
     _unit_activations : np.ndarray            = None
     _n_units          : int                   = 0
@@ -310,7 +310,7 @@ class QActivationView(QWidget, Observer):
         pen = QPen(pen_color)
         pen.setWidth(pen_width)
         qp.setPen(pen)
-        qp.drawRect(self._getUnitRect(self._controller._selectedUnit, 0))
+        qp.drawRect(self._getUnitRect(self._current_unit, 0))
 
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.

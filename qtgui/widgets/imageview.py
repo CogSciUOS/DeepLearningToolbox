@@ -130,6 +130,7 @@ class QImageView(QWidget, Observer):
 
     def modelChanged(self, model):
         all_activations = model._current_activation
-        if all_activations is not None:
-            unit = model._unit
-            self.setActivationMask(all_activations[..., unit])
+        unit = model._unit
+        if all_activations is not None and unit is not None:
+            activation_mask = np.ascontiguousarray(all_activations[..., unit] * 255, np.uint8)
+            self.setActivationMask(activation_mask)
