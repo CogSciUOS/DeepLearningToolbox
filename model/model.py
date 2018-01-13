@@ -32,6 +32,11 @@ class ModelChange(dict):
         else:
             self[attr] = value
 
+    @staticmethod
+    def all():
+        return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
+                           input_index_changed=True, dataset_changed=True, mode_changed=True)
+
 
 
 class Model(object):
@@ -138,7 +143,6 @@ class Model(object):
         '''
         if self._layer != layer:
             self._layer = layer
-            __import__('ipdb').set_trace()
             if self._data is not None and layer:
                 self._current_activation = self.activations_for_layers([layer], self._data)
                 self.notifyObservers(ModelChange(layer_changed=True))
@@ -156,7 +160,6 @@ class Model(object):
         self._unit = unit
         if self._layer:
             activation_mask = self.activations_for_layers([self._layer], self._data)
-            print(activation_mask)
             if activation_mask is not None:
                 self._current_activation = activation_mask
         self.notifyObservers(ModelChange(unit_changed=True))
@@ -357,6 +360,7 @@ class Model(object):
                 raise RuntimeError('Attempting to visualise batch.')
             activations = np.squeeze(activations, axis=0)
 
+        print(activations[0])
         return activations
 
     def getNetworkName(self, network):
