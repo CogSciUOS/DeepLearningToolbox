@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QImage, QPainter, QPen, QColor, QBrush
@@ -72,6 +73,8 @@ class QImageView(QWidget, Observer):
         if mask is None:
             self._overlay = None
         else:
+            mask = imresize(mask, (self._image.height(), self._image.width()),
+                                    interp='nearest')
             self._overlay = QImage(mask.shape[1], mask.shape[0],
                                    QImage.Format_ARGB32)
             self._overlay.fill(Qt.red)
@@ -128,7 +131,7 @@ class QImageView(QWidget, Observer):
         if self._image is not None and self._overlay is not None:
             painter.drawImage(self._imageRect, self._overlay)
 
-    def modelChanged(self, model):
+    def modelChanged(self, model, info):
         all_activations = model._current_activation
         unit = model._unit
         if all_activations is not None and unit is not None:

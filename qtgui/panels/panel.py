@@ -80,6 +80,6 @@ class Panel(QWidget):
     def updateInput(self, data):
         self._input_view.setImage(data)
 
-    def modelChanged(self, model):
+    def modelChanged(self, model, info):
         current_input = model.get_input(model._current_index)
         self.updateInput(current_input.data)

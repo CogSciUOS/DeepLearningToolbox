@@ -47,7 +47,7 @@ class QNetworkView(QWidget, Observer):
         '''Callback for clicking one of the layer buttons.'''
         self._controller.on_layer_selected(self.sender().text())
 
-    def modelChanged(self, model):
+    def modelChanged(self, model, info):
         #############################
         #  Respond to layer change  #
         #############################
@@ -109,7 +109,7 @@ class QNetworkInfoBox(QLabel, Observer):
         super().__init__(parent)
         self.setWordWrap(True)
 
-    def modelChanged(self, model):
+    def modelChanged(self, model, info):
         network = model._network
         layer = network.layer_dict[model._layer]
         ############################################################################################

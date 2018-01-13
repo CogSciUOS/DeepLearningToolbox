@@ -292,7 +292,7 @@ class QInputSelector(QWidget, Observer):
     def setController(self, controller):
         super().setController(controller)
 
-    def modelChanged(self, model):
+    def modelChanged(self, model, info):
         source = model._sources[model._current_mode]
         if isinstance(source, DataArray):
             info = (source.getFile()

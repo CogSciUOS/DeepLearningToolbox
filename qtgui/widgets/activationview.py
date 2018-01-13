@@ -93,19 +93,11 @@ class QActivationView(QWidget, Observer):
         # TODO: Disconnect before reconnecting?
         super().setController(controller)
 
-    def modelChanged(self, model):
+    def modelChanged(self, model, info):
         '''Get the current activations from the model and set the activations to
         be displayed in this QActivationView.  Currently there are two possible
         types of activations that are supported by this widget: 1D, and 2D
         convolutional.
-
-        Parameters
-        -----------
-        activation  :   np.ndarray
-                        Either a 1D or a 3D array. The latter one will be
-                        displayed in the convolutional mode. The activation
-                        values are expected to be float values. For display they
-                        will be scaled and converted to 8-bit integers.
         '''
         activation = model._current_activation
 

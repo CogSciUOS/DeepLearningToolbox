@@ -9,6 +9,29 @@ from qtgui.widgets.inputselector import (DataSource,
                                          DataDirectory,
                                          DataFile,
                                          DataSet)
+class ModelChange(dict):
+
+    def __init__(self, **kwargs):
+        self['network_changed'] = False
+        self['layer_changed'] = False
+        self['unit_changed'] = False
+        self['input_index_changed'] = False
+        self['dataset_changed'] = False
+        self['mode_changed'] = False
+        self.update(kwargs)
+
+    def __getattr__(self, attr):
+        try:
+            return self[attr]
+        except KeyError:
+            raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
+
+    def __setattr__(self, attr, value):
+        if attr not in self:
+            raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
+        else:
+            self[attr] = value
+
 
 
 class Model(object):
@@ -78,10 +101,10 @@ class Model(object):
         '''
         self._observers.add(observer)
 
-    def notifyObservers(self):
+    def notifyObservers(self, info):
         '''Notify all observers that the state of this model has changed.'''
         for o in self._observers:
-            o.modelChanged(self)
+            o.modelChanged(self, info)
 
     ################################################################################################
     #                           SETTING CURRENTLY VISUALISED PROPERTIES                            #
@@ -91,7 +114,7 @@ class Model(object):
             raise ArgumentError(f'Cannot look up network by name "({network})".')
         if self._network != network:
             self.setLayer(None)
-            self.notifyObservers()
+            self.notifyObservers(ModelChange(network_changed=True))
 
     def id_for_layer(self, layer_str):
         layer_id = -1
@@ -115,9 +138,10 @@ class Model(object):
         '''
         if self._layer != layer:
             self._layer = layer
+            __import__('ipdb').set_trace()
             if self._data is not None and layer:
                 self._current_activation = self.activations_for_layers([layer], self._data)
-                self.notifyObservers()
+                self.notifyObservers(ModelChange(layer_changed=True))
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised channel/unit. This should be called when the
@@ -132,11 +156,10 @@ class Model(object):
         self._unit = unit
         if self._layer:
             activation_mask = self.activations_for_layers([self._layer], self._data)
-            if (activation_mask is not None
-                and activation_mask.shape == self._data.shape):
-                self._current_activation = imresize(activation_mask, self._data.shape,
-                                                    interp='nearest')
-        self.notifyObservers()
+            print(activation_mask)
+            if activation_mask is not None:
+                self._current_activation = activation_mask
+        self.notifyObservers(ModelChange(unit_changed=True))
 
     def setMode(self, mode: str):
         '''Set the current mode.
@@ -185,7 +208,7 @@ class Model(object):
             self._data, _info = source[index]
             self.setInputData(source[index].data)
 
-        self.notifyObservers()
+        self.notifyObservers(ModelChange(data_index_changed=True))
 
     ################################################################################################
     #                                         SETTING DATA                                         #
@@ -200,7 +223,7 @@ class Model(object):
         self._current_mode = mode
         self._sources[mode] = source
         self.setIndex(0)
-        self.notifyObservers()
+        self.notifyObservers(ModelChange(dataset_changed=True))
 
     def setDataArray(self, data: np.ndarray = None):
         '''Set the data array to be used.
@@ -308,7 +331,7 @@ class Model(object):
         name = 'Network ' + str(self._network_selector.count())
         self._networks[name] = network
         self.setNetwork(network)
-        self.notifyObservers()
+        self.notifyObservers(ModelChange(network_changed=True))
 
     ################################################################################################
     #                                          UTILITIES                                           #
