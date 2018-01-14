@@ -377,19 +377,14 @@ class QActivationView(QWidget, Observer):
             col = self._current_unit // self._columns
             if key == Qt.Key_Left:
                 self._controller.on_unit_selected(self._current_unit - 1, self)
-                self._current_unit = max(0, self._current_unit - 1)
             elif key == Qt.Key_Up:
                 self._controller.on_unit_selected(self._current_unit - self._columns, self)
-                self._current_unit = max(0, self._current_unit - self._columns)
             elif key == Qt.Key_Right:
                 self._controller.on_unit_selected(self._current_unit + 1, self)
-                self._current_unit = min(self._n_units - 1, self._current_unit + 1)
             elif key == Qt.Key_Down:
                 self._controller.on_unit_selected(self._current_unit + self._columns, self)
-                self._current_unit = min(self._n_units - 1, self._current_unit + self._columns)
             elif key == Qt.Key_Escape:
                 self._controller.on_unit_selected(None, self)
-                self._current_unit = None
             else:
                 event.ignore()
         else:
