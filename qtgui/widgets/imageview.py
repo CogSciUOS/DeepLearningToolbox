@@ -132,8 +132,10 @@ class QImageView(QWidget, Observer):
             painter.drawImage(self._imageRect, self._overlay)
 
     def modelChanged(self, model, info):
+        from util import to_image
         all_activations = model._current_activation
         unit = model._unit
         if all_activations is not None and unit is not None:
-            activation_mask = np.ascontiguousarray(all_activations[..., unit] * 255, np.uint8)
+            activation_mask_f = all_activations[..., unit]
+            activation_mask = np.ascontiguousarray(to_image(activation_mask_f), np.uint8)
             self.setActivationMask(activation_mask)

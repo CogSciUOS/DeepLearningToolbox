@@ -112,23 +112,16 @@ class QActivationView(QWidget, Observer):
         if activation is not None:
             self._isConvolution = (activation.ndim == 3)
 
-            # normalization (values should be between 0 and 1)
-            min_value = activation.min()
-            max_value = activation.max()
-            value_range = max_value - min_value
-            activation = (activation - min_value)
-            if value_range > 0:
-                activation = activation / value_range
             if self._isConvolution:
                 # for convolution we want activtation to be of shape
                 # (output_channels, width, height) but it comes in
                 # (width, height, output_channels)
                 activation = activation.transpose([2, 0, 1])
 
-            # change dtype to uint8
-            activation = np.ascontiguousarray(
-                activation * 255, np.uint8
-            )
+            from util import to_image
+            # a contiguous array is important for display with Qt
+            activation = np.ascontiguousarray(to_image(activation))
+
         self._unit_activations = activation
 
         # unset selected entry if shape changed
