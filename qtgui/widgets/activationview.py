@@ -99,35 +99,42 @@ class QActivationView(QWidget, Observer):
         types of activations that are supported by this widget: 1D, and 2D
         convolutional.
         '''
-        activation = model._current_activation
+        if info.unit_changed:
+            self._current_unit = model._unit
 
-        if activation is not None:
-            if activation.dtype != np.float32:
-                raise ArgumentError('Activations must be floats.')
-            if activation.ndim not in {1, 3}:
-                raise ArgumentError(f'Unexpected shape {activation.shape}')
-        # TODO: Not used? Investigate
-        old_shape = None if activation is None else activation.shape
+        # get activation and update overlay only when significant properties change
+        if any(info[prop] for prop in {'network_changed', 'layer_changed', 'input_index_changed',
+                                         'dataset_changed'}):
+            activation = model._current_activation
+            self._current_unit = model._unit
 
-        if activation is not None:
-            self._isConvolution = (activation.ndim == 3)
+            if activation is not None:
+                if activation.dtype != np.float32:
+                    raise ArgumentError('Activations must be floats.')
+                if activation.ndim not in {1, 3}:
+                    raise ArgumentError(f'Unexpected shape {activation.shape}')
 
-            if self._isConvolution:
-                # for convolution we want activtation to be of shape
-                # (output_channels, width, height) but it comes in
-                # (width, height, output_channels)
-                activation = activation.transpose([2, 0, 1])
+            if activation is not None:
+                self._isConvolution = (activation.ndim == 3)
 
-            from util import to_image
-            # a contiguous array is important for display with Qt
-            activation = np.ascontiguousarray(to_image(activation))
+                if self._isConvolution:
+                    # for convolution we want activtation to be of shape
+                    # (output_channels, width, height) but it comes in
+                    # (width, height, output_channels)
+                    activation = activation.transpose([2, 0, 1])
 
-        self._unit_activations = activation
+                from util import grayscale_normalized
+                # a contiguous array is important for display with Qt
+                activation = np.ascontiguousarray(grayscale_normalized(activation))
 
-        # unset selected entry if shape changed
-        self._controller.on_unit_selected(None, self)
+            self._unit_activations = activation
+
+        # deselect unit on layer change
+        if info.network_changed or info.layer_changed:
+            self._current_unit = None
 
         self._computeGeometry()
+        self.update()
 
     def getUnitActivation(self, unit: int=None) -> np.ndarray:
         '''Get the activation mask for a given unit.
@@ -280,8 +287,7 @@ class QActivationView(QWidget, Observer):
         qp : QPainter
         '''
         for unit, value in enumerate(self._unit_activations):
-            qp.fillRect(self._getUnitRect(unit),
-                        QBrush(QColor(value, value, value)))
+            qp.fillRect(self._getUnitRect(unit), QBrush(QColor(value, value, value)))
 
     def _drawSelection(self, qp):
         '''Mark the currently selected unit in the painter.
