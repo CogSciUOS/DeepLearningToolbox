@@ -2,7 +2,7 @@ class ArgumentError(ValueError):
     '''Invalid argument exception'''
     pass
 
-def to_image(array):
+def grayscale_normalized(array):
     '''Convert a float array to 8bit grayscale
 
     Parameters
@@ -18,8 +18,6 @@ def to_image(array):
 
     '''
     import numpy as np
-    if array.ndim not in {2, 3}:
-        raise ArgumentError(f'Array must have 2 or 3 dimensions, has {array.ndim}')
 
     # normalization (values should be between 0 and 1)
     min_value = array.min()
