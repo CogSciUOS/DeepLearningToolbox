@@ -14,11 +14,9 @@ class KerasTensorFlowLayerMixin:
 # Mix in acess to input and output into every KerasLayer class.
 
 class KerasTensorFlowLayer(keras_layers.KerasLayer, KerasTensorFlowLayerMixin):
-
     pass
 
 class KerasTensorFlowNeuralLayer(keras_layers.KerasNeuralLayer, KerasTensorFlowLayerMixin):
-
     pass
 
 class KerasTensorFlowStridingLayer(keras_layers.KerasStridingLayer, KerasTensorFlowLayerMixin):
@@ -29,13 +27,10 @@ class KerasTensorFlowDense(keras_layers.KerasDense, KerasTensorFlowLayerMixin):
     pass
 
 class KerasTensorFlowConv2D(keras_layers.KerasConv2D, KerasTensorFlowLayerMixin):
-
-
    pass
 
 
 class KerasTensorFlowMaxPooling2D(keras_layers.KerasMaxPooling2D, KerasTensorFlowLayerMixin):
-
    pass
 
 
