@@ -159,9 +159,7 @@ class Model(object):
         '''
         self._unit = unit
         if self._layer:
-            activation_mask = self.activations_for_layers([self._layer], self._data)
-            if activation_mask is not None:
-                self._current_activation = activation_mask
+            self._current_activation = self.activations_for_layers([self._layer], self._data)
         self.notifyObservers(ModelChange(unit_changed=True))
 
     def setMode(self, mode: str):
@@ -360,7 +358,6 @@ class Model(object):
                 raise RuntimeError('Attempting to visualise batch.')
             activations = np.squeeze(activations, axis=0)
 
-        print(activations[0])
         return activations
 
     def getNetworkName(self, network):
