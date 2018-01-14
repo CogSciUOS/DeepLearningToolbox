@@ -157,10 +157,12 @@ class Model(object):
         unit    :   int
                     Index of the unit in the layer (0-based)
         '''
-        self._unit = unit
-        if self._layer:
-            self._current_activation = self.activations_for_layers([self._layer], self._data)
-        self.notifyObservers(ModelChange(unit_changed=True))
+        n_units = self._current_activation.shape[-1]
+        if unit >= 0 and unit < n_units:
+            self._unit = unit
+            if self._layer:
+                self._current_activation = self.activations_for_layers([self._layer], self._data)
+            self.notifyObservers(ModelChange(unit_changed=True))
 
     def setMode(self, mode: str):
         '''Set the current mode.
