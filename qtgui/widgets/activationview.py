@@ -8,7 +8,7 @@ from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
 from observer import Observer
-from controller import ActivationsController
+import controller
 
 # FIXME[todo]: improve the display of the activations: check that the
 # space is used not only in a good, but in an optimal way. Check that
@@ -25,14 +25,14 @@ class QActivationView(QWidget, Observer):
     supported: (two-dimensional) convolutional layers and dense
     (=fully connected) layers.
 
-    The ``QActivationView`` widget allows to select an individual unit in
+    The :py:class:``QActivationView`` widget allows to select an individual unit in
     the network layer by a single mouse click (this will either select
     a single unit in a dense layer, or a channel in a convolutional
     layer). The selection can be moved with the cursor keys and the
     unit can be deselected by hitting escape. The widget will signal
     such a (de)selection by emitting the 'selected' signal.
 
-    The ``QActivationView`` will try to make good use of the available
+    The :py:class:``QActivationView`` will try to make good use of the available
     space by arranging and scaling the units. However, the current
     implementation is still suboptimal and may be improved to allow
     for further configuration.
@@ -41,12 +41,12 @@ class QActivationView(QWidget, Observer):
     -----------
     _activation :   np.ndarray
                     The activation values to be displayed in this activation
-                    view. None means that no activation is assigned to this
-                    QActivationView and will result in an empty widget.
+                    view. ``None`` means that no activation is assigned to this
+                    :py:class:``QActivationView`` and will result in an empty widget.
 
     _padding    :   int
                     Padding between the individual units in this
-                    QActivationView.
+                    :py:class:``QActivationView``.
 
     _current_unit   :   int
                         The currently selected unit. The value None means that
@@ -58,20 +58,20 @@ class QActivationView(QWidget, Observer):
 
     _selected       :   PyQt5.QtCore.pyqtSignal
                         A signal emitted whenever a unit is (de)selected in this
-                        ``QActivationView``. This will be an int (the index of
-                        the selected unit) or None (if no unit is selected). We
+                        :py:class:``QActivationView``. This will be an int (the index of
+                        the selected unit) or ``None`` (if no unit is selected). We
                         have to use object not int here to allow for None
                         values.
     _n_units    :   int
                     Number of units in this view
     '''
 
-    _padding          : int                   = 2
-    _isConvolution    : bool                  = False
-    _current_unit     : int                   = None
-    _controller       : ActivationsController = None
-    _unit_activations : np.ndarray            = None
-    _n_units          : int                   = 0
+    _padding          : int                                = 2
+    _isConvolution    : bool                               = False
+    _current_unit     : int                                = None
+    _controller       : 'controller.ActivationsController' = None
+    _unit_activations : np.ndarray                         = None
+    _n_units          : int                                = 0
 
     def __init__(self, parent: QWidget=None):
         '''Initialization of the QActivationView.

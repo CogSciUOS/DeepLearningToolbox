@@ -2,12 +2,18 @@ import numpy as np
 from controller import NetworkController
 from network import Network
 from PyQt5 import QtCore
+import model
 
 
 class ActivationsController(NetworkController):
     '''Controller for ``ActivationsPanel``'''
 
     def __init__(self, model : 'model.Model'):
+        '''
+        Parameters
+        ----------
+        model   :   model.Model
+        '''
         self._model = model
 
     def on_unit_selected(self, unit : int, sender):

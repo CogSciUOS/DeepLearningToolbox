@@ -6,6 +6,9 @@ qtpyvis
 
    main
    network
+   observer
+   controller
+   model
    qtgui
    util
    visualizations

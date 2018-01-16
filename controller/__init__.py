@@ -1,7 +1,7 @@
 '''
 .. moduleauthor Rasmus Diederichsen
 
-..module controller
+.. module controller
 
 This module includes all classes which relate to the controller portion of the MVC pattern.
 '''

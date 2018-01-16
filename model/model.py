@@ -4,11 +4,8 @@ from scipy.misc import imresize
 from network import Network
 from network.layers import Layer
 from util import ArgumentError
-from qtgui.widgets.inputselector import (DataSource,
-                                         DataArray,
-                                         DataDirectory,
-                                         DataFile,
-                                         DataSet)
+from qtgui.datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
+
 class ModelChange(dict):
     '''
     .. :py:class:: ModelChange

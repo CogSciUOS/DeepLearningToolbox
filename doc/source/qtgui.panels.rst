@@ -28,6 +28,14 @@ qtgui\.panels\.occlusion module
     :undoc-members:
     :show-inheritance:
 
+qtgui\.panels\.panel module
+---------------------------
+
+.. automodule:: qtgui.panels.panel
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

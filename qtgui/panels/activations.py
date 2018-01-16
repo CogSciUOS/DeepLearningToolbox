@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 from qtgui.widgets import QActivationView
 from qtgui.widgets import QNetworkInfoBox
 from .panel import Panel
-from controller import ActivationsController
+import controller
 from observer import Observer
 
 import numpy as np
@@ -51,6 +51,7 @@ class ActivationsPanel(Panel, Observer):
                     The backing model. Communication will be handled by a
                     controller.
         '''
+        from controller import ActivationsController
         super().__init__(parent)
         self.initUI()
         self.setController(ActivationsController(model))

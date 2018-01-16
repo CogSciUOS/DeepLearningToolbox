@@ -7,7 +7,6 @@ Subpackages
 .. toctree::
 
     network.layers
-    network.tests
 
 Submodules
 ----------

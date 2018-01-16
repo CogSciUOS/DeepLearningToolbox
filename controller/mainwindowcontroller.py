@@ -1,4 +1,5 @@
 from network.network import Network
+import qtgui
 
 class MainWindowController(object):
     '''Controller class for the main GUI window. Will form the base handler for

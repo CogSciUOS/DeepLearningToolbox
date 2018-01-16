@@ -21,8 +21,11 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
 sys.path.insert(0, os.path.abspath('../../qtgui'))
-sys.path.insert(0, os.path.abspath('../../qtgui/panels'))
+sys.path.insert(0, os.path.abspath('../../qtgui/'))
 sys.path.insert(0, os.path.abspath('../../qtgui/widgets'))
+sys.path.insert(0, os.path.abspath('../../controller'))
+sys.path.insert(0, os.path.abspath('../../model'))
+sys.path.insert(0, os.path.abspath('../../observer'))
 
 
 # -- General configuration ------------------------------------------------
