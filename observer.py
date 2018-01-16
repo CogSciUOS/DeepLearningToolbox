@@ -1,5 +1,15 @@
+'''
+.. moduleauthor:: Rasmus Diederichsen
+
+.. module:: observer
+
+This module contains definitions for observer functionality
+'''
+
 class Observer(object):
-    '''Mixin for inheriting observer functionality.'''
+    '''Mixin for inheriting observer functionality. An observer registeres itself to a class which
+    notifies its observers in case something changes. Every observer has an associated controller
+    object for dispatching changes to the observed object.'''
 
     def __init__(self, **kwargs):
         '''Respected kwargs:
@@ -15,7 +25,7 @@ class Observer(object):
         '''Add self to observer list of `obj`'''
         obj.add_observer(self)
 
-    def modelChanged(self, model=None, info=None):
+    def modelChanged(self, model : 'model.Model'=None, info : 'model.ModelChange'=None):
         '''Respond to change in the model.
 
         Parameters
@@ -27,8 +37,14 @@ class Observer(object):
         '''
         pass
 
-    def setController(self, controller):
+    def setController(self, controller : 'controller.NetworkController'):
         '''Set the controller for this observer. Will trigger observation of the controller\'s
-        model'''
+        model
+
+        Parameters
+        ----------
+        controller  :   controller.NetworkController
+                        Controller for mediating communication with the observer object
+        '''
         self._controller = controller
         self.observe(controller._model)

@@ -61,9 +61,9 @@ class QNetworkView(QWidget, Observer):
                     newItem.widget().setStyleSheet('background-color: red')
 
         if info.network_changed:
-            ################################
-            #  Respond to network changed  #
-            ################################
+            ###############################
+            #  Respond to network change  #
+            ###############################
             layout = self.layout()
             network = model._network
             if network:
@@ -98,22 +98,25 @@ from network import Network
 
 
 class QNetworkInfoBox(QLabel, Observer):
-    '''A simple widget to display information on a network and a selected
-    layer.'''
+    '''
+    .. class:: QNetworkInfoBox
+
+    A simple widget to display information on a network and a selected
+    layer'''
 
     def __init__(self, parent=None):
-        '''Create a new ``QNetworkInfoBox``'''
+        '''Create a new :py:class:``QNetworkInfoBox``'''
         super().__init__(parent)
         self.setWordWrap(True)
 
     def modelChanged(self, model, info):
         network = model._network
-        layer = network.layer_dict[model._layer]
+        network_text = ''
+        layer_text = ''
         if info.network_changed:
             ############################################################################################
             #                                  Set Network info text                                   #
             ############################################################################################
-
             network_text = '<b>Network info:</b> '
             if not network:
                 network_text += 'No network selected'
@@ -126,6 +129,7 @@ class QNetworkInfoBox(QLabel, Observer):
             ############################################################################################
             #                                   Set Layer info text                                    #
             ############################################################################################
+            layer = network.layer_dict[model._layer]
             if not network:
                 layer_text = ''
             else:
@@ -139,4 +143,4 @@ class QNetworkInfoBox(QLabel, Observer):
                                            layer.info.items())
                     layer_text += layer_info
 
-            self.setText(network_text + layer_text)
+        self.setText(network_text + layer_text)

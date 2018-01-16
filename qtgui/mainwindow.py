@@ -54,7 +54,7 @@ class DeepVisMainWindow(QMainWindow):
 
     def _createTabWidget(self):
         self._tabs = QTabWidget(self)
-        self._tabs.currentChanged.connect(self._controller.on_tab_selected)
+        self._tabs.currentChanged.connect(self._controller.on_panel_selected)
         self._tabs.addTab(self._activations, 'Activations')
 
     def getTab(self, index: int) -> QWidget:

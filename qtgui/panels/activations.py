@@ -65,7 +65,8 @@ class ActivationsPanel(Panel, Observer):
         for widget in controllable_widgets:
             widget.setController(controller)
 
-        self._network_selector.activated.connect(controller.on_network_selected)
+
+        self._network_selector.activated[str].connect(controller.on_network_selected)
         for n in controller._model._networks.keys():
             self._network_selector.addItem(n)
 

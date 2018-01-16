@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 '''
 A framework-agnostic visualisation tool for deep neural networks
 
-.. moduleauthor Rüdiger Busche, Petr Byvshev, Ulf Krumnack, Rasmus Diederichsen
+.. moduleauthor:: Rüdiger Busche, Petr Byvshev, Ulf Krumnack, Rasmus Diederichsen
 
 '''
 
@@ -13,9 +13,11 @@ import os
 from PyQt5.QtWidgets import QApplication
 
 from qtgui.mainwindow import DeepVisMainWindow
+from network.keras import Network as KerasNetwork
+from network.torch import Network as TorchNetwork
 
 
-def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
+def keras(backend : str, cpu : bool, model : str='models/example_keras_mnist_model.h5') -> KerasNetwork:
     '''
     Visualise a Keras-based network
 
@@ -72,7 +74,7 @@ def keras(backend, cpu, model='models/example_keras_mnist_model.h5'):
         raise RuntimeError('Unknown backend %s' % backend)
 
 
-def torch(cpu, model, net_class, parameter_file, input_shape):
+def torch(cpu : bool, model : str, net_class : str, parameter_file : str, input_shape : tuple) -> TorchNetwork:
     '''
     Visualise a Torch-based network
 
@@ -105,6 +107,8 @@ def torch(cpu, model, net_class, parameter_file, input_shape):
 
 
 def main():
+    '''Start the program.'''
+
     parser = argparse.ArgumentParser(
         description='Visual neural network analysis.')
     parser.add_argument('--model', help='Filename of model to use',
@@ -124,19 +128,19 @@ def main():
 
     if args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
-        backend = args.framework[dash_idx + 1:]
-        network = keras(backend, args.cpu, model=args.model)
+        backend  = args.framework[dash_idx + 1:]
+        network  = keras(backend, args.cpu, model=args.model)
     elif args.framework == 'torch':
         # FIXME[hack]: provide these parameter on the command line ...
-        net_file = 'models/example_torch_mnist_net.py'
-        net_class = 'Net'
+        net_file       = 'models/example_torch_mnist_net.py'
+        net_class      = 'Net'
         parameter_file = 'models/example_torch_mnist_model.pth'
-        input_shape = (28, 28)
+        input_shape    = (28, 28)
         network = torch(args.cpu, net_file, net_class,
                         parameter_file, input_shape)
 
     if network:
-        app = QApplication(sys.argv)
+        app        = QApplication(sys.argv)
         mainWindow = DeepVisMainWindow(network)
         if args.data:
             mainWindow.getModel().setDataFile(args.data)

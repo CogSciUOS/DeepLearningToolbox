@@ -1,18 +1,17 @@
 import numpy as np
 from controller import NetworkController
 from network import Network
+from PyQt5 import QtCore
 
 
 class ActivationsController(NetworkController):
     '''Controller for ``ActivationsPanel``'''
 
-    _parent = None
-
-    def __init__(self, model):
+    def __init__(self, model : 'model.Model'):
         self._model = model
 
-    def on_unit_selected(self, unit: int, sender):
-        '''(De)select a unit in this ``QActivationView``.
+    def on_unit_selected(self, unit : int, sender):
+        '''(De)select a unit in the ``QActivationView``.
 
         Parameters
         -----------
@@ -37,6 +36,17 @@ class ActivationsController(NetworkController):
 
     def set_input_data(self, raw: np.ndarray=None, fitted: np.ndarray=None,
                        description: str=None):
+        '''Callback for setting a new input data set.
+
+        Parameters
+        ----------
+        raw :   np.ndarray
+                Raw input data provided by the ``DataSource``
+        fitted  :   np.ndarray
+                    Input data fit to the network input layer
+        description :   str
+                        Textual description of the data
+        '''
         pass
 
     def on_layer_selected(self, layer):
@@ -44,22 +54,38 @@ class ActivationsController(NetworkController):
 
         Parameters
         ----------
-        layer : int or string
-            The index or the name of the layer to activate.
+        layer   :   int or string
+                    The index or the name of the layer to activate.
         '''
         self._model.setLayer(layer)
 
     def source_selected(self, source):
+        '''Set a new ``DataSource``
+
+        Parameters
+        ----------
+        source  :   DataSource
+        '''
         self._model.setDataSource(source)
 
     def on_network_selected(self, network):
         if isinstance(network, Network):
             raise ValueError('Setting network via object is not supported.')
+
         if isinstance(network, int) or isinstance(network, str):
             print(f'Selecting network {network}')
             self._model.setNetwork(network)
 
     def on_open_button_clicked(self, sender=None):
+        '''Helper callback for handling the click on the ``Open`` button. Unfortunately, this cannot
+        be handled directly in the GUI layer since we need to coordinate with the model\'s current
+        mode.
+
+        Parameters
+        ----------
+        sender  :   PyQt5.QtWidgets.QWidget
+                    GUI element receiving the click.
+        '''
         from qtgui.widgets.inputselector import DataDirectory, DataFile
         try:
             source = self._model._current_source
@@ -74,4 +100,4 @@ class ActivationsController(NetworkController):
                 source.selectDirectory(sender)
             self.source_selected(source)
         except FileNotFoundError:
-            pass
+            print('Could not open file.')

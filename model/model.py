@@ -10,23 +10,50 @@ from qtgui.widgets.inputselector import (DataSource,
                                          DataFile,
                                          DataSet)
 class ModelChange(dict):
+    '''
+    .. :py:class:: ModelChange
+
+    A class whose instancesa are passed to observers  in :py:meth:`observer.Observer.modelChanged`
+    in order to inform them as to the exact nature of the model's change.
+
+
+    Attributes
+    ----------
+    network_changed :   bool
+                        Whether the underlying :py:class:`network.Network` has changed
+    layer_changed :   bool
+                    Whether the current :py:class:`network.layers.Layer` has changed
+    unit_changed :   bool
+                    Whether the selected unit changed
+    input_index_changed :   bool
+                            Whether the index into the dataset changed
+    dataset_changed :   bool
+                        Whether the underlying :py:class:`qtgui.widgets.inputselector.DataSource`
+                        has changed
+    mode_changed :   bool
+                    Whether the dataset mode changed
+    '''
 
     def __init__(self, **kwargs):
-        self['network_changed'] = False
-        self['layer_changed'] = False
-        self['unit_changed'] = False
+        self['network_changed']     = False
+        self['layer_changed']       = False
+        self['unit_changed']        = False
         self['input_index_changed'] = False
-        self['dataset_changed'] = False
-        self['mode_changed'] = False
+        self['dataset_changed']     = False
+        self['mode_changed']        = False
         self.update(kwargs)
 
     def __getattr__(self, attr):
+        '''Override for making dict entries accessible by dot notation. Will raise
+        :py:exc:`ValueError` for unknown attributes.'''
         try:
             return self[attr]
         except KeyError:
             raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
 
     def __setattr__(self, attr, value):
+        '''Override for disallowing addition of arbitrary keys to this dict. Will raise
+        :py:exc:`ValueError` in case of unknown property.'''
         if attr not in self:
             raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
         else:
@@ -34,13 +61,16 @@ class ModelChange(dict):
 
     @staticmethod
     def all():
+        '''Create a :py:class:`ModelChange` instance with all properties set to ``True``.'''
         return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
                            input_index_changed=True, dataset_changed=True, mode_changed=True)
 
 
 
 class Model(object):
-    '''Model class encompassing network, current activations, and the like.
+    '''.. :py:class:: Model
+
+    Model class encompassing network, current activations, and the like.
 
     Attributes
     ----------
@@ -89,6 +119,13 @@ class Model(object):
         self._networks[str(network)] = network
 
     def __len__(self):
+        '''Returns the number of elements in the currently selected dataset.
+
+        Returns
+        -------
+        int
+
+        '''
         return 0 if self._data is None else len(self._data)
 
     ################################################################################################
@@ -101,27 +138,52 @@ class Model(object):
         ----------
         observer    :   object
                         Object which wants to be notified of changes. Must supply a
-                        ``modelChanged(model)`` method.
+                        :py:meth:``observer.modelChanged(model)`` method.
 
         '''
         self._observers.add(observer)
 
     def notifyObservers(self, info):
-        '''Notify all observers that the state of this model has changed.'''
+        '''Notify all observers that the state of this model has changed.
+
+        Parameters
+        ----------
+        info    :   ModelChange
+                    Changes in the model since the last update
+
+        '''
         for o in self._observers:
             o.modelChanged(self, info)
 
     ################################################################################################
     #                           SETTING CURRENTLY VISUALISED PROPERTIES                            #
     ################################################################################################
-    def setNetwork(self, network=None):
-        if isinstance(network, str):
-            raise ArgumentError(f'Cannot look up network by name "({network})".')
+    def setNetwork(self, network : str=None):
+        '''Set the current network.
+
+        Parameters
+        ----------
+        network :   str
+                    Key for the network
+        '''
         if self._network != network:
+            self._network = self._networks[str(network)]
             self.setLayer(None)
             self.notifyObservers(ModelChange(network_changed=True))
 
     def id_for_layer(self, layer_str):
+        '''Obtain the numeric id for a given layer identifier.
+
+        Parameters
+        ----------
+        layer_str   :   str
+                        Identifier of the layser
+
+        Returns
+        -------
+        int
+            layer index
+        '''
         layer_id = -1
         for index, label in enumerate(self._network.layer_dict.keys()):
             if layer_str == label:
@@ -149,8 +211,7 @@ class Model(object):
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised channel/unit. This should be called when the
-        user clicks on a unit in the ActivationView. The activation mask will be
-        nearest-neighbour-interpolated to the shape of the input data.
+        user clicks on a unit in the :py:class:`QActivationView`.
 
         Parameters
         ----------
@@ -180,9 +241,15 @@ class Model(object):
             n_elems = len(source or [])
 
             self._current_index = None
-            self.setIndex(0 if n_elems > 0 else None)
+            self._setIndex(0 if n_elems > 0 else None)
 
     def editIndex(self, index):
+        '''Set the current dataset index. Index is left unchanged if out of range.
+
+        Parameters
+        ----------
+        index   :   int
+        '''
         if index is not None:
             try:
                 index = int(index)
@@ -192,10 +259,16 @@ class Model(object):
                 index = self._current_index
 
         if index != self._current_index:
-            self.setIndex(index)
+            self._setIndex(index)
 
-    def setIndex(self, index=None):
-        '''Set the index of the entry in the current data source.'''
+    def _setIndex(self, index=None):
+        '''Helper for setting dataset index. Will do nothing if ``index`` is ``None``. This method
+        will update the appropriate fields of the model.
+
+        Parameters
+        ----------
+        index   :   int
+        '''
         source = self._sources[self._current_mode]
         if index is None or source is None or len(source) < 1:
             index = None
@@ -217,6 +290,7 @@ class Model(object):
     #                                         SETTING DATA                                         #
     ################################################################################################
     def setDataSource(self, source: DataSource):
+        '''Update the :py:class:``DataSource``.'''
         if isinstance(source, DataArray):
             mode = 'array'
         elif isinstance(source, DataDirectory):
@@ -225,7 +299,7 @@ class Model(object):
             return
         self._current_mode = mode
         self._sources[mode] = source
-        self.setIndex(0)
+        self._setIndex(0)
         self.notifyObservers(ModelChange(dataset_changed=True))
 
     def setDataArray(self, data: np.ndarray = None):
@@ -240,13 +314,11 @@ class Model(object):
         self.setDataSource(DataArray(data))
 
     def setDataFile(self, filename: str):
-        '''Set the data file to be used.
-        '''
+        '''Set the data file to be used.'''
         self.setDataSource(DataFile(filename))
 
     def setDataDirectory(self, dirname: str = None):
-        '''Set the directory to be used for loading data.
-        '''
+        '''Set the directory to be used for loading data.'''
         self.setDataSource(DataDirectory(dirname))
 
     def setDataSet(self, name: str):
@@ -254,9 +326,9 @@ class Model(object):
 
         Parameters
         ----------
-        name:
-            The name of the dataset. The only dataset supported up to now
-            is 'mnist'.
+        name    :   str
+                    The name of the dataset. The only dataset supported up to now
+                    is 'mnist'.
         '''
         self.setDataSource(DataSet(name))
 

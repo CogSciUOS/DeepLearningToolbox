@@ -1,3 +1,11 @@
+'''
+.. moduleauthor:: Rasmus Diederichsen
+
+.. module:: util
+
+This module collects miscellaneous utilities.
+'''
+
 class ArgumentError(ValueError):
     '''Invalid argument exception'''
     pass

@@ -3,7 +3,7 @@ import numpy as np
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget
 from qtgui.widgets import QMatrixView
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QComboBox
+from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
