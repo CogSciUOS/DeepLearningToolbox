@@ -123,7 +123,8 @@ class Model(object):
         int
 
         '''
-        return 0 if self._data is None else len(self._data)
+        source = self._sources.get(self._current_mode, None)
+        return 0 if source is None else len(source)
 
     ################################################################################################
     #                                      OBSERVER HANDLING                                       #
