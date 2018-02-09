@@ -16,8 +16,6 @@ from observer import Observer
 
 import numpy as np
 
-# FIXME[todo]: rearrange the layer selection on network change!
-
 
 class ActivationsPanel(Panel, Observer):
     '''A complex panel containing elements to display activations in
@@ -26,19 +24,11 @@ class ActivationsPanel(Panel, Observer):
 
     Attributes
     ----------
-    _network :  network.network.Network
-                The current model to visualise. This network is used
-                for all computations in this ActivationsPanel. Can be None if no
-                network is selected.
-    _layer   :   str
-                Layer id of the currently selected layer. Activations are shown
-                for the respective layer. The layer can be None if no layer is
-                selected.
-    _data   :   np.ndarray
-                The current input data. This data should always match the input
-                size of the current network. May be None if no input data is
-                available.
+    _network_map    :   dict A dictionary mapping the strings displayed in the network selector
+                        dropdown to actual network objects.
     '''
+
+    _network_map    :   dict = {}
 
     def __init__(self, model, parent=None):
         '''Initialization of the ActivationsPael.
@@ -66,10 +56,25 @@ class ActivationsPanel(Panel, Observer):
         for widget in controllable_widgets:
             widget.setController(controller)
 
+        # What is this for? Since the Model is initialised with the network, the first call to
+        # setNetwork must somehow communicate that an update of all observers is desired despite
+        # the fact that the new network is identical to the old one. Another approach would be to
+        # make the network an optional Model initialiser param, but this requires some further
+        # tweaks. So here I just capture a local variable in a closure which then gets flipped on
+        # first call. I need a closure anyway for the name -> network map, so might as well put this
+        # in as well.
+        first_call = True
+        def select_net(name):
+            '''closure for _network_map and first_call'''
+            nonlocal first_call # 'global' does not work, dunno why.
+            controller.on_network_selected(self._network_map[name], first_call)
+            first_call = False
 
-        self._network_selector.activated[str].connect(controller.on_network_selected)
-        for n in controller._model._networks.keys():
-            self._network_selector.addItem(n)
+        self._network_selector.activated[str].connect(select_net)
+        for key, network in controller._model._networks.items():
+            display_name = str(network.__class__)
+            self._network_selector.addItem(display_name)
+            self._network_map[display_name] = network
 
     def initUI(self):
         '''Add additional UI elements

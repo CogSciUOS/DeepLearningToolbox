@@ -157,16 +157,31 @@ class Model(object):
     ################################################################################################
     #                           SETTING CURRENTLY VISUALISED PROPERTIES                            #
     ################################################################################################
-    def setNetwork(self, network : str=None):
-        '''Set the current network.
+    def setNetwork(self, network=None, force_update=False):
+        '''Set the current network. Update will only be published if not already selected.
 
         Parameters
         ----------
-        network :   str
+        network :   str or int or Network
                     Key for the network
+        force_update    :   bool
+                            Force update to be published. This is useful if the current network
+                            passed to the constructor, but not loaded in the gui yet. The gui may
+                            make sure updates are published by setting this argument.
         '''
         if self._network != network:
-            self._network = self._networks[str(network)]
+            if isinstance(network, Network):
+                if network not in self._networks.values():
+                    self.addNetwork(network)
+                self._network = network
+            elif isinstance(network, str) or isinstance(network, int):
+                self._network = self._networks[str(network)]
+            else:
+                raise ArgumentError(f'Unknown network type {network.__class__}')
+            self.setLayer(None)
+            self.notifyObservers(ModelChange(network_changed=True))
+        elif force_update:
+            # argh. code smell
             self.setLayer(None)
             self.notifyObservers(ModelChange(network_changed=True))
 

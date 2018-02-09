@@ -74,13 +74,9 @@ class ActivationsController(NetworkController):
         '''
         self._model.setDataSource(source)
 
-    def on_network_selected(self, network):
-        if isinstance(network, Network):
-            raise ValueError('Setting network via object is not supported.')
-
-        if isinstance(network, int) or isinstance(network, str):
-            print(f'Selecting network {network}')
-            self._model.setNetwork(network)
+    def on_network_selected(self, network, force_update=False):
+        print(f'Selecting network {network}')
+        self._model.setNetwork(network, force_update)
 
     def on_open_button_clicked(self, sender=None):
         '''Helper callback for handling the click on the ``Open`` button. Unfortunately, this cannot
