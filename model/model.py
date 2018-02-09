@@ -38,7 +38,8 @@ class ModelChange(dict):
         self['input_index_changed'] = False
         self['dataset_changed']     = False
         self['mode_changed']        = False
-        self.update(kwargs)
+        for k, v in kwargs.items():
+            self[k] = v
 
     def __getattr__(self, attr):
         '''Override for making dict entries accessible by dot notation. Will raise
@@ -287,7 +288,7 @@ class Model(object):
             self._data, _info = source[index]
             self.setInputData(source[index].data)
 
-        self.notifyObservers(ModelChange(data_index_changed=True))
+        self.notifyObservers(ModelChange(input_index_changed=True))
 
     ################################################################################################
     #                                         SETTING DATA                                         #
