@@ -205,7 +205,7 @@ class Model(object):
         if self._layer != layer:
             self._layer = layer
             if self._data is not None and layer:
-                self._current_activation = self.activations_for_layers([layer], self._data)
+                self._update_activation()
                 if self._unit:
                     n_units = self._current_activation.shape[-1]
                     self._unit = min(n_units - 1, self._unit)
@@ -226,7 +226,7 @@ class Model(object):
         if unit >= 0 and unit < n_units:
             self._unit = unit
             if self._layer:
-                self._current_activation = self.activations_for_layers([self._layer], self._data)
+                self._update_activation()
             self.notifyObservers(ModelChange(unit_changed=True))
 
     def setMode(self, mode: str):
@@ -265,6 +265,11 @@ class Model(object):
         if index != self._current_index:
             self._setIndex(index)
 
+    def _update_activation(self):
+        '''Set the :py:attr:`_current_activation` property by loading activations for
+        :py:attr:`_layer` and :py:attr:`_data`'''
+        self._current_activation = self.activations_for_layers([self._layer], self._data)
+
     def _setIndex(self, index=None):
         '''Helper for setting dataset index. Will do nothing if ``index`` is ``None``. This method
         will update the appropriate fields of the model.
@@ -287,6 +292,8 @@ class Model(object):
         else:
             self._data, _info = source[index]
             self.setInputData(source[index].data)
+            if self._layer:
+                self._update_activation()
 
         self.notifyObservers(ModelChange(input_index_changed=True))
 
