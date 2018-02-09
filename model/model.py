@@ -205,7 +205,12 @@ class Model(object):
             self._layer = layer
             if self._data is not None and layer:
                 self._current_activation = self.activations_for_layers([layer], self._data)
-                self.notifyObservers(ModelChange(layer_changed=True))
+                if self._unit:
+                    n_units = self._current_activation.shape[-1]
+                    self._unit = min(n_units - 1, self._unit)
+                    self.notifyObservers(ModelChange(layer_changed=True, unit_changed=True))
+                else:
+                    self.notifyObservers(ModelChange(layer_changed=True))
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised channel/unit. This should be called when the
