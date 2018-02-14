@@ -39,7 +39,6 @@ class DeepVisMainWindow(QMainWindow):
     def initUI(self):
         '''Initialize the graphical components of this user interface.'''
         self.setWindowTitle(self._title)
-
         self._createMenu()
 
         # Initialize the panels

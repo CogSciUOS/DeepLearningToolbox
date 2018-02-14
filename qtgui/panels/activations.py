@@ -90,8 +90,8 @@ class ActivationsPanel(Panel, Observer):
         self._activation_view = QActivationView()
 
         # FIXME[layout]
-        self._activation_view.setMinimumWidth(300)
-        self._activation_view.resize(600, self._activation_view.height())
+        self._activation_view.setMinimumWidth(200)
+        self._activation_view.resize(400, self._activation_view.height())
 
         activation_layout = QVBoxLayout()
         activation_layout.addWidget(self._activation_view)
@@ -106,7 +106,7 @@ class ActivationsPanel(Panel, Observer):
         # network info: a widget to select a layer
         self._network_info = QNetworkInfoBox()
         # FIXME[layout]
-        self._network_info.setMinimumWidth(300)
+        # self._network_info.setMinimumWidth(300)
         self._network_layout.addWidget(self._network_info)
 
         ########################################################################

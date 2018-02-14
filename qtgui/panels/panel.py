@@ -48,7 +48,7 @@ class Panel(QWidget):
 
         self._input_info = QInputInfoBox()
         # FIXME[layout]
-        self._input_info.setMinimumWidth(300)
+        self._input_info.setMinimumWidth(200)
 
         input_layout = QVBoxLayout()
         # FIXME[layout]
