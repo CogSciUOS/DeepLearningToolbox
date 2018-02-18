@@ -17,7 +17,7 @@ from network.keras import Network as KerasNetwork
 from network.torch import Network as TorchNetwork
 
 
-def keras(backend : str, cpu : bool, model : str='models/example_keras_mnist_model.h5') -> KerasNetwork:
+def keras(backend: str, cpu: bool, model: str='models/example_keras_mnist_model.h5') -> KerasNetwork:
     '''
     Visualise a Keras-based network
 
@@ -67,14 +67,14 @@ def keras(backend : str, cpu : bool, model : str='models/example_keras_mnist_mod
         network = KerasTensorFlowNetwork(model_file=model)
         return network
     elif backend == 'theano':
-        os.environ['KERAS_BACKEND'] = 'theano'
+        # os.environ['KERAS_BACKEND'] = 'theano'
         print('Currently, only TF backend is supported', file=sys.stderr)
         return None
     else:
-        raise RuntimeError('Unknown backend %s' % backend)
+        raise RuntimeError('Unknown backend {backend}')
 
 
-def torch(cpu : bool, model : str, net_class : str, parameter_file : str, input_shape : tuple) -> TorchNetwork:
+def torch(cpu: bool, model: str, net_class: str, parameter_file: str, input_shape: tuple) -> TorchNetwork:
     '''
     Visualise a Torch-based network
 
@@ -141,13 +141,15 @@ def main():
 
     if network:
         app        = QApplication(sys.argv)
-        mainWindow = DeepVisMainWindow(network)
+        from model import Model
+        model = Model(network)
+        mainWindow = DeepVisMainWindow(model)
         if args.data:
-            mainWindow.getModel().setDataFile(args.data)
+            model.setDataFile(args.data)
         elif args.dataset:
-            mainWindow.getModel().setDataSet(args.dataset)
+            model.setDataSet(args.dataset)
         elif args.datadir:
-            mainWindow.getModel().setDataDirectory(args.datadir)
+            model.setDataDirectory(args.datadir)
 
         mainWindow.show()
 

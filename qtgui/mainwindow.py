@@ -27,11 +27,11 @@ class DeepVisMainWindow(QMainWindow):
                 Backing model instance
     '''
 
-    def __init__(self, network, data=None, title='QtPyVis'):
+    def __init__(self, model, data=None, title='QtPyVis'):
         super().__init__()
         self._controller = MainWindowController()
         self._title = title
-        self._model = Model(network)
+        self._model = model
         self.initUI()
 
     def getModel(self):
