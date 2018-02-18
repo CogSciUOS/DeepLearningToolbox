@@ -1,38 +1,10 @@
 import numpy as np
-from controller import NetworkController
+from controller import InputController
 from network import Network
 import model
 
-from concurrent.futures import ThreadPoolExecutor, Future
-from PyQt5.QtCore import QObject, pyqtSignal
 
-class AsyncRunner(object):
-
-    def __init__(self, model):
-        super().__init__()
-        self._model = model
-        self._executor = ThreadPoolExecutor(max_workers=1)
-
-    def run_task(self, fn, *args, **kwargs):
-        future = self._executor.submit(fn, *args, **kwargs)
-        future.add_done_callback(self.on_completion)
-
-    def on_completion(self, result):
-        pass
-
-class QTAsyncRunner(AsyncRunner, QObject):
-
-    _completion_signal = pyqtSignal(object)
-
-    def __init__(self, model):
-        super().__init__(model)
-        self._completion_signal.connect(lambda info: model.notifyObservers(info))
-
-    def on_completion(self, future):
-        self._completion_signal.emit(future.result())
-
-
-class ActivationsController(NetworkController):
+class ActivationsController(InputController):
     '''Controller for ``ActivationsPanel``'''
 
     def __init__(self, model : 'model.Model'):
@@ -41,8 +13,7 @@ class ActivationsController(NetworkController):
         ----------
         model   :   model.Model
         '''
-        self._model = model
-        self._runner = QTAsyncRunner(model)
+        super().__init__(model)
 
     def on_unit_selected(self, unit : int, sender):
         '''(De)select a unit in the ``QActivationView``.
