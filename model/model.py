@@ -284,7 +284,9 @@ class Model(object):
                 index = self._current_index
 
         if index != self._current_index:
-            self._setIndex(index)
+            return self._setIndex(index)
+        else:
+            return None
 
     def _update_activation(self):
         '''Set the :py:attr:`_current_activation` property by loading activations for
@@ -324,18 +326,24 @@ class Model(object):
     ################################################################################################
     #                                         SETTING DATA                                         #
     ################################################################################################
-    def setDataSource(self, source: DataSource):
+    def setDataSource(self, source: DataSource, synchronous=True):
         '''Update the :py:class:``DataSource``.'''
         if isinstance(source, DataArray):
             mode = 'array'
         elif isinstance(source, DataDirectory):
             mode = 'dir'
         else:
-            return
+            raise ArgumentError(f'Unknown source {source}')
         self._current_mode = mode
         self._sources[mode] = source
         self._setIndex(0)
-        return ModelChange(dataset_changed=True)
+
+        change = ModelChange(dataset_changed=True, input_index_changed=True)
+        if not synchronous:
+            return change
+        else:
+            self.notifyObservers(change)
+
 
     def setDataArray(self, data: np.ndarray = None):
         '''Set the data array to be used.
