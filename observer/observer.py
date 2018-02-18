@@ -7,7 +7,6 @@ This module contains definitions for observer functionality
 '''
 import model
 import controller
-from PyQt5.QtCore import pyqtSignal
 
 class Observer(object):
     '''Mixin for inheriting observer functionality. An observer registers itself to a class which

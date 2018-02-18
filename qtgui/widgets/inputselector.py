@@ -26,16 +26,10 @@ class QInputSelector(QWidget, observer.Observer):
     ----------
     _index  :   int
                 The index of the current data entry.
-    selected    :   pyqtSignal
-                    A signal emitted when new input data are selected.  The
-                    signal will carry the new data and some text explaining the
-                    data origin. (np.ndarray, str)
     '''
     _index: int = None
 
     _controller = None
-
-    selected = pyqtSignal(object, str)
 
     def __init__(self, parent=None):
         '''Initialization of the QNetworkView.

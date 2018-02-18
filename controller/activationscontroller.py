@@ -1,8 +1,35 @@
 import numpy as np
 from controller import NetworkController
 from network import Network
-from PyQt5 import QtCore
 import model
+
+from concurrent.futures import ThreadPoolExecutor, Future
+from PyQt5.QtCore import QObject, pyqtSignal
+
+class AsyncRunner(object):
+
+    def __init__(self, model):
+        super().__init__()
+        self._model = model
+        self._executor = ThreadPoolExecutor(max_workers=1)
+
+    def run_task(self, fn, *args, **kwargs):
+        future = self._executor.submit(fn, *args, **kwargs)
+        future.add_done_callback(self.on_completion)
+
+    def on_completion(self, result):
+        pass
+
+class QTAsyncRunner(AsyncRunner, QObject):
+
+    _completion_signal = pyqtSignal(object)
+
+    def __init__(self, model):
+        super().__init__(model)
+        self._completion_signal.connect(lambda info: model.notifyObservers(info))
+
+    def on_completion(self, future):
+        self._completion_signal.emit(future.result())
 
 
 class ActivationsController(NetworkController):
@@ -15,6 +42,7 @@ class ActivationsController(NetworkController):
         model   :   model.Model
         '''
         self._model = model
+        self._runner = QTAsyncRunner(model)
 
     def on_unit_selected(self, unit : int, sender):
         '''(De)select a unit in the ``QActivationView``.
@@ -26,7 +54,7 @@ class ActivationsController(NetworkController):
 
         '''
         if self._model._current_activation is not None and unit is not None:
-            self._model.setUnit(unit)
+            self._runner.run_task(self._model.setUnit, unit)
 
     def on_key_pressed(self, sender):
         '''Callback for handling keyboard events.
@@ -61,7 +89,7 @@ class ActivationsController(NetworkController):
         layer   :   int or string
                     The index or the name of the layer to activate.
         '''
-        self._model.setLayer(layer)
+        self._runner.run_task(self._model.setLayer, layer)
 
     def source_selected(self, source):
         '''Set a new ``DataSource``
@@ -70,11 +98,10 @@ class ActivationsController(NetworkController):
         ----------
         source  :   DataSource
         '''
-        self._model.setDataSource(source)
+        self._runner.run_task(self._model.setDataSource, source)
 
     def on_network_selected(self, network, force_update=False):
-        print(f'Selecting network {network}')
-        self._model.setNetwork(network, force_update)
+        self._runner.run_task(self._model.setNetwork, network, force_update)
 
     def on_open_button_clicked(self, sender=None):
         '''Helper callback for handling the click on the ``Open`` button. Unfortunately, this cannot

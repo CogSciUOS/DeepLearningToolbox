@@ -56,12 +56,6 @@ class QActivationView(QWidget, Observer):
                         A flag indicating if the current QActivationView is
                         currently in convolution mode (True) or not (False).
 
-    _selected       :   PyQt5.QtCore.pyqtSignal
-                        A signal emitted whenever a unit is (de)selected in this
-                        :py:class:``QActivationView``. This will be an int (the index of
-                        the selected unit) or ``None`` (if no unit is selected). We
-                        have to use object not int here to allow for None
-                        values.
     _n_units    :   int
                     Number of units in this view
     '''

@@ -1,12 +1,12 @@
 import numpy as np
 from scipy.misc import imresize
 
-from concurrent.futures import ThreadPoolExecutor, Future
-
 from network import Network
 from network.layers import Layer
 from util import ArgumentError
 from qtgui.datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
+
+
 
 class ModelChange(dict):
     '''
@@ -150,11 +150,12 @@ class Model(object):
         Parameters
         ----------
         info    :   ModelChange
-                    Changes in the model since the last update
+                    Changes in the model since the last update. If ``None``, do not publish update.
 
         '''
-        for o in self._observers:
-            o.modelChanged(self, info)
+        if info:
+            for o in self._observers:
+                o.modelChanged(self, info)
 
     ################################################################################################
     #                           SETTING CURRENTLY VISUALISED PROPERTIES                            #
@@ -181,11 +182,12 @@ class Model(object):
             else:
                 raise ArgumentError(f'Unknown network type {network.__class__}')
             self.setLayer(None)
-            self.notifyObservers(ModelChange(network_changed=True))
+            return ModelChange(network_changed=True, layer_changed=True)
         elif force_update:
             # argh. code smell
             self.setLayer(None)
-            self.notifyObservers(ModelChange(network_changed=True))
+            return ModelChange(network_changed=True, layer_changed=True)
+        return None
 
 
     def id_for_layer(self, layer_str):
@@ -227,9 +229,10 @@ class Model(object):
                 if self._unit:
                     n_units = self._current_activation.shape[-1]
                     self._unit = min(n_units - 1, self._unit)
-                    self.notifyObservers(ModelChange(layer_changed=True, unit_changed=True))
+                    return ModelChange(layer_changed=True, unit_changed=True)
                 else:
-                    self.notifyObservers(ModelChange(layer_changed=True))
+                    return ModelChange(layer_changed=True)
+        return None
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised channel/unit. This should be called when the
@@ -243,7 +246,9 @@ class Model(object):
         n_units = self._current_activation.shape[-1]
         if unit >= 0 and unit < n_units:
             self._unit = unit
-            self.notifyObservers(ModelChange(unit_changed=True))
+            return ModelChange(unit_changed=True)
+
+        return None
 
     def setMode(self, mode: str):
         '''Set the current mode.
@@ -294,6 +299,9 @@ class Model(object):
         ----------
         index   :   int
         '''
+        if self._current_index == index:
+            return None
+
         source = self._sources[self._current_mode]
         if index is None or source is None or len(source) < 1:
             index = None
@@ -311,7 +319,7 @@ class Model(object):
             if self._layer:
                 self._update_activation()
 
-        self.notifyObservers(ModelChange(input_index_changed=True))
+        return ModelChange(input_index_changed=True)
 
     ################################################################################################
     #                                         SETTING DATA                                         #
@@ -327,7 +335,7 @@ class Model(object):
         self._current_mode = mode
         self._sources[mode] = source
         self._setIndex(0)
-        self.notifyObservers(ModelChange(dataset_changed=True))
+        return ModelChange(dataset_changed=True)
 
     def setDataArray(self, data: np.ndarray = None):
         '''Set the data array to be used.
@@ -433,7 +441,7 @@ class Model(object):
         name = 'Network ' + str(self._network_selector.count())
         self._networks[name] = network
         self.setNetwork(network)
-        self.notifyObservers(ModelChange(network_changed=True))
+        return ModelChange(network_changed=True)
 
     ################################################################################################
     #                                          UTILITIES                                           #
