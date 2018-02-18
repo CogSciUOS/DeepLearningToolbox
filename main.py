@@ -17,7 +17,7 @@ from network.keras import Network as KerasNetwork
 from network.torch import Network as TorchNetwork
 
 
-def keras(backend: str, cpu: bool, model: str='models/example_keras_mnist_model.h5') -> KerasNetwork:
+def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_model.h5') -> KerasNetwork:
     '''
     Visualise a Keras-based network
 
@@ -27,8 +27,8 @@ def keras(backend: str, cpu: bool, model: str='models/example_keras_mnist_model.
                     Name of the Keras backend
     cpu         :   bool
                     Whether to use only cpu, not gpu
-    model       :   str
-                    Filename where the model is located (in hdf5)
+    model_file       :   str
+                    Filename where the model_file is located (in hdf5)
 
     Returns
     -------
@@ -52,19 +52,18 @@ def keras(backend: str, cpu: bool, model: str='models/example_keras_mnist_model.
             os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
             os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
             print('Running in CPU-only mode.')
-            import tensorflow as tf
+            import tensorflow as tf     # do not import at the top to avoid expensive loading
             from multiprocessing import cpu_count
             from keras import backend as K
             num_cpus = cpu_count()
             config = tf.ConfigProto(intra_op_parallelism_threads=num_cpus,
                                     inter_op_parallelism_threads=num_cpus,
                                     allow_soft_placement=True,
-                                    device_count={'CPU': num_cpus, 'GPU': 0}
-                                    )
+                                    device_count={'CPU': num_cpus, 'GPU': 0})
             session = tf.Session(config=config)
             K.set_session(session)
         from network.keras_tensorflow import Network as KerasTensorFlowNetwork
-        network = KerasTensorFlowNetwork(model_file=model)
+        network = KerasTensorFlowNetwork(model_file=model_file)
         return network
     elif backend == 'theano':
         # os.environ['KERAS_BACKEND'] = 'theano'
@@ -74,7 +73,7 @@ def keras(backend: str, cpu: bool, model: str='models/example_keras_mnist_model.
         raise RuntimeError('Unknown backend {backend}')
 
 
-def torch(cpu: bool, model: str, net_class: str, parameter_file: str, input_shape: tuple) -> TorchNetwork:
+def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input_shape: tuple) -> TorchNetwork:
     '''
     Visualise a Torch-based network
 
@@ -82,14 +81,14 @@ def torch(cpu: bool, model: str, net_class: str, parameter_file: str, input_shap
     ----------
     cpu         :   bool
                     Whether to use only cpu, not gpu
-    model       :   str
-                    Filename where the model is defined (a Python file with a
+    model_file       :   str
+                    Filename where the model_file is defined (a Python file with a
                     torch.nn.Module sublcass)
     net_class   :   str
-                    Name of the model class (see ``model``)
+                    Name of the model_file class (see ``model_file``)
 
     parameter_file  :   str
-                        Name of the file storing the model weights (pickled
+                        Name of the file storing the model_file weights (pickled
                         torch weights)
     input_shape     :   tuple
                         Shape of the input images
@@ -102,7 +101,7 @@ def torch(cpu: bool, model: str, net_class: str, parameter_file: str, input_shap
     '''
     # TODO Fix errors when running torch network
     from network.torch import Network as TorchNetwork
-    return TorchNetwork(model, parameter_file, net_class=net_class,
+    return TorchNetwork(model_file, parameter_file, net_class=net_class,
                         input_shape=input_shape, use_cuda=not cpu)
 
 
@@ -129,7 +128,7 @@ def main():
     if args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
         backend  = args.framework[dash_idx + 1:]
-        network  = keras(backend, args.cpu, model=args.model)
+        network  = keras(backend, args.cpu, model_file=args.model)
     elif args.framework == 'torch':
         # FIXME[hack]: provide these parameter on the command line ...
         net_file       = 'models/example_torch_mnist_net.py'
@@ -140,16 +139,17 @@ def main():
                         parameter_file, input_shape)
 
     if network:
-        app        = QApplication(sys.argv)
         from model import Model
-        model = Model(network)
+        from qtgui.datasources import DataSet, DataDirectory
+        app        = QApplication(sys.argv)
+        model      = Model(network)
         mainWindow = DeepVisMainWindow(model)
         if args.data:
-            model.setDataFile(args.data)
+            model.setDataSource(DataSet(args.data), synchronous=True)
         elif args.dataset:
-            model.setDataSet(args.dataset)
+            model.setDataSource(DataSet(args.dataset), synchronous=True)
         elif args.datadir:
-            model.setDataDirectory(args.datadir)
+            model.setDataSource(DataDirectory(args.datadir), synchronous=True)
 
         mainWindow.show()
 
