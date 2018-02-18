@@ -7,9 +7,10 @@ This module contains definitions for observer functionality
 '''
 import model
 import controller
+from PyQt5.QtCore import pyqtSignal
 
 class Observer(object):
-    '''Mixin for inheriting observer functionality. An observer registeres itself to a class which
+    '''Mixin for inheriting observer functionality. An observer registers itself to a class which
     notifies its observers in case something changes. Every observer has an associated controller
     object for dispatching changes to the observed object.'''
 
@@ -24,10 +25,10 @@ class Observer(object):
         self._model = kwargs.get('model', None)
 
     def observe(self, obj):
-        '''Add self to observer list of `obj`'''
+        '''Add self to observer list of ``obj``'''
         obj.add_observer(self)
 
-    def modelChanged(self, model : 'model.Model'=None, info : 'model.ModelChange'=None):
+    def modelChanged(self, model: 'model.Model'=None, info: 'model.ModelChange'=None):
         '''Respond to change in the model.
 
         Parameters
@@ -40,7 +41,7 @@ class Observer(object):
         pass
 
     def setController(self, controller : 'controller.NetworkController'):
-        '''Set the controller for this observer. Will trigger observation of the controller\'s
+        '''Set the controller for this observer. Will trigger observation of the controller's
         model
 
         Parameters

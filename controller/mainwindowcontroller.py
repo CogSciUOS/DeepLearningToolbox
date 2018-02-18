@@ -43,8 +43,7 @@ class MainWindowController(object):
         network :   network.Network
                     Newly selected network
         '''
-        self._model._network = network
-        self._model.setChanged()
+        self._model.setNetwork(network)
 
     def _saveState(self):
         '''Callback for saving any application state inb4 quitting.'''

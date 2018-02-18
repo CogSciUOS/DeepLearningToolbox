@@ -11,19 +11,20 @@ from util import ArgumentError
 
 
 class DeepVisMainWindow(QMainWindow):
-    '''The main window of the deep visualization toolbox. The window is
-    intended to hold different panels that allow for different kinds
-    of visualizations.
+    '''The main window of the Deep Visualization Toolbox. The window is intended to hold different
+    panels that allow for different kinds of visualizations.
 
-    This class also provides central entry points to programmatically
-    set certain aspects, like loading a network or input data,
-    switching between different panels, etc.
+    This class also provides central entry points to programmatically set certain aspects, like
+    loading a network or input data, switching between different panels, etc.
 
     Attributes
     ----------
-    _title   :   str
+    _title  :   str
                 Window title
-
+    _controller :   MainWindowController
+                    Controller for this widget
+    _model  :   Model
+                Backing model instance
     '''
 
     def __init__(self, network, data=None, title='QtPyVis'):
@@ -73,7 +74,6 @@ class DeepVisMainWindow(QMainWindow):
         return self._tabs.widget(index)
 
     def _setAppIcon(self):
-        # add an icon
         self.setWindowIcon(QIcon('assets/logo.png'))
 
     def _createMenu(self):
@@ -94,9 +94,8 @@ class DeepVisMainWindow(QMainWindow):
         self._controller.on_exit_clicked()
 
     def initActivationPanel(self):
-        '''Initialiase the actiations panel.
-        This will connect the Input button and the Layer buttons
-        '''
+        '''Initialise the activations panel.  This will connect the Input button and the Layer
+        buttons'''
         self._activations = ActivationsPanel(self._model)
         self._controller.add_child_controller(self._activations,
                                               self._activations._controller)

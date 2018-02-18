@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.misc import imresize
 
+from concurrent.futures import ThreadPoolExecutor, Future
+
 from network import Network
 from network.layers import Layer
 from util import ArgumentError
@@ -10,7 +12,7 @@ class ModelChange(dict):
     '''
     .. :py:class:: ModelChange
 
-    A class whose instancesa are passed to observers  in :py:meth:`observer.Observer.modelChanged`
+    A class whose instances are passed to observers  in :py:meth:``observer.Observer.modelChanged``
     in order to inform them as to the exact nature of the model's change.
 
 
@@ -165,8 +167,8 @@ class Model(object):
         network :   str or int or Network
                     Key for the network
         force_update    :   bool
-                            Force update to be published. This is useful if the current network
-                            passed to the constructor, but not loaded in the gui yet. The gui may
+                            Force update to be published. This is useful if the current network was
+                            passed to the constructor, but not loaded in the GUI yet. The GUI may
                             make sure updates are published by setting this argument.
         '''
         if self._network != network:
@@ -184,6 +186,7 @@ class Model(object):
             # argh. code smell
             self.setLayer(None)
             self.notifyObservers(ModelChange(network_changed=True))
+
 
     def id_for_layer(self, layer_str):
         '''Obtain the numeric id for a given layer identifier.
@@ -230,7 +233,7 @@ class Model(object):
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised channel/unit. This should be called when the
-        user clicks on a unit in the :py:class:`QActivationView`.
+        user clicks on a unit in the :py:class:``QActivationView``.
 
         Parameters
         ----------
@@ -240,8 +243,6 @@ class Model(object):
         n_units = self._current_activation.shape[-1]
         if unit >= 0 and unit < n_units:
             self._unit = unit
-            if self._layer:
-                self._update_activation()
             self.notifyObservers(ModelChange(unit_changed=True))
 
     def setMode(self, mode: str):
@@ -250,7 +251,7 @@ class Model(object):
         Parameters
         ----------
         mode    :   str
-                    the mode (currently either 'array' or 'dir').
+                    the mode (currently either ``array`` or ``dir``).
         '''
         self._current_mode = mode
         if self._current_mode != mode:
@@ -282,7 +283,7 @@ class Model(object):
 
     def _update_activation(self):
         '''Set the :py:attr:`_current_activation` property by loading activations for
-        :py:attr:`_layer` and :py:attr:`_data`'''
+        :py:attr:``_layer`` and :py:attr:``_data``'''
         self._current_activation = self.activations_for_layers([self._layer], self._data)
 
     def _setIndex(self, index=None):

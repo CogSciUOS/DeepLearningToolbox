@@ -25,9 +25,7 @@ class ActivationsController(NetworkController):
                     index of the unit in the layer
 
         '''
-        if self._model._current_activation is None:
-            unit = None
-        elif unit is not None:
+        if self._model._current_activation is not None and unit is not None:
             self._model.setUnit(unit)
 
     def on_key_pressed(self, sender):
@@ -102,4 +100,5 @@ class ActivationsController(NetworkController):
                 source.selectDirectory(sender)
             self.source_selected(source)
         except FileNotFoundError:
+            # TODO: Inform user via GUI
             print('Could not open file.')
