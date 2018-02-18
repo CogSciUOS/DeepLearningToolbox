@@ -39,13 +39,13 @@ class Observer(object):
         '''
         pass
 
-    def setController(self, controller : 'controller.NetworkController'):
+    def setController(self, controller : 'controller.InputController'):
         '''Set the controller for this observer. Will trigger observation of the controller's
         model
 
         Parameters
         ----------
-        controller  :   controller.NetworkController
+        controller  :   controller.InputController
                         Controller for mediating communication with the observer object
         '''
         self._controller = controller
