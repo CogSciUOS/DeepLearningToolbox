@@ -52,8 +52,7 @@ class DataFile(DataArray):
             filters
         )
         if filename is None or not isfile(filename):
-            raise FileNotFoundError('The specified file %s could not be found.' %
-                                    filename)
+            raise FileNotFoundError(f'The specified file "{filename}" could not be found.')
         self.setFile(filename)
 
 

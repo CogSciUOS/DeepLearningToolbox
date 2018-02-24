@@ -29,7 +29,7 @@ class ModelChange(dict):
 	dataset_changed	:	bool
                         Whether the underlying :py:class:``qtgui.datasources.DataSource``
                         has changed
-	mode_changed	:	bool
+	onModeChanged	:	bool
                         Whether the dataset mode changed
     '''
 
@@ -39,7 +39,7 @@ class ModelChange(dict):
         self['unit_changed']        = False
         self['input_index_changed'] = False
         self['dataset_changed']     = False
-        self['mode_changed']        = False
+        self['onModeChanged']        = False
         # set additional properties, if given.
         for k, v in kwargs.items():
             self[k] = v
@@ -64,7 +64,7 @@ class ModelChange(dict):
     def all():
         '''Create a :py:class:``ModelChange`` instance with all properties set to ``True``.'''
         return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
-                           input_index_changed=True, dataset_changed=True, mode_changed=True)
+                           input_index_changed=True, dataset_changed=True, onModeChanged=True)
 
 
 
@@ -132,7 +132,7 @@ class Model(object):
     ################################################################################################
     #                                      OBSERVER HANDLING                                       #
     ################################################################################################
-    def add_observer(self, observer):
+    def addObserver(self, observer):
         '''Add an object to observe this model.
 
         Parameters

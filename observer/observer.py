@@ -25,7 +25,7 @@ class Observer(object):
 
     def observe(self, obj):
         '''Add self to observer list of ``obj``'''
-        obj.add_observer(self)
+        obj.addObserver(self)
 
     def modelChanged(self, model: 'model.Model'=None, info: 'model.ModelChange'=None):
         '''Respond to change in the model.

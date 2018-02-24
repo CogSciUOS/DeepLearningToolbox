@@ -32,7 +32,7 @@ class AsyncRunner(object):
         self._model = model
         self._executor = ThreadPoolExecutor(max_workers=1)
 
-    def run_task(self, fn, *args, **kwargs):
+    def runTask(self, fn, *args, **kwargs):
         '''Schedule the execution of a function. This is equivalent to running::
             fn(*args, **kwargs)
         asynchronously.
@@ -47,9 +47,9 @@ class AsyncRunner(object):
                     keyword args to ``fn``
         '''
         future = self._executor.submit(fn, *args, **kwargs)
-        future.add_done_callback(self.on_completion)
+        future.add_done_callback(self.onCompletion)
 
-    def on_completion(self, result):
+    def onCompletion(self, result):
         '''Callback exectuted on completion of a running task. This method must be implemented.
         By subclasses and - together with any necessary initialisations in  :py:meth:``__init__`` -
         should lead to calling :py:meth:``model.Model.notifyObservers`` on the main thread.
@@ -68,7 +68,7 @@ class QTAsyncRunner(AsyncRunner, QObject):
     ----------
     _completion_signal  :   pyqtSignal
                             Signal emitted once the computation is done. The signal is connected to
-                            :py:meth:``on_completion`` which will be run on the main thread by the
+                            :py:meth:``onCompletion`` which will be run on the main thread by the
                             qt magic.
     '''
 
@@ -80,7 +80,7 @@ class QTAsyncRunner(AsyncRunner, QObject):
         super().__init__(model)
         self._completion_signal.connect(lambda info: model.notifyObservers(info))
 
-    def on_completion(self, future):
+    def onCompletion(self, future):
         '''Emit the sompletion signal to have :py:meth:``model.Model.notifyObservers`` called.'''
         self._completion_signal.emit(future.result())
 
@@ -115,26 +115,26 @@ class InputController(object):
         '''Select a random index into the dataset.'''
         n_elems = len(self._model)
         index = randint(0, n_elems)
-        self._runner.run_task(self._model.editIndex, index)
+        self._runner.runTask(self._model.editIndex, index)
 
     def advance(self):
         '''Advance data index to end.'''
         n_elems = len(self._model)
-        self._runner.run_task(self._model.editIndex, n_elems - 1)
+        self._runner.runTask(self._model.editIndex, n_elems - 1)
 
     def advance_one(self):
         '''Advance data index by one.'''
         current_index = self._model._current_index
-        self._runner.run_task(self._model.editIndex, current_index + 1)
+        self._runner.runTask(self._model.editIndex, current_index + 1)
 
     def rewind(self):
         '''Reset data index to zero.'''
-        self._runner.run_task(self._model.editIndex, 0)
+        self._runner.runTask(self._model.editIndex, 0)
 
     def rewind_one(self):
         '''Rewind data index by one.'''
         current_index = self._model._current_index
-        self._runner.run_task(self._model.editIndex, current_index - 1)
+        self._runner.runTask(self._model.editIndex, current_index - 1)
 
     def editIndex(self, index: int):
         '''Set data index to specified value.
@@ -143,9 +143,9 @@ class InputController(object):
         ----------
         index   :   int
         '''
-        self._runner.run_task(self._model.editIndex, index)
+        self._runner.runTask(self._model.editIndex, index)
 
-    def mode_changed(self, mode: str):
+    def onModeChanged(self, mode: str):
         '''Change the model's data mode.
 
         Parameters
@@ -153,4 +153,4 @@ class InputController(object):
         mode    :   str
                     One of 'dir' or 'array'
         '''
-        self._runner.run_task(self._model.setMode, mode)
+        self._runner.runTask(self._model.setMode, mode)

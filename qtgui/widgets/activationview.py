@@ -117,9 +117,9 @@ class QActivationView(QWidget, Observer):
                     # (width, height, output_channels)
                     activation = activation.transpose([2, 0, 1])
 
-                from util import grayscale_normalized
+                from util import grayscaleNormalized
                 # a contiguous array is important for display with Qt
-                activation = np.ascontiguousarray(grayscale_normalized(activation))
+                activation = np.ascontiguousarray(grayscaleNormalized(activation))
 
             self._unit_activations = activation
 
@@ -327,7 +327,7 @@ class QActivationView(QWidget, Observer):
         event : QMouseEvent
         '''
         unit = self._unitAtPosition(event.pos())
-        self._controller.on_unit_selected(unit, self)
+        self._controller.onUnitSelected(unit, self)
         self._current_unit = unit
 
     def mouseReleaseEvent(self, event):
@@ -370,15 +370,15 @@ class QActivationView(QWidget, Observer):
             row = self._current_unit % self._columns
             col = self._current_unit // self._columns
             if key == Qt.Key_Left:
-                self._controller.on_unit_selected(self._current_unit - 1, self)
+                self._controller.onUnitSelected(self._current_unit - 1, self)
             elif key == Qt.Key_Up:
-                self._controller.on_unit_selected(self._current_unit - self._columns, self)
+                self._controller.onUnitSelected(self._current_unit - self._columns, self)
             elif key == Qt.Key_Right:
-                self._controller.on_unit_selected(self._current_unit + 1, self)
+                self._controller.onUnitSelected(self._current_unit + 1, self)
             elif key == Qt.Key_Down:
-                self._controller.on_unit_selected(self._current_unit + self._columns, self)
+                self._controller.onUnitSelected(self._current_unit + self._columns, self)
             elif key == Qt.Key_Escape:
-                self._controller.on_unit_selected(None, self)
+                self._controller.onUnitSelected(None, self)
             else:
                 event.ignore()
         else:

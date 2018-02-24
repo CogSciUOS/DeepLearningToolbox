@@ -22,7 +22,7 @@ class ActivationsController(InputController):
         '''
         super().__init__(model)
 
-    def on_unit_selected(self, unit: int, sender: PyQt5.QtWidgets.QWidget):
+    def onUnitSelected(self, unit: int, sender: PyQt5.QtWidgets.QWidget):
         '''(De)select a unit in the :py:class:``qtgui.widgets.QActivationView``.
 
         Parameters
@@ -33,9 +33,9 @@ class ActivationsController(InputController):
                     UI element triggering the callback
         '''
         if self._model._current_activation is not None and unit is not None:
-            self._runner.run_task(self._model.setUnit, unit)
+            self._runner.runTask(self._model.setUnit, unit)
 
-    def on_key_pressed(self, sender: PyQt5.QtWidgets.QWidget):
+    def onKeyPressed(self, sender: PyQt5.QtWidgets.QWidget):
         '''Callback for handling keyboard events.
 
         Parameters
@@ -45,7 +45,7 @@ class ActivationsController(InputController):
         '''
         pass
 
-    def set_input_data(self, raw: np.ndarray=None, fitted: np.ndarray=None,
+    def setInputData(self, raw: np.ndarray=None, fitted: np.ndarray=None,
                        description: str=None):
         '''Callback for setting a new input data set.
 
@@ -60,7 +60,7 @@ class ActivationsController(InputController):
         '''
         pass
 
-    def on_layer_selected(self, layer: Union[int, str]):
+    def onLayerSelected(self, layer: Union[int, str]):
         '''Set the active layer.
 
         Parameters
@@ -68,18 +68,18 @@ class ActivationsController(InputController):
         layer   :   int or string
                     The index or the name of the layer to activate.
         '''
-        self._runner.run_task(self._model.setLayer, layer)
+        self._runner.runTask(self._model.setLayer, layer)
 
-    def source_selected(self, source: qtgui.datasources.DataSource):
+    def onSourceSelected(self, source: qtgui.datasources.DataSource):
         '''Set a new :py:class:``qtgui.datasources.DataSource``.
 
         Parameters
         ----------
         source  :   qtgui.datasources.DataSource
         '''
-        self._runner.run_task(self._model.setDataSource, source)
+        self._runner.runTask(self._model.setDataSource, source)
 
-    def on_network_selected(self, network: Network, force_update: bool=False):
+    def onNetworkSelected(self, network: Network, force_update: bool=False):
         '''Callback for selection of a new network.
 
         Parameters
@@ -90,9 +90,9 @@ class ActivationsController(InputController):
                             Cause the model to broadcast an update regardless of whether the state
                             actually changed
         '''
-        self._runner.run_task(self._model.setNetwork, network, force_update)
+        self._runner.runTask(self._model.setNetwork, network, force_update)
 
-    def on_open_button_clicked(self, sender: PyQt5.QtWidgets.QWidget=None):
+    def onOpenButtonClicked(self, sender: PyQt5.QtWidgets.QWidget=None):
         '''Helper callback for handling the click on the ``Open`` button. Unfortunately, this cannot
         be handled directly in the GUI layer since we need to coordinate with the model's current
         mode.
@@ -114,7 +114,7 @@ class ActivationsController(InputController):
                 if not isinstance(source, DataDirectory):
                     source = DataDirectory()
                 source.selectDirectory(sender)
-            self.source_selected(source)
+            self.onSourceSelected(source)
         except FileNotFoundError:
             # TODO: Inform user via GUI
             print('Could not open file.', file=sys.stderr)

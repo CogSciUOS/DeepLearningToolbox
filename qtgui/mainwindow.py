@@ -54,7 +54,7 @@ class DeepVisMainWindow(QMainWindow):
 
     def _createTabWidget(self):
         self._tabs = QTabWidget(self)
-        self._tabs.currentChanged.connect(self._controller.on_panel_selected)
+        self._tabs.currentChanged.connect(self._controller.onPanelSelected)
         self._tabs.addTab(self._activations, 'Activations')
 
     def getTab(self, index: int) -> QWidget:
@@ -84,20 +84,20 @@ class DeepVisMainWindow(QMainWindow):
         exitAction = QAction(QIcon('exit.png'), '&Exit', self)
         exitAction.setShortcuts(['Ctrl+W', 'Ctrl+Q'])
         exitAction.setStatusTip('Exit application')
-        exitAction.triggered.connect(self._controller.on_exit_clicked)
+        exitAction.triggered.connect(self._controller.onExitClicked)
 
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(exitAction)
 
     def closeEvent(self, event):
         '''Callback for x button click.'''
-        self._controller.on_exit_clicked()
+        self._controller.onExitClicked()
 
     def initActivationPanel(self):
         '''Initialise the activations panel.  This will connect the Input button and the Layer
         buttons'''
         self._activations = ActivationsPanel(self._model)
-        self._controller.add_child_controller(self._activations,
+        self._controller.addChildController(self._activations,
                                               self._activations._controller)
 
     def showStatusMessage(self, message):

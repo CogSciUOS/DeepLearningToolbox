@@ -67,7 +67,7 @@ class ActivationsPanel(Panel, Observer):
         def select_net(name):
             '''closure for _network_map and first_call'''
             nonlocal first_call # 'global' does not work, dunno why.
-            controller.on_network_selected(self._network_map[name], first_call)
+            controller.onNetworkSelected(self._network_map[name], first_call)
             first_call = False
 
         self._network_selector.activated[str].connect(select_net)

@@ -12,7 +12,7 @@ class MainWindowController(object):
         '''Create a new controller.'''
         pass
 
-    def on_panel_selected(self, panel : 'qtgui.panels.Panel'):
+    def onPanelSelected(self, panel : 'qtgui.panels.Panel'):
         '''Callback for selecting a new panel in the main window.
 
         Parameters
@@ -22,7 +22,7 @@ class MainWindowController(object):
         '''
         self._panel = panel
 
-    def add_child_controller(self, widget, controller):
+    def addChildController(self, widget, controller):
         '''Add a controller responsible for a subelement.
 
         Parameters
@@ -35,7 +35,7 @@ class MainWindowController(object):
         controller.setParent(self)
         self._children[widget] = controller
 
-    def on_network_selected(self, network):
+    def onNetworkSelected(self, network):
         '''Callback for selecting a new network. (This may be unnecessary)
 
         Parameters
@@ -49,7 +49,7 @@ class MainWindowController(object):
         '''Callback for saving any application state inb4 quitting.'''
         pass
 
-    def on_exit_clicked(self):
+    def onExitClicked(self):
         '''Callback for clicking the exit button. This will save state and then terminate the Qt
         application'''
         from PyQt5.QtCore import QCoreApplication

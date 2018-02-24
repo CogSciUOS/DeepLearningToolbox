@@ -10,7 +10,7 @@ class ArgumentError(ValueError):
     '''Invalid argument exception'''
     pass
 
-def grayscale_normalized(array):
+def grayscaleNormalized(array):
     '''Convert a float array to 8bit grayscale
 
     Parameters

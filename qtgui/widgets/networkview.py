@@ -39,7 +39,7 @@ class QNetworkView(QWidget, Observer):
 
     def layerClicked(self):
         '''Callback for clicking one of the layer buttons.'''
-        self._controller.on_layer_selected(self.sender().text())
+        self._controller.onLayerSelected(self.sender().text())
 
     def modelChanged(self, model, info):
         if info.network_changed or info.layer_changed:
@@ -54,7 +54,7 @@ class QNetworkView(QWidget, Observer):
                     if oldItem is not None:
                         oldItem.widget().setStyleSheet('')
 
-                self._current_selected = model.id_for_layer(layer)
+                self._current_selected = model.idForLayer(layer)
                 # and mark the new layer
                 newItem = self.layout().itemAt(self._current_selected)
                 if newItem is not None:
@@ -85,7 +85,7 @@ class QNetworkView(QWidget, Observer):
 
                 # choose the active layer for the new network
                 # self.setActiveLayer(0)
-                self._controller.on_layer_selected(None)
+                self._controller.onLayerSelected(None)
 
         self.update()
 

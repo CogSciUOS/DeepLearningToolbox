@@ -124,8 +124,8 @@ class QInputSelector(QWidget, observer.Observer):
             'dir': QRadioButton('Directory')
         }
         self._modeButton['array'].clicked.connect(
-            lambda: self._controller.mode_changed('array'))
-        self._modeButton['dir'].clicked.connect(lambda: self._controller.mode_changed('dir'))
+            lambda: self._controller.onModeChanged('array'))
+        self._modeButton['dir'].clicked.connect(lambda: self._controller.onModeChanged('dir'))
 
         self._openButton = QPushButton('Open...')
         self._openButton.clicked.connect(self._openButtonClicked)
@@ -176,7 +176,7 @@ class QInputSelector(QWidget, observer.Observer):
     def _openButtonClicked(self):
         '''An event handler for the 'Open' button. We need to pass this widget as parent in case a
         file must be selected.'''
-        self._controller.on_open_button_clicked(self)
+        self._controller.onOpenButtonClicked(self)
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
