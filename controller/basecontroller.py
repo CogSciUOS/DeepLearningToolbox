@@ -13,7 +13,7 @@ class AsyncRunner(object):
     When working with Qt for instance, it is not possible to update the gui from a non-main thread.
     So we cannot simply run a thread to do expensive computations and have it call
     :py:meth:`model.Model.notifyObservers` since that call would invoke methods on
-    :py:class:`PyQt5.QWidget`s. We would need some way to call back into the main thread, but that
+    :py:class:`PyQt5.QWidget` s. We would need some way to call back into the main thread, but that
     one is busy runnig Qt's main loop so the App can respond to further user action. Qt's way of
     resolving this is with signals. But we do not want to make this a fixed solution since the app
     should be as independent of Qt as possible. I have thus decided that a dedicated runner must be

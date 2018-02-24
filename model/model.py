@@ -62,7 +62,7 @@ class ModelChange(dict):
 
     @staticmethod
     def all():
-        '''Create a :py:class:`ModelChange`` instance with all properties set to ``True`.'''
+        '''Create a :py:class:`ModelChange` instance with all properties set to ``True``.'''
         return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
                            input_index_changed=True, dataset_changed=True, onModeChanged=True)
 
@@ -72,6 +72,8 @@ class Model(object):
     '''.. :py:class:: Model
 
     Model class encompassing network, current activations, and the like.
+
+    Note: Some attributes do not render correctly with Sphinx (feinste bugwaren)
 
     Attributes
     ----------
@@ -301,7 +303,7 @@ class Model(object):
 
     def _update_activation(self):
         '''Set the :py:attr:`_current_activation` property by loading activations for
-        :py:attr:``_layer`` and :py:attr:`_data`'''
+        :py:attr:`_layer` and :py:attr:`_data`'''
         self._current_activation = self.activationsForLayers([self._layer], self._data)
 
     def _setIndex(self, index=None):
