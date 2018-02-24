@@ -12,22 +12,22 @@ class ModelChange(dict):
     '''
     .. :py:class:: ModelChange
 
-    A class whose instances are passed to observers in :py:meth:``observer.Observer.modelChanged``
+    A class whose instances are passed to observers in :py:meth:`observer.Observer.modelChanged`
     in order to inform them as to the exact nature of the model's change.
 
 
     Attributes
     ----------
 	network_changed	:	bool
-                        Whether the underlying :py:class:``network.Network`` has changed
+                        Whether the underlying :py:class:`network.Network` has changed
 	layer_changed	:	bool
-                        Whether the current :py:class:``network.layers.Layer`` has changed
+                        Whether the current :py:class:`network.layers.Layer` has changed
 	unit_changed	:	bool
                         Whether the selected unit changed
 	input_index_changed	:	bool
                             Whether the index into the dataset changed
 	dataset_changed	:	bool
-                        Whether the underlying :py:class:``qtgui.datasources.DataSource``
+                        Whether the underlying :py:class:`qtgui.datasources.DataSource`
                         has changed
 	onModeChanged	:	bool
                         Whether the dataset mode changed
@@ -46,7 +46,7 @@ class ModelChange(dict):
 
     def __getattr__(self, attr):
         '''Override for making dict entries accessible by dot notation. Will raise
-        :py:exc:``ValueError`` for unknown attributes.'''
+        :py:exc:`ValueError` for unknown attributes.'''
         try:
             return self[attr]
         except KeyError:
@@ -54,7 +54,7 @@ class ModelChange(dict):
 
     def __setattr__(self, attr, value):
         '''Override for disallowing addition of arbitrary keys to this dict. Will raise
-        :py:exc:``ValueError`` in case of unknown property.'''
+        :py:exc:`ValueError` in case of unknown property.'''
         if attr not in self:
             raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
         else:
@@ -62,7 +62,7 @@ class ModelChange(dict):
 
     @staticmethod
     def all():
-        '''Create a :py:class:``ModelChange`` instance with all properties set to ``True``.'''
+        '''Create a :py:class:`ModelChange`` instance with all properties set to ``True`.'''
         return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
                            input_index_changed=True, dataset_changed=True, onModeChanged=True)
 
@@ -80,7 +80,7 @@ class Model(object):
     _data   :   np.ndarray
                 Current input data
 	_current_index	:	int
-                        Index of _data in the data set
+                        Index of ``_data`` in the data set
     _layer  :   Layer
                 Currently selected layer
     _unit   :   int
@@ -93,7 +93,7 @@ class Model(object):
                         The current mode: can be ``array`` or ``dir``
     _sources    :   dict
                     The available data sources. A dictionary with mode names as
-                    keys and :py:class:``qtgui.datasources.DataSource`` objects as values.
+                    keys and :py:class:`qtgui.datasources.DataSource` objects as values.
     _current_activation :   np.ndarray
                             The last computed activations
     '''
@@ -139,7 +139,7 @@ class Model(object):
         ----------
         observer    :   object
                         Object which wants to be notified of changes. Must supply a
-                        :py:meth:``observer.modelChanged`` method.
+                        :py:meth:`observer.modelChanged` method.
 
         '''
         self._observers.add(observer)
@@ -242,7 +242,7 @@ class Model(object):
 
     def setUnit(self, unit: int=None):
         '''Change the currently visualised channel/unit. This should be called when the
-        user clicks on a unit in the :py:class:``QActivationView``.
+        user clicks on a unit in the :py:class:`QActivationView`.
 
         Parameters
         ----------
@@ -301,7 +301,7 @@ class Model(object):
 
     def _update_activation(self):
         '''Set the :py:attr:`_current_activation` property by loading activations for
-        :py:attr:``_layer`` and :py:attr:``_data``'''
+        :py:attr:``_layer`` and :py:attr:`_data`'''
         self._current_activation = self.activationsForLayers([self._layer], self._data)
 
     def _setIndex(self, index=None):
@@ -343,7 +343,7 @@ class Model(object):
     #                                         SETTING DATA                                         #
     ################################################################################################
     def setDataSource(self, source: DataSource, synchronous=True):
-        '''Update the :py:class:``DataSource``.
+        '''Update the :py:class:`DataSource`.
 
         Returns
         -------
@@ -512,6 +512,7 @@ class Model(object):
         ----------
         network     :   Network
                         The network to visualise.
+
         '''
         name = None
         for n, net in self._networks.items():

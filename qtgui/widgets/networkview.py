@@ -2,9 +2,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QWidget, QPushButton, QVBoxLayout
 
 from network import Network, Layer, Conv2D
-
 from observer import Observer
-from controller import InputController
 
 
 class QNetworkView(QWidget, Observer):
@@ -13,13 +11,13 @@ class QNetworkView(QWidget, Observer):
 
     Attributes
     ----------
-    _controller :   InputController
+    _controller :   controller.InputController
                     Controller for this UI element
     _current_selected   :   int
                             Layer id of the currently selected layer
     '''
 
-    _controller:   InputController = None
+    _controller:   'controller.InputController' = None
     _current_selected:  int = None
 
     def __init__(self, parent=None):

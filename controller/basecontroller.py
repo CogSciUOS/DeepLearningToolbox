@@ -9,11 +9,11 @@ class AsyncRunner(object):
     '''Base class for runner objects which must be provided for each controller/user interface.
 
     Why is this necessary?
-    -----------------------
+    ----------------------
     When working with Qt for instance, it is not possible to update the gui from a non-main thread.
     So we cannot simply run a thread to do expensive computations and have it call
-    :py:meth:``model.Model.notifyObservers`` since that call would invoke methods on
-    :py:class:``PyQt5.QWidget``s. We would need some way to call back into the main thread, but that
+    :py:meth:`model.Model.notifyObservers` since that call would invoke methods on
+    :py:class:`PyQt5.QWidget`s. We would need some way to call back into the main thread, but that
     one is busy runnig Qt's main loop so the App can respond to further user action. Qt's way of
     resolving this is with signals. But we do not want to make this a fixed solution since the app
     should be as independent of Qt as possible. I have thus decided that a dedicated runner must be
@@ -34,7 +34,9 @@ class AsyncRunner(object):
 
     def runTask(self, fn, *args, **kwargs):
         '''Schedule the execution of a function. This is equivalent to running::
+
             fn(*args, **kwargs)
+
         asynchronously.
 
         Parameters
@@ -51,8 +53,8 @@ class AsyncRunner(object):
 
     def onCompletion(self, result):
         '''Callback exectuted on completion of a running task. This method must be implemented.
-        By subclasses and - together with any necessary initialisations in  :py:meth:``__init__`` -
-        should lead to calling :py:meth:``model.Model.notifyObservers`` on the main thread.
+        By subclasses and - together with any necessary initialisations in  :py:meth:`__init__` -
+        should lead to calling :py:meth:`model.Model.notifyObservers` on the main thread.
 
         Parameters
         ----------
@@ -62,13 +64,13 @@ class AsyncRunner(object):
         raise NotImplementedError('This abstract base class should not be used directly.')
 
 class QTAsyncRunner(AsyncRunner, QObject):
-    ''':py:class:``AsyncRunner`` subclass which knows how to update Qt widgets.
+    ''':py:class:`AsyncRunner` subclass which knows how to update Qt widgets.
 
     Attributes
     ----------
     _completion_signal  :   pyqtSignal
                             Signal emitted once the computation is done. The signal is connected to
-                            :py:meth:``onCompletion`` which will be run on the main thread by the
+                            :py:meth:`onCompletion` which will be run on the main thread by the
                             qt magic.
     '''
 
@@ -76,12 +78,12 @@ class QTAsyncRunner(AsyncRunner, QObject):
     _completion_signal = pyqtSignal(object)
 
     def __init__(self, model):
-        '''Connect a signal to :py:meth:``model.Model.notifyObservers``.'''
+        '''Connect a signal to :py:meth:`model.Model.notifyObservers`.'''
         super().__init__(model)
         self._completion_signal.connect(lambda info: model.notifyObservers(info))
 
     def onCompletion(self, future):
-        '''Emit the sompletion signal to have :py:meth:``model.Model.notifyObservers`` called.'''
+        '''Emit the sompletion signal to have :py:meth:`model.Model.notifyObservers` called.'''
         self._completion_signal.emit(future.result())
 
 

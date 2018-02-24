@@ -20,9 +20,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
-sys.path.insert(0, os.path.abspath('../../qtgui'))
 sys.path.insert(0, os.path.abspath('../../qtgui/'))
-sys.path.insert(0, os.path.abspath('../../qtgui/widgets'))
 sys.path.insert(0, os.path.abspath('../../controller'))
 sys.path.insert(0, os.path.abspath('../../model'))
 sys.path.insert(0, os.path.abspath('../../observer'))
@@ -44,7 +42,8 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages', 'sphinx.ext.napoleon']
+    'sphinx.ext.githubpages',
+    'sphinx.ext.napoleon']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -60,7 +59,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'PyQtVis'
-copyright = '2017, Rüdiger Busche, Petr Byvshev, Rasmus Diederichsen, Ulf Krumnack'
+copyright = '2017-, Osnabrück University'
 author = 'Rüdiger Busche, Petr Byvshev, Rasmus Diederichsen, Ulf Krumnack'
 
 # The version info for the project you're documenting, acts as replacement for

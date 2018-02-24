@@ -20,10 +20,10 @@ controller\.mainwindowcontroller module
     :undoc-members:
     :show-inheritance:
 
-controller\.networkcontroller module
+controller\.basecontroller module
 ------------------------------------
 
-.. automodule:: controller.networkcontroller
+.. automodule:: controller.basecontroller
     :members:
     :undoc-members:
     :show-inheritance:

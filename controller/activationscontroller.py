@@ -10,7 +10,7 @@ from typing import Union
 
 
 class ActivationsController(InputController):
-    '''Controller for :py:class:``qtgui.panels.ActivationsPanel``.
+    '''Controller for :py:class:`qtgui.panels.ActivationsPanel`.
     This class contains callbacks for all kinds of events which are effected by the user in the
     ``ActivationsPanel``.'''
 
@@ -23,7 +23,7 @@ class ActivationsController(InputController):
         super().__init__(model)
 
     def onUnitSelected(self, unit: int, sender: PyQt5.QtWidgets.QWidget):
-        '''(De)select a unit in the :py:class:``qtgui.widgets.QActivationView``.
+        '''(De)select a unit in the :py:class:`qtgui.widgets.QActivationView`.
 
         Parameters
         -----------
@@ -52,7 +52,7 @@ class ActivationsController(InputController):
         Parameters
         ----------
         raw :   np.ndarray
-        Raw input data provided by the :py:class:``qtgui.datasources.DataSource``
+        Raw input data provided by the :py:class:`qtgui.datasources.DataSource`
         fitted  :   np.ndarray
                     Input data fit to the network input layer
         description :   str
@@ -71,7 +71,7 @@ class ActivationsController(InputController):
         self._runner.runTask(self._model.setLayer, layer)
 
     def onSourceSelected(self, source: qtgui.datasources.DataSource):
-        '''Set a new :py:class:``qtgui.datasources.DataSource``.
+        '''Set a new :py:class:`qtgui.datasources.DataSource`.
 
         Parameters
         ----------

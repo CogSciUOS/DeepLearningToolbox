@@ -34,8 +34,7 @@ class Network:
       * pytorch only supports channel first (NCHW)
         http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d
 
-      * pycaffe seems to default to NCHW
-      http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html
+      * pycaffe seems to default to NCHW [http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html]
 
       * theano: ?
 
