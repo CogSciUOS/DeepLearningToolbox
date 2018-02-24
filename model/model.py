@@ -12,25 +12,25 @@ class ModelChange(dict):
     '''
     .. :py:class:: ModelChange
 
-    A class whose instances are passed to observers  in :py:meth:``observer.Observer.modelChanged``
+    A class whose instances are passed to observers in :py:meth:``observer.Observer.modelChanged``
     in order to inform them as to the exact nature of the model's change.
 
 
     Attributes
     ----------
-    network_changed :   bool
-                        Whether the underlying :py:class:`network.Network` has changed
-    layer_changed :   bool
-                    Whether the current :py:class:`network.layers.Layer` has changed
-    unit_changed :   bool
-                    Whether the selected unit changed
-    input_index_changed :   bool
+	network_changed	:	bool
+                        Whether the underlying :py:class:``network.Network`` has changed
+	layer_changed	:	bool
+                        Whether the current :py:class:``network.layers.Layer`` has changed
+	unit_changed	:	bool
+                        Whether the selected unit changed
+	input_index_changed	:	bool
                             Whether the index into the dataset changed
-    dataset_changed :   bool
-                        Whether the underlying :py:class:`qtgui.widgets.inputselector.DataSource`
+	dataset_changed	:	bool
+                        Whether the underlying :py:class:``qtgui.datasources.DataSource``
                         has changed
-    mode_changed :   bool
-                    Whether the dataset mode changed
+	mode_changed	:	bool
+                        Whether the dataset mode changed
     '''
 
     def __init__(self, **kwargs):
@@ -40,12 +40,13 @@ class ModelChange(dict):
         self['input_index_changed'] = False
         self['dataset_changed']     = False
         self['mode_changed']        = False
+        # set additional properties, if given.
         for k, v in kwargs.items():
             self[k] = v
 
     def __getattr__(self, attr):
         '''Override for making dict entries accessible by dot notation. Will raise
-        :py:exc:`ValueError` for unknown attributes.'''
+        :py:exc:``ValueError`` for unknown attributes.'''
         try:
             return self[attr]
         except KeyError:
@@ -53,7 +54,7 @@ class ModelChange(dict):
 
     def __setattr__(self, attr, value):
         '''Override for disallowing addition of arbitrary keys to this dict. Will raise
-        :py:exc:`ValueError` in case of unknown property.'''
+        :py:exc:``ValueError`` in case of unknown property.'''
         if attr not in self:
             raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
         else:
@@ -61,7 +62,7 @@ class ModelChange(dict):
 
     @staticmethod
     def all():
-        '''Create a :py:class:`ModelChange` instance with all properties set to ``True``.'''
+        '''Create a :py:class:``ModelChange`` instance with all properties set to ``True``.'''
         return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
                            input_index_changed=True, dataset_changed=True, mode_changed=True)
 
@@ -78,37 +79,37 @@ class Model(object):
                     Objects observing this class for changes
     _data   :   np.ndarray
                 Current input data
-    _current_index  :   int
-                Index of _data in the data set
+	_current_index	:	int
+                        Index of _data in the data set
     _layer  :   Layer
                 Currently selected layer
     _unit   :   int
                 Currently selected unit in the layer
-    _network    :   Network
-                Currently active network
+	_network	:	Network
+                    Currently active network
     _networks   :   dict
                     All available networks
-    _current_mode   :   str
-                The current mode: can be 'array' or 'dir'
+	_current_mode	:	str
+                        The current mode: can be ``array`` or ``dir``
     _sources    :   dict
                     The available data sources. A dictionary with mode names as
-                    keys and DataSource objects as values.
+                    keys and :py:class:``qtgui.datasources.DataSource`` objects as values.
     _current_activation :   np.ndarray
                             The last computed activations
     '''
-    _observers:     set        = set()
-    _data:          np.ndarray = None
-    _network:       Network    = None
-    _networks:      dict       = {}
-    _layer:         Layer      = None
-    _unit:          Layer      = None
-    _sources:       dict       = {}
-    _current_mode:  str        = None
-    _current_index: int        = None
-    _current_activation: np.ndarray = None
+    _observers:             set        = set()
+    _data:                  np.ndarray = None
+    _network:               Network    = None
+    _networks:              dict       = {}
+    _layer:                 Layer      = None
+    _unit:                  Layer      = None
+    _sources:               dict       = {}
+    _current_mode:          str        = None
+    _current_index:         int        = None
+    _current_activation:    np.ndarray = None
 
     def __init__(self, network: Network):
-        '''Create a new Model instance.
+        '''Create a new ``Model`` instance.
 
         Parameters
         ----------
@@ -124,7 +125,6 @@ class Model(object):
         Returns
         -------
         int
-
         '''
         source = self._sources.get(self._current_mode, None)
         return 0 if source is None else len(source)
@@ -139,12 +139,12 @@ class Model(object):
         ----------
         observer    :   object
                         Object which wants to be notified of changes. Must supply a
-                        :py:meth:``observer.modelChanged(model)`` method.
+                        :py:meth:``observer.modelChanged`` method.
 
         '''
         self._observers.add(observer)
 
-    def notifyObservers(self, info):
+    def notifyObservers(self, info: ModelChange):
         '''Notify all observers that the state of this model has changed.
 
         Parameters
@@ -160,7 +160,7 @@ class Model(object):
     ################################################################################################
     #                           SETTING CURRENTLY VISUALISED PROPERTIES                            #
     ################################################################################################
-    def setNetwork(self, network=None, force_update=False):
+    def setNetwork(self, network=None, force_update: bool=False):
         '''Set the current network. Update will only be published if not already selected.
 
         Parameters
@@ -171,6 +171,11 @@ class Model(object):
                             Force update to be published. This is useful if the current network was
                             passed to the constructor, but not loaded in the GUI yet. The GUI may
                             make sure updates are published by setting this argument.
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
         '''
         if self._network != network:
             if isinstance(network, Network):
@@ -190,37 +195,38 @@ class Model(object):
         return None
 
 
-    def id_for_layer(self, layer_str):
-        '''Obtain the numeric id for a given layer identifier.
+    def idForLayer(self, layer_str: str):
+        '''Obtain the numeric id for a given layer identifier. This operation is linear in the number
+        of layers in the current network.
 
         Parameters
         ----------
         layer_str   :   str
-                        Identifier of the layser
+                        Identifier of the layer
 
         Returns
         -------
         int
             layer index
         '''
-        layer_id = -1
-        for index, label in enumerate(self._network.layer_dict.keys()):
-            if layer_str == label:
-                layer_id = index
+        try:
+            layer_keys = list(self._network.layer_dict.keys())
+            return layer_keys.index(layer_str)
+        except ValueError:
+            raise ValueError(f'Layer for string {layer_str} not found.')
 
-        if layer_id <= -1:
-            raise RuntimeError(f'Layer for string {layer_str} not found.')
-        else:
-            return layer_id
-
-    def setLayer(self, layer=None):
+    def setLayer(self, layer: Layer=None):
         '''Set the current layer to choose units from.
 
         Parameters
         ----------
-        layer       :   network.layers.Layer
-                        Layer instance to display
+	    layer	:	Layer
+                    Layer instance to display
 
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
         '''
         if self._layer != layer:
             self._layer = layer
@@ -242,6 +248,11 @@ class Model(object):
         ----------
         unit    :   int
                     Index of the unit in the layer (0-based)
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
         '''
         n_units = self._current_activation.shape[-1]
         if unit >= 0 and unit < n_units:
@@ -291,7 +302,7 @@ class Model(object):
     def _update_activation(self):
         '''Set the :py:attr:`_current_activation` property by loading activations for
         :py:attr:``_layer`` and :py:attr:``_data``'''
-        self._current_activation = self.activations_for_layers([self._layer], self._data)
+        self._current_activation = self.activationsForLayers([self._layer], self._data)
 
     def _setIndex(self, index=None):
         '''Helper for setting dataset index. Will do nothing if ``index`` is ``None``. This method
@@ -300,6 +311,11 @@ class Model(object):
         Parameters
         ----------
         index   :   int
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
         '''
         if self._current_index == index:
             return None
@@ -327,7 +343,13 @@ class Model(object):
     #                                         SETTING DATA                                         #
     ################################################################################################
     def setDataSource(self, source: DataSource, synchronous=True):
-        '''Update the :py:class:``DataSource``.'''
+        '''Update the :py:class:``DataSource``.
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
+        '''
         if isinstance(source, DataArray):
             mode = 'array'
         elif isinstance(source, DataDirectory):
@@ -445,6 +467,11 @@ class Model(object):
         network     :   network.network.Network
                         A network  (should be of the same class as currently
                         selected ones)
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
         '''
         name = 'Network ' + str(self._network_selector.count())
         self._networks[name] = network
@@ -454,7 +481,7 @@ class Model(object):
     ################################################################################################
     #                                          UTILITIES                                           #
     ################################################################################################
-    def activations_for_layers(self, layers, data):
+    def activationsForLayers(self, layers, data):
         '''Get activations for a set of layers. TODO: Cache results.
 
         Parameters
@@ -477,13 +504,13 @@ class Model(object):
 
         return activations
 
-    def getNetworkName(self, network):
+    def getNetworkName(self, network: Network) -> str:
         '''Get the name of the currently selected network. Note: This runs in
         O(n).
 
         Parameters
         ----------
-        network     :   network.network.Network
+        network     :   Network
                         The network to visualise.
         '''
         name = None
@@ -492,7 +519,7 @@ class Model(object):
                 name = n
         return name
 
-    def get_input(self, index):
+    def getInput(self, index: int) -> np.ndarray:
         '''Obtain input at index.
 
         Parameters
@@ -503,6 +530,5 @@ class Model(object):
         Returns
         -------
         np.ndarray
-
         '''
         return self._sources[self._current_mode][index]

@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import QApplication
 from qtgui.mainwindow import DeepVisMainWindow
 from network.keras import Network as KerasNetwork
 from network.torch import Network as TorchNetwork
+from network import Network
 
 
 def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_model.h5') -> KerasNetwork:
@@ -32,13 +33,13 @@ def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_m
 
     Returns
     -------
-    network.network.Network
-                The concrete network instance to visualise
+    Network
+        The concrete network instance to visualise
 
     Raises
     ------
     RuntimeError
-                In case of unknown backend
+        In case of unknown backend
 
     '''
     # the only way to configure the keras backend appears to be via env vars we
@@ -95,8 +96,8 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input
 
     Returns
     -------
-    network.torch.TorchNetwork
-                The concrete network instance to visualise
+    TorchNetwork
+        The concrete network instance to visualise
 
     '''
     # TODO Fix errors when running torch network
