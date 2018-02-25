@@ -52,7 +52,7 @@ class ActivationsController(InputController):
         Parameters
         ----------
         raw :   np.ndarray
-        Raw input data provided by the :py:class:`qtgui.datasources.DataSource`
+                Raw input data provided by the :py:class:`qtgui.datasources.DataSource`
         fitted  :   np.ndarray
                     Input data fit to the network input layer
         description :   str
@@ -84,7 +84,7 @@ class ActivationsController(InputController):
 
         Parameters
         ----------
-        network :   Network
+        network :   network.network.Network
                     The new network object
         force_update    :   bool
                             Cause the model to broadcast an update regardless of whether the state

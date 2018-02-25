@@ -18,18 +18,18 @@ class ModelChange(dict):
 
     Attributes
     ----------
-	network_changed	:	bool
+    network_changed :   bool
                         Whether the underlying :py:class:`network.Network` has changed
-	layer_changed	:	bool
+    layer_changed   :   bool
                         Whether the current :py:class:`network.layers.Layer` has changed
-	unit_changed	:	bool
+    unit_changed    :   bool
                         Whether the selected unit changed
-	input_index_changed	:	bool
+    input_index_changed :   bool
                             Whether the index into the dataset changed
-	dataset_changed	:	bool
+    dataset_changed :   bool
                         Whether the underlying :py:class:`qtgui.datasources.DataSource`
                         has changed
-	onModeChanged	:	bool
+    onModeChanged   :   bool
                         Whether the dataset mode changed
     '''
 
@@ -45,16 +45,39 @@ class ModelChange(dict):
             self[k] = v
 
     def __getattr__(self, attr):
-        '''Override for making dict entries accessible by dot notation. Will raise
-        :py:exc:`ValueError` for unknown attributes.'''
+        '''Override for making dict entries accessible by dot notation.
+
+        Parameters
+        ----------
+        attr    :   str
+                    Name of the attribute
+
+        Returns
+        -------
+        object
+
+        Raises
+        ------
+        ValueError  :   For unknown attributes.
+        '''
         try:
             return self[attr]
         except KeyError:
             raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
 
     def __setattr__(self, attr, value):
-        '''Override for disallowing addition of arbitrary keys to this dict. Will raise
-        :py:exc:`ValueError` in case of unknown property.'''
+        '''Override for disallowing arbitrary keys in dict.
+
+        Parameters
+        ----------
+        attr    :   str
+                    Name of the attribute
+        value   :   object
+
+        Raises
+        ------
+        ValueError  :   For unknown attributes.
+        '''
         if attr not in self:
             raise ValueError(f'{self.__class__.__name__} has no attribute \'{attr}\'.')
         else:
@@ -73,25 +96,23 @@ class Model(object):
 
     Model class encompassing network, current activations, and the like.
 
-    Note: Some attributes do not render correctly with Sphinx (feinste bugwaren)
-
     Attributes
     ----------
     _observers  :   set
                     Objects observing this class for changes
     _data   :   np.ndarray
                 Current input data
-	_current_index	:	int
+    _current_index  :   int
                         Index of ``_data`` in the data set
     _layer  :   Layer
                 Currently selected layer
     _unit   :   int
                 Currently selected unit in the layer
-	_network	:	Network
+    _network    :   Network
                     Currently active network
     _networks   :   dict
                     All available networks
-	_current_mode	:	str
+    _current_mode   :   str
                         The current mode: can be ``array`` or ``dir``
     _sources    :   dict
                     The available data sources. A dictionary with mode names as
@@ -167,7 +188,7 @@ class Model(object):
 
         Parameters
         ----------
-        network :   str or int or Network
+        network :   str or int or network.network.Network
                     Key for the network
         force_update    :   bool
                             Force update to be published. This is useful if the current network was
@@ -198,8 +219,8 @@ class Model(object):
 
 
     def idForLayer(self, layer_str: str):
-        '''Obtain the numeric id for a given layer identifier. This operation is linear in the number
-        of layers in the current network.
+        '''Obtain the numeric id for a given layer identifier.
+        .. note:: This operation is linear in the number of layers in the current network.
 
         Parameters
         ----------
@@ -222,7 +243,7 @@ class Model(object):
 
         Parameters
         ----------
-	    layer	:	Layer
+        layer   :   Layer
                     Layer instance to display
 
         Returns
@@ -407,8 +428,8 @@ class Model(object):
         - 3 dimensions means a single three-channel image. The channels will
           be repeated thrice to form a three-dimensional input
         - 4 dimensions are only supported insofar as the shape must be
-          (1, A, B, C), meaning the fist dimension is singular and can be
-          dropped. Actual batches are not supported
+          ``(1, A, B, C)``, meaning the fist dimension is singular and can be
+          dropped. Actual batches are not supported.
 
         The input image shape will be adapted for the chosen network by resizing
         the images
@@ -462,12 +483,12 @@ class Model(object):
 
     def addNetwork(self, network):
         '''Add a model to visualise. This will add the network to the list of
-        choices and make it the currently selcted one
+        choices and make it the currently selcted one.
 
         Parameters
         ----------
         network     :   network.network.Network
-                        A network  (should be of the same class as currently
+                        A network (should be of the same class as currently
                         selected ones)
 
         Returns
@@ -484,7 +505,9 @@ class Model(object):
     #                                          UTILITIES                                           #
     ################################################################################################
     def activationsForLayers(self, layers, data):
-        '''Get activations for a set of layers. TODO: Cache results.
+        '''Get activations for a set of layers.
+
+        .. attention:: Results should be cached.
 
         Parameters
         ----------
@@ -507,12 +530,12 @@ class Model(object):
         return activations
 
     def getNetworkName(self, network: Network) -> str:
-        '''Get the name of the currently selected network. Note: This runs in
-        O(n).
+        '''Get the name of the currently selected network.
+        .. note:: This runs in O(n).
 
         Parameters
         ----------
-        network     :   Network
+        network     :   network.network.Network
                         The network to visualise.
 
         '''

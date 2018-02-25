@@ -256,12 +256,11 @@ class QActivationView(QWidget, Observer):
         return unit
 
     def _drawConvolution(self, qp):
-        '''Draw activation values for a convolutional layer in the form of
-        ``QImage``s.
+        '''Draw activation values for a convolutional layer in the form of ``QImage`` s.
 
         Parameters
         ----------
-        qp : QPainter
+        qp  :   QPainter
         '''
         # image size: filter size (or a single pixel per neuron)
         map_height, map_width = self._unit_activations.shape[1:3]

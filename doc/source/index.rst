@@ -7,9 +7,11 @@ Welcome to PyQtVis's documentation!
 ===================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
 
+    user_guide
+    developer_guide
+    modules
 
 
 Indices and tables

@@ -33,7 +33,7 @@ def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_m
 
     Returns
     -------
-    Network
+    network.network.Network
         The concrete network instance to visualise
 
     Raises
@@ -78,19 +78,20 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input
     '''
     Visualise a Torch-based network
 
+    .. error:: Torch network currently don't work.
+
     Parameters
     ----------
     cpu         :   bool
                     Whether to use only cpu, not gpu
-    model_file       :   str
-                    Filename where the model_file is defined (a Python file with a
-                    torch.nn.Module sublcass)
+    model_file  :   str
+                    Filename where the model is defined (a Python file with a
+                    :py:class:`torch.nn.Module` sublcass)
     net_class   :   str
                     Name of the model_file class (see ``model_file``)
 
     parameter_file  :   str
-                        Name of the file storing the model_file weights (pickled
-                        torch weights)
+                        Name of the file storing the model weights (pickled torch weights)
     input_shape     :   tuple
                         Shape of the input images
 
@@ -131,7 +132,7 @@ def main():
         backend  = args.framework[dash_idx + 1:]
         network  = keras(backend, args.cpu, model_file=args.model)
     elif args.framework == 'torch':
-        # FIXME[hack]: provide these parameter on the command line ...
+        # FIXME[hack]: provide these parameters on the command line ...
         net_file       = 'models/example_torch_mnist_net.py'
         net_class      = 'Net'
         parameter_file = 'models/example_torch_mnist_model.pth'

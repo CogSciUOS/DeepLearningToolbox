@@ -22,31 +22,28 @@ from .util import convert_data_format
 class Network:
     """Abstract Network interface for all frameworks.
 
-    The Network API will allow to order the dimensions in data
-    arrays in a way independent of the underlying Network
-    implementation. There seem to be different orderings applied in
-    different frameworks:
+    The Network API will allow to order the dimensions in data arrays in a way independent of the
+    underlying Network implementation. There seem to be different orderings applied in different
+    frameworks:
 
-      * tensorflow default is to use channel last (NHWC)
-        (can be changed to channel first: data_format="NCHW")
-        https://www.tensorflow.org/api_docs/python/tf/nn/conv2d
+      * tensorflow default is to use channel last (``NHWC``)
+        (`can be changed to channel first <https://www.tensorflow.org/api_docs/python/tf/nn/conv2d>`_: ``data_format = "NCHW"``)
 
-      * pytorch only supports channel first (NCHW)
-        http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d
+      * `pytorch only supports channel first <http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d>`_ (``NCHW``)
 
-      * pycaffe seems to default to NCHW [http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html]
+      * `pycaffe seems to default to <http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html>`_ ``NCHW``
 
       * theano: ?
 
     We have decided to use a batch first, channel last ordering, that
-    is "NHWC", i.e, (batch, height, width, channel) as seems to be the
+    is ``NHWC``, i.e, ``(batch, height, width, channel)`` as this seems to be the
     natural ordering for RGB images. However, there may also arguments
-    against this ordering. Rüdiger has mentioned that cuDNN requires
-    channel first data [https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order]
+    against this ordering. Rüdiger has mentioned that cuDNN `requires
+    channel first data <https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order>`_
 
-    FIXME[todo]: it may be more useful to be able to specify the
-    desired order, either globally for a Network, in each method
-    that gets or returns array data.
+    .. note::
+        It may be more useful to be able to specify the desired order, either globally for a
+        Network, in each method that gets or returns array data.
 
     """
 
@@ -74,7 +71,7 @@ class Network:
 
 
     def __getitem__(self, item):
-        """Provide access to the layers by number. Access by id is provided via `layer_dict`."""
+        """Provide access to the layers by number. Access by id is provided via :py:attr:`layer_dict`."""
         return tuple(self.layer_dict.values())[item]
 
 

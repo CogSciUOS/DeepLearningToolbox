@@ -15,13 +15,14 @@ from PyQt5.QtWidgets import QWidget, QScrollBar, QHBoxLayout
 
 
 class QConnectionView(QWidget):
+
     def __init__(self, parent=None):
-        '''Initialization of the QMatrixView.
+        '''Initialization of the :py:class:`QConnectionView`.
 
         Parameters
         ----------
-        parent : QWidget
-            The parent argument is sent to the QWidget constructor.
+        parent  :   QWidget
+                    The parent argument is sent to the QWidget constructor.
         '''
         super().__init__(parent)
 
