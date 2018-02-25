@@ -1,0 +1,3 @@
+Notes for the developer
+=======================
+

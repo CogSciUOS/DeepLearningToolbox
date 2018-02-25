@@ -2,91 +2,96 @@ import numpy as np
 from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush
+from PyQt5.QtGui import QImage, QPainter, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
+
+from observer import Observer
 
 # FIXME[todo]: add docstrings!
 
-class QImageView(QWidget):
-    '''An experimental class to display images using the QPixmap
+
+class QImageView(QWidget, Observer):
+    '''An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.
+
+    Attributes
+    ----------
+    _image  :   QImage
+                The image to display
+    _overlay    :   QImage
+                    Overlay for displaying on top of the image
     '''
 
-    image : QImage = None
+    _image: QImage = None
 
-    activationMask : QImage = None
+    _overlay: QImage = None
 
     def __init__(self, parent):
         super().__init__(parent)
-        #self.setScaledContents(True)
-        # an alternative may be to call
-        #     pixmap.scaled(self.size(), Qt.KeepAspectRatio)
-        # in the myplot method.
         self._imageRect = None
 
-    def setImage(self, image : np.ndarray):
-        self.image = image
+    def setImage(self, image: np.ndarray):
         if image is not None:
-            # To construct a 8-bit monochrome QImage, we need a
+            # To construct an 8-bit monochrome QImage, we need a
             # 2-dimensional, uint8 numpy array
             if image.ndim == 4:
                 image = image[0]
 
-            format = QImage.Format_Grayscale8
-            byter_per_line = image.shape[1]
+            img_format = QImage.Format_Grayscale8
+            bytes_per_line = image.shape[1]
+
             if image.ndim == 3:
+                # three channels -> probably rgb
                 if image.shape[2] == 3:
-                    format = QImage.Format_RGB888
-                    byter_per_line *= 3
+                    img_format = QImage.Format_RGB888
+                    bytes_per_line *= 3
                 else:
-                    image = image[:,:,0]
+                    image = image[:, :, 0]
 
             if image.dtype != np.uint8:
-                image = (image*255).astype(np.uint8)
+                image = (image * 255).astype(np.uint8)
             image = np.copy(image)
 
-            self.image = QImage(image,
-                                image.shape[1], image.shape[0],
-                                byter_per_line, format)
+            self._image = QImage(image,
+                                 image.shape[1], image.shape[0],
+                                 bytes_per_line, img_format)
         else:
-            self.image = None
+            self._image = None
 
         self.update()
 
-
-    def setActivationMask(self, mask, position = None):
+    def setActivationMask(self, mask):
         '''Set an (activation) mask to be displayed on top of
-        the actual image. The mask should be
+        the actual image.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         mask : numpy.ndarray
 
         '''
-        mask = imresize(mask, (self.image.height(), self.image.width()),
-                                interp='nearest')
         if mask is None:
-            self.activationMask = None
+            self._overlay = None
         else:
-            self.activationMask = QImage(mask.shape[1], mask.shape[0],
-                                         QImage.Format_ARGB32)
-            self.activationMask.fill(Qt.red)
+            mask = imresize(mask, (self._image.height(), self._image.width()),
+                                    interp='nearest')
+            self._overlay = QImage(mask.shape[1], mask.shape[0],
+                                   QImage.Format_ARGB32)
+            self._overlay.fill(Qt.red)
 
             alpha = QImage(mask, mask.shape[1], mask.shape[0],
                            mask.shape[1], QImage.Format_Alpha8)
-            painter = QPainter(self.activationMask)
+            painter = QPainter(self._overlay)
             painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-            painter.drawImage(QPoint(),alpha)
+            painter.drawImage(QPoint(), alpha)
             painter.end()
         self.update()
-
 
     def paintEvent(self, event):
         '''Process the paint event by repainting this Widget.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QPaintEvent
         '''
         painter = QPainter()
@@ -95,82 +100,47 @@ class QImageView(QWidget):
         self._drawMask(painter)
         painter.end()
 
+    def _drawImage(self, painter: QPainter):
+        '''Draw current image into this ``QImageView``.
 
-    def _drawImage(self, painter : QPainter):
-        if self.image is not None:
-            w = self.image.width()
-            h = self.image.height()
-            if False:
-                # Scale to full size
-                painter.drawImage(self.rect(),self.image)
-
-            elif True:
-                # scale maximally while maintaining aspect ratio
-                w_ratio = self.width()/w
-                h_ratio = self.height()/h
-                ratio = min(w_ratio, h_ratio)
-                rect = QRect((self.width()-w*ratio)//2,
-                             (self.height()-h*ratio)//2,
-                             w*ratio,h*ratio)
-                self._imageRect = rect
-                painter.drawImage(rect, self.image)
-
-            elif False:
-                # Original image size
-                x = (self.width()-self.image.width()) // 2
-                y = (self.height()-self.image.height()) // 2
-                painter.drawImage(x,y,self.image)
-
-
-    def _drawMask(self, painter : QPainter):
-        '''Display the given image. Image is supposed to be a numpy array.
+        Parameters
+        ----------
+        painter :   QPainter
         '''
-        if self.image is not None and self.activationMask is not None:
-            # __import__('ipdb').set_trace()
-            # scale_width = self.width() / self.image.width()
-            # scale_height = self.height() / self.image.height()
-            # delta = (self.image.size() - self.activationMask.size())/2
-            # target = QRect(delta.width()*scale_width,
-            #                delta.height()*scale_height,
-            #                self.activationMask.width()*scale_width,
-            #                self.activationMask.height()*scale_height)
+        if self._image is not None:
+            w = self._image.width()
+            h = self._image.height()
+            # scale maximally while maintaining aspect ratio
+            w_ratio = self.width() / w
+            h_ratio = self.height() / h
+            ratio = min(w_ratio, h_ratio)
+            # the rect is created such that it is centered on the current widget
+            # pane both horizontally and vertically
+            self._imageRect = QRect((self.width() - w * ratio) // 2,
+                                    (self.height() - h * ratio) // 2,
+                                    w * ratio, h * ratio)
+            painter.drawImage(self._imageRect, self._image)
 
-            #source = QRect(QPoint(),self.activationMask.size())
-            painter.drawImage(self._imageRect, self.activationMask)
+    def _drawMask(self, painter: QPainter):
+        '''Display the given image.
 
-
-
-###
-### FIXME: OLD
-###
-
-
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-
-# FIXME[todo]: add docstrings!
-
-class QImageViewMatplotlib(FigureCanvas):
-    '''A simple class to display an image, using a MatPlotLib figure.
-    '''
-
-    def __init__(self, parent=None, width=9, height=9, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
-        self.axes.axis('off')
-
-        FigureCanvas.__init__(self, fig)
-        self.setParent(parent)
-
-        FigureCanvas.setSizePolicy(self,
-                QSizePolicy.Expanding,
-                QSizePolicy.Expanding)
-        FigureCanvas.updateGeometry(self)
-        self.draw()
-
-
-    def myplot(self, image, map = 'gray'):
-        '''Plot the given image.
+        Parameters
+        ----------
+        painter :   QPainter
         '''
-        self.axes.imshow(image, cmap = map)
-        self.draw()
+        if self._image is not None and self._overlay is not None:
+            painter.drawImage(self._imageRect, self._overlay)
+
+    def modelChanged(self, model, info):
+        from util import grayscaleNormalized
+        all_activations = model._current_activation
+        unit = model._unit
+        # skip if dense layer
+        if info.input_index_changed:
+            current_input = model.getInput(model._current_index)
+            self.setImage(current_input.data)
+        if all_activations is not None and unit is not None and all_activations.ndim > 1:
+            activation_mask_f = all_activations[..., unit]
+            # PROBLEM: Mask not propberly updated
+            activation_mask = np.ascontiguousarray(grayscaleNormalized(activation_mask_f), np.uint8)
+            self.setActivationMask(activation_mask)

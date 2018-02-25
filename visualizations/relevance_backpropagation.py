@@ -1,4 +1,4 @@
-from network.network import BaseNetwork
+from network.network import Network as BaseNetwork
 import numpy as np
 
 class RelevanceBackpropagation:

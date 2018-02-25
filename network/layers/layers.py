@@ -46,6 +46,7 @@ class NeuralLayer(Layer):
     @property
     def weights(self) -> np.ndarray:
         raise NotImplementedError
+
     @property
     def bias(self) -> np.ndarray:
         raise NotImplementedError
@@ -69,7 +70,7 @@ class StridingLayer(Layer):
 
     @property
     def padding(self) -> str:
-        """The padding stragety used for striding operations.
+        """The padding strategy used for striding operations.
 
         Returns
         -------

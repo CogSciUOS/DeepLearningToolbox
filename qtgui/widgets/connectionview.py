@@ -14,15 +14,15 @@ from PyQt5.QtWidgets import QWidget, QScrollBar, QHBoxLayout
 # FIXME[todo]: add docstrings!
 
 
-
 class QConnectionView(QWidget):
-    def __init__(self, parent = None):
-        '''Initialization of the QMatrixView.
 
-        Arguments
-        ---------
-        parent : QWidget
-            The parent argument is sent to the QWidget constructor.
+    def __init__(self, parent=None):
+        '''Initialization of the :py:class:`QConnectionView`.
+
+        Parameters
+        ----------
+        parent  :   QWidget
+                    The parent argument is sent to the QWidget constructor.
         '''
         super().__init__(parent)
 
@@ -32,7 +32,7 @@ class QConnectionView(QWidget):
         self._inputScrollBar.setValue(0)
 
         self._connections = QConnectionDisplay()
-        
+
         self._outputScrollBar = QScrollBar(Qt.Vertical)
         self._outputScrollBar.setFocusPolicy(Qt.StrongFocus)
         self._outputScrollBar.setMaximum(0)
@@ -45,10 +45,11 @@ class QConnectionView(QWidget):
 
         self.setLayout(layout)
 
-        self._inputScrollBar.valueChanged.connect(self._connections.setInputOffset)
+        self._inputScrollBar.valueChanged.connect(
+            self._connections.setInputOffset)
 
-    def setActivation(self, input : np.ndarray, output : np.ndarray) -> None:
-        self._connections.setActivation(input,output)
+    def setActivation(self, input: np.ndarray, output: np.ndarray) -> None:
+        self._connections.setActivation(input, output)
         self._inputScrollBar.setMaximum(max(self._connections.getInputHeight()
                                             - self._connections.height(), 0))
         self._inputScrollBar.setValue(self._connections.getInputOffset())
@@ -57,41 +58,38 @@ class QConnectionView(QWidget):
 
 class QConnectionDisplay(QWidget):
 
-    connections : np.ndarray = None
-    
-    _input : np.ndarray = None
+    connections: np.ndarray = None
 
-    _output : np.ndarray = None
+    _input: np.ndarray = None
 
+    _output: np.ndarray = None
 
-    selectedInput : int = None
+    selectedInput: int = None
 
-    selectedOutput : int = None
+    selectedOutput: int = None
 
-    _inputOffset : int = 0
-    _outputOffset : int = 0
+    _inputOffset: int = 0
+    _outputOffset: int = 0
 
-    _inputOrder : list
+    _inputOrder: list
 
-    _outputOrder : list
+    _outputOrder: list
 
-    
-    padding : int = 2
+    padding: int = 2
     """Padding between the individual units in a layer."""
-    
+
     selected = pyqtSignal(object)
     """A signal emitted whenever a unit is (de)selected in this
     QConnectionDisplay. This will be an int (the index of the selected
     unit) or None (if no unit is selected). [We have to use object not
     int here to allow for None values.]
     """
-    
 
-    def __init__(self, parent = None):
+    def __init__(self, parent=None):
         '''Initialization of the QMatrixView.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         matrix : numpy.ndarray
             The matrix to be displayed in this QMatrixView.
         parent : QWidget
@@ -106,24 +104,22 @@ class QConnectionDisplay(QWidget):
         # get focus by "Tab" key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-
-    def setActivation(self, input : np.ndarray, output : np.ndarray) -> None:
+    def setActivation(self, input: np.ndarray, output: np.ndarray) -> None:
         """Set the activations to be displayed in this QConnectionDisplay.
         Currently there are two possible types of activations that are
         supported by this widget: 1D, and 2D convolutional.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         activation:
             Either a 1D or a 3D array. The latter one will be displayed
             in the convolutional mode.
         """
 
-
         activation = input
         old_shape = None if activation is None else activation.shape
         if activation is not None:
-            self.isConvolution = (len(activation.shape)>2)
+            self.isConvolution = (len(activation.shape) > 2)
 
             # normalization (values should be between 0 and 1)
             min_value = activation.min()
@@ -131,7 +127,7 @@ class QConnectionDisplay(QWidget):
             value_range = max_value - min_value
             activation = (activation - min_value)
             if value_range > 0:
-                activation = activation/value_range
+                activation = activation / value_range
 
             # check the shape
             if self.isConvolution:
@@ -146,7 +142,7 @@ class QConnectionDisplay(QWidget):
                     activation = activation.squeeze(axis=0)
                 # (width, height, output_channels)
                 #  to (output_channels, width, height)
-                activation = activation.transpose([2,0,1])
+                activation = activation.transpose([2, 0, 1])
                 #self.activation = np.swapaxes(self.activation,0,3)
             else:
                 if len(activation.shape) == 2:
@@ -157,15 +153,15 @@ class QConnectionDisplay(QWidget):
 
             # change dtype to uint8
             # FIXME[hack]:
-            self._input = np.ascontiguousarray(activation*255, np.uint8)
-            self._output = np.ascontiguousarray(activation*255, np.uint8)
+            self._input = np.ascontiguousarray(activation * 255, np.uint8)
+            self._output = np.ascontiguousarray(activation * 255, np.uint8)
 
-        ## unset selected entry if shape changed
+        # unset selected entry if shape changed
         if self._input is None or old_shape != self._input.shape:
             self.selectUnit()
         else:
             self.selected.emit(self.selectedUnit)
-            
+
         self._computeGeometry()
         self.update()
 
@@ -182,8 +178,7 @@ class QConnectionDisplay(QWidget):
             self._inputOffset = offset
             self.update()
 
-
-    def selectUnit(self, unit = None, input = True):
+    def selectUnit(self, unit=None, input=True):
         if self._input is None:
             unit = None
         elif unit is not None and (unit < 0 or unit >= self._input.shape[0]):
@@ -193,8 +188,7 @@ class QConnectionDisplay(QWidget):
             self.selected.emit(self.selectedUnit)
             self.update()
 
-
-    def getUnitActivation(self, unit = None, input = True) -> np.ndarray:
+    def getUnitActivation(self, unit=None, input=True) -> np.ndarray:
         """Get the activation mask for a given unit.
         """
         if unit is None:
@@ -202,7 +196,6 @@ class QConnectionDisplay(QWidget):
         if self._input is None or unit is None or not self.isConvolution:
             return None
         return self._input[unit]
-
 
     def _computeGeometry(self):
         if self._input is None:
@@ -216,11 +209,11 @@ class QConnectionDisplay(QWidget):
             # For fully connected (i.e., dense) layers, the axes are:
             # (batch_size, units)
             # In both cases, batch_size should be 1!
-            self.isConvolution = (len(self._input.shape)>2)
+            self.isConvolution = (len(self._input.shape) > 2)
             n = self._input.shape[0]
             if self.isConvolution:
                 # unitRatio = width/height
-                unitRatio = self._input.shape[1]/self._input.shape[2]
+                unitRatio = self._input.shape[1] / self._input.shape[2]
             else:
                 unitRatio = 1
 
@@ -233,28 +226,26 @@ class QConnectionDisplay(QWidget):
             # unitSize = w*h
             unitSize = (self.width() * self.height()) / n
 
-            unitHeight = math.floor(math.sqrt(unitSize/unitRatio))
-            rows = math.ceil(self.height()/unitHeight)
-            unitHeight = math.floor(self.height()/rows)
+            unitHeight = math.floor(math.sqrt(unitSize / unitRatio))
+            rows = math.ceil(self.height() / unitHeight)
+            unitHeight = math.floor(self.height() / rows)
 
             unitWidth = math.floor(unitRatio * unitHeight)
-            columns = math.ceil(self.width()/unitWidth)
-            unitWidth = math.floor(self.width()/columns)
+            columns = math.ceil(self.width() / unitWidth)
+            unitWidth = math.floor(self.width() / columns)
 
             self._inputUnitWidth = unitWidth
             self._inputUnitHeight = unitHeight
             self._outputUnitWidth = unitWidth
-            self._outputUnitHeight = unitHeight 
+            self._outputUnitHeight = unitHeight
 
         self.update()
-
-
 
     def paintEvent(self, event):
         '''Process the paint event by repainting this Widget.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QPaintEvent
         '''
         qp = QPainter()
@@ -270,18 +261,17 @@ class QConnectionDisplay(QWidget):
 
         qp.end()
 
-
-    def _getUnitRect(self, input : bool, unit : int, padding : int = None):
+    def _getUnitRect(self, input: bool, unit: int, padding: int = None):
         '''Get the rectangle (screen position and size) occupied by the given
         unit.
 
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         unit : index of the unit of interest
         left
             A flag indicating if the unit indicates an input (True,
-            left side) or an outupt (False, right side).            
+            left side) or an outupt (False, right side).
         padding: padding of the unit.
             If None is given, standard padding value of this QActivationView
             will be use.
@@ -293,21 +283,20 @@ class QConnectionDisplay(QWidget):
             rect = QRect(padding,
                          self._inputUnitHeight * unit
                          + padding - self._inputOffset,
-                         self._inputUnitWidth - 2*padding,
-                         self._inputUnitHeight - 2*padding)
+                         self._inputUnitWidth - 2 * padding,
+                         self._inputUnitHeight - 2 * padding)
         else:
             rect = QRect(self.width() - self._outputUnitWidth + padding,
                          self._outputUnitHeight * unit + padding,
-                         self._outputUnitWidth - 2*padding,
-                         self._outputUnitHeight - 2*padding)
+                         self._outputUnitWidth - 2 * padding,
+                         self._outputUnitHeight - 2 * padding)
         return rect
 
-
-    def _unitAtPosition(self, position : QPoint):
+    def _unitAtPosition(self, position: QPoint):
         '''Compute the entry corresponding to some point in this widget.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         position
             The position of the point in question (in Widget coordinates).
 
@@ -322,35 +311,33 @@ class QConnectionDisplay(QWidget):
         unit = None
 
         # FIXME[todo]
-        #unit = ((position.y() // self.unitHeight) * self.columns +
+        # unit = ((position.y() // self.unitHeight) * self.columns +
         #        (position.x() // self.unitWidth))
-        #if unit >= self.activation.shape[0]:
+        # if unit >= self.activation.shape[0]:
         #    unit = None
         return unit
 
-
-    
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         qp : QPainter
         '''
-        
-        r2 = self._getUnitRect(False,0)
+
+        r2 = self._getUnitRect(False, 0)
         p2 = r2.center()
         p2.setX(r2.left())
         pen_width = 4
         pen_color = Qt.red
         pen = QPen(pen_color)
         pen.setWidth(pen_width)
-        
+
         map_width, map_height = self._input.shape[1:3]
         for unit in range(self._input.shape[0]):
-            rect = self._getUnitRect(True,unit)
+            rect = self._getUnitRect(True, unit)
             if ((rect.top() + self._inputUnitHeight >= 0) and
-                (rect.top() < self.height())):
+                    (rect.top() < self.height())):
                 image = QImage(self._input[unit],
                                map_width, map_height,
                                map_width,
@@ -361,7 +348,7 @@ class QConnectionDisplay(QWidget):
                 p1.setX(rect.right())
 
                 qp.setPen(pen)
-                qp.drawLine(p1,p2)
+                qp.drawLine(p1, p2)
 
         map_width, map_height = self._output.shape[1:3]
         for unit in range(self._output.shape[0]):
@@ -369,25 +356,22 @@ class QConnectionDisplay(QWidget):
                            map_width, map_height,
                            map_width,
                            QImage.Format_Grayscale8)
-            qp.drawImage(self._getUnitRect(False,unit), image)
-
-
+            qp.drawImage(self._getUnitRect(False, unit), image)
 
     def _drawDense(self, qp):
         '''Draw activation values for a dense layer.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         qp : QPainter
         '''
         for unit, value in enumerate(self._input):
-            qp.fillRect(self._getUnitRect(True,unit),
-                        QBrush(QColor(value,value,value)))
+            qp.fillRect(self._getUnitRect(True, unit),
+                        QBrush(QColor(value, value, value)))
 
         for unit, value in enumerate(self._output):
-            qp.fillRect(self._getUnitRect(False,unit),
-                        QBrush(QColor(value,value,value)))
-
+            qp.fillRect(self._getUnitRect(False, unit),
+                        QBrush(QColor(value, value, value)))
 
     def _drawSelection(self, qp):
 
@@ -396,25 +380,23 @@ class QConnectionDisplay(QWidget):
         pen = QPen(pen_color)
         pen.setWidth(pen_width)
         qp.setPen(pen)
-        qp.drawRect(self._getUnitRect(self.selectedUnit,0))
-
+        qp.drawRect(self._getUnitRect(self.selectedUnit, 0))
 
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         qp : QPainter
         '''
         qp.drawText(self.rect(), Qt.AlignCenter, "No data!")
-
 
     def resizeEvent(self, event):
         '''Adapt to a change in size. The behavior dependes on the zoom
         policy.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QResizeEvent
 
         '''
@@ -422,21 +404,19 @@ class QConnectionDisplay(QWidget):
         # providing the new .size() and the old .oldSize().
         self._computeGeometry()
 
-
     def mousePressEvent(self, event):
         '''Process mouse event.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QMouseEvent
         '''
         self.selectUnit(self._unitAtPosition(event.pos()))
 
-
     def mouseReleaseEvent(self, event):
         '''Process mouse event.
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QMouseEvent
         '''
         # As we implement .mouseDoubleClickEvent(), we
@@ -448,19 +428,18 @@ class QConnectionDisplay(QWidget):
         '''Process a double click. We use double click to select a
         matrix entry.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QMouseEvent
         '''
         self.selectUnit(self._unitAtPosition(event.pos()))
-
 
     def keyPressEvent(self, event):
         '''Process special keys for this widget.
         Allow moving selected entry using the cursor key.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         event : QKeyEvent
         '''
         key = event.key()
@@ -470,9 +449,11 @@ class QConnectionDisplay(QWidget):
         # Arrow keyes will move the selected entry
         elif self.selectedUnit is not None:
             if key == Qt.Key_Up:
-                self.selectUnit(self.selectedUnit-1) # FIXME[todo]: input/output
+                # FIXME[todo]: input/output
+                self.selectUnit(self.selectedUnit - 1)
             elif key == Qt.Key_Down:
-                self.selectUnit(self.selectedUnit+1) # FIXME[todo]: input/output
+                # FIXME[todo]: input/output
+                self.selectUnit(self.selectedUnit + 1)
             elif key == Qt.Key_Escape:
                 self.selectUnit(None)
             else:

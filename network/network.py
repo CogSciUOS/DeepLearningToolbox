@@ -16,36 +16,34 @@ from .util import convert_data_format
 #     - GPU usage
 #
 #  * provide some information on the layer
+#
 
 
 class Network:
-    """Abstract loaded_network interface for all frameworks.
+    """Abstract Network interface for all frameworks.
 
-    The loaded_network API will allow for to order the dimensions in data
-    arrays in a way independent of the underlying loaded_network
-    implementation. There seem to be different orderings applied in
-    different frameworks:
-    
-      * tensorflow default is to use channel last ("NHWC")
-        (can be changed to channel first: data_format="NCHW")
-        https://www.tensorflow.org/api_docs/python/tf/nn/conv2d
+    The Network API will allow to order the dimensions in data arrays in a way independent of the
+    underlying Network implementation. There seem to be different orderings applied in different
+    frameworks:
 
-      * pytorch only supports channel first (N,C,H,W)
-        http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d
+      * tensorflow default is to use channel last (``NHWC``)
+        (`can be changed to channel first <https://www.tensorflow.org/api_docs/python/tf/nn/conv2d>`_: ``data_format = "NCHW"``)
 
-      * pycaffe: ?
-    
+      * `pytorch only supports channel first <http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d>`_ (``NCHW``)
+
+      * `pycaffe seems to default to <http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html>`_ ``NCHW``
+
       * theano: ?
-    
-    We have decided to use a batch first, channel last ordering, that
-    is "NHWC", i.e, (batch, height, width, channel) as seems to be the
-    natural ordering for RGB images. However, there may also arguments
-    against this ordering. Ruediger has mentioned that cuDNN requires
-    channel first data [https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order]
 
-    FIXME[todo]: it may be more useful to be able to specify the
-    desired order, either globally for a loaded_network, at in each method
-    that gets or returns array data.
+    We have decided to use a batch first, channel last ordering, that
+    is ``NHWC``, i.e, ``(batch, height, width, channel)`` as this seems to be the
+    natural ordering for RGB images. However, there may also arguments
+    against this ordering. Rüdiger has mentioned that cuDNN `requires
+    channel first data <https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order>`_
+
+    .. note::
+        It may be more useful to be able to specify the desired order, either globally for a
+        Network, in each method that gets or returns array data.
 
     """
 
@@ -73,7 +71,7 @@ class Network:
 
 
     def __getitem__(self, item):
-        """Provide access to the layers by number. Access by id is provided via `layer_dict`."""
+        """Provide access to the layers by number. Access by id is provided via :py:attr:`layer_dict`."""
         return tuple(self.layer_dict.values())[item]
 
 
@@ -82,13 +80,13 @@ class Network:
                         data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
-        
+
         Parameters
         ----------
         layer_ids
             The layers the activations should be fetched for. Single
             layer_id or list of layer_ids.
-        input_samples       
+        input_samples
              For multi-channel, two-dimensional data, we expect the
              input data to be given in with channel last, that is
              (N,H,W,C). For plain data of dimensionality D we expect
@@ -289,8 +287,8 @@ class Network:
         This method is intended to be used to determine the actual
         layer shapes for networks, that do not provide this
         information.
-        
-        Arguments
+
+        Parameters
         ---------
         input_shape:
             The shape of an input sample. May or may not include batch (B)

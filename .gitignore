@@ -21,6 +21,17 @@ core
 
 # I think this is for one of my linters
 .ropeproject/
- 
+
 # I think this is for one of my linters
 .cache/
+
+# do not accidentally check in vim temp files
+*.swp
+doc/build/
+
+ # nfs files
+.fuse_hidden*
+.ipynb_checkpoints
+
+.DS_Store
+.pytest_cache/

@@ -481,6 +481,7 @@ class Network(BaseNetwork):
     def get_activations(self, layer_ids, input_samples: np.ndarray) -> list:
         """Gives activations values of the network/model
         for a given layername and an input (inputsample).
+
         Parameters
         ----------
         layer_ids: The layer(s) the activations should be fetched for,
@@ -492,6 +493,7 @@ class Network(BaseNetwork):
 
         Returns
         -------
+        np.ndarray
 
         """
         ## We need to know the network input shape to get a cannonical

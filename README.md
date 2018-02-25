@@ -14,7 +14,7 @@ Functionality
 =============
 
 Example of a network visualization that classifies different shapes
-![screenshot](docs/example.png)
+![screenshot](doc/source/_static/example.png)
 
 The main window consists of activation maps for selected layer, the input and the structure of a network where the layers of interest can be chosen
 
@@ -49,3 +49,21 @@ Then run the PyTorch MNIST example, tpye
 Testing
 =======
 Run `$ pytest` to execute all tests.
+
+Documentation
+=======
+
+Building
+--------
+In order to build the Sphinx documentation, `cd` into the `doc` directory and
+run `make html`. Then open `build/html/index.html`. __Note__: Sphinx executes
+all found modules, which can exhibit side-effects. For instance, loading
+TensorFlow takes a lot of time, and so building the documentation does as well.
+
+Adding files
+--------
+When adding a new python file, run ``sphinx-apidoc <folder> -o doc/source`` to
+generate an `.rst` file indexing the modules. When the apidoc tool finds modules
+it has already created indexes for, it will complain that those already exist.
+It may be neccessary to delete them and regenerate them if you add a submodule,
+I'm not currently sure.
