@@ -60,9 +60,9 @@ class Network:
         """
         # Prohibited instantiation of base class.
         if self.__class__ == Network:
-            raise NotImplementedError
+            raise NotImplementedError('Abstract base class Network cannot be used directl.')
 
-        # Every loaded_network should now which data format it is using. Default is channels_last.
+        # Every loaded_network should know which data format it is using. Default is channels_last.
         data_format = kwargs.get('data_format', 'channels_last')
         self._data_format = data_format
 
@@ -661,3 +661,4 @@ class Network:
         """
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
+

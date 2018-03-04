@@ -111,12 +111,9 @@ class Model(object):
     _network    :   Network
                     Currently active network
     _networks   :   dict
-                    All available networks
-    _current_mode   :   str
-                        The current mode: can be ``array`` or ``dir``
-    _sources    :   dict
-                    The available data sources. A dictionary with mode names as
-                    keys and :py:class:`qtgui.datasources.DataSource` objects as values.
+                    All available networks. TODO: Move this out of the model
+    _current_source     :    DataSource
+                            The current :py:class:`qtgui.datasources.DataSource`
     _current_activation :   np.ndarray
                             The last computed activations
     '''
@@ -127,9 +124,9 @@ class Model(object):
     _layer:                 Layer      = None
     _unit:                  Layer      = None
     _sources:               dict       = {}
-    _current_mode:          str        = None
     _current_index:         int        = None
     _current_activation:    np.ndarray = None
+    _current_source:        DataSource = None
 
     def __init__(self, network: Network):
         '''Create a new ``Model`` instance.
@@ -149,7 +146,7 @@ class Model(object):
         -------
         int
         '''
-        source = self._sources.get(self._current_mode, None)
+        source = self._current_source
         return 0 if source is None else len(source)
 
     ################################################################################################
@@ -284,24 +281,6 @@ class Model(object):
 
         return None
 
-    def setMode(self, mode: str):
-        '''Set the current mode.
-
-        Parameters
-        ----------
-        mode    :   str
-                    the mode (currently either ``array`` or ``dir``).
-        '''
-        self._current_mode = mode
-        if self._current_mode != mode:
-            self._current_mode = mode
-
-            source = self._sources.get(mode)
-            n_elems = len(source or [])
-
-            self._current_index = None
-            self._setIndex(0 if n_elems > 0 else None)
-
     def editIndex(self, index):
         '''Set the current dataset index. Index is left unchanged if out of range.
 
@@ -343,7 +322,7 @@ class Model(object):
         if self._current_index == index:
             return None
 
-        source = self._sources[self._current_mode]
+        source = self._current_source
         if index is None or source is None or len(source) < 1:
             index = None
         elif index < 0:
@@ -355,8 +334,7 @@ class Model(object):
         if not source or index is None:
             self._data, _info = None, None
         else:
-            self._data, _info = source[index]
-            self.setInputData(source[index].data)
+            self._setInputData(source[index].data)
             if self._layer:
                 self._update_activation()
 
@@ -373,14 +351,7 @@ class Model(object):
         ModelChange
             Change notification for the task runner to handle.
         '''
-        if isinstance(source, DataArray):
-            mode = 'array'
-        elif isinstance(source, DataDirectory):
-            mode = 'dir'
-        else:
-            raise ArgumentError(f'Unknown source {source}')
-        self._current_mode = mode
-        self._sources[mode] = source
+        self._current_source = source
         self._setIndex(0)
 
         change = ModelChange(dataset_changed=True, input_index_changed=True)
@@ -390,7 +361,7 @@ class Model(object):
             self.notifyObservers(change)
 
 
-    def setDataArray(self, data: np.ndarray = None):
+    def setDataArray(self, data: np.ndarray=None):
         '''Set the data array to be used.
 
         Parameters
@@ -405,7 +376,7 @@ class Model(object):
         '''Set the data file to be used.'''
         self.setDataSource(DataFile(filename))
 
-    def setDataDirectory(self, dirname: str = None):
+    def setDataDirectory(self, dirname: str=None):
         '''Set the directory to be used for loading data.'''
         self.setDataSource(DataDirectory(dirname))
 
@@ -420,7 +391,7 @@ class Model(object):
         '''
         self.setDataSource(DataSet(name))
 
-    def setInputData(self, data: np.ndarray=None, description: str=None):
+    def _setInputData(self, data: np.ndarray=None, description: str=None):
         '''Provide one data vector as input for the network.
         The input data must have 2, 3, or 4 dimensions.
 
@@ -465,6 +436,7 @@ class Model(object):
 
             if data.shape[0:2] != network_shape[0:2]:
                 # Image does not fit into network -> resize
+                # TODO: Replace with ShapeAdaptor
                 data = imresize(data, network_shape[0:2])
 
             if data.shape[2] != network_shape[2]:
@@ -557,4 +529,4 @@ class Model(object):
         -------
         np.ndarray
         '''
-        return self._sources[self._current_mode][index]
+        return self._current_source[index]

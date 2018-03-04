@@ -1,8 +1,7 @@
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
-from PyQt5.QtWidgets import QWidget, QPushButton, QRadioButton, QLineEdit
-from PyQt5.QtWidgets import QLabel, QGroupBox
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
+from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QLineEdit, QLabel, QGroupBox,
+                             QHBoxLayout, QVBoxLayout, QSizePolicy, QInputDialog, QComboBox)
 
 import observer
 import numpy as np
@@ -47,7 +46,7 @@ class QInputSelector(QWidget, observer.Observer):
         super().setController(controller)
 
     def modelChanged(self, model, info):
-        source = model._sources[model._current_mode]
+        source = model._current_source
         if isinstance(source, DataArray):
             info = (source.getFile()
                     if isinstance(source, DataFile)
@@ -57,9 +56,9 @@ class QInputSelector(QWidget, observer.Observer):
             if len(info) > 40:
                 info = info[0:info.find('/', 10) + 1] + \
                     '...' + info[info.rfind('/', 0, -20):]
-            self._modeButton['array'].setText('Array: ' + info)
+            self._radioButtons['Name'].setText('Name: ' + info)
         elif isinstance(source, DataDirectory):
-            self._modeButton['dir'].setText('Directory: ' +
+            self._radioButtons['Filesystem'].setText('File: ' +
                                             source.getDirectory())
         ############################################################################################
         #                              Disable buttons, if necessary                               #
@@ -79,8 +78,8 @@ class QInputSelector(QWidget, observer.Observer):
             self._indexField.setValidator(QIntValidator(0, n_elems))
             self._indexField.setText(str(model._current_index))
 
-        mode = model._current_mode
-        self._modeButton[mode].setChecked(True)
+        # mode = model._current_mode
+        # self._modeButton[mode].setChecked(True)
 
     def _newNavigationButton(self, label: str, icon: str=None):
         button = QPushButton()
@@ -119,24 +118,24 @@ class QInputSelector(QWidget, observer.Observer):
         self.infoLabel.setSizePolicy(
             QSizePolicy.Maximum, QSizePolicy.Expanding)
 
-        self._modeButton = {
-            'array': QRadioButton('Array'),
-            'dir': QRadioButton('Directory')
+        self._radioButtons = {
+            'Name': QRadioButton('Name'),
+            'Filesystem': QRadioButton('Filesystem')
         }
-        self._modeButton['array'].clicked.connect(
-            lambda: self._controller.onModeChanged('array'))
-        self._modeButton['dir'].clicked.connect(lambda: self._controller.onModeChanged('dir'))
+        # self._modeButton['array'].clicked.connect(
+        #     lambda: self._controller.onModeChanged('array'))
+        # self._modeButton['dir'].clicked.connect(lambda: self._controller.onModeChanged('dir'))
 
         self._openButton = QPushButton('Open...')
         self._openButton.clicked.connect(self._openButtonClicked)
         self._openButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         sourceBox = QGroupBox('Data sources')
-        modeLayout = QVBoxLayout()
-        modeLayout.addWidget(self._modeButton['array'])
-        modeLayout.addWidget(self._modeButton['dir'])
+        radioLayout = QVBoxLayout()
+        radioLayout.addWidget(self._radioButtons['Name'])
+        radioLayout.addWidget(self._radioButtons['Filesystem'])
         sourceLayout = QHBoxLayout()
-        sourceLayout.addLayout(modeLayout)
+        sourceLayout.addLayout(radioLayout)
         sourceLayout.addWidget(self._openButton)
         sourceBox.setLayout(sourceLayout)
 
@@ -174,9 +173,31 @@ class QInputSelector(QWidget, observer.Observer):
             self._controller.random()
 
     def _openButtonClicked(self):
-        '''An event handler for the 'Open' button. We need to pass this widget as parent in case a
-        file must be selected.'''
-        self._controller.onOpenButtonClicked(self)
+        '''An event handler for the ``Open`` button.'''
+        mode = None
+        if self._radioButtons['Name'].isChecked():
+            mode = 'Name'
+            # name, success = QInputDialog.getText(self, 'Select a dataset', 'Name')
+            dataset_names = QInputSelector.getKerasDatasets()
+            # TODO: Somehow create a modal dropdown so the user can only choose permissible values
+            name = ModalComboBox(dataset_names)  # god i wish
+            from importlib import import_module
+            dataset = import_module(f'keras.datasets.{name}')
+        elif self._radioButtons['Filesystem'].isChecked():
+            mode = 'Filesystem'
+            # TODO: call selectFile and convert to DataFile or DataDirectory
+        # self._controller.onOpenButtonClicked(self)
+
+
+    @staticmethod
+    def getKerasDatasets():
+        from keras import datasets
+        from types import ModuleType
+        dataset_names = set(key for key in dir(datasets)
+                            if type(getattr(datasets, key)) == ModuleType)
+        return dataset_names
+
+
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel

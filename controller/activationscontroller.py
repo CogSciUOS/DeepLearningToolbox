@@ -104,7 +104,6 @@ class ActivationsController(InputController):
         '''
         from qtgui.widgets.inputselector import DataDirectory, DataFile
         try:
-            source = self._model._current_source
             mode = self._model._current_mode
             if mode == 'array':
                 if not isinstance(source, DataFile):

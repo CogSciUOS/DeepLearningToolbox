@@ -1,6 +1,7 @@
 from qtgui.datasources import DataArray
 
 class DataSet(DataArray):
+    '''Data source for Keras builtin datasets'''
 
     def __init__(self, name: str = None):
         super().__init__()

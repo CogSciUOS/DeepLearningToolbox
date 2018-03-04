@@ -147,13 +147,3 @@ class InputController(object):
         index   :   int
         '''
         self._runner.runTask(self._model.editIndex, index)
-
-    def onModeChanged(self, mode: str):
-        '''Change the model's data mode.
-
-        Parameters
-        ----------
-        mode    :   str
-                    One of ``dir`` or ``array``
-        '''
-        self._runner.runTask(self._model.setMode, mode)

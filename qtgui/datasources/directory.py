@@ -68,7 +68,7 @@ class DataDirectory(DataSource):
     def selectDirectory(self, parent: QWidget=None):
         dirname = QFileDialog.getExistingDirectory(parent, 'Select Directory')
         if not dirname or not isdir(dirname):
-            raise FileNotFoundError('%s is not a directory.' % dirname)
+            raise FileNotFoundError(f'{dirname} is not a directory.')
         else:
             self.setDirectory(dirname)
 

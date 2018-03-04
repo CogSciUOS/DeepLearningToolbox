@@ -4,7 +4,7 @@ InputData = namedtuple('Data', ['data', 'name'])
 
 class DataSource:
     '''An abstract base class for different types of data sources.  The
-    individual elements of a data source can be accessed using an array like
+    individual elements of a data source can be accessed using an array-like
     notation.
 
     Attributes
