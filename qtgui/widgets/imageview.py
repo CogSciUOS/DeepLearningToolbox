@@ -144,3 +144,5 @@ class QImageView(QWidget, Observer):
             # PROBLEM: Mask not propberly updated
             activation_mask = np.ascontiguousarray(grayscaleNormalized(activation_mask_f), np.uint8)
             self.setActivationMask(activation_mask)
+        else:
+            self.setActivationMask(None)
