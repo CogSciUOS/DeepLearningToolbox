@@ -253,8 +253,9 @@ class Model(object):
             if self._data is not None and layer:
                 self._update_activation()
                 if self._unit:
-                    n_units = self._current_activation.shape[-1]
-                    self._unit = min(n_units - 1, self._unit)
+                    #n_units = self._current_activation.shape[-1]
+                    #self._unit = min(n_units - 1, self._unit)
+                    self._unit = None
                     return ModelChange(layer_changed=True, unit_changed=True)
                 else:
                     return ModelChange(layer_changed=True)
