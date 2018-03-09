@@ -1,12 +1,13 @@
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
 from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QLineEdit, QLabel, QGroupBox,
-                             QHBoxLayout, QVBoxLayout, QSizePolicy, QInputDialog, QComboBox)
+                             QHBoxLayout, QVBoxLayout, QSizePolicy, QInputDialog, QComboBox,
+                             QFileDialog, QListView, QAbstractItemView, QTreeView)
 
 import observer
 import numpy as np
 
-from qtgui.datasources import DataArray, DataFile, DataDirectory
+from qtgui.datasources import DataArray, DataFile, DataDirectory, DataSet
 
 class QInputSelector(QWidget, observer.Observer):
     '''A Widget to select input data (probably images).  There are
@@ -20,6 +21,8 @@ class QInputSelector(QWidget, observer.Observer):
 
     ATTENTION: this mode concept may be changed in future versions! It
     seems more plausible to just maintain a list of data sources.
+
+    .. warning:: This docstring must be changed once the mode concept is thrown overboard
 
     Attributes
     ----------
@@ -47,19 +50,19 @@ class QInputSelector(QWidget, observer.Observer):
 
     def modelChanged(self, model, info):
         source = model._current_source
-        if isinstance(source, DataArray):
-            info = (source.getFile()
-                    if isinstance(source, DataFile)
-                    else source.getDescription())
-            if info is None:
-                info = ''
-            if len(info) > 40:
-                info = info[0:info.find('/', 10) + 1] + \
-                    '...' + info[info.rfind('/', 0, -20):]
-            self._radioButtons['Name'].setText('Name: ' + info)
-        elif isinstance(source, DataDirectory):
-            self._radioButtons['Filesystem'].setText('File: ' +
-                                            source.getDirectory())
+        # if isinstance(source, DataArray):
+        #     info = (source.getFile()
+        #             if isinstance(source, DataFile)
+        #             else source.getDescription())
+        #     if info is None:
+        #         info = ''
+        #     if len(info) > 40:
+        #         info = info[0:info.find('/', 10) + 1] + \
+        #             '...' + info[info.rfind('/', 0, -20):]
+        #     self._radioButtons['Name'].setText('Name: ' + info)
+        # elif isinstance(source, DataDirectory):
+        #     self._radioButtons['Filesystem'].setText('File: ' +
+        #                                     source.getDirectory())
         ############################################################################################
         #                              Disable buttons, if necessary                               #
         ############################################################################################
@@ -126,9 +129,19 @@ class QInputSelector(QWidget, observer.Observer):
         #     lambda: self._controller.onModeChanged('array'))
         # self._modeButton['dir'].clicked.connect(lambda: self._controller.onModeChanged('dir'))
 
-        self._openButton = QPushButton('Open...')
+        self._openButton = QPushButton('Open')
         self._openButton.clicked.connect(self._openButtonClicked)
         self._openButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        self._datasetDropdown = QComboBox()
+        size_policy = self._datasetDropdown.sizePolicy()
+        size_policy.setRetainSizeWhenHidden(True)
+        self._datasetDropdown.setSizePolicy(size_policy)
+        dataset_names = DataSet.getKerasDatasets()
+        self._datasetDropdown.addItems(dataset_names)
+        self._datasetDropdown.setEnabled(False)
+        self._radioButtons['Name'].clicked.connect(self._radioButtonChecked)
+        self._radioButtons['Filesystem'].clicked.connect(self._radioButtonChecked)
 
         sourceBox = QGroupBox('Data sources')
         radioLayout = QVBoxLayout()
@@ -136,6 +149,7 @@ class QInputSelector(QWidget, observer.Observer):
         radioLayout.addWidget(self._radioButtons['Filesystem'])
         sourceLayout = QHBoxLayout()
         sourceLayout.addLayout(radioLayout)
+        radioLayout.addWidget(self._datasetDropdown)
         sourceLayout.addWidget(self._openButton)
         sourceBox.setLayout(sourceLayout)
 
@@ -159,6 +173,16 @@ class QInputSelector(QWidget, observer.Observer):
         '''Event handler for the edit field.'''
         self._controller.editIndex(text)
 
+    def _radioButtonChecked(self):
+        '''Callback for clicking the radio buttons.'''
+        name = self.sender().text()
+        if name == 'Name':
+            self._datasetDropdown.setEnabled(True)
+            self._openButton.setText('Load')
+        elif name == 'Filesystem':
+            self._datasetDropdown.setEnabled(False)
+            self._openButton.setText('Open')
+
     def _navigationButtonClicked(self):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
         if self.sender() == self.firstButton:
@@ -176,27 +200,30 @@ class QInputSelector(QWidget, observer.Observer):
         '''An event handler for the ``Open`` button.'''
         mode = None
         if self._radioButtons['Name'].isChecked():
-            mode = 'Name'
-            # name, success = QInputDialog.getText(self, 'Select a dataset', 'Name')
-            dataset_names = QInputSelector.getKerasDatasets()
-            # TODO: Somehow create a modal dropdown so the user can only choose permissible values
-            name = ModalComboBox(dataset_names)  # god i wish
-            from importlib import import_module
-            dataset = import_module(f'keras.datasets.{name}')
+            self._datasetDropdown.setVisible(True)
+            name = self._datasetDropdown.currentText()
+            dataset = DataSet(name)
         elif self._radioButtons['Filesystem'].isChecked():
             mode = 'Filesystem'
-            # TODO: call selectFile and convert to DataFile or DataDirectory
-        # self._controller.onOpenButtonClicked(self)
-
-
-    @staticmethod
-    def getKerasDatasets():
-        from keras import datasets
-        from types import ModuleType
-        dataset_names = set(key for key in dir(datasets)
-                            if type(getattr(datasets, key)) == ModuleType)
-        return dataset_names
-
+            # CAUTION: I've converted the C++ from here
+            # http://www.qtcentre.org/threads/43841-QFileDialog-to-select-files-AND-folders
+            # to Python. I'm pretty sure this makes use of implemention details of the QFileDialog
+            # and is thus susceptible to sudden breakage on version change. It's retarded that there
+            # is no way for the file dialog to accept either files or directories at the same time
+            # so this is necessary.
+            # UPDATE: It appears setting the selection mode is unnecessary if only single selection
+            # is desired. The key insight appears to be using the non-native file dialog
+            dialog = QFileDialog(self)
+            dialog.setFileMode(QFileDialog.Directory)
+            dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+            nMode = dialog.exec_()
+            fname = dialog.selectedFiles()[0]
+            import os
+            if os.path.isdir(fname):
+                dataset = DataDirectory(fname)
+            else:
+                dataset = DataFile(fname)
+        self._controller.onSourceSelected(dataset)
 
 
 

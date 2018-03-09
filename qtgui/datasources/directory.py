@@ -22,7 +22,7 @@ class DataDirectory(DataSource):
     _dirname: str = None
     _filenames: list = None
 
-    def __init__(self, dirname: str=None):
+    def __init__(self, dirname: str):
         '''Create a new DataDirectory
 
         Parameters
@@ -64,13 +64,3 @@ class DataDirectory(DataSource):
         if not self._filenames:
             return 0
         return len(self._filenames)
-
-    def selectDirectory(self, parent: QWidget=None):
-        dirname = QFileDialog.getExistingDirectory(parent, 'Select Directory')
-        if not dirname or not isdir(dirname):
-            raise FileNotFoundError(f'{dirname} is not a directory.')
-        else:
-            self.setDirectory(dirname)
-
-
-

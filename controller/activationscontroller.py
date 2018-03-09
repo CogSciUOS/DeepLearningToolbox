@@ -91,29 +91,3 @@ class ActivationsController(InputController):
                             actually changed
         '''
         self._runner.runTask(self._model.setNetwork, network, force_update)
-
-    def onOpenButtonClicked(self, sender: PyQt5.QtWidgets.QWidget=None):
-        '''Helper callback for handling the click on the ``Open`` button. Unfortunately, this cannot
-        be handled directly in the GUI layer since we need to coordinate with the model's current
-        mode.
-
-        Parameters
-        ----------
-        sender  :   PyQt5.QtWidgets.QWidget
-                    GUI element receiving the click.
-        '''
-        from qtgui.widgets.inputselector import DataDirectory, DataFile
-        try:
-            mode = self._model._current_mode
-            if mode == 'array':
-                if not isinstance(source, DataFile):
-                    source = DataFile()
-                source.selectFile(sender)
-            elif mode == 'dir':
-                if not isinstance(source, DataDirectory):
-                    source = DataDirectory()
-                source.selectDirectory(sender)
-            self.onSourceSelected(source)
-        except FileNotFoundError:
-            # TODO: Inform user via GUI
-            print('Could not open file.', file=sys.stderr)

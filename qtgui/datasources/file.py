@@ -15,7 +15,7 @@ class DataFile(DataArray):
 
     _filename: str = None
 
-    def __init__(self, filename: str=None):
+    def __init__(self, filename: str):
         '''Create a new data file.
 
         Parameters
@@ -42,18 +42,3 @@ class DataFile(DataArray):
     def getFile(self) -> str:
         '''Get the underlying file name'''
         return self._filename
-
-    def selectFile(self, parent: QWidget=None):
-        filters = 'Numpy Array (*.npy);; All Files (*)'
-        filename, _ = QFileDialog.getOpenFileName(
-            parent,
-            'Select input data archive',
-            self._filename,
-            filters
-        )
-        if filename is None or not isfile(filename):
-            raise FileNotFoundError(f'The specified file "{filename}" could not be found.')
-        self.setFile(filename)
-
-
-
