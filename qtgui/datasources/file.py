@@ -42,3 +42,6 @@ class DataFile(DataArray):
     def getFile(self) -> str:
         '''Get the underlying file name'''
         return self._filename
+
+    def __str__(self):
+        return f'<DataFile "{self._filename}"'

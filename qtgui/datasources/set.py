@@ -25,8 +25,5 @@ class DataSet(DataArray):
         dataset_names = ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']
         return dataset_names
 
-
-
-
-
-
+    def __str__(self):
+        return f'<DataSet "{self._name}"'

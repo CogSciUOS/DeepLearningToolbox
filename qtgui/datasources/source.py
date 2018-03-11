@@ -36,6 +36,3 @@ class DataSource:
     def getDescription(self) -> str:
         '''Get the description for this DataSource'''
         return self._description
-
-
-

@@ -65,3 +65,6 @@ class DataDirectory(DataSource):
         if not self._filenames:
             return 0
         return len(self._filenames)
+
+    def __str__(self):
+        return f'<DataDirectory "{self._dirname}"'

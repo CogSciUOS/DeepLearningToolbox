@@ -52,5 +52,5 @@ class DataArray(DataSource):
             return 0
         return len(self._array)
 
-
-
+    def __str__(self):
+        return f'<DataArray "{self._array.shape}"'
