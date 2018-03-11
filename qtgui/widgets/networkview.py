@@ -33,7 +33,20 @@ class QNetworkView(QWidget, Observer):
 
     def initUI(self) -> None:
         '''Initialize the user interface.'''
-        self.setLayout(QVBoxLayout())
+        self._info_layout = QVBoxLayout()
+        self._layer_layout = QVBoxLayout()
+        self._network_info = QNetworkInfoBox(self)
+        self._layer_buttons = []
+        self._network_info.setMinimumWidth(300)
+        self._info_layout.addWidget(self._network_info)
+        layout = QVBoxLayout()
+        layout.addLayout(self._layer_layout)
+        layout.addLayout(self._info_layout)
+        self.setLayout(layout)
+
+    def setController(self, controller):
+        super().setController(controller)
+        self._network_info.setController(self._controller)
 
     def layerClicked(self):
         '''Callback for clicking one of the layer buttons.'''
@@ -48,35 +61,36 @@ class QNetworkView(QWidget, Observer):
             if layer:
                 # unmark the previously active layer
                 if self._current_selected is not None:
-                    oldItem = self.layout().itemAt(self._current_selected)
-                    if oldItem is not None:
-                        oldItem.widget().setStyleSheet('')
+                    if self._current_selected is not None:
+                        oldItem = self._layer_buttons[self._current_selected]
+                        oldItem.setStyleSheet('')
 
                 self._current_selected = model.idForLayer(layer)
-                # and mark the new layer
-                newItem = self.layout().itemAt(self._current_selected)
-                if newItem is not None:
-                    newItem.widget().setStyleSheet('background-color: red')
+                if self._current_selected is not None:
+                    # and mark the new layer
+                    newItem = self._layer_buttons[self._current_selected]
+                    if newItem is not None:
+                        newItem.setStyleSheet('background-color: red')
 
         if info.network_changed:
             ###############################
             #  Respond to network change  #
             ###############################
-            layout = self.layout()
+            layout = self._layer_layout
             network = model._network
             if network:
                 # remove the old network buttons
                 # FIXME[todo]: (still not sure what is the correct way to do:
                 # widget.deleteLater(), widget.close(), widget.setParent(None), or
                 # layout.removeWidget(widget) + widget.setParent(None))
-                while layout.count():
-                    item = layout.takeAt(0)
-                    if item.widget():
-                        item.widget().deleteLater()
+                for button in self._layer_buttons:
+                    button.deleteLater()
+                self._layer_buttons = []
 
                 # a column of buttons to select the network layer
                 for name in network.layer_dict.keys():
                     button = QPushButton(name, self)
+                    self._layer_buttons.append(button)
                     layout.addWidget(button)
                     button.resize(button.sizeHint())
                     button.clicked.connect(self.layerClicked)
@@ -112,33 +126,29 @@ class QNetworkInfoBox(QLabel, Observer):
         network_text = ''
         layer_text = ''
         if info.network_changed:
+            if not network:
+                return
             ############################################################################################
             #                                  Set Network info text                                   #
             ############################################################################################
             network_text = '<b>Network info:</b> '
-            if not network:
-                network_text += 'No network selected'
-            else:
-                network_name = type(network).__name__
-                network_text += 'FIXME[todo]: obtain network information ...'
-                network_text += f'<br>\n<b>class:</b> {network_name}'
+            network_name = type(network).__name__
+            network_text += 'FIXME[todo]: obtain network information ...'
+            network_text += f'<br>\n<b>class:</b> {network_name}'
 
         if info.network_changed or info.layer_changed:
             ############################################################################################
             #                                   Set Layer info text                                    #
             ############################################################################################
-            layer = network.layer_dict[model._layer]
             if not network:
-                layer_text = ''
-            else:
+                return
+            if model._layer:
+                layer = network.layer_dict[model._layer]
                 layer_text = '<br>\n<br>\n'
                 layer_text += '<b>Layer info:</b><br>\n'
 
-                if not layer:
-                    layer_text += 'No layer selected'
-                else:
-                    layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val) for key, val in
-                                           layer.info.items())
-                    layer_text += layer_info
+                layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val) for key, val in
+                                       layer.info.items())
+                layer_text += layer_info
 
         self.setText(network_text + layer_text)
