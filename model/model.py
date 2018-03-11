@@ -29,8 +29,6 @@ class ModelChange(dict):
     dataset_changed :   bool
                         Whether the underlying :py:class:`qtgui.datasources.DataSource`
                         has changed
-    onModeChanged   :   bool
-                        Whether the dataset mode changed
     '''
 
     def __init__(self, **kwargs):
@@ -39,7 +37,6 @@ class ModelChange(dict):
         self['unit_changed']        = False
         self['input_index_changed'] = False
         self['dataset_changed']     = False
-        self['onModeChanged']        = False
         # set additional properties, if given.
         for k, v in kwargs.items():
             self[k] = v
@@ -87,7 +84,7 @@ class ModelChange(dict):
     def all():
         '''Create a :py:class:`ModelChange` instance with all properties set to ``True``.'''
         return ModelChange(network_changed=True, layer_changed=True, unit_changed=True,
-                           input_index_changed=True, dataset_changed=True, onModeChanged=True)
+                           input_index_changed=True, dataset_changed=True)
 
 
 
@@ -253,8 +250,6 @@ class Model(object):
             if self._data is not None and layer:
                 self._update_activation()
                 if self._unit:
-                    #n_units = self._current_activation.shape[-1]
-                    #self._unit = min(n_units - 1, self._unit)
                     self._unit = None
                     return ModelChange(layer_changed=True, unit_changed=True)
                 else:
@@ -304,8 +299,10 @@ class Model(object):
 
     def _update_activation(self):
         '''Set the :py:attr:`_current_activation` property by loading activations for
-        :py:attr:`_layer` and :py:attr:`_data`'''
-        self._current_activation = self.activationsForLayers([self._layer], self._data)
+        :py:attr:`_layer` and :py:attr:`_data`. This is a noop if no layer is selected or no data is
+        set.'''
+        if self._layer and self._data is not None:
+            self._current_activation = self.activationsForLayers([self._layer], self._data)
 
     def _setIndex(self, index=None):
         '''Helper for setting dataset index. Will do nothing if ``index`` is ``None``. This method
@@ -320,9 +317,6 @@ class Model(object):
         ModelChange
             Change notification for the task runner to handle.
         '''
-        if self._current_index == index:
-            return None
-
         source = self._current_source
         if index is None or source is None or len(source) < 1:
             index = None
@@ -354,13 +348,13 @@ class Model(object):
         '''
         self._current_source = source
         self._setIndex(0)
+        self._update_activation()
 
         change = ModelChange(dataset_changed=True, input_index_changed=True)
         if not synchronous:
             return change
         else:
             self.notifyObservers(change)
-
 
     def setDataArray(self, data: np.ndarray=None):
         '''Set the data array to be used.
