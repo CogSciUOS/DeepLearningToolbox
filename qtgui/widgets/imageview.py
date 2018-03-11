@@ -136,12 +136,12 @@ class QImageView(QWidget, Observer):
         all_activations = model._current_activation
         unit = model._unit
         # skip if dense layer
-        if info.input_index_changed:
+        if info.input_index_changed or info.dataset_changed:
             current_input = model.getInput(model._current_index)
             self.setImage(current_input.data)
         if all_activations is not None and unit is not None and all_activations.ndim > 1:
             activation_mask_f = all_activations[..., unit]
-            # PROBLEM: Mask not propberly updated
+            # PROBLEM: Mask not properly updated
             activation_mask = np.ascontiguousarray(grayscaleNormalized(activation_mask_f), np.uint8)
             self.setActivationMask(activation_mask)
         else:
