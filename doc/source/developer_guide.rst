@@ -11,9 +11,9 @@ linter.
 
     #. 1 tab shall expand to 4 spaces
 
-#. Use ``'`` single quotes ``'`` instead of ``"`` double quotes ``"``
+#. Use ``'single quotes'`` instead of ``"double quotes"``
 #. prefix private attributes and methods with ``_``
-#. Use camelCase instead of snake_case
+#. Use camelCase for methods, snake_case for variables
 #. Use ``numpydoc`` sphinx syntax for documentation
 
 
