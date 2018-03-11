@@ -1,8 +1,9 @@
 from qtgui.datasources import DataSource, InputData
 from PyQt5.QtWidgets import QWidget, QFileDialog
 from scipy.misc import imread
-from os.path import join
+from os.path import join, isdir, isfile
 from os import listdir
+
 
 class DataDirectory(DataSource):
     '''A data directory contains data entries (e.g., images), in
