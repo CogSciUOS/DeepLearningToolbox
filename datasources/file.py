@@ -2,7 +2,7 @@ import numpy as np
 from os.path import isfile, isdir, join, basename
 
 from PyQt5.QtWidgets import QWidget, QFileDialog
-from qtgui.datasources import DataArray
+from datasources import DataArray
 
 class DataFile(DataArray):
     '''Data source for reading from a file.

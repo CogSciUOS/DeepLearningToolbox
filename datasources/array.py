@@ -1,14 +1,14 @@
 import numpy as np
-from qtgui.datasources import DataSource, InputData
+from datasources import DataSource, InputData
 
 class DataArray(DataSource):
-    '''A ``DataArray`` the stores all entries in an array (like the MNIST
+    '''A ``DataArray`` stores all entries in an array (like the MNIST
     character data). That means that all entries will have the same sizes.
 
     Attributes
     ----------
     _array  :   np.ndarray
-                An array of input data. Can be None.
+                An array of input data. Can be ``None``.
     '''
     _array: np.ndarray = None
 

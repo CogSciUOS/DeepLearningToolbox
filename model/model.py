@@ -4,7 +4,7 @@ from scipy.misc import imresize
 from network import Network
 from network.layers import Layer
 from util import ArgumentError
-from qtgui.datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
+from datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
 
 
 
@@ -27,7 +27,7 @@ class ModelChange(dict):
     input_index_changed :   bool
                             Whether the index into the dataset changed
     dataset_changed :   bool
-                        Whether the underlying :py:class:`qtgui.datasources.DataSource`
+                        Whether the underlying :py:class:`datasources.DataSource`
                         has changed
     '''
 
@@ -110,7 +110,7 @@ class Model(object):
     _networks   :   dict
                     All available networks. TODO: Move this out of the model
     _current_source     :    DataSource
-                            The current :py:class:`qtgui.datasources.DataSource`
+                            The current :py:class:`datasources.DataSource`
     _current_activation :   np.ndarray
                             The last computed activations
     '''

@@ -7,6 +7,7 @@ import model
 # for type hints
 import PyQt5, qtgui
 from typing import Union
+import datasources
 
 
 class ActivationsController(InputController):
@@ -52,7 +53,7 @@ class ActivationsController(InputController):
         Parameters
         ----------
         raw :   np.ndarray
-                Raw input data provided by the :py:class:`qtgui.datasources.DataSource`
+                Raw input data provided by the :py:class:`datasources.DataSource`
         fitted  :   np.ndarray
                     Input data fit to the network input layer
         description :   str
@@ -70,12 +71,12 @@ class ActivationsController(InputController):
         '''
         self._runner.runTask(self._model.setLayer, layer)
 
-    def onSourceSelected(self, source: qtgui.datasources.DataSource):
-        '''Set a new :py:class:`qtgui.datasources.DataSource`.
+    def onSourceSelected(self, source: datasources.DataSource):
+        '''Set a new :py:class:`datasources.DataSource`.
 
         Parameters
         ----------
-        source  :   qtgui.datasources.DataSource
+        source  :   datasources.DataSource
         '''
         self._runner.runTask(self._model.setDataSource, source)
 

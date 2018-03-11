@@ -6,6 +6,7 @@ qtpyvis
 
    main
    network
+   datasources
    observer
    controller
    model

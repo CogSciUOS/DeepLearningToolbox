@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QLineEdit, QLab
 import observer
 import numpy as np
 
-from qtgui.datasources import DataArray, DataFile, DataDirectory, DataSet
+from datasources import DataArray, DataFile, DataDirectory, DataSet
 
 class QInputSelector(QWidget, observer.Observer):
     '''A Widget to select input data (probably images).  There are

@@ -8,7 +8,6 @@ Subpackages
 
     qtgui.panels
     qtgui.widgets
-    qtgui.datasources
 
 Submodules
 ----------

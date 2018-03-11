@@ -1,4 +1,4 @@
-from qtgui.datasources import DataArray
+from datasources import DataArray
 
 class DataSet(DataArray):
     '''Data source for Keras builtin datasets'''

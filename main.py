@@ -142,7 +142,7 @@ def main():
 
     if network:
         from model import Model
-        from qtgui.datasources import DataSet, DataDirectory
+        from datasources import DataSet, DataDirectory
         app        = QApplication(sys.argv)
         model      = Model(network)
         mainWindow = DeepVisMainWindow(model)

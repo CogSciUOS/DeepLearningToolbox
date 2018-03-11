@@ -1,4 +1,4 @@
-from qtgui.datasources import DataSource, InputData
+from datasources import DataSource, InputData
 from PyQt5.QtWidgets import QWidget, QFileDialog
 from scipy.misc import imread
 from os.path import join, isdir, isfile
@@ -13,11 +13,8 @@ class DataDirectory(DataSource):
     ----------
     _dirname    :   str
                     A directory containing input data files. Can be None.
-
-
     _filenames  :   list
-                    A list of filenames in the data directory. Will be None if
-                    no directory was selected. An empty list indicates that no
+                    A list of filenames in the data directory. An empty list indicates that no
                     suitable files where found in the directory.
     '''
     _dirname: str = None
