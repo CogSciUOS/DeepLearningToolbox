@@ -18,6 +18,7 @@ network\.caffe module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.exceptions module
 --------------------------
@@ -26,6 +27,7 @@ network\.exceptions module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.keras module
 ---------------------
@@ -34,6 +36,7 @@ network\.keras module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.keras\_tensorflow module
 ---------------------------------
@@ -42,6 +45,7 @@ network\.keras\_tensorflow module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.keras\_util module
 ---------------------------
@@ -50,6 +54,7 @@ network\.keras\_util module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.network module
 -----------------------
@@ -58,6 +63,7 @@ network\.network module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.tensorflow module
 --------------------------
@@ -66,6 +72,7 @@ network\.tensorflow module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.torch module
 ---------------------
@@ -74,6 +81,7 @@ network\.torch module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.util module
 --------------------
@@ -82,6 +90,7 @@ network\.util module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.resize module
 ----------------------
@@ -90,6 +99,7 @@ network\.resize module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 
 Module contents
@@ -99,3 +109,4 @@ Module contents
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:

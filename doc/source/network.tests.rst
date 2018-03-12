@@ -11,6 +11,7 @@ network\.tests\.conf module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.tests\.test\_caffe\_network module
 -------------------------------------------
@@ -19,6 +20,7 @@ network\.tests\.test\_caffe\_network module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.tests\.test\_keras\_tensorflow\_network module
 -------------------------------------------------------
@@ -27,6 +29,7 @@ network\.tests\.test\_keras\_tensorflow\_network module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.tests\.test\_network module
 ------------------------------------
@@ -35,6 +38,7 @@ network\.tests\.test\_network module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.tests\.test\_tensorflow\_network module
 ------------------------------------------------
@@ -43,6 +47,7 @@ network\.tests\.test\_tensorflow\_network module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 
 Module contents
@@ -52,3 +57,4 @@ Module contents
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:

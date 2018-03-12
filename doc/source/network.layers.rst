@@ -11,6 +11,7 @@ network\.layers\.caffe\_layers module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.layers\.keras\_layers module
 -------------------------------------
@@ -19,6 +20,7 @@ network\.layers\.keras\_layers module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.layers\.keras\_tensorflow\_layers module
 -------------------------------------------------
@@ -27,6 +29,7 @@ network\.layers\.keras\_tensorflow\_layers module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.layers\.layers module
 ------------------------------
@@ -35,6 +38,7 @@ network\.layers\.layers module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network\.layers\.tensorflow\_layers module
 ------------------------------------------
@@ -43,6 +47,7 @@ network\.layers\.tensorflow\_layers module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 
 Module contents
@@ -52,3 +57,4 @@ Module contents
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:

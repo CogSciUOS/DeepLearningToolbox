@@ -11,6 +11,7 @@ datasources.array module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 datasources.directory module
 ----------------------------
@@ -19,6 +20,7 @@ datasources.directory module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 datasources.file module
 -----------------------
@@ -27,6 +29,7 @@ datasources.file module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 datasources.set module
 ----------------------
@@ -35,6 +38,7 @@ datasources.set module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 datasources.source module
 -------------------------
@@ -43,6 +47,7 @@ datasources.source module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 
 Module contents
@@ -52,3 +57,4 @@ Module contents
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:

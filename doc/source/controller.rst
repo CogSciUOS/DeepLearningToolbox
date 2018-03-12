@@ -11,6 +11,7 @@ controller\.activationscontroller module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 controller\.mainwindowcontroller module
 ---------------------------------------
@@ -19,6 +20,7 @@ controller\.mainwindowcontroller module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 controller\.basecontroller module
 ------------------------------------
@@ -27,6 +29,7 @@ controller\.basecontroller module
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 
 Module contents
@@ -36,3 +39,4 @@ Module contents
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
