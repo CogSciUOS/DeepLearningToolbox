@@ -407,7 +407,6 @@ class Model(object):
         description :   str
                         Data description
         '''
-
         if data is None or not data.ndim:
             raise ArgumentError('Data cannot be None.')
 

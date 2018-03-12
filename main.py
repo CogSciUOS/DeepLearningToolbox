@@ -143,15 +143,18 @@ def main():
     if network:
         from model import Model
         from datasources import DataSet, DataDirectory
+        from network import ShapeAdaptor, ResizePolicy
         app        = QApplication(sys.argv)
         model      = Model(network)
         mainWindow = DeepVisMainWindow(model)
         if args.data:
-            model.setDataSource(DataSet(args.data), synchronous=True)
+            source = DataSet(args.data)
         elif args.dataset:
-            model.setDataSource(DataSet(args.dataset), synchronous=True)
+            source = DataSet(args.dataset)
         elif args.datadir:
-            model.setDataSource(DataDirectory(args.datadir), synchronous=True)
+            source = DataDirectory(args.datadir)
+
+        model.setDataSource(ShapeAdaptor(network, source, ResizePolicy.Pad()), synchronous=True)
 
         mainWindow.show()
 
