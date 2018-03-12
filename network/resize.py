@@ -1,8 +1,9 @@
 '''
 .. module:: resize
-    This module defines the :py:class:`ShapeAdaptor` and :py:class:`ResizePolicy` classes which can
-    be used to wrap a :py:class:`datasources.DataSource` object so that the items it yields contain
-    a resized version of the original image.
+
+This module defines the :py:class:`ShapeAdaptor` and :py:class:`ResizePolicy` classes which can
+be used to wrap a :py:class:`datasources.DataSource` object so that the items it yields contain
+a resized version of the original image.
 
 .. moduleauthor Rasmus Diederichsen
 '''
@@ -128,7 +129,7 @@ class ShapeAdaptor(DataSource):
         '''
         Parameters
         ----------
-        network :   Network
+        network :   network.Network
                     Network to adapt to
         source  :   DataSource
                     Source to adapt from
@@ -145,7 +146,7 @@ class ShapeAdaptor(DataSource):
 
         Parameters
         ----------
-        network :   Network
+        network :   network.Network
         '''
         self._resize.setShape(network.get_input_shape(include_batch=False))
 

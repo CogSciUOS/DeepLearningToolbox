@@ -83,6 +83,14 @@ network\.util module
     :undoc-members:
     :show-inheritance:
 
+network\.resize module
+----------------------
+
+.. automodule:: network.resize
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------
