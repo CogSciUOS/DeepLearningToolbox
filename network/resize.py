@@ -5,7 +5,7 @@ This module defines the :py:class:`ShapeAdaptor` and :py:class:`ResizePolicy` cl
 be used to wrap a :py:class:`datasources.DataSource` object so that the items it yields contain
 a resized version of the original image.
 
-.. moduleauthor Rasmus Diederichsen
+.. moduleauthor:: Rasmus Diederichsen
 '''
 from datasources import DataSource, InputData
 from network import Network
