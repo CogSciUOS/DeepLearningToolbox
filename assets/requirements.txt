@@ -1,2 +1,0 @@
-# These are all the packages which cannot be installed via conda.
-PyQt5
