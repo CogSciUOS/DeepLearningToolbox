@@ -109,11 +109,29 @@ class Network(BaseNetwork):
     keras_name_regex = re.compile(r'(.)([A-Z][a-z0-9]+)')
 
     def __init__(self, **kwargs):
+        """Initialize a TensorFlow network.
+
+        Parameters
+        ----------
+        checkpoint:
+        session:
+
+        Returns
+        -------
+        A mapping of layer_ids to layer objects.
+
+
+        TensorFlow provides two ways to store models: checkpoints
+        ans SavedModel.
+        """
         checkpoint = kwargs.get('checkpoint', None)
         sess = kwargs.get('session', None)
         if checkpoint is not None and sess is None:
             # Restore the tensorflow model from a file.
-            self._sess = tf.Session()
+            #self._sess = tf.Session()
+            #tf_config = tf.ConfigProto(log_device_placement=True)
+            tf_config = tf.ConfigProto()
+            self._sess = tf.Session(config=tf_config)
             saver = tf.train.import_meta_graph(checkpoint + '.meta', clear_devices=True)
             model_dir = os.path.split(checkpoint)[0]
             saver.restore(self._sess, tf.train.latest_checkpoint(model_dir))
@@ -125,6 +143,7 @@ class Network(BaseNetwork):
         # TODO make this more flexible.
         kwargs['data_format'] = 'channels_last'
         super().__init__(**kwargs)
+
 
     def _create_layer_dict(self) -> FrozenOrderedDict:
         """Try to find the sequences in operations of the graph that
@@ -183,9 +202,10 @@ class Network(BaseNetwork):
             if ops[op_idx + i].type in op_group:
                 matched_ops.append(ops[op_idx + i])
                 continue
-            # The operation at this position is optional. This is only the case if we are dealing with a linear
-            # activation function. In this case the last MatMul operation should just be duplicated as
-            # the activation.
+            # The operation at this position is optional. This is only
+            # the case if we are dealing with a linear activation
+            # function. In this case the last MatMul operation should
+            # just be duplicated as the activation.
             elif '?' in op_group:
                 matched_ops.append(ops[op_idx + i - 1])
                 continue
@@ -221,6 +241,18 @@ class Network(BaseNetwork):
 
         return self._feed_input(net_input_tensors, input_samples)
 
+    def _get_network_input_tensor(self):
+        """Determine the input node of the network.
+        This should be a Placeholder, that can be used to feed the network.
+
+        Returns
+        -------
+        The tf.Placeholder object representing the network input.
+        """
+        # Assuming the first op is the input.
+        return self._sess.graph.get_operations()[0].outputs[0]
+
+
     def _feed_input(self, fetches: list, input_samples: np.ndarray):
-        network_input_tensor = self._sess.graph.get_operations()[0].outputs[0] # Assuming the first op is the input.
-        return self._sess.run(fetches=fetches, feed_dict={network_input_tensor: input_samples})
+        input = self._get_network_input_tensor()
+        return self._sess.run(fetches=fetches, feed_dict={input: input_samples})
