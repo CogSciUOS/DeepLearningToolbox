@@ -1,5 +1,4 @@
 from datasources import DataSource, InputData
-from PyQt5.QtWidgets import QWidget, QFileDialog
 from scipy.misc import imread
 from os.path import join, isdir, isfile
 from os import listdir

@@ -1,7 +1,6 @@
 import numpy as np
 from os.path import isfile, isdir, join, basename
 
-from PyQt5.QtWidgets import QWidget, QFileDialog
 from datasources import DataArray
 
 class DataFile(DataArray):
