@@ -1,7 +1,17 @@
 from __future__ import absolute_import
 
-import keras
 import numpy as np
+
+# Make sure that we use the 'tensorflow' backend:
+import os
+os.environ['KERAS_BACKEND'] = 'tensorflow'
+
+import keras
+
+print(keras.backend.set_image_dim_ordering('th'))
+print(keras.backend.image_dim_ordering())
+print(keras.backend.image_data_format())
+
 
 from collections import OrderedDict
 from frozendict import FrozenOrderedDict

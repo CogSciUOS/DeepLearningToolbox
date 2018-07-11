@@ -155,8 +155,17 @@ class Network(BaseNetwork):
         """
         layer_dict = OrderedDict()
         layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
+        ops = self._sess.graph.get_operations()
         op_idx = 0
+        self._input_placeholder = None
+        
         while op_idx < len(self._sess.graph.get_operations()):
+
+            if self._input_placeholder is None:
+                if ops[op_idx].type == 'Placeholder':
+                    self._input_placeholder = ops[op_idx]
+                op_idx += 1
+                continue
 
             for layer_type, layer_def in self._LAYER_DEFS.items():
                 try:
@@ -249,10 +258,15 @@ class Network(BaseNetwork):
         -------
         The tf.Placeholder object representing the network input.
         """
-        # Assuming the first op is the input.
-        return self._sess.graph.get_operations()[0].outputs[0]
+        return self._input_placeholder.outputs[0]
 
 
     def _feed_input(self, fetches: list, input_samples: np.ndarray):
         input = self._get_network_input_tensor()
         return self._sess.run(fetches=fetches, feed_dict={input: input_samples})
+
+    def get_input_shape(self, include_batch = True) -> tuple:
+        """Get the shape of the input data for the network.
+        """
+        shape = self._get_network_input_tensor().shape
+        return shape if include_batch else shape[1:]
