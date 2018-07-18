@@ -21,17 +21,25 @@ class QImageView(QWidget, Observer):
                 The image to display
     _overlay    :   QImage
                     Overlay for displaying on top of the image
+    _show_raw : bool
+                a flag indicating whether this QImageView will show
+                the raw input data, or the data acutally fed to the network.
+                
     '''
 
     _image: QImage = None
 
     _overlay: QImage = None
 
+    _show_raw: bool = False
+    
     def __init__(self, parent):
         super().__init__(parent)
         self._imageRect = None
 
-    def setImage(self, image: np.ndarray):
+    def setImage(self):
+        image = self._model.getInputData(self._show_raw) if self._model else None      
+
         if image is not None:
             # To construct an 8-bit monochrome QImage, we need a
             # 2-dimensional, uint8 numpy array
@@ -51,7 +59,7 @@ class QImageView(QWidget, Observer):
 
             if image.dtype != np.uint8:
                 image = (image * 255).astype(np.uint8)
-            image = np.copy(image)
+            image = image.copy()
 
             self._image = QImage(image,
                                  image.shape[1], image.shape[0],
@@ -136,9 +144,10 @@ class QImageView(QWidget, Observer):
         all_activations = model._current_activation
         unit = model._unit
         # skip if dense layer
+        self._model = model
         if info.input_index_changed or info.dataset_changed:
-            current_input = model.getInput(model._current_index)
-            self.setImage(current_input.data)
+            self.setImage()
+
         if all_activations is not None and unit is not None and all_activations.ndim > 1:
             activation_mask_f = all_activations[..., unit]
             # PROBLEM: Mask not properly updated
@@ -146,3 +155,14 @@ class QImageView(QWidget, Observer):
             self.setActivationMask(activation_mask)
         else:
             self.setActivationMask(None)
+            
+    def mousePressEvent(self, event):
+        self._show_raw = not self._show_raw
+        self.setImage()
+
+    # FIXME[todo]: does not work!
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key_Space:
+            self._show_raw = not self._show_raw
+            self.setImage()

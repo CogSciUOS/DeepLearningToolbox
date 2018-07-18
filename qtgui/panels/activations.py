@@ -45,6 +45,8 @@ class ActivationsPanel(Panel, Observer):
         super().__init__(parent)
         self.initUI()
         self.setController(ActivationsController(model))
+        model
+
 
     def setController(self, controller):
         super().setController(controller)
@@ -52,6 +54,7 @@ class ActivationsPanel(Panel, Observer):
                    self._network_view,
                    self._input_view,
                    self._input_selector,
+                   self._input_info,
                    self._network_view]
         for widget in controllable_widgets:
             widget.setController(controller)

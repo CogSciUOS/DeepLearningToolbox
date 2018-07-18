@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QLineEdit, QLab
 import observer
 import numpy as np
 
-from datasources import DataArray, DataFile, DataDirectory, DataSet
+from datasources import DataArray, DataFile, DataDirectory, DataSet, DataWebcam, DataVideo
 
 class QInputSelector(QWidget, observer.Observer):
     '''A Widget to select input data (probably images).  There are
@@ -42,14 +42,32 @@ class QInputSelector(QWidget, observer.Observer):
                     The parent argument is sent to the QWidget constructor.
         '''
         super().__init__(parent)
-
         self.initUI()
+
 
     def setController(self, controller):
         super().setController(controller)
 
     def modelChanged(self, model, info):
         source = model._current_source
+
+        if info.dataset_changed:
+            
+            self.infoDataset.setText(source.getDescription())
+            if isinstance(source, DataArray):
+                self._radioButtons['Name'].setChecked(True)
+            elif isinstance(source, DataFile):
+                self._radioButtons['Filesystem'].setChecked(True)
+            elif isinstance(source, DataDirectory):
+                self._radioButtons['Filesystem'].setChecked(True)
+            elif isinstance(source, DataSet):
+                self._radioButtons['Name'].setChecked(True)
+            elif isinstance(source, DataWebcam):
+                self._radioButtons['Webcam'].setChecked(True)
+            elif isinstance(source, DataVideo):
+                self._radioButtons['Video'].setChecked(True)
+                
+            print("new datasource: {}".format(source))
         # if isinstance(source, DataArray):
         #     info = (source.getFile()
         #             if isinstance(source, DataFile)
@@ -63,9 +81,9 @@ class QInputSelector(QWidget, observer.Observer):
         # elif isinstance(source, DataDirectory):
         #     self._radioButtons['Filesystem'].setText('File: ' +
         #                                     source.getDirectory())
-        ############################################################################################
-        #                              Disable buttons, if necessary                               #
-        ############################################################################################
+        #####################################################################
+        #                Disable buttons, if necessary                      #
+        #####################################################################
         valid = len(model) > 0
         for elem in {self.firstButton,
                      self.prevButton,
@@ -84,6 +102,9 @@ class QInputSelector(QWidget, observer.Observer):
         # mode = model._current_mode
         # self._modeButton[mode].setChecked(True)
 
+            
+
+        
     def _newNavigationButton(self, label: str, icon: str=None):
         button = QPushButton()
         icon = QIcon.fromTheme(icon, QIcon())
@@ -98,12 +119,59 @@ class QInputSelector(QWidget, observer.Observer):
     def initUI(self):
         '''Initialize the user interface.'''
 
+        #
+        # Data sources
+        #
+        self._radioButtons = {
+            'Name': QRadioButton('Name'),
+            'Filesystem': QRadioButton('Filesystem'),
+            'Webcam': QRadioButton('Webcam'),
+            'Video': QRadioButton('Video')
+        }
+        # self._modeButton['array'].clicked.connect(
+        #     lambda: self._controller.onModeChanged('array'))
+        # self._modeButton['dir'].clicked.connect(lambda: self._controller.onModeChanged('dir'))
+
+        self._openButton = QPushButton('Open')
+        self._openButton.clicked.connect(self._openButtonClicked)
+        self._openButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        self._datasetDropdown = QComboBox()
+        size_policy = self._datasetDropdown.sizePolicy()
+        size_policy.setRetainSizeWhenHidden(True)
+        self._datasetDropdown.setSizePolicy(size_policy)
+        dataset_names = DataSet.getDatasets()
+        self._datasetDropdown.addItems(dataset_names)
+        self._datasetDropdown.setEnabled(False)
+        self._radioButtons['Name'].clicked.connect(self._radioButtonChecked)
+        self._radioButtons['Filesystem'].clicked.connect(self._radioButtonChecked)
+        self._radioButtons['Webcam'].clicked.connect(self._radioButtonChecked)
+        self._radioButtons['Video'].clicked.connect(self._radioButtonChecked)
+
+        sourceBox = QGroupBox('Data sources')
+        radioLayout = QVBoxLayout()
+        radioLayout.addWidget(self._radioButtons['Name'])
+        radioLayout.addWidget(self._radioButtons['Filesystem'])
+        radioLayout.addWidget(self._radioButtons['Webcam'])
+        radioLayout.addWidget(self._radioButtons['Video'])
+        sourceLayout = QHBoxLayout()
+        sourceLayout.addLayout(radioLayout)
+        radioLayout.addWidget(self._datasetDropdown)
+        sourceLayout.addWidget(self._openButton)
+        sourceBox.setLayout(sourceLayout)
+
+        
+        #
+        # Navigation in indexed data source
+        #
         self.firstButton = self._newNavigationButton('|<', 'go-first')
         self.prevButton = self._newNavigationButton('<<', 'go-previous')
         self.nextButton = self._newNavigationButton('>>', 'go-next')
         self.lastButton = self._newNavigationButton('>|', 'go-last')
         self.randomButton = self._newNavigationButton('random')
 
+        # _indexField: A text field to manually enter the index of
+        # desired input.
         self._indexField = QLineEdit()
         self._indexField.setMaxLength(8)
         self._indexField.setAlignment(Qt.AlignRight)
@@ -121,38 +189,8 @@ class QInputSelector(QWidget, observer.Observer):
         self.infoLabel.setSizePolicy(
             QSizePolicy.Maximum, QSizePolicy.Expanding)
 
-        self._radioButtons = {
-            'Name': QRadioButton('Name'),
-            'Filesystem': QRadioButton('Filesystem')
-        }
-        # self._modeButton['array'].clicked.connect(
-        #     lambda: self._controller.onModeChanged('array'))
-        # self._modeButton['dir'].clicked.connect(lambda: self._controller.onModeChanged('dir'))
-
-        self._openButton = QPushButton('Open')
-        self._openButton.clicked.connect(self._openButtonClicked)
-        self._openButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-        self._datasetDropdown = QComboBox()
-        size_policy = self._datasetDropdown.sizePolicy()
-        size_policy.setRetainSizeWhenHidden(True)
-        self._datasetDropdown.setSizePolicy(size_policy)
-        dataset_names = DataSet.getKerasDatasets()
-        self._datasetDropdown.addItems(dataset_names)
-        self._datasetDropdown.setEnabled(False)
-        self._radioButtons['Name'].clicked.connect(self._radioButtonChecked)
-        self._radioButtons['Filesystem'].clicked.connect(self._radioButtonChecked)
-
-        sourceBox = QGroupBox('Data sources')
-        radioLayout = QVBoxLayout()
-        radioLayout.addWidget(self._radioButtons['Name'])
-        radioLayout.addWidget(self._radioButtons['Filesystem'])
-        sourceLayout = QHBoxLayout()
-        sourceLayout.addLayout(radioLayout)
-        radioLayout.addWidget(self._datasetDropdown)
-        sourceLayout.addWidget(self._openButton)
-        sourceBox.setLayout(sourceLayout)
-
+        self.infoDataset = QLabel()
+        
         navigationBox = QGroupBox('Navigation')
         navigationLayout = QHBoxLayout()
         navigationLayout.addWidget(self.firstButton)
@@ -162,7 +200,10 @@ class QInputSelector(QWidget, observer.Observer):
         navigationLayout.addWidget(self.nextButton)
         navigationLayout.addWidget(self.lastButton)
         navigationLayout.addWidget(self.randomButton)
-        navigationBox.setLayout(navigationLayout)
+        navigationMainLayout = QVBoxLayout()
+        navigationMainLayout.addWidget(self.infoDataset)
+        navigationMainLayout.addLayout(navigationLayout)
+        navigationBox.setLayout(navigationMainLayout)
 
         layout = QHBoxLayout()
         layout.addWidget(sourceBox)
@@ -182,6 +223,12 @@ class QInputSelector(QWidget, observer.Observer):
         elif name == 'Filesystem':
             self._datasetDropdown.setEnabled(False)
             self._openButton.setText('Open')
+        elif name == 'Webcam':
+            self._datasetDropdown.setEnabled(False)
+            self._openButton.setText('Run')
+        elif name == 'Video':
+            self._datasetDropdown.setEnabled(False)
+            self._openButton.setText('Play')
 
     def _navigationButtonClicked(self):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
@@ -202,7 +249,7 @@ class QInputSelector(QWidget, observer.Observer):
         if self._radioButtons['Name'].isChecked():
             self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
-            dataset = DataSet(name)
+            dataset = DataSet.load(name)
         elif self._radioButtons['Filesystem'].isChecked():
             mode = 'Filesystem'
             # CAUTION: I've converted the C++ from here
@@ -223,15 +270,23 @@ class QInputSelector(QWidget, observer.Observer):
                 dataset = DataDirectory(fname)
             else:
                 dataset = DataFile(fname)
+        elif self._radioButtons['Webcam'].isChecked():
+            mode = 'Webcam'
+            dataset = DataWebcam()
+        elif self._radioButtons['Video'].isChecked():
+            mode = 'Video'
+            # FIXME[hack]: use file browser ...
+            # FIXME[problem]: the opencv embedded in anoconda does not
+            # have ffmpeg support, and hence cannot read videos
+            dataset = DataVideo("/net/home/student/k/krumnack/AnacondaCON.avi")
         self._controller.onSourceSelected(dataset)
-
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 
 
-class QInputInfoBox(QWidget):
+class QInputInfoBox(QWidget, observer.Observer):
 
     def __init__(self, parent=None):
         '''Create a new QInputInfoBox.
@@ -257,6 +312,17 @@ class QInputInfoBox(QWidget):
         layout.addWidget(self._dataLabel)
         layout.addWidget(self._button)
         self.setLayout(layout)
+
+
+    def modelChanged(self, model, info):
+        if info.input_index_changed:
+            if model._data is None:
+                self.showInfo()
+            elif model._current_source is None:
+                self.showInfo(model._data)
+            else:
+                self.showInfo(model._data,
+                              model._current_source.getName(model._current_index))
 
     def showInfo(self, data: np.ndarray=None, description: str=None):
         '''Show info for the given (image) data.

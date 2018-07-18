@@ -1,7 +1,7 @@
 import numpy as np
-from scipy.misc import imresize
 
 from network import Network
+from network import ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from util import ArgumentError
 from datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
@@ -9,11 +9,11 @@ from datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
 
 
 class ModelChange(dict):
-    '''
-    .. :py:class:: ModelChange
+    '''.. :py:class:: ModelChange
 
-    A class whose instances are passed to observers in :py:meth:`observer.Observer.modelChanged`
-    in order to inform them as to the exact nature of the model's change.
+    A class whose instances are passed to observers in
+    :py:meth:`observer.Observer.modelChanged` in order to inform them
+    as to the exact nature of the model's change.
 
 
     Attributes
@@ -29,6 +29,7 @@ class ModelChange(dict):
     dataset_changed :   bool
                         Whether the underlying :py:class:`datasources.DataSource`
                         has changed
+
     '''
 
     def __init__(self, **kwargs):
@@ -97,10 +98,11 @@ class Model(object):
     ----------
     _observers  :   set
                     Objects observing this class for changes
-    _data   :   np.ndarray
-                Current input data
-    _current_index  :   int
-                        Index of ``_data`` in the data set
+    _input   :   np.ndarray
+                 Current input data, suitable for the current network
+                 (this is an adapted version of _data)
+    _current_activation :   np.ndarray
+                            The last computed activations
     _layer  :   Layer
                 Currently selected layer
     _unit   :   int
@@ -108,11 +110,13 @@ class Model(object):
     _network    :   Network
                     Currently active network
     _networks   :   dict
-                    All available networks. TODO: Move this out of the model
+                    All available networks. FIXME[todo]: Move this out of the model
     _current_source     :    DataSource
                             The current :py:class:`datasources.DataSource`
-    _current_activation :   np.ndarray
-                            The last computed activations
+    _current_index  :   int
+                        Index of ``_data`` in the data set
+    _data   :   np.ndarray
+                Current data provided by the data source
     '''
     _observers:             set        = set()
     _data:                  np.ndarray = None
@@ -124,6 +128,10 @@ class Model(object):
     _current_index:         int        = None
     _current_activation:    np.ndarray = None
     _current_source:        DataSource = None
+    _input:                 np.ndarray = None
+    _shape_adaptor:         ShapeAdaptor = None
+    _channel_adaptor:       ShapeAdaptor = None
+    
 
     def __init__(self, network: Network):
         '''Create a new ``Model`` instance.
@@ -133,9 +141,11 @@ class Model(object):
         network :   Network
                     Network instance backing the model
         '''
-        self._network = network
-        self._networks[str(network)] = network
-
+        self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
+        self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
+        if network is not None:
+            self.addNetwork(network)
+        
     def __len__(self):
         '''Returns the number of elements in the currently selected dataset.
 
@@ -146,9 +156,10 @@ class Model(object):
         source = self._current_source
         return 0 if source is None else len(source)
 
-    ################################################################################################
-    #                                      OBSERVER HANDLING                                       #
-    ################################################################################################
+
+    ##########################################################################
+    #                          OBSERVER HANDLING                             #
+    ##########################################################################
     def addObserver(self, observer):
         '''Add an object to observe this model.
 
@@ -174,170 +185,23 @@ class Model(object):
             for o in self._observers:
                 o.modelChanged(self, info)
 
-    ################################################################################################
-    #                           SETTING CURRENTLY VISUALISED PROPERTIES                            #
-    ################################################################################################
-    def setNetwork(self, network=None, force_update: bool=False):
-        '''Set the current network. Update will only be published if not already selected.
 
-        Parameters
-        ----------
-        network :   str or int or network.network.Network
-                    Key for the network
-        force_update    :   bool
-                            Force update to be published. This is useful if the current network was
-                            passed to the constructor, but not loaded in the GUI yet. The GUI may
-                            make sure updates are published by setting this argument.
+    # FIXME[hack]: notify all observers that everything has changed.
+    # This is intended to make the UI reflect the state of the model
+    # upon initialization. There is probably a better way to do this!
+    def notifyUI(self):
+        change_all = ModelChange(network_changed=True,
+                                 layer_changed=True,
+                                 unit_changed=True,
+                                 input_index_changed=True,
+                                 dataset_changed=True)
+        self.notifyObservers(change_all)
 
-        Returns
-        -------
-        ModelChange
-            Change notification for the task runner to handle.
-        '''
-        if self._network != network:
-            if isinstance(network, Network):
-                if network not in self._networks.values():
-                    self.addNetwork(network)
-                self._network = network
-            elif isinstance(network, str) or isinstance(network, int):
-                self._network = self._networks[str(network)]
-            else:
-                raise ArgumentError(f'Unknown network type {network.__class__}')
-            self.setLayer(None)
-            return ModelChange(network_changed=True, layer_changed=True)
-        elif force_update:
-            # argh. code smell
-            self.setLayer(None)
-            return ModelChange(network_changed=True, layer_changed=True)
-        return None
+    
+    ##########################################################################
+    #                          SETTING DATA                                  #
+    ##########################################################################
 
-
-    def idForLayer(self, layer_str: str):
-        '''Obtain the numeric id for a given layer identifier.
-        .. note:: This operation is linear in the number of layers in the current network.
-
-        Parameters
-        ----------
-        layer_str   :   str
-                        Identifier of the layer
-
-        Returns
-        -------
-        int
-            layer index
-        '''
-        try:
-            layer_keys = list(self._network.layer_dict.keys())
-            return layer_keys.index(layer_str)
-        except ValueError:
-            raise ValueError(f'Layer for string {layer_str} not found.')
-
-    def setLayer(self, layer: Layer=None):
-        '''Set the current layer to choose units from.
-
-        Parameters
-        ----------
-        layer   :   Layer
-                    Layer instance to display
-
-        Returns
-        -------
-        ModelChange
-            Change notification for the task runner to handle.
-        '''
-        if self._layer != layer:
-            self._layer = layer
-            if self._data is not None and layer:
-                self._update_activation()
-                if self._unit:
-                    self._unit = None
-                    return ModelChange(layer_changed=True, unit_changed=True)
-                else:
-                    return ModelChange(layer_changed=True)
-        return None
-
-    def setUnit(self, unit: int=None):
-        '''Change the currently visualised channel/unit. This should be called when the
-        user clicks on a unit in the :py:class:`QActivationView`.
-
-        Parameters
-        ----------
-        unit    :   int
-                    Index of the unit in the layer (0-based)
-
-        Returns
-        -------
-        ModelChange
-            Change notification for the task runner to handle.
-        '''
-        n_units = self._current_activation.shape[-1]
-        if unit >= 0 and unit < n_units:
-            self._unit = unit
-            return ModelChange(unit_changed=True)
-
-        return None
-
-    def editIndex(self, index):
-        '''Set the current dataset index. Index is left unchanged if out of range.
-
-        Parameters
-        ----------
-        index   :   int
-        '''
-        if index is not None:
-            try:
-                index = int(index)
-                if index < 0:
-                    raise ValueError('Index out of range')
-            except ValueError:
-                index = self._current_index
-
-        if index != self._current_index:
-            return self._setIndex(index)
-        else:
-            return None
-
-    def _update_activation(self):
-        '''Set the :py:attr:`_current_activation` property by loading activations for
-        :py:attr:`_layer` and :py:attr:`_data`. This is a noop if no layer is selected or no data is
-        set.'''
-        if self._layer and self._data is not None:
-            self._current_activation = self.activationsForLayers([self._layer], self._data)
-
-    def _setIndex(self, index=None):
-        '''Helper for setting dataset index. Will do nothing if ``index`` is ``None``. This method
-        will update the appropriate fields of the model.
-
-        Parameters
-        ----------
-        index   :   int
-
-        Returns
-        -------
-        ModelChange
-            Change notification for the task runner to handle.
-        '''
-        source = self._current_source
-        if index is None or source is None or len(source) < 1:
-            index = None
-        elif index < 0:
-            index = 0
-        elif index >= len(source):
-            index = len(source) - 1
-
-        self._current_index = index
-        if not source or index is None:
-            self._data, _info = None, None
-        else:
-            self._setInputData(source[index].data)
-            if self._layer:
-                self._update_activation()
-
-        return ModelChange(input_index_changed=True)
-
-    ################################################################################################
-    #                                         SETTING DATA                                         #
-    ################################################################################################
     def setDataSource(self, source: DataSource, synchronous=True):
         '''Update the :py:class:`DataSource`.
 
@@ -381,10 +245,10 @@ class Model(object):
         Parameters
         ----------
         name    :   str
-                    The name of the dataset. The only dataset supported up to now
-                    is 'mnist'.
+                    The name of the dataset. The only dataset supported up
+                    to now is 'mnist'.
         '''
-        self.setDataSource(DataSet(name))
+        self.setDataSource(DataSet.load(name))
 
     def _setInputData(self, data: np.ndarray=None, description: str=None):
         '''Provide one data vector as input for the network.
@@ -407,12 +271,11 @@ class Model(object):
         description :   str
                         Data description
         '''
+        
         if data is None or not data.ndim:
             raise ArgumentError('Data cannot be None.')
-
-        if data is not None:
-            network_shape = self._network.get_input_shape(include_batch=False)
-
+        else:
+            # do some sanity checks and corrections
             if data.ndim > 4 or data.ndim < 2:
                 raise ArgumentError(f'Data must have between 2 '
                                     'and 4 dimensions (has {data.ndim}).')
@@ -424,30 +287,94 @@ class Model(object):
                 else:
                     raise ArgumentError('Cannot visualize batch of images')
 
-            if data.ndim == 2:
-                # Blow up to three dimensions by repeating the channel
-                data = data[..., np.newaxis].repeat(3, axis=2)
-
-            if data.shape[0:2] != network_shape[0:2]:
-                # Image does not fit into network -> resize
-                # TODO: Replace with ShapeAdaptor
-                data = imresize(data, network_shape[0:2])
-
-            if data.shape[2] != network_shape[2]:
-                # different number of channels
-                # FIXME[hack]: find better way to do RGB <-> grayscale
-                # conversion
-
-                if network_shape[2] == 1:
-                    data = np.mean(data, axis=2)
-                elif network_shape[2] == 3 and data.shape[2] == 1:
-                    data = data.repeat(3, axis=2)
-                else:
-                    raise ArgumentError('Incompatible network input shape.')
 
         self._data = data
+        if data is not None:
+            data = self._shape_adaptor(data)
+            data = self._channel_adaptor(data)
+        self._input = data
 
-    def addNetwork(self, network):
+
+    def editIndex(self, index):
+        '''Set the current dataset index.  Index is left unchanged if out of
+        range.
+
+        Parameters
+        ----------
+        index   :   int
+
+        '''
+        if index is not None:
+            try:
+                index = int(index)
+                if index < 0:
+                    raise ValueError('Index out of range')
+            except ValueError:
+                index = self._current_index
+
+        if index != self._current_index:
+            return self._setIndex(index)
+        else:
+            return None
+
+    def _setIndex(self, index=None):
+        '''Helper for setting dataset index. Will do nothing if ``index`` is
+        ``None``. This method will update the appropriate fields of
+        the model.
+
+        Parameters
+        ----------
+        index   :   int
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
+
+        '''
+        source = self._current_source
+        if index is None or source is None or len(source) < 1:
+            index = None
+        elif index < 0:
+            index = 0
+        elif index >= len(source):
+            index = len(source) - 1
+
+        self._current_index = index
+        if not source or index is None:
+            self._data, _info = None, None
+        else:
+            self._setInputData(source[index].data)
+            if self._layer:
+                self._update_activation()
+
+        return ModelChange(input_index_changed=True)
+
+
+
+    def getInputData(self, raw:bool=False) -> np.ndarray:
+        '''Obtain the current input data.  This is the current data in a
+        format suitable to be fed to the current network.
+
+        Parameters
+        ----------
+        raw   :   bool
+            If true, the method will return the raw data (as it was
+            provided by the input source). Otherwise it will provide
+            data in a format suitable for the current network.
+
+        Returns
+        -------
+        np.ndarray
+
+        '''
+        return self._data if raw else self._input
+
+    ##########################################################################
+    #                     SETTING THE NETWORK                                #
+    ##########################################################################
+    
+    def addNetwork(self, network, select:bool=True):
         '''Add a model to visualise. This will add the network to the list of
         choices and make it the currently selcted one.
 
@@ -455,21 +382,162 @@ class Model(object):
         ----------
         network     :   network.network.Network
                         A network (should be of the same class as currently
-                        selected ones)
+                        selected ones). FIXME[question]: why?
+        select      :   bool
+                        A flag indicating whether the new network
+                        should automatically be selected as the active
+                        network in this model.
 
         Returns
         -------
         ModelChange
             Change notification for the task runner to handle.
         '''
-        name = 'Network ' + str(self._network_selector.count())
-        self._networks[name] = network
-        self.setNetwork(network)
+        if network is not None:
+            name = 'Network ' + str(len(self._networks))
+            self._networks[name] = network
+        if select:
+            self.setNetwork(network)
         return ModelChange(network_changed=True)
 
-    ################################################################################################
-    #                                          UTILITIES                                           #
-    ################################################################################################
+    def setNetwork(self, network=None, force_update: bool=False):
+        '''Set the current network. Update will only be published if not already selected.
+
+        Parameters
+        ----------
+        network :   str or int or network.network.Network
+                    Key for the network
+        force_update    :   bool
+                            Force update to be published. This is useful if the current network was
+                            passed to the constructor, but not loaded in the GUI yet. The GUI may
+                            make sure updates are published by setting this argument.
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
+        '''
+        if self._network != network:
+            if isinstance(network, Network):
+                if network not in self._networks.values():
+                    self.addNetwork(network)
+                self._network = network
+            elif isinstance(network, str) or isinstance(network, int):
+                self._network = self._networks[str(network)]
+            else:
+                raise ArgumentError(f'Unknown network type {network.__class__}')
+            self.setLayer(None)
+
+            if self._shape_adaptor is not None:
+                self._shape_adaptor.setNetwork(network)
+                self._channel_adaptor.setNetwork(network)
+                if self._data is not None:
+                    data = self._shape_adaptor(self.data)
+                    data = self._channel_adaptor(data)
+                    self._input = data
+
+            return ModelChange(network_changed=True, layer_changed=True)
+        elif force_update:
+            # argh. code smell
+            self.setLayer(None)
+            return ModelChange(network_changed=True, layer_changed=True)
+        return None
+
+    def getNetworkName(self, network: Network) -> str:
+        '''Get the name of the currently selected network.
+        .. note:: This runs in O(n).
+
+        Parameters
+        ----------
+        network     :   network.network.Network
+                        The network to visualise.
+
+        '''
+        name = None
+        for n, net in self._networks.items():
+            if net == network:
+                name = n
+        return name
+
+
+    def idForLayer(self, layer_str: str):
+        '''Obtain the numeric id for a given layer identifier.
+        .. note:: This operation is linear in the number of layers in the current network.
+
+        Parameters
+        ----------
+        layer_str   :   str
+                        Identifier of the layer
+
+        Returns
+        -------
+        int
+            layer index
+        '''
+        try:
+            layer_keys = list(self._network.layer_dict.keys())
+            return layer_keys.index(layer_str)
+        except ValueError:
+            raise ValueError(f'Layer for string {layer_str} not found.')
+
+    def setLayer(self, layer: Layer=None):
+        '''Set the current layer to choose units from.
+
+        Parameters
+        ----------
+        layer   :   Layer
+                    Layer instance to display
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
+        '''
+        if self._layer != layer:
+            self._layer = layer
+            if self._input is not None and layer:
+                self._update_activation()
+                if self._unit:
+                    self._unit = None
+                    return ModelChange(layer_changed=True, unit_changed=True)
+                else:
+                    return ModelChange(layer_changed=True)
+        return None
+
+    def setUnit(self, unit: int=None):
+        '''Change the currently visualised channel/unit. This should be called when the
+        user clicks on a unit in the :py:class:`QActivationView`.
+
+        Parameters
+        ----------
+        unit    :   int
+                    Index of the unit in the layer (0-based)
+
+        Returns
+        -------
+        ModelChange
+            Change notification for the task runner to handle.
+        '''
+        n_units = self._current_activation.shape[-1]
+        if unit >= 0 and unit < n_units:
+            self._unit = unit
+            return ModelChange(unit_changed=True)
+
+        return None
+
+
+    def _update_activation(self):
+        '''Set the :py:attr:`_current_activation` property by loading activations for
+        :py:attr:`_layer` and :py:attr:`_data`. This is a noop if no layer is selected or no data is
+        set.'''
+        if self._layer and self._input is not None:
+            self._current_activation = self.activationsForLayers([self._layer], self._input)
+
+
+
+    ##########################################################################
+    #                     UTILITIES                                          #
+    ##########################################################################
     def activationsForLayers(self, layers, data):
         '''Get activations for a set of layers.
 
@@ -495,32 +563,4 @@ class Model(object):
 
         return activations
 
-    def getNetworkName(self, network: Network) -> str:
-        '''Get the name of the currently selected network.
-        .. note:: This runs in O(n).
 
-        Parameters
-        ----------
-        network     :   network.network.Network
-                        The network to visualise.
-
-        '''
-        name = None
-        for n, net in self._networks.items():
-            if net == network:
-                name = n
-        return name
-
-    def getInput(self, index: int) -> np.ndarray:
-        '''Obtain input at index.
-
-        Parameters
-        ----------
-        index : int
-                Index into the current dataset
-
-        Returns
-        -------
-        np.ndarray
-        '''
-        return self._current_source[index]

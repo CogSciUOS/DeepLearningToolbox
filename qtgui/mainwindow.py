@@ -33,6 +33,7 @@ class DeepVisMainWindow(QMainWindow):
         self._title = title
         self._model = model
         self.initUI()
+        model.notifyUI()
 
     def getModel(self):
         return self._model

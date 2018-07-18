@@ -94,15 +94,19 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input
 def main():
     '''Start the program.'''
 
+    from datasources import DataSet
+    datasets = DataSet.getDatasets(True)
+
     parser = argparse.ArgumentParser(
         description='Visual neural network analysis.')
     parser.add_argument('--model', help='Filename of model to use',
                         default='models/example_keras_mnist_model.h5')
     parser.add_argument('--data', help='filename of dataset to visualize')
     parser.add_argument('--datadir', help='directory containing input images')
-    parser.add_argument('--dataset', help='name of a dataset',
-                        choices=['mnist'],
-                        default='mnist')
+    if (len(datasets) > 0):
+        parser.add_argument('--dataset', help='name of a dataset',
+                            choices=datasets,
+                            default=datasets[0]) # 'mnist'
     parser.add_argument('--framework', help='The framework to use.',
                         choices=['keras-tensorflow', 'keras-theano', 'torch'],
                         default='keras-tensorflow')
@@ -111,6 +115,7 @@ def main():
                         default=False)
     args = parser.parse_args()
 
+   
     if args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
         backend  = args.framework[dash_idx + 1:]
@@ -123,27 +128,27 @@ def main():
         input_shape    = (28, 28)
         network = torch(args.cpu, net_file, net_class,
                         parameter_file, input_shape)
+    else:
+        network = None
+        
+    from datasources import DataDirectory
+    from model import Model
+    app        = QApplication(sys.argv)
+    model      = Model(network)
 
-    if network:
-        from model import Model
-        from datasources import DataSet, DataDirectory
-        from network import ShapeAdaptor, ResizePolicy
-        app        = QApplication(sys.argv)
-        model      = Model(network)
-        mainWindow = DeepVisMainWindow(model)
-        if args.data:
-            source = DataSet(args.data)
-        elif args.dataset:
-            source = DataSet(args.dataset)
-        elif args.datadir:
-            source = DataDirectory(args.datadir)
+    if args.data:
+        source = DataSet.load(args.data)
+    elif args.dataset:
+        source = DataSet.load(args.dataset)
+    elif args.datadir:
+        source = DataDirectory(args.datadir)
+    model.setDataSource(source)
 
-        model.setDataSource(ShapeAdaptor(network, source, ResizePolicy.Pad()), synchronous=True)
+    mainWindow = DeepVisMainWindow(model)
+    mainWindow.show()
 
-        mainWindow.show()
-
-        rc = app.exec_()
-        sys.exit(rc)
+    rc = app.exec_()
+    sys.exit(rc)
 
 
 if __name__ == '__main__':

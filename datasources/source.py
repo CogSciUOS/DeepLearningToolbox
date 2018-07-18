@@ -1,4 +1,5 @@
 from collections import namedtuple
+import numpy as np
 
 InputData = namedtuple('Data', ['data', 'name'])
 
@@ -14,6 +15,7 @@ class DataSource:
 
     '''
     _description: str = None
+    _targets: np.ndarray = None
 
     def __init__(self, description=None):
         '''Create a new DataSource
@@ -23,7 +25,7 @@ class DataSource:
         description :   str
                         Description of the dataset
         '''
-        self._description = description
+        self._description = self.__class__.__name__ if description is None else description 
 
     def __getitem__(self, index: int):
         '''Provide access to the records in this data source.'''
@@ -33,6 +35,20 @@ class DataSource:
         '''Get the number of entries in this data source.'''
         pass
 
+    def add_target_values(self, target_values: np.ndarray):
+        if len(self) != len(target_values):
+            raise ValueError('Wrong number of target values. expect={}, got={}'.format(len(self), len(target_values)))
+        self._targets = target_values
+        
+    def getName(self, index=None) -> str:
+        if index is None:
+            return self._description
+        elif self._targets is None:
+            return self._description + "[" + str(index) + "]"
+        else:
+            return self._description + ", target=" + str(self._targets[index])
+
     def getDescription(self) -> str:
         '''Get the description for this DataSource'''
         return self._description
+

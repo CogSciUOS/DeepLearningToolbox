@@ -57,11 +57,17 @@ class ResizePolicyBilinear(_ResizePolicyBase):
     '''Resize policy which bilinearly interpolates images to the target size.'''
 
     def resize(self, img):
-        from skimage.transforms import resize
+        #from skimage.transforms import resize
+        from scipy.misc import imresize
+
         if self._new_shape is None:
             return img
-        else:
-            return resize(img, self._new_shape, preserve_range=True)
+        
+        if self._new_shape[0:2] == img.shape[0:2]:
+            return img
+        
+        #return resize(img, self._new_shape, preserve_range=True)
+        return imresize(img, self._new_shape[0:2])
 
 
 class ResizePolicyPad(_ResizePolicyBase):
@@ -92,18 +98,55 @@ class ResizePolicyPad(_ResizePolicyBase):
         # necessary padding to reach desired size
         pad_h = new_h - h
         pad_w = new_w - w
-        ###############################################################################
-        #  If padding is not even, we put one more padding pixel to the bottom/right  #
-        ###############################################################################
+        
+        # If padding is not even, we put one more padding pixel to the
+        # bottom/right
         top = pad_h // 2
         bottom = pad_h - top
         left = pad_w // 2
         right = pad_w - left
-        print(self._new_shape)
-        print(img.shape)
-        __import__('ipdb').set_trace()
+        print("new_shape", self._new_shape)
+        print("img.shape", img.shape)
 
         return np.pad(img, (top, bottom, left, right), self._pad_mode, **self._pad_kwargs)
+
+
+class ResizePolicyChannels(_ResizePolicyBase):
+    '''Resize policy which adapts the number of channels.'''
+
+    _channels = None
+
+    def setShape(self, new_shape):
+        if len(new_shape) == 3:
+            self._channels = new_shape[2]
+        else:
+            self._channels = None
+
+    def resize(self, img):
+        if self._channels is None:
+            if img.ndim == 3 and img.shape[3] == 1:
+                img = np.squeeze(img, axis=2)
+            elif img.ndim == 3:
+                # FIXME[hack]: find better way to do RGB <-> grayscale
+                # conversion
+                img = np.mean(img, axis=2).astype(np.uint8)
+            elif img.ndim != 2:
+                raise ArgumentError('Incompatible shape.')
+        elif img.ndim == 2:
+            if self._channels == 1:
+                img = img[..., np.newaxis]
+            else:
+                # Blow up to three dimensions by repeating the channel
+                img = img[..., np.newaxis].repeat(self._channels, axis=2)
+        elif self._channels > 1 and img.shape[2] == 1:
+            img = img.repeat(3, axis=2)
+        elif self._channels == 1 and img.shape[2] > 1:
+            # FIXME[hack]: find better way to do RGB <-> grayscale
+            # conversion
+            img = np.mean(img, axis=2, keepdims=True).astype(np.uint8)
+        else:
+            raise ArgumentError('Incompatible network input shape.')
+        return img
 
 class ResizePolicy(object):
 
@@ -121,23 +164,23 @@ class ResizePolicy(object):
     def Crop():
         raise NotImplementedError
 
+    @staticmethod
+    def Channels():
+        return ResizePolicyChannels()
 
-class ShapeAdaptor(DataSource):
+
+class ShapeAdaptor:
     '''Adaptive wrapper around a :py:class:`DataSource`'''
 
-    def __init__(self, network: Network, source: DataSource, resize_policy):
+    def __init__(self, resize_policy, network: Network=None):
         '''
         Parameters
         ----------
-        network :   network.Network
-                    Network to adapt to
-        source  :   DataSource
-                    Source to adapt from
         resize  :   ResizePolicy
                     Policy to use for resizing images
+        network :   network.Network
+                    Network to adapt to
         '''
-        super().__init__(f'ShapeAdaptor< {source._description} >')
-        self._source = source
         self._resize = resize_policy
         self.setNetwork(network)
 
@@ -148,11 +191,8 @@ class ShapeAdaptor(DataSource):
         ----------
         network :   network.Network
         '''
-        self._resize.setShape(network.get_input_shape(include_batch=False))
+        if network is not None:
+            self._resize.setShape(network.get_input_shape(include_batch=False))
 
-    def __getitem__(self, item: int):
-        img, name = self._source[item]
-        return InputData(self._resize.resize(img), name)
-
-    def __len__(self):
-        return len(self._source)
+    def __call__(self, data: np.ndarray):
+        return self._resize.resize(data)

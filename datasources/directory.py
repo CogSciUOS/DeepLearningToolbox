@@ -2,7 +2,7 @@ from datasources import DataSource, InputData
 from scipy.misc import imread
 from os.path import join, isdir, isfile
 from os import listdir
-
+from glob import glob
 
 class DataDirectory(DataSource):
     '''A data directory contains data entries (e.g., images), in
@@ -27,7 +27,7 @@ class DataDirectory(DataSource):
         dirname :   str
                     Name of the directory with files
         '''
-        super().__init__()
+        super().__init__(dirname)
         self.setDirectory(dirname)
 
     def setDirectory(self, dirname: str):
@@ -42,8 +42,11 @@ class DataDirectory(DataSource):
         if self._dirname is None:
             self._filenames = None
         else:
-            self._filenames = [f for f in listdir(self._dirname)
-                               if isfile(join(self._dirname, f))]
+#            self._filenames = [f for f in listdir(self._dirname)
+#                               if isfile(join(self._dirname, f))]
+            self._filenames = glob(join(self._dirname, "**", "*.*"),
+                                   recursive=True)
+
 
     def getDirectory(self) -> str:
         return self._dirname
@@ -64,3 +67,11 @@ class DataDirectory(DataSource):
 
     def __str__(self):
         return f'<DataDirectory "{self._dirname}"'
+
+    def getName(self, index=None) -> str:
+        if index is None:
+            return self._description
+        elif self._targets is None:
+            return self._filenames[index]
+        else:
+            return self._filenames[index] + ", target=" + str(self._targets[index])

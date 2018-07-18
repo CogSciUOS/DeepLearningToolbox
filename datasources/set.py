@@ -1,29 +1,52 @@
-from datasources import DataArray
+import os
+import os.path
+import importlib
+import importlib.util
 
-class DataSet(DataArray):
-    '''Data source for Keras builtin datasets'''
+from datasources import DataArray, DataDirectory
 
-    def __init__(self, name: str = None):
-        super().__init__()
-        self._name = name
-        self.load(name)
+class DataSet:
+    '''Data source for Keras builtin datasets.
 
-    def load(self, name: str):
-        try:
-            from importlib import import_module
-            dataset = import_module(f'keras.datasets.{name}')
-            data = dataset.load_data()[0][0]
-            self.setArray(data, name)
-        except ImportError:
+    Keras provides some methods to access standard datasets via its
+    keras.datasets API. This API will automatically download and
+    unpack required data into ~/.keras/datasets/.
+
+    '''
+    @staticmethod
+    def load(name: str):
+        if name != 'imagenet' and importlib.util.find_spec(f'keras.datasets.{name}') is not None:
+            dataset = importlib.import_module(f'keras.datasets.{name}')
+            data = dataset.load_data()
+            # (x_train, y_train), (x_test, y_test)
+            dataset = DataArray(data[0][0], f'keras.datasets.{name}')
+            dataset.add_target_values(data[0][1])
+        elif name == 'imagenet':
+            dir = os.path.join(os.environ.get('IMAGENET_DATA'),"val")
+            dataset = DataDirectory(dir)
+        else:
             raise ValueError(f'Unknown dataset: {name}')
+        return dataset
 
-    def getName(self) -> str:
-        return self._name
 
     @staticmethod
-    def getKerasDatasets():
-        dataset_names = ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']
-        return dataset_names
+    def getDatasets(quick = False):
+        dataset_names = []
 
-    def __str__(self):
-        return f'<DataSet "{self._name}"'
+        # Check for Keras datasets
+        # Attention: even finding the module spec for the
+        # keras.dataset modules will also load the keras backend (which
+        # is hugh and slow and may actually not be needed)!
+        if quick:
+            dataset_names.extend(['mnist', 'cifar10', 'cifar100'])
+        else:
+            for d in ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']:
+                if importlib.util.find_spec(f'keras.datasets.{d}') is not None:
+                    dataset_names.append(d)
+        
+
+        # Check for ImageNet
+        if os.environ.get('IMAGENET_DATA') is not None:
+            dataset_names.append('imagenet')
+
+        return dataset_names
