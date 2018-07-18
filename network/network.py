@@ -6,7 +6,10 @@ import numpy as np
 
 from frozendict import FrozenOrderedDict
 
+import importlib
+
 from .util import convert_data_format
+
 
 # FIXME[design]: we should decide on some points:
 #
@@ -22,9 +25,10 @@ from .util import convert_data_format
 class Network:
     """Abstract Network interface for all frameworks.
 
-    The Network API will allow to order the dimensions in data arrays in a way independent of the
-    underlying Network implementation. There seem to be different orderings applied in different
-    frameworks:
+    The Network API will allow to order the dimensions in data arrays
+    in a way independent of the underlying Network
+    implementation. There seem to be different orderings applied in
+    different frameworks:
 
       * tensorflow default is to use channel last (``NHWC``)
         (`can be changed to channel first <https://www.tensorflow.org/api_docs/python/tf/nn/conv2d>`_: ``data_format = "NCHW"``)
@@ -46,6 +50,34 @@ class Network:
         Network, in each method that gets or returns array data.
 
     """
+
+    
+    @classmethod
+    def framework_available(cls):
+        """Check if the underlying framework is available (installed
+        on this machine).
+        """
+        return false
+
+    @classmethod
+    def import_framework(cls):
+        """Import the framework (python modules) required by this network.
+        """
+        pass # to be implemented by subclasses
+    
+
+    # FIXME[todo]: add additional parameters, e.g. cpu / gpu
+    @classmethod
+    def load(cls, module_name, *args, **kwargs):
+        print("Loading module: {}".format(module_name))
+        module = importlib.import_module(module_name)
+        network_class = getattr(module, "Network")
+        network_class.import_framework()
+        instance = network_class(*args, **kwargs)
+        return instance
+
+        #
+
 
     # ------------ Public interface ----------------
 

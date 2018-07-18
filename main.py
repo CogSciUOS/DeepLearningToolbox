@@ -13,12 +13,17 @@ import os
 from PyQt5.QtWidgets import QApplication
 
 from qtgui.mainwindow import DeepVisMainWindow
-from network.keras import Network as KerasNetwork
-from network.torch import Network as TorchNetwork
+
+
+# FIXME[todo]: speed up initialization by only loading frameworks
+# that actually needed
+# FIXME[todo]: also provide code to check if the framework is available
+#from network.keras import Network as KerasNetwork
+#from network.torch import Network as TorchNetwork
 from network import Network
 
 
-def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_model.h5') -> KerasNetwork:
+def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_model.h5') -> Network: # KerasNetwork
     '''
     Visualise a Keras-based network
 
@@ -26,6 +31,7 @@ def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_m
     ----------
     backend     :   str
                     Name of the Keras backend
+                    (currently only "tensorflow" or "theano")
     cpu         :   bool
                     Whether to use only cpu, not gpu
     model_file       :   str
@@ -42,43 +48,21 @@ def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_m
         In case of unknown backend
 
     '''
-    # the only way to configure the keras backend appears to be via env vars we
-    # thus inject one for this process. Keras must be loaded after this is done
     if backend == 'tensorflow':
-        os.environ['KERAS_BACKEND'] = 'tensorflow'
-        if cpu:
-            # unless we do this, TF still checks and finds gpus (not sure if it
-            # actually uses them)
-            # UPDATE: TF now still loads CUDA, there seems to be no way around this
-            os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-            os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-            print('Running in CPU-only mode.')
-            import tensorflow as tf     # do not import at the top to avoid expensive loading
-            from multiprocessing import cpu_count
-            from keras import backend as K
-            num_cpus = cpu_count()
-            config = tf.ConfigProto(intra_op_parallelism_threads=num_cpus,
-                                    inter_op_parallelism_threads=num_cpus,
-                                    allow_soft_placement=True,
-                                    device_count={'CPU': num_cpus, 'GPU': 0})
-            session = tf.Session(config=config)
-            K.set_session(session)
-        from network.keras_tensorflow import Network as KerasTensorFlowNetwork
-        network = KerasTensorFlowNetwork(model_file=model_file)
-        return network
+        return Network.load('network.keras_tensorflow',
+                            model_file=model_file)
     elif backend == 'theano':
-        # os.environ['KERAS_BACKEND'] = 'theano'
-        print('Currently, only TF backend is supported', file=sys.stderr)
-        return None
+        return Network.load('network.keras_theano',
+                            model_file=model_file)
     else:
         raise RuntimeError('Unknown backend {backend}')
 
 
-def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input_shape: tuple) -> TorchNetwork:
+def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input_shape: tuple) -> Network: # TorchNetwork
     '''
     Visualise a Torch-based network
 
-    .. error:: Torch network currently don't work.
+    .. error:: Torch network currently does not work.
 
     Parameters
     ----------
@@ -101,9 +85,9 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input
         The concrete network instance to visualise
 
     '''
-    # TODO Fix errors when running torch network
-    from network.torch import Network as TorchNetwork
-    return TorchNetwork(model_file, parameter_file, net_class=net_class,
+    # FIXME[todo]: Fix errors when running torch network
+    return Network.load('network.torch',
+                        model_file, parameter_file, net_class=net_class,
                         input_shape=input_shape, use_cuda=not cpu)
 
 

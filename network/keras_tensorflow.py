@@ -2,15 +2,8 @@ from __future__ import absolute_import
 
 import numpy as np
 
-# Make sure that we use the 'tensorflow' backend:
+import sys
 import os
-os.environ['KERAS_BACKEND'] = 'tensorflow'
-
-import keras
-
-print(keras.backend.set_image_dim_ordering('th'))
-print(keras.backend.image_dim_ordering())
-print(keras.backend.image_data_format())
 
 
 from collections import OrderedDict
@@ -30,10 +23,81 @@ class Network(KerasNetwork):
         'Flatten': keras_tensorflow_layers.KerasTensorFlowFlatten
     }
 
-    # Layer types that encapsulate the inner product, bias add, activation pattern.
+    # Layer types that encapsulate the inner product, bias add,
+    # activation pattern.
     _neural_layer_types = {'Dense', 'Conv2D'}
-    # Layer types that just map input to output without trainable parameters.
+
+    # Layer types that just map input to output without trainable
+    # parameters.
     _transformation_layer_types = {'MaxPooling2D', 'Flatten', 'Dropout'}
+
+
+    @classmethod
+    def import_framework(cls, cpu=True):
+        # The only way to configure the keras backend appears to be
+        # via environment variable. We thus inject one for this
+        # process. Keras must be loaded after this is done
+        os.environ['KERAS_BACKEND'] = 'tensorflow'
+
+        # TF_CPP_MIN_LOG_LEVEL: Control the amount of TensorFlow log
+        # message displayed on the console.
+        #  0 = INFO
+        #  1 = WARNING
+        #  2 = ERROR
+        #  3 = FATAL
+        #  4 = NUM_SEVERITIES
+        # Defaults to 0, so all logs are shown.
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
+        # TF_CPP_MIN_VLOG_LEVEL brings in extra debugging information
+        # and actually works the other way round: its default value is
+        # 0 and as it increases, more debugging messages are logged
+        # in.
+        # Remark: VLOG messages are actually always logged at the INFO
+        # log level. It means that in any case, you need a
+        # TF_CPP_MIN_LOG_LEVEL of 0 to see any VLOG message.
+        #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+        
+        if cpu:
+            # unless we do this, TF still checks and finds gpus (not
+            # sure if it actually uses them)
+            #
+            # UPDATE: TF now still loads CUDA, there seems to be no
+            # way around this
+            os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+
+            # FIXME[todo]: the following setting causes a TensorFlow
+            # error: failed call to cuInit: CUDA_ERROR_NO_DEVICE
+            #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+            print('{}: Running in CPU-only mode.'.format(__name__),
+                  file=sys.stderr)
+            import tensorflow as tf
+            from multiprocessing import cpu_count
+            num_cpus = cpu_count()
+            config = tf.ConfigProto(intra_op_parallelism_threads=num_cpus,
+                                    inter_op_parallelism_threads=num_cpus,
+                                    allow_soft_placement=True,
+                                    device_count={'CPU': num_cpus, 'GPU': 0})
+            session = tf.Session(config=config)
+
+        global K
+        from keras import backend as K
+        # image_dim_ordering:
+        #   'tf' - "tensorflow":
+        #   'th' - "theano":
+        K.set_image_dim_ordering('tf')
+        print("{}: image_dim_ordering: {}".
+              format(__name__, K.image_dim_ordering()),
+              file=sys.stderr)
+        print("{}: image_data_format: {}".
+              format(__name__, K.image_data_format()),
+              file=sys.stderr)
+
+        if cpu:
+            K.set_session(session)
+
+        super(Network, cls).import_framework()
+
 
     def __init__(self, **kwargs):
         """
@@ -44,7 +108,7 @@ class Network(KerasNetwork):
             Path to the .h5 model file.
         """
         super().__init__(**kwargs)
-        self._sess = keras.backend.get_session()
+        self._sess = K.get_session()
 
     def _create_layer_dict(self):
 
@@ -97,6 +161,7 @@ class Network(KerasNetwork):
     def _compute_activations(self, layer_ids: list, input_samples: np.ndarray):
         """Gives activations values of the loaded_network/model
         for a given layername and an input (inputsample).
+        
         Parameters
         ----------
         layer_ids: The layers the activations should be fetched for.
@@ -112,8 +177,9 @@ class Network(KerasNetwork):
     def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
         ops = self._sess.graph.get_operations()
         net_input_tensors = []
-        # To get the net input of a layer we take the second to last operation as the net input.
-        # This operation corresponds usually to the addition of the bias.
+        # To get the net input of a layer we take the second to last
+        # operation as the net input.  This operation corresponds
+        # usually to the addition of the bias.
         for layer_id in layer_ids:
             output_op = self.layer_dict[layer_id].output.op
             # Assumes the input to the activation is the net input.
