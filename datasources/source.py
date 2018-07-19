@@ -16,7 +16,19 @@ class DataSource:
     '''
     _description: str = None
     _targets: np.ndarray = None
+    _labels: list = None
 
+    @staticmethod
+    def check_availability():
+        '''Check if this Datasource is available.
+        
+        Returns
+        -------
+        True if the DataSource can be instantiated, False otherwise.
+        '''
+        return True
+
+    
     def __init__(self, description=None):
         '''Create a new DataSource
 
@@ -40,13 +52,18 @@ class DataSource:
             raise ValueError('Wrong number of target values. expect={}, got={}'.format(len(self), len(target_values)))
         self._targets = target_values
         
+    def add_target_labels(self, labels: list):
+        self._labels = labels
+        
     def getName(self, index=None) -> str:
         if index is None:
             return self._description
         elif self._targets is None:
             return self._description + "[" + str(index) + "]"
         else:
-            return self._description + ", target=" + str(self._targets[index])
+            target = int(self._targets[index])
+            target = f'[{target}]' if self._labels is None else self._labels[target]
+            return self._description + ", target=" + target
 
     def getDescription(self) -> str:
         '''Get the description for this DataSource'''

@@ -21,6 +21,23 @@ class DataSet:
             # (x_train, y_train), (x_test, y_test)
             dataset = DataArray(data[0][0], f'keras.datasets.{name}')
             dataset.add_target_values(data[0][1])
+
+            # Also load the labels if available
+            from keras.utils.data_utils import get_file
+            from six.moves import cPickle
+            if name == 'cifar10':
+                path = get_file('cifar-10-batches-py', None)
+                with open(os.path.join(path, "batches.meta"), 'rb') as file:
+                    d = cPickle.load(file)
+                dataset.add_target_labels(d['label_names'])
+            elif name == 'cifar100':
+                path = get_file('cifar-100-python', None)
+                with open(os.path.join(path, "meta"), 'rb') as file:
+                    d = cPickle.load(file)
+                dataset.add_target_labels(d['fine_label_names'])
+                # there is also 'coarse_label_names'
+                # with 20 categories
+
         elif name == 'imagenet':
             dir = os.path.join(os.environ.get('IMAGENET_DATA'),"val")
             dataset = DataDirectory(dir)

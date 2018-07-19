@@ -13,7 +13,7 @@ import os.path
 import urllib
 
 flag_download = False
-flag_save = False
+flag_save = True
 
 model_data_url = "http://www.cs.toronto.edu/%7Eguerzhoy/tf_alexnet/bvlc_alexnet.npy"
 

@@ -103,7 +103,8 @@ class Network:
 
 
     def __getitem__(self, item):
-        """Provide access to the layers by number. Access by id is provided via :py:attr:`layer_dict`."""
+        """Provide access to the layers by number. Access by id is provided
+        via :py:attr:`layer_dict`."""
         return tuple(self.layer_dict.values())[item]
 
 
@@ -253,7 +254,8 @@ class Network:
 
         """
 
-        network_input_shape = self[0].input_shape
+        #network_input_shape = self[0].input_shape
+        network_input_shape = self.get_input_shape()
         # Checking whether input samples was provided with all for channels.
         if len(inputs.shape) == 2:
             # Only width and height means we are dealing with one grayscale image.
@@ -270,7 +272,7 @@ class Network:
             elif self._is_batch_provided(inputs.shape, network_input_shape):
                 inputs = inputs[..., np.newaxis]
             else:
-                raise ValueError('Non matching input dimensions.')
+                raise ValueError('Non matching input dimensions: network={} vs data={}'.format(network_input_shape, inputs.shape))
         elif len(inputs.shape) > 4:
             raise ValueError('Too many input dimensions. Should be maximally 4 instead of {}.'.format(
                 len(inputs.shape)
@@ -385,8 +387,18 @@ class Network:
     def get_input_shape(self, include_batch = True) -> tuple:
         """Get the shape of the input data for the network.
         """
-        shape = self.get_layer_input_shape(next(iter(self.layer_dict.keys())))
+        first_layer_id = next(iter(self.layer_dict.keys()))
+        shape = self.get_layer_input_shape(first_layer_id)
         return shape if include_batch else shape[1:]
+
+
+    def get_output_shape(self, include_batch = True) -> tuple:
+        """Get the shape of the output data for the network.
+        """
+        for last_layer_id in iter(self.layer_dict.keys()): pass
+        shape = self.get_layer_output_shape(last_layer_id)
+        return shape if include_batch else shape[1:]
+
 
     def get_layer_input_shape(self, layer_id) -> tuple:
         """

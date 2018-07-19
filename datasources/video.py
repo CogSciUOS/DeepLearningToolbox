@@ -1,23 +1,39 @@
-from datasources import DataSource, InputData
-import cv2
-from cv2 import VideoCapture
+import importlib.util
 
-class DataVideo(DataSource):
+from datasources import DataSource, InputData
+
+
+class DataVideo(DataSource):   
     '''A data source fetching frames from a video.
 
+    
     Attributes
     ----------
-    _capture    : VideoCapture  
+    _capture    : cv2.VideoCapture  
                     A capture object
     '''
-    _capture: VideoCapture  = None
-    _filename: str  = None
+    _capture = None
+    _filename: str = None
+
+
+    @staticmethod
+    def check_availability() -> bool:
+        '''Check if this Datasource is available.
+        
+        Returns
+        -------
+        True if the OpenCV library is available, False otherwise.
+        '''
+        return importlib.util.find_spec('cv2')
+
 
     def __init__(self, filename:str):
         '''Create a new DataWebcam
         '''
         super().__init__()
         self._filename = filename
+
+        from cv2 import VideoCapture
         self._capture = VideoCapture(filename)
         if not self._capture.isOpened():
             print("could not open :",filename)

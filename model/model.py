@@ -432,11 +432,12 @@ class Model(object):
                 self._shape_adaptor.setNetwork(network)
                 self._channel_adaptor.setNetwork(network)
                 if self._data is not None:
-                    data = self._shape_adaptor(self.data)
+                    data = self._shape_adaptor(self._data)
                     data = self._channel_adaptor(data)
                     self._input = data
 
-            return ModelChange(network_changed=True, layer_changed=True)
+            return ModelChange(network_changed=True, layer_changed=True,
+                               input_index_changed=True)
         elif force_update:
             # argh. code smell
             self.setLayer(None)

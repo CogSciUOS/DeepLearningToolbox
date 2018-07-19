@@ -127,13 +127,25 @@ class Network(BaseNetwork):
         checkpoint = kwargs.get('checkpoint', None)
         sess = kwargs.get('session', None)
         if checkpoint is not None and sess is None:
-            # Restore the tensorflow model from a file.
+            # Restore the tensorflow model from checkpoint files.
+            # The consists basically of two parts:
+            # (a) The meta graph ({checkpoint}.meta):
+            #     a protocol buffer containing the complete Tensorflow
+            #     graph, i.e. all variables, operations, collections, etc.
+            # (b) The actual checkpoint files
+            # (b1) {checkpoint}.data-00000-of-00001
+            #      a binary file containing all weights, biases,
+            #      gradients, etc.
+            # (b2) {checkpoint}.index
+            # (b3) a textfile alled "checkpoint" keeping record of
+            #      the latest checkpoint files saved
+            
             #self._sess = tf.Session()
             #tf_config = tf.ConfigProto(log_device_placement=True)
             tf_config = tf.ConfigProto()
             self._sess = tf.Session(config=tf_config)
             saver = tf.train.import_meta_graph(checkpoint + '.meta', clear_devices=True)
-            model_dir = os.path.split(checkpoint)[0]
+            model_dir = os.path.dirname(checkpoint)
             saver.restore(self._sess, tf.train.latest_checkpoint(model_dir))
         elif checkpoint is None and sess is not None:
             # Just store the session since the model is already there.

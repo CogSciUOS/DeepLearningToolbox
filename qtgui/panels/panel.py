@@ -46,7 +46,10 @@ class Panel(QWidget):
         # the 'next' button: used to load the next image
         self._input_selector = QInputSelector()
 
-        self._input_info = QInputInfoBox()
+        # FIXME[hack]
+        self._input_info = QInputInfoBox(imageView=self._input_view)
+        self._input_view._info_box = self._input_info
+        
         # FIXME[layout]
         self._input_info.setMinimumWidth(200)
 

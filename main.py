@@ -115,11 +115,16 @@ def main():
                         default=False)
     args = parser.parse_args()
 
+    from network.tensorflow import Network as TensorFlowNetwork
+    checkpoint = os.path.join('models', 'example_tf_alexnet',
+                              'bvlc_alexnet.ckpt')
+    network2 = TensorFlowNetwork(checkpoint=checkpoint)
    
     if args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
         backend  = args.framework[dash_idx + 1:]
         network  = keras(backend, args.cpu, model_file=args.model)
+
     elif args.framework == 'torch':
         # FIXME[hack]: provide these parameters on the command line ...
         net_file       = 'models/example_torch_mnist_net.py'
@@ -135,6 +140,7 @@ def main():
     from model import Model
     app        = QApplication(sys.argv)
     model      = Model(network)
+    model.addNetwork(network2)
 
     if args.data:
         source = DataSet.load(args.data)

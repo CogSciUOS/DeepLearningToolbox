@@ -73,6 +73,13 @@ class TensorFlowStridingLayer(TensorFlowLayer, layers.StridingLayer):
         striding_op = self._ops[0]
         return striding_op.node_def.attr['padding'].s.decode('utf8')
 
+    @property
+    def activation_tensor(self):
+        """The tensor that contains the activations of the layer."""
+        # For now assume that the last operation is the activation.
+        # Maybe differentiate with subclasses later.
+        return self._ops[0].outputs[0]
+
 
 class TensorFlowDense(TensorFlowNeuralLayer, layers.Dense):
     pass

@@ -20,6 +20,10 @@ class QNetworkView(QWidget, Observer):
     _controller:   'controller.InputController' = None
     _current_selected:  int = None
 
+    # FIXME[hack]: make a nicer solution and then remove this!
+    _label_input = None
+    _label_output = None
+    
     def __init__(self, parent=None):
         '''Initialization of the QNetworkView.
 
@@ -86,6 +90,15 @@ class QNetworkView(QWidget, Observer):
                 for button in self._layer_buttons:
                     button.deleteLater()
                 self._layer_buttons = []
+                if self._label_input is not None:
+                    self._label_input.deleteLater()
+                    self._label_input = None
+                if self._label_output is not None:
+                    self._label_output.deleteLater()
+                    self._label_output = None                   
+
+                self._label_input = QLabel("input = " + str(network.get_input_shape(False)))
+                layout.addWidget(self._label_input)
 
                 # a column of buttons to select the network layer
                 for name in network.layer_dict.keys():
@@ -94,6 +107,9 @@ class QNetworkView(QWidget, Observer):
                     layout.addWidget(button)
                     button.resize(button.sizeHint())
                     button.clicked.connect(self.layerClicked)
+
+                self._label_output = QLabel("output = " + str(network.get_output_shape(False)))
+                layout.addWidget(self._label_output)
 
                 # choose the active layer for the new network
                 # self.setActiveLayer(0)

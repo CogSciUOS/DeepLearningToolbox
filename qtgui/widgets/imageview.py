@@ -32,6 +32,9 @@ class QImageView(QWidget, Observer):
     _overlay: QImage = None
 
     _show_raw: bool = False
+
+    # FIXME[hack]: remove
+    _info_box = None
     
     def __init__(self, parent):
         super().__init__(parent)
@@ -159,6 +162,8 @@ class QImageView(QWidget, Observer):
     def mousePressEvent(self, event):
         self._show_raw = not self._show_raw
         self.setImage()
+        from model import ModelChange
+        self._info_box.modelChanged(self._model, ModelChange(input_index_changed=True))
 
     # FIXME[todo]: does not work!
     def keyPressEvent(self, event):

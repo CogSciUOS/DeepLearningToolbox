@@ -105,8 +105,6 @@ class ResizePolicyPad(_ResizePolicyBase):
         bottom = pad_h - top
         left = pad_w // 2
         right = pad_w - left
-        print("new_shape", self._new_shape)
-        print("img.shape", img.shape)
 
         return np.pad(img, (top, bottom, left, right), self._pad_mode, **self._pad_kwargs)
 
@@ -144,8 +142,8 @@ class ResizePolicyChannels(_ResizePolicyBase):
             # FIXME[hack]: find better way to do RGB <-> grayscale
             # conversion
             img = np.mean(img, axis=2, keepdims=True).astype(np.uint8)
-        else:
-            raise ArgumentError('Incompatible network input shape.')
+        elif self._channels != img.shape[2]:
+            raise ValueError('Incompatible network input shape: network expects {} channels, but image has shape {}.'.format(self._channels,img.shape))
         return img
 
 class ResizePolicy(object):

@@ -59,13 +59,16 @@ class ActivationsPanel(Panel, Observer):
         for widget in controllable_widgets:
             widget.setController(controller)
 
-        # What is this for? Since the Model is initialised with the network, the first call to
-        # setNetwork must somehow communicate that an update of all observers is desired despite
-        # the fact that the new network is identical to the old one. Another approach would be to
-        # make the network an optional Model initialiser param, but this requires some further
-        # tweaks. So here I just capture a local variable in a closure which then gets flipped on
-        # first call. I need a closure anyway for the name -> network map, so might as well put this
-        # in as well.
+        # What is this for? Since the Model is initialised with the
+        # network, the first call to setNetwork must somehow
+        # communicate that an update of all observers is desired
+        # despite the fact that the new network is identical to the
+        # old one. Another approach would be to make the network an
+        # optional Model initialiser param, but this requires some
+        # further tweaks. So here I just capture a local variable in a
+        # closure which then gets flipped on first call. I need a
+        # closure anyway for the name -> network map, so might as well
+        # put this in as well.
         first_call = True
         def select_net(name):
             '''closure for _network_map and first_call'''
