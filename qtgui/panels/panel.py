@@ -65,10 +65,11 @@ class Panel(QWidget):
         input_box.setLayout(input_layout)
         self._input_box = input_box
 
-        ########################################################################
-        #                            Network                                   #
-        ########################################################################
-        # networkview: a widget to select a network
+        ##
+        ## Network
+        ##
+        
+        ## networkview: a widget to select a network
         self._network_view = QNetworkView()
 
         self._network_selector = QComboBox()

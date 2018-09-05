@@ -9,7 +9,7 @@ from datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
 
 
 class ModelChange(dict):
-    '''.. :py:class:: ModelChange
+    """.. :py:class:: ModelChange
 
     A class whose instances are passed to observers in
     :py:meth:`observer.Observer.modelChanged` in order to inform them
@@ -29,8 +29,7 @@ class ModelChange(dict):
     dataset_changed :   bool
                         Whether the underlying :py:class:`datasources.DataSource`
                         has changed
-
-    '''
+    """
 
     def __init__(self, **kwargs):
         self['network_changed']     = False
@@ -443,6 +442,18 @@ class Model(object):
             self.setLayer(None)
             return ModelChange(network_changed=True, layer_changed=True)
         return None
+
+
+    def getNetwork(self) -> Network:
+        """Get the currently selected network.
+
+        Returns
+        -------
+        The currently selected network or None if no network
+        is selected.
+        """
+        return self._network
+
 
     def getNetworkName(self, network: Network) -> str:
         '''Get the name of the currently selected network.

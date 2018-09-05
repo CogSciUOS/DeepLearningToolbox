@@ -384,19 +384,25 @@ class Network:
 
 ###------------------------- methods for accessing layer attributes ---------
 
+    def input_layer_id(self):
+        first_layer_id = next(iter(self.layer_dict.keys()))
+        return first_layer_id
+
+    def output_layer_id(self):
+        for last_layer_id in iter(self.layer_dict.keys()): pass
+        return last_layer_id
+
     def get_input_shape(self, include_batch = True) -> tuple:
         """Get the shape of the input data for the network.
         """
-        first_layer_id = next(iter(self.layer_dict.keys()))
-        shape = self.get_layer_input_shape(first_layer_id)
+        shape = self.get_layer_input_shape(self.input_layer_id())
         return shape if include_batch else shape[1:]
 
 
     def get_output_shape(self, include_batch = True) -> tuple:
         """Get the shape of the output data for the network.
         """
-        for last_layer_id in iter(self.layer_dict.keys()): pass
-        shape = self.get_layer_output_shape(last_layer_id)
+        shape = self.get_layer_output_shape(self.output_layer_id())
         return shape if include_batch else shape[1:]
 
 
@@ -705,4 +711,45 @@ class Network:
         """
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
+
+
+    def set_output_labels(self, labels):
+        """Provide labels for the output layer. This is useful for 
+        networks that are used as classifier. It allows to report
+        results in form of human readable labels instead of just
+        the indices of units within the output layer.
+
+        Parameters
+        ----------
+        labels:
+            A list providing the labels.
+
+        Raises
+        ------
+        ValueError
+            If the length of the list does not match the number of
+            neurons in the output layer.
+        """
+        output_shape = self.get_output_shape(include_batch = False)
+        if len(output_shape) > 1 or output_shape[0] != len(labels):
+            raise ValueError("Labels do not fit to the output layer")
+        self._output_labels = labels
+
+
+    def classify_top_n(self, input_samples: np.ndarray, n = 5):
+        """Output the top-n classes for given input.
+        """
+
+        # FIXME[todo]: at least in tensorflow it seems possible to feed a list of inputs!
+        #output = sess.run(network_output_tensor, feed_dict = {network_input_tensor:input_samples})
+        # However, we do not allow this yet!
+        input_samples = np.asarray(input_samples)
+        output = self.get_activations(self.output_layer_id(), input_samples)
+
+        for input_im_ind in range(output.shape[0]):
+            inds = np.argsort(output)[input_im_ind,:]
+            print("Image", input_im_ind)
+            for i in range(n):
+                print("  {}: {} ({})".format(i,self._output_labels[inds[-1-i]],
+                                             output[input_im_ind, inds[-1-i]]))
 

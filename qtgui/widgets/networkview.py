@@ -57,24 +57,6 @@ class QNetworkView(QWidget, Observer):
         self._controller.onLayerSelected(self.sender().text())
 
     def modelChanged(self, model, info):
-        if info.network_changed or info.layer_changed:
-            #############################
-            #  Respond to layer change  #
-            #############################
-            layer = model._layer
-            if layer:
-                # unmark the previously active layer
-                if self._current_selected is not None:
-                    if self._current_selected is not None:
-                        oldItem = self._layer_buttons[self._current_selected]
-                        oldItem.setStyleSheet('')
-
-                self._current_selected = model.idForLayer(layer)
-                if self._current_selected is not None:
-                    # and mark the new layer
-                    newItem = self._layer_buttons[self._current_selected]
-                    if newItem is not None:
-                        newItem.setStyleSheet('background-color: red')
 
         if info.network_changed:
             ###############################
@@ -82,6 +64,7 @@ class QNetworkView(QWidget, Observer):
             ###############################
             layout = self._layer_layout
             network = model._network
+            self._current_selected = None
             if network:
                 # remove the old network buttons
                 # FIXME[todo]: (still not sure what is the correct way to do:
@@ -114,6 +97,24 @@ class QNetworkView(QWidget, Observer):
                 # choose the active layer for the new network
                 # self.setActiveLayer(0)
                 self._controller.onLayerSelected(None)
+
+        if info.network_changed or info.layer_changed:
+            #############################
+            #  Respond to layer change  #
+            #############################
+            layer = model._layer
+            if layer:
+                # unmark the previously active layer
+                if self._current_selected is not None:
+                    oldItem = self._layer_buttons[self._current_selected]
+                    oldItem.setStyleSheet('')
+
+                self._current_selected = model.idForLayer(layer)
+                if self._current_selected is not None:
+                    # and mark the new layer
+                    newItem = self._layer_buttons[self._current_selected]
+                    if newItem is not None:
+                        newItem.setStyleSheet('background-color: red')
 
         self.update()
 

@@ -69,6 +69,7 @@ class ActivationsController(InputController):
         layer   :   int or string
                     The index or the name of the layer to activate.
         '''
+        print("ACTIVATE LAYER {}".format(layer))
         self._runner.runTask(self._model.setLayer, layer)
 
     def onSourceSelected(self, source: datasources.DataSource):

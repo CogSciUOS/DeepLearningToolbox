@@ -167,11 +167,16 @@ class Network(BaseNetwork):
         """
         layer_dict = OrderedDict()
         layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
+        for tensor in self._sess.graph.as_graph_def().node:
+            print(type(tensor), tensor.name)
+
         ops = self._sess.graph.get_operations()
         op_idx = 0
         self._input_placeholder = None
-        
+
+
         while op_idx < len(self._sess.graph.get_operations()):
+            print(op_idx, type(ops[op_idx]), ops[op_idx].type, ops[op_idx].name, ops[op_idx].values())
 
             if self._input_placeholder is None:
                 if ops[op_idx].type == 'Placeholder':
@@ -282,3 +287,21 @@ class Network(BaseNetwork):
         """
         shape = self._get_network_input_tensor().shape
         return shape if include_batch else shape[1:]
+
+
+
+def load_alexnet():
+    if 'ALEXNET_MODEL' in os.environ:
+        model_path = os.getenv('ALEXNET_MODEL', '.')
+    else:
+        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                  'models', 'example_tf_alexnet')
+    checkpoint = os.path.join(model_path, 'bvlc_alexnet.ckpt')
+    if not os.path.isfile(checkpoint + '.meta'):
+        raise ValueError('AlexNet checkpoint files do not exist. You can generate them by downloading "bvlc_alexnet.npy" and then running models/example_tf_alexnet/alexnet.py.')
+
+    network = Network(checkpoint=checkpoint)
+    
+    from datasources.imagenet_classes import class_names
+    network.set_output_labels(class_names)
+    return network

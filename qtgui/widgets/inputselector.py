@@ -29,6 +29,7 @@ class QInputSelector(QWidget, observer.Observer):
     '''
     _index: int = None
 
+
     def __init__(self, parent=None):
         '''Initialization of the QInputSelector.
 
@@ -40,10 +41,9 @@ class QInputSelector(QWidget, observer.Observer):
         super().__init__(parent)
         self._initUI()
 
-    _controller = None
 
     def setController(self, controller: ActivationsController):
-        '''Set the controller for this QInputSelector. Will trigger
+        """Set the controller for this QInputSelector. Will trigger
         observation of the controller's model.
 
         Parameters
@@ -52,7 +52,7 @@ class QInputSelector(QWidget, observer.Observer):
                         Controller for mediating commands for
                         the activations panel.
 
-        '''
+        """
         super().setController(controller)
         self._source_selector.setController(controller)
         self._navigator.setController(controller)
