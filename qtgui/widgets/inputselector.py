@@ -86,7 +86,19 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
 
 
 class QInputSourceSelector(QWidget, observer.Observer):
+    '''The QInputSourceSelector provides a controls to select a data
+    source. It is mainly a graphical user interface to the datasource
+    module, adding some additional logic.
 
+    The QInputSourceSelector provides four main ways to select input
+    data:
+    1. a collection of predefined data sets from which the user can
+       select via a dropdown box
+    2. a file or directory, that the user can select via a file browser
+    3. a camera
+    4. a URL (not implemented yet)
+    '''
+    
     def __init__(self, parent=None):
         '''Initialization of the QInputNavigator.
 
@@ -98,12 +110,19 @@ class QInputSourceSelector(QWidget, observer.Observer):
         super().__init__(parent)
         self._initUI()
 
+
     def modelChanged(self, model, info):
+        '''The QInputSourceSelector is only affected by changes of
+        the model's dataset.
+        '''
         source = model._current_source
 
         if info.dataset_changed:
-            
-            if isinstance(source, DataArray):
+
+            id = source.get_public_id()
+            if id is not None:
+                self._radioButtons['Name'].setChecked(True)
+            elif isinstance(source, DataArray):
                 self._radioButtons['Name'].setChecked(True)
             elif isinstance(source, DataFile):
                 self._radioButtons['Filesystem'].setChecked(True)

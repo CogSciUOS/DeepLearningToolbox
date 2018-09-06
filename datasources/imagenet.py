@@ -24,4 +24,11 @@ class ImageNet(DataSource):
         img_file = os.path.join(img_dir, random.choice(os.listdir(img_dir)))
         im = imread(img_file)
         return InputData(im,img_file)
-        
+
+    @staticmethod
+    def download():
+        raise NotImplementedError("Downloading ImageNet is not implemented yet")
+
+    @staticmethod
+    def get_public_id():
+        return 'ImageNet'

@@ -69,3 +69,22 @@ class DataSource:
         '''Get the description for this DataSource'''
         return self._description
 
+
+    @staticmethod
+    def get_public_id():
+        '''Get the "public" ID that is used to identify this datasource.  Only
+        predefined DataSource should have such an ID, other
+        datasources should provide None.
+
+        Actually, it is the result of this method that determines if a
+        DataSource is considered as predefined. If you return a value
+        different from None here, you should make sure that you
+        provide functionality to download and initialize this
+        DataSource.
+
+        '''
+        return None
+
+    @staticmethod
+    def download():
+        raise NotImplementedError("Downloading ImageNet is not implemented yet")
