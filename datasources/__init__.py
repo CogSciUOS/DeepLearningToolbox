@@ -14,23 +14,24 @@ to locate it (e.g., by means of environment variables or some standard
 locations), and how access it (i.e., which DataSource class to use).
 
 '''
-from .source import DataSource, InputData
+from .source import DataSource, InputData, Predefined
 from .array import DataArray
 from .file import DataFile
 from .files import DataFiles
 from .directory import DataDirectory
 from .webcam import DataWebcam
 from .video import DataVideo
-from .set import DataSet
-from .imagenet import ImageNet
+from .keras import KerasDataSource
+from .imagenet import ImageNet, ImageNet2
 
-#
-# Predefined Datasources
-#
+import sys
 
-def get_datasource(public_id):
-    if public_id == "imagenet":
-        return ImageNet
-    raise ValueError(f"Unknown datasource name '{public_id}'")
+for d in KerasDataSource.KERAS_IDS:
+    try:
+        KerasDataSource(d)
+    except ValueError as err:
+        print(f"Error instantiating keras data source '{d}': {err}",
+              file=sys.stderr)
+ImageNet(section = 'train')
 
-datasources = ["mnist", "cifar10", "cifar100", "imagenet"]
+print(Predefined.get_data_source_ids())

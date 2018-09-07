@@ -19,7 +19,7 @@ class DataDirectory(DataSource):
     _dirname: str = None
     _filenames: list = None
 
-    def __init__(self, dirname: str):
+    def __init__(self, dirname: str = None):
         '''Create a new DataDirectory
 
         Parameters
@@ -38,15 +38,17 @@ class DataDirectory(DataSource):
         dirname :   str
                     Name of the directory with files
         '''
-        self._dirname = dirname
-        if self._dirname is None:
+        if self._dirname != dirname:
+            self._dirname = dirname
             self._filenames = None
-        else:
+
+    def prepare(self):
+        if self._dirname is not None and self._filenames is None:
 #            self._filenames = [f for f in listdir(self._dirname)
 #                               if isfile(join(self._dirname, f))]
             self._filenames = glob(join(self._dirname, "**", "*.*"),
                                    recursive=True)
-
+        
 
     def getDirectory(self) -> str:
         return self._dirname

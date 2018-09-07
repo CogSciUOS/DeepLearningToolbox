@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QWidget, QGroupBox, QHBoxLayout
 class QInputSelector(QWidget, observer.Observer):
     '''A Widget to select input data (probably images).  There are
     different modes of selection: from an array, from a file, from a
-    directory or from some predefined dataset.
+    directory or from some predefined data source.
 
     Modes: there are currently different modes ('array' or 'dir').
     For each mode there exist a corresponding data source. The widget
@@ -76,7 +76,7 @@ class QInputSelector(QWidget, observer.Observer):
 
 
 
-from datasources import DataArray, DataFile, DataDirectory, DataSet, DataWebcam, DataVideo
+from datasources import DataArray, DataFile, DataDirectory, DataWebcam, DataVideo, Predefined
 
 
 from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
@@ -115,25 +115,28 @@ class QInputSourceSelector(QWidget, observer.Observer):
         '''The QInputSourceSelector is only affected by changes of
         the model's dataset.
         '''
-        source = model._current_source
 
         if info.dataset_changed:
+            source = model._current_source
 
-            id = source.get_public_id()
-            if id is not None:
+            if isinstance(source, Predefined):
                 self._radioButtons['Name'].setChecked(True)
-            elif isinstance(source, DataArray):
-                self._radioButtons['Name'].setChecked(True)
-            elif isinstance(source, DataFile):
-                self._radioButtons['Filesystem'].setChecked(True)
-            elif isinstance(source, DataDirectory):
-                self._radioButtons['Filesystem'].setChecked(True)
-            elif isinstance(source, DataSet):
-                self._radioButtons['Name'].setChecked(True)
+                id = source.get_public_id()
+                index = self._datasetDropdown.findText(id)
+                if index == -1:
+                    pass # should not happen!
+                elif index != self._datasetDropdown.currentIndex():
+                    self._datasetDropdown.setCurrentIndex(index)
             elif isinstance(source, DataWebcam):
                 self._radioButtons['Webcam'].setChecked(True)
             elif isinstance(source, DataVideo):
                 self._radioButtons['Video'].setChecked(True)
+            elif isinstance(source, DataFile):
+                self._radioButtons['Filesystem'].setChecked(True)
+            elif isinstance(source, DataDirectory):
+                self._radioButtons['Filesystem'].setChecked(True)
+            else:
+                self._radioButtons['Filesystem'].setChecked(True)
 
             self._datasetDropdown.setEnabled(self._radioButtons['Name'].isChecked())
         # FIXME[old]
@@ -182,10 +185,10 @@ class QInputSourceSelector(QWidget, observer.Observer):
         size_policy = self._datasetDropdown.sizePolicy()
         size_policy.setRetainSizeWhenHidden(True)
         self._datasetDropdown.setSizePolicy(size_policy)
-        dataset_names = DataSet.getDatasets()
+        dataset_names = Predefined.get_data_source_ids()
         self._datasetDropdown.addItems(dataset_names)
         self._datasetDropdown.setEnabled(False)
-
+        self._datasetDropdown.currentIndexChanged.connect(self._predefinedSelectionChange)
 
         
         buttonsLayout = QVBoxLayout()
@@ -222,7 +225,8 @@ class QInputSourceSelector(QWidget, observer.Observer):
         if self._radioButtons['Name'].isChecked():
             self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
-            dataset = DataSet.load(name)
+            print(f"!!!{name}!!!")
+            data_source = Predefined.get_data_source(name)
         elif self._radioButtons['Filesystem'].isChecked():
             mode = 'Filesystem'
             # CAUTION: I've converted the C++ from here
@@ -244,21 +248,26 @@ class QInputSourceSelector(QWidget, observer.Observer):
             fname = dialog.selectedFiles()[0]
             import os
             if os.path.isdir(fname):
-                dataset = DataDirectory(fname)
+                data_source = DataDirectory(fname)
             else:
-                dataset = DataFile(fname)
+                data_source = DataFile(fname)
         elif self._radioButtons['Webcam'].isChecked():
             mode = 'Webcam'
-            dataset = DataWebcam()
+            data_source = DataWebcam()
         elif self._radioButtons['Video'].isChecked():
             mode = 'Video'
             # FIXME[hack]: use file browser ...
             # FIXME[problem]: the opencv embedded in anoconda does not
             # have ffmpeg support, and hence cannot read videos
-            dataset = DataVideo("/net/home/student/k/krumnack/AnacondaCON.avi")
-        self._controller.onSourceSelected(dataset)
+            data_source = DataVideo("/net/home/student/k/krumnack/AnacondaCON.avi")
+        self._controller.onSourceSelected(data_source)
 
-
+    def _predefinedSelectionChange(self,i):
+        if self._radioButtons['Name'].isChecked():
+            self._datasetDropdown.setVisible(True)
+            name = self._datasetDropdown.currentText()
+            data_source = Predefined.get_data_source(name)
+            self._controller.onSourceSelected(data_source)
 
 
 

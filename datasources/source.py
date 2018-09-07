@@ -3,10 +3,21 @@ import numpy as np
 
 InputData = namedtuple('Data', ['data', 'name'])
 
+
+
 class DataSource:
-    '''An abstract base class for different types of data sources.  The
-    individual elements of a data source can be accessed using an array-like
-    notation.
+    '''An abstract base class for different types of data sources.
+
+    There are different APIs for navigating in a datasource, depending
+    on what that datasource supports:
+
+    array-like navigation: individual elements of a data source can be
+    accessed using an array-like notation.
+
+    random selection: select a random element from the dataset.
+
+
+    
 
     Attributes
     ----------
@@ -17,16 +28,6 @@ class DataSource:
     _description: str = None
     _targets: np.ndarray = None
     _labels: list = None
-
-    @staticmethod
-    def check_availability():
-        '''Check if this Datasource is available.
-        
-        Returns
-        -------
-        True if the DataSource can be instantiated, False otherwise.
-        '''
-        return True
 
     
     def __init__(self, description=None):
@@ -70,21 +71,72 @@ class DataSource:
         return self._description
 
 
-    @staticmethod
-    def get_public_id():
-        '''Get the "public" ID that is used to identify this datasource.  Only
-        predefined DataSource should have such an ID, other
-        datasources should provide None.
+    def prepare(self):
+        '''Prepare this DataSource for use.
+        '''
+        pass # to be implemented by subclasses
 
-        Actually, it is the result of this method that determines if a
-        DataSource is considered as predefined. If you return a value
-        different from None here, you should make sure that you
-        provide functionality to download and initialize this
-        DataSource.
 
+    def get_section_ids(self):
+        '''Get a list of sections provided by this data source.  A data source
+        may for example be divided into training and test data.
+        '''
+        return None
+    
+    def get_section(self):
+        '''Get the current section in the data source.
         '''
         return None
 
-    @staticmethod
-    def download():
+    def set_section(self, section_id):
+        '''Set the current section in the data source.
+        '''
+        pass
+
+
+class Predefined:
+    '''An abstract base class for predefined data sources.
+    '''
+
+    
+    _id = None
+    
+    def __init__(self, id):
+        self._id = id
+        Predefined.datasources[id] = self;
+    
+    def get_public_id(self):
+        '''Get the "public" ID that is used to identify this datasource.  Only
+        predefined DataSource should have such an ID, other
+        datasources should provide None.
+        '''
+        return self._id
+
+    def check_availability(self):
+        '''Check if this Datasource is available.
+        
+        Returns
+        -------
+        True if the DataSource can be instantiated, False otherwise.
+        '''
+        return False
+
+    
+    def download(self):
         raise NotImplementedError("Downloading ImageNet is not implemented yet")
+
+
+    #
+    # Static data and methods
+    #
+
+    datasources = {}
+
+    @staticmethod
+    def get_data_source_ids():
+        return list(Predefined.datasources.keys())
+
+    @staticmethod
+    def get_data_source(id):
+        return Predefined.datasources[id]
+    

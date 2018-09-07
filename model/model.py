@@ -4,7 +4,7 @@ from network import Network
 from network import ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from util import ArgumentError
-from datasources import DataSource, DataArray, DataDirectory, DataFile, DataSet
+from datasources import DataSource, DataArray, DataDirectory, DataFile
 
 
 
@@ -29,6 +29,11 @@ class ModelChange(dict):
     dataset_changed :   bool
                         Whether the underlying :py:class:`datasources.DataSource`
                         has changed
+    activation_changed: bool
+                        Whether the network activation changed. This
+                        usually coincides with a change in input data,
+                        but may also be delayed in case of complex
+                        computation and multi-threading.
     """
 
     def __init__(self, **kwargs):
@@ -37,6 +42,7 @@ class ModelChange(dict):
         self['unit_changed']        = False
         self['input_index_changed'] = False
         self['dataset_changed']     = False
+        self['activation_changed']  = False
         # set additional properties, if given.
         for k, v in kwargs.items():
             self[k] = v
@@ -104,6 +110,10 @@ class Model(object):
                             The last computed activations
     _layer  :   Layer
                 Currently selected layer
+    _classification  :  bool
+                If True, the model will consider the current model
+                as a classifier and record the output of the output layer
+                in addition to the current (hidden) layer.
     _unit   :   int
                 Currently selected unit in the layer
     _network    :   Network
@@ -116,13 +126,20 @@ class Model(object):
                         Index of ``_data`` in the data set
     _data   :   np.ndarray
                 Current data provided by the data source
+
+    New:
+    _layers:    list of layer_ids
+                the layers of interest 
+    _activations:   dictionary mapping layer_ids to actiations (np.ndarray)
+                   the layers of interest 
     '''
     _observers:             set        = set()
     _data:                  np.ndarray = None
     _network:               Network    = None
     _networks:              dict       = {}
     _layer:                 Layer      = None
-    _unit:                  Layer      = None
+    _unit:                  int        = None
+    _classification:        Layer      = None
     _sources:               dict       = {}
     _current_index:         int        = None
     _current_activation:    np.ndarray = None
@@ -130,7 +147,10 @@ class Model(object):
     _input:                 np.ndarray = None
     _shape_adaptor:         ShapeAdaptor = None
     _channel_adaptor:       ShapeAdaptor = None
-    
+
+    # New:
+    _layers: list = []
+    _activations: dict = {}
 
     def __init__(self, network: Network):
         '''Create a new ``Model`` instance.
@@ -209,6 +229,7 @@ class Model(object):
         ModelChange
             Change notification for the task runner to handle.
         '''
+        source.prepare()
         self._current_source = source
         self._setIndex(0)
         self._update_activation()
@@ -238,16 +259,6 @@ class Model(object):
         '''Set the directory to be used for loading data.'''
         self.setDataSource(DataDirectory(dirname))
 
-    def setDataSet(self, name: str):
-        '''Set a data set to be used.
-
-        Parameters
-        ----------
-        name    :   str
-                    The name of the dataset. The only dataset supported up
-                    to now is 'mnist'.
-        '''
-        self.setDataSource(DataSet.load(name))
 
     def _setInputData(self, data: np.ndarray=None, description: str=None):
         '''Provide one data vector as input for the network.
@@ -292,7 +303,8 @@ class Model(object):
             data = self._shape_adaptor(data)
             data = self._channel_adaptor(data)
         self._input = data
-
+        self._update_activation()
+        
 
     def editIndex(self, index):
         '''Set the current dataset index.  Index is left unchanged if out of
@@ -344,8 +356,6 @@ class Model(object):
             self._data, _info = None, None
         else:
             self._setInputData(source[index].data)
-            if self._layer:
-                self._update_activation()
 
         return ModelChange(input_index_changed=True)
 
@@ -426,6 +436,11 @@ class Model(object):
             else:
                 raise ArgumentError(f'Unknown network type {network.__class__}')
             self.setLayer(None)
+
+            # FIXME[hack]: the following should be set from outside
+            # the model!
+            self._classification = None
+            self.set_classification(True)
 
             if self._shape_adaptor is not None:
                 self._shape_adaptor.setNetwork(network)
@@ -511,9 +526,11 @@ class Model(object):
                 self._update_activation()
                 if self._unit:
                     self._unit = None
-                    return ModelChange(layer_changed=True, unit_changed=True)
+                    return ModelChange(layer_changed=True, unit_changed=True,
+                                       activation_changed=True)
                 else:
-                    return ModelChange(layer_changed=True)
+                    return ModelChange(layer_changed=True,
+                                       activation_changed=True)
         return None
 
     def setUnit(self, unit: int=None):
@@ -537,42 +554,70 @@ class Model(object):
 
         return None
 
+    def set_classification(self, classication = True):
+        '''Record the classification results. This assumes that the network is
+        a classifier and the results are provided in the last layer.
+        '''
+        old_classification = self._classification
+        self._classification = classication
+        self._update_layer_list()
+        if old_classification != self._classification:
+            self._update_activation()
+
+    def _update_layer_list(self):
+        if self._network is None:
+            self._layers = []
+        else:
+            layers = set()
+            if self._layer is not None:
+                layers.add(self._layer)
+            if self._classification and self._network.is_classifier():
+                layers.add(self._network.output_layer_id())
+            self._layers = list(layers)
 
     def _update_activation(self):
-        '''Set the :py:attr:`_current_activation` property by loading activations for
-        :py:attr:`_layer` and :py:attr:`_data`. This is a noop if no layer is selected or no data is
+        '''Set the :py:attr:`_current_activation` property by loading
+        activations for :py:attr:`_layer` and :py:attr:`_data`.
+        This is a noop if no layers are selected or no data is
         set.'''
-        if self._layer and self._input is not None:
-            self._current_activation = self.activationsForLayers([self._layer], self._input)
 
+        if self._layers and self._input is not None:
+            
+            # compute the activations for the layers of interest
+            activations = self._network.get_activations(self._layers,
+                                                        self._input)
 
+            # FIXME[hack]: should be done in network!
+            for i in range(len(activations)):
+                if activations[i].ndim in {2, 4}:
+                    if activations[i].shape[0] != 1:
+                        raise RuntimeError('Attempting to visualise batch.')
+                    activations[i] = np.squeeze(activations[i], axis=0)
+
+            self._activations = {id: activations[i]
+                                 for i, id in enumerate(self._layers)}
+
+            # FIXME[old]
+            self._current_activation = self._activations.get(self._layer, None)
+        else:
+            self._activations = {}            
+
+        self.notifyObservers(ModelChange(activation_changed=True))
 
     ##########################################################################
     #                     UTILITIES                                          #
     ##########################################################################
-    def activationsForLayers(self, layers, data):
-        '''Get activations for a set of layers.
 
-        .. attention:: Results should be cached.
+    def top_n_classifications(self, n=5):
+        if not self._classification:
+            return None
+        if not self._network:
+            return None
+        classification_layer_id = self._network.output_layer_id()
+        if not classification_layer_id in self._activations:
+            return None
 
-        Parameters
-        ----------
-        layers  :   Layer or list
-                    Layers to query
-        data    :   np.ndarray
-                    Data to pump through the net.
-        '''
-        if not isinstance(layers, list):
-            raise ArgumentError(f'Input must be list, is {type(layers)}')
-
-        activations = self._network.get_activations(
-            list(layers), data)[0]
-
-        if activations.ndim in {2, 4}:
-            if activations.shape[0] != 1:
-                raise RuntimeError('Attempting to visualise batch.')
-            activations = np.squeeze(activations, axis=0)
-
-        return activations
-
-
+        class_scores = self._activations[classification_layer_id]
+        top_n_indices = np.argsort(class_scores)[:n]
+        top_n = { i : class_scores[i] for i in top_n_indices}
+        return top_n

@@ -405,6 +405,14 @@ class Network:
         shape = self.get_layer_output_shape(self.output_layer_id())
         return shape if include_batch else shape[1:]
 
+    def is_classifier(self):
+        """Check if this network is a classifier.
+        This is just a guess, based on simple heuristics.
+        There is no way to give a definitive answer here.
+        Subclasses may overwrite this method if additional
+        information is available.
+        """
+        return len(self.get_output_shape(False)) == 1
 
     def get_layer_input_shape(self, layer_id) -> tuple:
         """

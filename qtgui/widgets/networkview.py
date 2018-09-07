@@ -4,6 +4,10 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QVBoxLayout
 from network import Network, Layer, Conv2D
 from observer import Observer
 
+from .classesview import QClassesView
+
+from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout
+
 
 class QNetworkView(QWidget, Observer):
     '''A simple widget to display information on a network and select a
@@ -23,6 +27,8 @@ class QNetworkView(QWidget, Observer):
     # FIXME[hack]: make a nicer solution and then remove this!
     _label_input = None
     _label_output = None
+
+    _classes_view = None
     
     def __init__(self, parent=None):
         '''Initialization of the QNetworkView.
@@ -37,22 +43,40 @@ class QNetworkView(QWidget, Observer):
 
     def initUI(self) -> None:
         '''Initialize the user interface.'''
-        self._info_layout = QVBoxLayout()
-        self._layer_layout = QVBoxLayout()
+        info_layout = QVBoxLayout()
         self._network_info = QNetworkInfoBox(self)
-        self._layer_buttons = []
         self._network_info.setMinimumWidth(300)
-        self._info_layout.addWidget(self._network_info)
+        info_layout.addWidget(self._network_info)
+        
+        self._layer_layout = QVBoxLayout()
+        self._layer_buttons = []
+        
+        self._classes_view = QClassesView(self)
+
         layout = QVBoxLayout()
         layout.addLayout(self._layer_layout)
-        layout.addLayout(self._info_layout)
+        layout.addLayout(info_layout)
+        layout.addWidget(self._classes_view)
+        layout.addWidget(QPushButton("HALLO", self))
+        layout.addWidget(QLabel("HALLO", self))
+        layout2 = QGridLayout()
+        layout2.addWidget(QPushButton("ABC", self),0,0)
+        layout2.addWidget(QLabel("XYZ", self),0,1)
+        for i in range(5):
+            c = QLabel("X", self)
+            layout2.addWidget(c, i+1, 0)
+            d = QLabel("Y", self)
+            layout2.addWidget(d, i+1, 1)
+            print("adding labels 2")
+        layout.addLayout(layout2)
         self.setLayout(layout)
 
     def setController(self, controller):
         super().setController(controller)
-        self._network_info.setController(self._controller)
+        self._network_info.setController(controller)
+        self._classes_view.setController(controller)
 
-    def layerClicked(self):
+    def _layerButtonClicked(self):
         '''Callback for clicking one of the layer buttons.'''
         self._controller.onLayerSelected(self.sender().text())
 
@@ -89,7 +113,7 @@ class QNetworkView(QWidget, Observer):
                     self._layer_buttons.append(button)
                     layout.addWidget(button)
                     button.resize(button.sizeHint())
-                    button.clicked.connect(self.layerClicked)
+                    button.clicked.connect(self._layerButtonClicked)
 
                 self._label_output = QLabel("output = " + str(network.get_output_shape(False)))
                 layout.addWidget(self._label_output)
@@ -118,9 +142,12 @@ class QNetworkView(QWidget, Observer):
 
         self.update()
 
-####################################################################################################
-#                                 QNetworkInfoBox class definition                                 #
-####################################################################################################
+
+###############################################################################
+###           QNetworkInfoBox class definition                              ###
+###############################################################################
+
+
 from PyQt5.QtWidgets import QLabel
 from collections import OrderedDict
 from network import Network

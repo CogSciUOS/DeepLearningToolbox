@@ -94,8 +94,8 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input
 def main():
     '''Start the program.'''
 
-    from datasources import DataSet
-    datasets = DataSet.getDatasets(True)
+    from datasources import Predefined
+    datasets = Predefined.get_data_source_ids()
 
     parser = argparse.ArgumentParser(
         description='Visual neural network analysis.')
@@ -143,9 +143,9 @@ def main():
     model.addNetwork(network2)
 
     if args.data:
-        source = DataSet.load(args.data)
+        source = Predefined.get_data_source(args.data)
     elif args.dataset:
-        source = DataSet.load(args.dataset)
+        source = Predefined.get_data_source(args.dataset)
     elif args.datadir:
         source = DataDirectory(args.datadir)
     model.setDataSource(source)
