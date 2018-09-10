@@ -44,8 +44,10 @@ class DataArray(DataSource):
         if self._array is None or index is None:
             return None, None
         data = self._array[index]
-        info = 'Image ' + str(index) + ' from ' + self._description
-        return InputData(data, info)
+        target = None if self._targets is None else self._targets[index]
+        
+        return InputData(data, target)
+
 
     def __len__(self):
         if self._array is None:

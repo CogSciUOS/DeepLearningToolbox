@@ -1,4 +1,5 @@
 import os
+import re
 import random
 from scipy.misc import imread, imresize
 from datasources.imagenet_classes import class_names
@@ -14,21 +15,52 @@ from datasources import DataSource, DataDirectory, InputData, Predefined
 
 class ImageNet(DataDirectory, Predefined):
 
-    _prefix = None
-    _section = None
 
     _section_ids = ['train', 'test', 'val']
     
     def __init__(self, prefix=None, section='train'):
         self._section = section
+        self._imagenet_data = os.getenv('IMAGENET_DATA', '.')
         super(ImageNet, self).__init__()
         Predefined.__init__(self, 'imagenet')
 
     def prepare(self):
-        dir = os.path.join(os.getenv('IMAGENET_DATA', '.'), self._section)
-        self.setDirectory(dir)
-        print(dir)
+        self._prefix = os.path.join(self._imagenet_data, self._section)
+        self._available = os.path.isdir(self._prefix)
 
+        print(f"PREPARING ImageNet : {self._prefix}: {self._available}")
+        self._categories = os.listdir(self._prefix)
+
+        from .imagenet_classes import wn_table
+        self._wn_table = wn_table
+        print(len(self._wn_table))
+
+        # This may take some time ...
+        self.setDirectory(self._prefix)
+        # FIXME[hack]: just randomly choose one subdir
+        self._category = random.randint(0,len(self._categories))
+        #self.setDirectory(os.path.join(self._prefix,
+        #                               self._categories[self._category]))
+        super().prepare()
+        print(f"ImageNet is now prepared: {len(self)}")
+
+    def __getitem__(self, index):
+        if not self._filenames:
+            return None, None
+        else:
+            filename = self._filenames[index]
+            data = imread(os.path.join(self._dirname, filename))
+            category = self._category_for_filename(filename)
+            return InputData(data, category)
+
+    def _category_for_filename(self, filename):
+        match_object = re.search('(n[0-9]*)_', filename)
+        if match_object is not None:
+            category = self._wn_table.get(match_object.group(1))
+        else:
+            category = None
+        return category
+        
 
     def get_section_ids(self):
         '''Get a list of sections provided by this data source.  A data source
@@ -39,37 +71,22 @@ class ImageNet(DataDirectory, Predefined):
     def get_section(self):
         '''Get the current section in the data source.
         '''
-        return self.section
+        return self._section
+
+
+    def random(self):
+        category = random.randint(0,len(self._categories)-1)
+        img_dir = os.path.join(self._prefix, self._categories[category])
+        self._image = random.choice(os.listdir(img_dir))
+        img_file = os.path.join(img_dir, self._image)
+        im = imread(img_file)
+        return InputData(im,category)
 
     def set_section(self, section_id):
         '''Set the current section in the data source.
         '''
         self.section = section_id
         self.prepare()
-
-class ImageNet2(DataSource, Predefined):
-
-    _prefix = None
-    _available = False
-    _category = None
-    _image = None
-
-    def __init__(self, prefix=None, section='train'):
-        self._prefix = os.path.join(os.getenv('IMAGENET_DATA', '.'), section)
-        self._available = os.path.isfile(self._prefix)
-        Predefined.__init__(self, 'imagenet')
-
-    def __len__(self):
-        '''Get the number of entries in this data source.'''
-        return 1000
-
-    def random(self):
-        self._category = random.choice(os.listdir(self._prefix))
-        img_dir = os.path.join(self._prefix, self.category)
-        self._image = random.choice(os.listdir(img_dir))
-        img_file = os.path.join(img_dir, self._image)
-        im = imread(img_file)
-        return InputData(im,img_file)
 
     def check_availability():
         '''Check if this Datasource is available.
@@ -82,4 +99,7 @@ class ImageNet2(DataSource, Predefined):
 
     def download():
         raise NotImplementedError("Downloading ImageNet is not implemented yet")
+
+
+
 

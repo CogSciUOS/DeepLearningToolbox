@@ -57,18 +57,6 @@ class QNetworkView(QWidget, Observer):
         layout.addLayout(self._layer_layout)
         layout.addLayout(info_layout)
         layout.addWidget(self._classes_view)
-        layout.addWidget(QPushButton("HALLO", self))
-        layout.addWidget(QLabel("HALLO", self))
-        layout2 = QGridLayout()
-        layout2.addWidget(QPushButton("ABC", self),0,0)
-        layout2.addWidget(QLabel("XYZ", self),0,1)
-        for i in range(5):
-            c = QLabel("X", self)
-            layout2.addWidget(c, i+1, 0)
-            d = QLabel("Y", self)
-            layout2.addWidget(d, i+1, 1)
-            print("adding labels 2")
-        layout.addLayout(layout2)
         self.setLayout(layout)
 
     def setController(self, controller):
@@ -81,18 +69,27 @@ class QNetworkView(QWidget, Observer):
         self._controller.onLayerSelected(self.sender().text())
 
     def modelChanged(self, model, info):
+        """The QNetworkView is interested in network related changes, i.e.
+        changes of the network itself or the current layer.
+
+        
+        """
 
         if info.network_changed:
-            ###############################
-            #  Respond to network change  #
-            ###############################
+            #
+            # Respond to network change
+            #
             layout = self._layer_layout
             network = model._network
             self._current_selected = None
             if network:
+                #
                 # remove the old network buttons
+                #
+                
                 # FIXME[todo]: (still not sure what is the correct way to do:
-                # widget.deleteLater(), widget.close(), widget.setParent(None), or
+                # widget.deleteLater(), widget.close(),
+                # widget.setParent(None), or
                 # layout.removeWidget(widget) + widget.setParent(None))
                 for button in self._layer_buttons:
                     button.deleteLater()
@@ -107,7 +104,9 @@ class QNetworkView(QWidget, Observer):
                 self._label_input = QLabel("input = " + str(network.get_input_shape(False)))
                 layout.addWidget(self._label_input)
 
+                #
                 # a column of buttons to select the network layer
+                #
                 for name in network.layer_dict.keys():
                     button = QPushButton(name, self)
                     self._layer_buttons.append(button)
@@ -123,17 +122,19 @@ class QNetworkView(QWidget, Observer):
                 self._controller.onLayerSelected(None)
 
         if info.network_changed or info.layer_changed:
-            #############################
-            #  Respond to layer change  #
-            #############################
-            layer = model._layer
-            if layer:
+            #
+            # Respond to layer change
+            #
+            layer_id = model.get_layer_id()
+            layer_index = model.idForLayer(layer_id)
+            if layer_index != self._current_selected:
+                
                 # unmark the previously active layer
                 if self._current_selected is not None:
                     oldItem = self._layer_buttons[self._current_selected]
                     oldItem.setStyleSheet('')
 
-                self._current_selected = model.idForLayer(layer)
+                self._current_selected = layer_index
                 if self._current_selected is not None:
                     # and mark the new layer
                     newItem = self._layer_buttons[self._current_selected]

@@ -60,7 +60,7 @@ class DataDirectory(DataSource):
             # TODO: This can be much improved by caching and/or prefetching
             filename = self._filenames[index]
             data = imread(join(self._dirname, filename))
-            return InputData(data, filename)
+            return InputData(data, None)
 
     def __len__(self):
         if not self._filenames:

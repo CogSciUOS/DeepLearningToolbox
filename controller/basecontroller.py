@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from PyQt5.QtCore import QObject, pyqtSignal
 
 class AsyncRunner(object):
-    '''Base class for runner objects which must be provided for each
+    """Base class for runner objects which must be provided for each
     controller/user interface.
 
     .. note:: *Why is this necessary?*
@@ -31,7 +31,7 @@ class AsyncRunner(object):
     _executor   :   ThreadPoolExecutor
                     Singular reusable thread to run computations in.
 
-    '''
+    """
 
     def __init__(self, model: Model):
         super().__init__()
@@ -39,7 +39,7 @@ class AsyncRunner(object):
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     def runTask(self, fn, *args, **kwargs):
-        '''Schedule the execution of a function. This is equivalent to running::
+        """Schedule the execution of a function. This is equivalent to running::
 
             fn(*args, **kwargs)
 
@@ -53,49 +53,52 @@ class AsyncRunner(object):
                     Non-keyword args to ``fn``
         kwargs  :   dict
                     keyword args to ``fn``
-        '''
+        """
         future = self._executor.submit(fn, *args, **kwargs)
         future.add_done_callback(self.onCompletion)
 
     def onCompletion(self, result):
-        '''Callback exectuted on completion of a running task. This method must be implemented.
-        By subclasses and - together with any necessary initialisations in  :py:meth:`__init__` -
-        should lead to calling :py:meth:`model.Model.notifyObservers` on the main thread.
+        """Callback exectuted on completion of a running task. This
+        method must be implemented by subclasses and - together with
+        any necessary initialisations in :py:meth:`__init__` - should
+        lead to calling :py:meth:`model.Model.notifyObservers` on the
+        main thread.
 
         Parameters
         ----------
         result  :   object or model.ModelChange
                     Object returned by the asynchronously run method.
-        '''
+        """
         raise NotImplementedError('This abstract base class should not be used directly.')
 
 class QTAsyncRunner(AsyncRunner, QObject):
-    ''':py:class:`AsyncRunner` subclass which knows how to update Qt widgets.
+    """:py:class:`AsyncRunner` subclass which knows how to update Qt widgets.
 
     Attributes
     ----------
     _completion_signal  :   pyqtSignal
-                            Signal emitted once the computation is done. The signal is connected to
-                            :py:meth:`onCompletion` which will be run on the main thread by the
-                            qt magic.
-    '''
+        Signal emitted once the computation is done.
+        The signal is connected to :py:meth:`onCompletion` which will be run
+        on the main thread by the Qt magic.
+    """
 
     # signals must be declared outside the constructor, for some weird reason
     _completion_signal = pyqtSignal(object)
 
     def __init__(self, model):
-        '''Connect a signal to :py:meth:`model.Model.notifyObservers`.'''
+        """Connect a signal to :py:meth:`model.Model.notifyObservers`."""
         super().__init__(model)
         self._completion_signal.connect(lambda info: model.notifyObservers(info))
 
     def onCompletion(self, future):
-        '''Emit the sompletion signal to have :py:meth:`model.Model.notifyObservers` called.'''
+        """Emit the completion signal to have
+        :py:meth:`model.Model.notifyObservers` called.
+        """
         self._completion_signal.emit(future.result())
 
 
-
 class InputController(object):
-    '''Base controller backed by a network. Contains functionality for
+    """Base controller backed by a network. Contains functionality for
     manipulating input index.
 
     Attributes
@@ -103,7 +106,7 @@ class InputController(object):
     _parent :   InputController
                 Parent controller to bubble up events to (currently unused)
 
-    '''
+    """
 
     _parent: 'InputController' = None
 
@@ -112,45 +115,45 @@ class InputController(object):
         self._runner = QTAsyncRunner(model)
 
     def setParent(self, controller: 'InputController'):
-        '''Set the parent controller.
+        """Set the parent controller.
 
         Parameters
         ----------
         controller  :   controller.InputController
                         Parent controller to which stuff will be delegated.
-        '''
+        """
         self._parent = controller
 
     def random(self):
-        '''Select a random index into the dataset.'''
+        """Select a random index into the dataset."""
         n_elems = len(self._model)
         index = randint(0, n_elems)
         self._runner.runTask(self._model.editIndex, index)
 
     def advance(self):
-        '''Advance data index to end.'''
+        """Advance data index to end."""
         n_elems = len(self._model)
         self._runner.runTask(self._model.editIndex, n_elems - 1)
 
     def advance_one(self):
-        '''Advance data index by one.'''
+        """Advance data index by one."""
         current_index = self._model._current_index
         self._runner.runTask(self._model.editIndex, current_index + 1)
 
     def rewind(self):
-        '''Reset data index to zero.'''
+        """Reset data index to zero."""
         self._runner.runTask(self._model.editIndex, 0)
 
     def rewind_one(self):
-        '''Rewind data index by one.'''
+        """Rewind data index by one."""
         current_index = self._model._current_index
         self._runner.runTask(self._model.editIndex, current_index - 1)
 
     def editIndex(self, index: int):
-        '''Set data index to specified value.
+        """Set data index to specified value.
 
         Parameters
         ----------
         index   :   int
-        '''
+        """
         self._runner.runTask(self._model.editIndex, index)

@@ -15,12 +15,13 @@ class KerasDataSource(DataArray, Predefined):
     '''
     KERAS_IDS = ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']
     
-    _name = None
+    _keras_dataset_name = None
     
     def __init__(self, name: str):
         if importlib.util.find_spec(f'keras.datasets.{name}') is None:
             raise ValueError(f'Unknown Keras dataset: {name}')
-        self._name = name
+        self._keras_dataset_name = name
+        DataArray.__init__(self, description=f"Keras Datasoure '{name}'")
         Predefined.__init__(self, name)
 
         
@@ -28,7 +29,7 @@ class KerasDataSource(DataArray, Predefined):
         if self._array is not None:
             return # Just prepare once!
         
-        name = self._name
+        name = self._keras_dataset_name
         module = importlib.import_module(f'keras.datasets.{name}')
         data = module.load_data()
         

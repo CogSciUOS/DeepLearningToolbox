@@ -456,7 +456,7 @@ class QInputInfoBox(QWidget, observer.Observer):
             some string describing the origin of the data
         '''
         self._meta_text = '<b>Input image:</b><br>\n'
-        self._meta_text += f'Description: {description}\n'
+        self._meta_text += f'Description: {description}<br>\n'
 
         self._data_text = '<b>Raw input:</b><br>\n' if self._imageView._show_raw else '<b>Network input:</b><br>\n'
         if data is not None:

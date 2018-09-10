@@ -167,8 +167,8 @@ class Network(BaseNetwork):
         """
         layer_dict = OrderedDict()
         layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
-        for tensor in self._sess.graph.as_graph_def().node:
-            print(type(tensor), tensor.name)
+        #for tensor in self._sess.graph.as_graph_def().node:
+        #    print(type(self), type(tensor), tensor.name)
 
         ops = self._sess.graph.get_operations()
         op_idx = 0
@@ -176,7 +176,7 @@ class Network(BaseNetwork):
 
 
         while op_idx < len(self._sess.graph.get_operations()):
-            print(op_idx, type(ops[op_idx]), ops[op_idx].type, ops[op_idx].name, ops[op_idx].values())
+            #print(op_idx, type(ops[op_idx]), ops[op_idx].type, ops[op_idx].name, ops[op_idx].values())
 
             if self._input_placeholder is None:
                 if ops[op_idx].type == 'Placeholder':

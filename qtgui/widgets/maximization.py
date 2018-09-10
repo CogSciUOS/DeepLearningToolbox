@@ -231,12 +231,13 @@ class QMaximizationConfig(QWidget, observer.Observer):
 
         if info.layer_changed:
             if network is not None:
-                layer_id = model._layer
+                layer_id = model.get_layer_id()
                 #self._layerSelector.setCurrentIndex(layer_id)
             else:
                 layer_id = None
+            print(f"QMaximizationConfig.modelChanged(): layer_id = '{layer_id}'")
                 
-            if layer_id is not None:
+            if layer_id:
                 self._layerSelector.setCurrentText(layer_id)
                 #self._unitMax.setText(str(network.get_layer_input_units(layer_id)))
                 self._unitMax.setText(str(network.get_layer_output_units(layer_id)))

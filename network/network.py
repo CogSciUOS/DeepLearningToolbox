@@ -49,6 +49,10 @@ class Network:
         It may be more useful to be able to specify the desired order, either globally for a
         Network, in each method that gets or returns array data.
 
+
+    _output_labels: List[str]
+        The output labels for this network. Only meaningful
+        if this Network is a classifier.
     """
 
     
@@ -100,6 +104,8 @@ class Network:
 
         # Create the layer representation.
         self.layer_dict = self._create_layer_dict()
+
+        self._output_labels = None
 
 
     def __getitem__(self, item):
@@ -191,7 +197,7 @@ class Network:
         """
         raise NotImplementedError
 
-    # ------------------- Things to be implmeneted by subclasses -------------------
+    # ------------------- Things to be implmeneted by subclasses --------------
 
     def _compute_activations(self, layer_ids: list, input_samples: np.ndarray) -> List[np.ndarray]:
         """To be implemented by subclasses. Computes a list of activations from a list of layer ids."""
@@ -210,7 +216,7 @@ class Network:
         """
         raise NotImplementedError
 
-    # ---------------------- Private helper functions --------------------------------
+    # ---------------------- Private helper functions -------------------------
 
     def _transform_input(self, inputs: np.ndarray, data_format: str) -> np.ndarray:
         """Fills up the ranks of the input, e.g. if no batch size was specified and
@@ -721,7 +727,7 @@ class Network:
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
 
 
-    def set_output_labels(self, labels):
+    def set_output_labels(self, labels: List[str]) -> None:
         """Provide labels for the output layer. This is useful for 
         networks that are used as classifier. It allows to report
         results in form of human readable labels instead of just
@@ -743,6 +749,22 @@ class Network:
             raise ValueError("Labels do not fit to the output layer")
         self._output_labels = labels
 
+    def get_label_for_class(self, index: int) -> str:
+        """Get a class label for the given class index.
+
+        Parameters
+        ----------
+        index:
+            The class index, i.e. the index of the unit in
+            the classification (=output) layer.
+
+        Returns
+        -------
+        label:
+            The label for the given class.
+        """
+        return (str(index) if self._output_labels is None
+                else self._output_labels[index])
 
     def classify_top_n(self, input_samples: np.ndarray, n = 5):
         """Output the top-n classes for given input.
@@ -761,3 +783,4 @@ class Network:
                 print("  {}: {} ({})".format(i,self._output_labels[inds[-1-i]],
                                              output[input_im_ind, inds[-1-i]]))
 
+        

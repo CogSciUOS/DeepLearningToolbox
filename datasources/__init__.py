@@ -22,7 +22,7 @@ from .directory import DataDirectory
 from .webcam import DataWebcam
 from .video import DataVideo
 from .keras import KerasDataSource
-from .imagenet import ImageNet, ImageNet2
+from .imagenet import ImageNet
 
 import sys
 

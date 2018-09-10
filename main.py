@@ -115,12 +115,22 @@ def main():
                         default=False)
     args = parser.parse_args()
 
+    #
+    # network2: AlexNet trained on ImageNet data (TensorFlow)
+    #
     from network.tensorflow import Network as TensorFlowNetwork
     checkpoint = os.path.join('models', 'example_tf_alexnet',
                               'bvlc_alexnet.ckpt')
     network2 = TensorFlowNetwork(checkpoint=checkpoint)
-   
-    if args.framework.startswith('keras'):
+    from datasources.imagenet_classes import class_names2
+    network2.set_output_labels(class_names2)
+
+    #
+    # network: dependes on the selected framework
+    #
+    if True:
+        network = None
+    elif args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
         backend  = args.framework[dash_idx + 1:]
         network  = keras(backend, args.cpu, model_file=args.model)
@@ -139,8 +149,8 @@ def main():
     from datasources import DataDirectory
     from model import Model
     app        = QApplication(sys.argv)
-    model      = Model(network)
-    model.addNetwork(network2)
+    model      = Model(network2)
+    #model.addNetwork(network2)
 
     if args.data:
         source = Predefined.get_data_source(args.data)
