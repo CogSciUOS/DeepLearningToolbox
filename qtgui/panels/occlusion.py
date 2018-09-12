@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
 from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
-from qtgui.widgets import QNetworkInfoBox
 
 from .panel import Panel
 

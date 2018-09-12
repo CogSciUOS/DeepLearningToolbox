@@ -2,13 +2,15 @@ from typing import Tuple
 import numpy as np
 from collections import OrderedDict
 
+from util import Identifiable
 
 # ------------ Base layers ----------------------
 
-
-class Layer:
+class Layer(Identifiable):
     """A Layer encapsulates operations that transform a tensor."""
-    def __init__(self, network):
+    
+    def __init__(self, network, id=None):
+        super().__init__(id)
         self._network = network
 
     @property
@@ -30,7 +32,8 @@ class Layer:
 
 class NeuralLayer(Layer):
     """A NeuralLayer is assumed to encapsulated three operations:
-    Calculating the net input by taking some inner product between weights and input.
+    Calculating the net input by taking some inner product between weights
+    and input.
     Adding a bias.
     Applying some (mostly non-linear) activation function.
     """
@@ -141,33 +144,3 @@ class Dropout(Layer):
 
 class Flatten(Layer):
     pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

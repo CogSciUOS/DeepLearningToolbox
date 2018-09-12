@@ -4,5 +4,6 @@ from .inputselector import QInputSelector
 from .inputselector import QInputInfoBox
 from .matrixview import QMatrixView
 from .networkview import QNetworkView
-from .networkview import QNetworkInfoBox
+from .networkview import QNetworkBox
+from .networkview import QNetworkSelector
 from .connectionview import QConnectionView

@@ -7,15 +7,15 @@ Author: Antonia Hain, Ulf Krumnack
 Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
-import observer
 from controller import ActivationsController
+from model import Model, ModelObserver, ModelChange
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFontMetrics, QIntValidator
 from PyQt5.QtWidgets import QWidget, QLabel, QCheckBox, QVBoxLayout, QHBoxLayout, QGroupBox, QComboBox, QLineEdit, QSizePolicy
 
 
-class QMaximizationConfig(QWidget, observer.Observer):
+class QMaximizationConfig(QWidget, ModelObserver):
 
 
     # in which layer the unit is found. needs to be a key in layer_dict in
@@ -220,9 +220,9 @@ class QMaximizationConfig(QWidget, observer.Observer):
 
 
 
-    def modelChanged(self, model, info):
+    def modelChanged(self, model: ModelObserver, info: ModelChange) -> None:
 
-        network = model.getNetwork()
+        network = model.get_network()
         
         if info.network_changed:
             self._layerSelector.clear()
@@ -235,7 +235,6 @@ class QMaximizationConfig(QWidget, observer.Observer):
                 #self._layerSelector.setCurrentIndex(layer_id)
             else:
                 layer_id = None
-            print(f"QMaximizationConfig.modelChanged(): layer_id = '{layer_id}'")
                 
             if layer_id:
                 self._layerSelector.setCurrentText(layer_id)

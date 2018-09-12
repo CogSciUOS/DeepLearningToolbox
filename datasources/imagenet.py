@@ -1,6 +1,7 @@
 import os
 import re
 import random
+import pickle
 from scipy.misc import imread, imresize
 from datasources.imagenet_classes import class_names
 
@@ -12,9 +13,17 @@ from datasources import DataSource, DataDirectory, InputData, Predefined
 #  - allow for all "sections" (train/valid/test)
 #  - automatically provide teh ImageNet class labels
 
+try:
+    from appdirs import AppDirs
+except ImportError:
+    AppDirs = None
+    print("---------------------------------------------------------------\n"
+          "info: module 'appdirs' is not installed. We can live without it,\n"
+          "but having it around will provide additional features.\n"
+          "See: https://github.com/ActiveState/appdirs\n"
+          "---------------------------------------------------------------\n")
 
 class ImageNet(DataDirectory, Predefined):
-
 
     _section_ids = ['train', 'test', 'val']
     
@@ -41,7 +50,26 @@ class ImageNet(DataDirectory, Predefined):
         self._category = random.randint(0,len(self._categories))
         #self.setDirectory(os.path.join(self._prefix,
         #                               self._categories[self._category]))
-        super().prepare()
+
+        if AppDirs is not None:
+            appname = "deepvis"
+            appauthor = "krumnack"
+            dirs = AppDirs(appname, appauthor)
+            imagenet_filelist = os.path.join(dirs.user_cache_dir,
+                                             "imagenet_filelist.p")
+            print(f"ImageNet: trying to load filelist from '{imagenet_filelist}")
+            if os.path.isfile(imagenet_filelist):
+                self._filenames = pickle.load(open(imagenet_filelist, 'rb'))
+        else:
+            imagenet_filelist = None
+
+        if self._filenames is None:
+            super().prepare()
+            if imagenet_filelist is not None:
+                print("ImageNet: writing filenames to {imagenet_filelist}")
+                if not os.path.isdir(dirs.user_cache_dir):
+                    os.makedirs(dirs.user_cache_dir)
+                pickle.dump(self._filenames, open(imagenet_filelist, 'wb'))
         print(f"ImageNet is now prepared: {len(self)}")
 
     def __getitem__(self, index):
@@ -99,7 +127,4 @@ class ImageNet(DataDirectory, Predefined):
 
     def download():
         raise NotImplementedError("Downloading ImageNet is not implemented yet")
-
-
-
 

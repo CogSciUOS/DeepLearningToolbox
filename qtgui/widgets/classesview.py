@@ -1,8 +1,8 @@
 from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout
 from observer import Observer
-from model import Model
+from model import Model, ModelObserver, ModelChange
 
-class QClassesView(QWidget, Observer):
+class QClassesView(QWidget, ModelObserver):
     """Visualization of classification results.
 
     Fields
@@ -43,28 +43,28 @@ class QClassesView(QWidget, Observer):
         layout.addWidget(self._target, self._top_n+1, 1)
         self.setLayout(layout)
 
-
-    def modelChanged(self, model, info):
+    def modelChanged(self, model: Model, info: ModelChange) -> None:
         """The QClassesView is only interested if the classification result
         changes.
         """
-        if info.activation_changed:
-            classes, scores, target = model.top_n_classifications(self._top_n)
-
-            if classes is not None:
-                for i in range(self._top_n):
-                    self._classes[i].setText(str(classes[i]))
-                    if target is None:
-                        self._classes[i].setStyleSheet('')
-                    elif target == classes[i]:
-                        self._classes[i].setStyleSheet(f'color: green')
-                    else:
-                        self._classes[i].setStyleSheet(f'color: red')
-                    self._scores[i].setText(str(scores[i]))
-            else:
-                for i in range(self._top_n):
-                    self._classes[i].setText("None")
-                    self._scores[i].setText("0")
-            self._target.setText(str(target))
-            self.update()
+        if not info.activation_changed:
+            return
+        
+        classes, scores, target = model.top_n_classifications(self._top_n)
+        if classes is not None:
+            for i in range(self._top_n):
+                self._classes[i].setText(str(classes[i]))
+                if target is None:
+                    self._classes[i].setStyleSheet('')
+                elif target == classes[i]:
+                    self._classes[i].setStyleSheet(f'color: green')
+                else:
+                    self._classes[i].setStyleSheet(f'color: red')
+                self._scores[i].setText(str(scores[i]))
+        else:
+            for i in range(self._top_n):
+                self._classes[i].setText("None")
+                self._scores[i].setText("0")
+        self._target.setText(str(target))
+        self.update()
 

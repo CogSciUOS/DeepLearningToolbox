@@ -1,10 +1,14 @@
 '''
-.. moduleauthor Rasmus Diederichsen
+.. moduleauthor Rasmus Diederichsen, Ulf Krumnack
 
 .. module controller
 
-This module includes all classes which relate to the controller portion of the MVC pattern.
+This module includes all classes which relate to the controller
+portion of the MVC pattern.
+
 '''
-from .basecontroller import InputController
-from .mainwindowcontroller import MainWindowController
-from .activationscontroller import ActivationsController
+
+from .base import BaseController
+from .asyncrunner import AsyncRunner
+from .datasource import DataSourceController, DataSourceObserver
+from .activations import ActivationsController

@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
-from observer import Observer
+from model import Model, ModelObserver
 import controller
 
 # FIXME[todo]: improve the display of the activations: check that the
@@ -19,30 +19,32 @@ import controller
 # two-color scheme.
 
 
-class QActivationView(QWidget, Observer):
+class QActivationView(QWidget, ModelObserver):
     '''A widget to diplay the activations of a given layer in a
     network. Currently there are two types of layers that are
     supported: (two-dimensional) convolutional layers and dense
     (=fully connected) layers.
 
-    The :py:class:``QActivationView`` widget allows to select an individual unit in
-    the network layer by a single mouse click (this will either select
-    a single unit in a dense layer, or a channel in a convolutional
-    layer). The selection can be moved with the cursor keys and the
-    unit can be deselected by hitting escape. The widget will signal
-    such a (de)selection by emitting the 'selected' signal.
+    The :py:class:``QActivationView`` widget allows to select an
+    individual unit in the network layer by a single mouse click (this
+    will either select a single unit in a dense layer, or a channel in
+    a convolutional layer). The selection can be moved with the cursor
+    keys and the unit can be deselected by hitting escape. The widget
+    will signal such a (de)selection by emitting the 'selected'
+    signal.
 
-    The :py:class:``QActivationView`` will try to make good use of the available
-    space by arranging and scaling the units. However, the current
-    implementation is still suboptimal and may be improved to allow
-    for further configuration.
+    The :py:class:``QActivationView`` will try to make good use of the
+    available space by arranging and scaling the units. However, the
+    current implementation is still suboptimal and may be improved to
+    allow for further configuration.
 
     Attributes
     -----------
     _activation :   np.ndarray
-                    The activation values to be displayed in this activation
-                    view. ``None`` means that no activation is assigned to this
-                    :py:class:``QActivationView`` and will result in an empty widget.
+                    The activation values to be displayed in this
+                    activation view. ``None`` means that no activation
+                    is assigned to this :py:class:``QActivationView``
+                    and will result in an empty widget.
 
     _padding    :   int
                     Padding between the individual units in this
@@ -58,14 +60,8 @@ class QActivationView(QWidget, Observer):
 
     _n_units    :   int
                     Number of units in this view
-    '''
 
-    _padding          : int                                = 2
-    _isConvolution    : bool                               = False
-    _current_unit     : int                                = None
-    _controller       : 'controller.ActivationsController' = None
-    _unit_activations : np.ndarray                         = None
-    _n_units          : int                                = 0
+    '''
 
     def __init__(self, parent: QWidget=None):
         '''Initialization of the QActivationView.
@@ -77,28 +73,36 @@ class QActivationView(QWidget, Observer):
         '''
         super().__init__(parent)
 
+        self._padding = 2
+        self._isConvolution = False
+        self._current_unit = None
+        self._controller = None
+        self._unit_activations = None
+        self._n_units = 0
+
         # By default, a QWidget does not accept the keyboard focus, so
         # we need to enable it explicitly: Qt.StrongFocus means to
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
-
 
     def setController(self, controller):
         # TODO: Disconnect before reconnecting?
         super().setController(controller)
 
     def modelChanged(self, model, info):
-        '''Get the current activations from the model and set the activations to
-        be displayed in this QActivationView.  Currently there are two possible
-        types of activations that are supported by this widget: 1D, and 2D
-        convolutional.
+        '''Get the current activations from the model and set the activations
+        to be displayed in this QActivationView.  Currently there are
+        two possible types of activations that are supported by this
+        widget: 1D, and 2D convolutional.
+
         '''
         if info.unit_changed:
             self._current_unit = model._unit
 
-        # get activation and update overlay only when significant properties change
-        if any(info[prop] for prop in {'network_changed', 'layer_changed', 'input_index_changed',
-                                         'dataset_changed'}):
+        # get activation and update overlay only when
+        # significant properties change
+        if info & {'network_changed', 'layer_changed', 'input_changed',
+                   'activation_changed'}:
             activation = model._current_activation
             self._current_unit = model._unit
 
@@ -119,7 +123,8 @@ class QActivationView(QWidget, Observer):
 
                 from util import grayscaleNormalized
                 # a contiguous array is important for display with Qt
-                activation = np.ascontiguousarray(grayscaleNormalized(activation))
+                activation = \
+                    np.ascontiguousarray(grayscaleNormalized(activation))
 
             self._unit_activations = activation
 
@@ -145,7 +150,9 @@ class QActivationView(QWidget, Observer):
                 activations (the channel) for 2d conv layers
 
         '''
-        if self._unit_activations is None or unit is None or not self._isConvolution:
+        if self._unit_activations is None or unit is None:
+            return None
+        elif not self._isConvolution:
             return None
         else:
             if unit is None:
@@ -241,8 +248,8 @@ class QActivationView(QWidget, Observer):
         Returns
         -------
         int
-            The unit occupying that position or ``None`` if no entry corresponds
-            to that position.
+            The unit occupying that position or ``None`` if no entry
+            corresponds to that position.
         '''
 
         if self._unit_activations is None:
@@ -256,11 +263,13 @@ class QActivationView(QWidget, Observer):
         return unit
 
     def _drawConvolution(self, qp):
-        '''Draw activation values for a convolutional layer in the form of ``QImage`` s.
+        '''Draw activation values for a convolutional layer in the form of
+        ``QImage``s.
 
         Parameters
         ----------
         qp  :   QPainter
+
         '''
         # image size: filter size (or a single pixel per neuron)
         map_height, map_width = self._unit_activations.shape[1:3]
@@ -280,7 +289,8 @@ class QActivationView(QWidget, Observer):
         qp : QPainter
         '''
         for unit, value in enumerate(self._unit_activations):
-            qp.fillRect(self._getUnitRect(unit), QBrush(QColor(value, value, value)))
+            qp.fillRect(self._getUnitRect(unit),
+                        QBrush(QColor(value, value, value)))
 
     def _drawSelection(self, qp):
         '''Mark the currently selected unit in the painter.
@@ -306,9 +316,10 @@ class QActivationView(QWidget, Observer):
         qp.drawText(self.rect(), Qt.AlignCenter, 'No data!')
 
     def resizeEvent(self, event):
-        '''Adapt to a change in size. The behavior dependes on the zoom policy.
-        This event handler is called after the Widget has been resized.
-        providing the new .size() and the old .oldSize().
+        '''Adapt to a change in size. The behavior dependes on the zoom
+        policy.  This event handler is called after the Widget has
+        been resized.  providing the new .size() and the old
+        .oldSize().
 
         Parameters
         ----------
@@ -319,13 +330,16 @@ class QActivationView(QWidget, Observer):
         self.update()
 
     def mousePressEvent(self, event):
-        '''Process mouse event.
+        '''Process mouse event. A mouse click will select (or deselect)
+        the unit under the mouse pointer.
 
         Parameters
         ----------
         event : QMouseEvent
         '''
         unit = self._unitAtPosition(event.pos())
+        if unit is not None and unit == self._current_unit:
+            unit = None
         self._controller.onUnitSelected(unit, self)
         self._current_unit = unit
 
@@ -371,11 +385,13 @@ class QActivationView(QWidget, Observer):
             if key == Qt.Key_Left:
                 self._controller.onUnitSelected(self._current_unit - 1, self)
             elif key == Qt.Key_Up:
-                self._controller.onUnitSelected(self._current_unit - self._columns, self)
+                self._controller.onUnitSelected(self._current_unit -
+                                                self._columns, self)
             elif key == Qt.Key_Right:
                 self._controller.onUnitSelected(self._current_unit + 1, self)
             elif key == Qt.Key_Down:
-                self._controller.onUnitSelected(self._current_unit + self._columns, self)
+                self._controller.onUnitSelected(self._current_unit +
+                                                self._columns, self)
             elif key == Qt.Key_Escape:
                 self._controller.onUnitSelected(None, self)
             else:

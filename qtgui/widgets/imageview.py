@@ -5,13 +5,13 @@ from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QImage, QPainter, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
-from observer import Observer
+from model import Model, ModelObserver, ModelChange
 
 # FIXME[todo]: add docstrings!
 
 
-class QImageView(QWidget, Observer):
-    '''An experimental class to display images using the ``QImage``
+class QImageView(QWidget, ModelObserver):
+    """An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.
 
@@ -25,7 +25,7 @@ class QImageView(QWidget, Observer):
                 a flag indicating whether this QImageView will show
                 the raw input data, or the data acutally fed to the network.
                 
-    '''
+    """
 
     _image: QImage = None
 
@@ -41,7 +41,8 @@ class QImageView(QWidget, Observer):
         self._imageRect = None
 
     def setImage(self):
-        image = self._model.getInputData(self._show_raw) if self._model else None      
+        image = (self._model.get_input_data(self._show_raw)
+                 if self._model else None)
 
         if image is not None:
             # To construct an 8-bit monochrome QImage, we need a
@@ -73,14 +74,14 @@ class QImageView(QWidget, Observer):
         self.update()
 
     def setActivationMask(self, mask):
-        '''Set an (activation) mask to be displayed on top of
+        """Set an (activation) mask to be displayed on top of
         the actual image.
 
         Parameters
         ----------
         mask : numpy.ndarray
 
-        '''
+        """
         if mask is None:
             self._overlay = None
         else:
@@ -99,12 +100,12 @@ class QImageView(QWidget, Observer):
         self.update()
 
     def paintEvent(self, event):
-        '''Process the paint event by repainting this Widget.
+        """Process the paint event by repainting this Widget.
 
         Parameters
         ----------
         event : QPaintEvent
-        '''
+        """
         painter = QPainter()
         painter.begin(self)
         self._drawImage(painter)
@@ -112,12 +113,12 @@ class QImageView(QWidget, Observer):
         painter.end()
 
     def _drawImage(self, painter: QPainter):
-        '''Draw current image into this ``QImageView``.
+        """Draw current image into this ``QImageView``.
 
         Parameters
         ----------
         painter :   QPainter
-        '''
+        """
         if self._image is not None:
             w = self._image.width()
             h = self._image.height()
@@ -133,25 +134,26 @@ class QImageView(QWidget, Observer):
             painter.drawImage(self._imageRect, self._image)
 
     def _drawMask(self, painter: QPainter):
-        '''Display the given image.
+        """Display the given image.
 
         Parameters
         ----------
         painter :   QPainter
-        '''
+        """
         if self._image is not None and self._overlay is not None:
             painter.drawImage(self._imageRect, self._overlay)
 
-    def modelChanged(self, model, info):
+    def modelChanged(self, model: Model, info: ModelChange):
         from util import grayscaleNormalized
         all_activations = model._current_activation
         unit = model._unit
         # skip if dense layer
         self._model = model
-        if info.input_index_changed or info.dataset_changed:
+        if info.input_changed:
             self.setImage()
 
-        if all_activations is not None and unit is not None and all_activations.ndim > 1:
+        if (all_activations is not None and
+            unit is not None and all_activations.ndim > 1):
             activation_mask_f = all_activations[..., unit]
             # PROBLEM: Mask not properly updated
             activation_mask = np.ascontiguousarray(grayscaleNormalized(activation_mask_f), np.uint8)
@@ -162,8 +164,9 @@ class QImageView(QWidget, Observer):
     def mousePressEvent(self, event):
         self._show_raw = not self._show_raw
         self.setImage()
+        # FIXME[hack]: whit is this supposed to do?!
         from model import ModelChange
-        self._info_box.modelChanged(self._model, ModelChange(input_index_changed=True))
+        self._info_box.modelChanged(self._model, ModelChange(input_changed=True))
 
     # FIXME[todo]: does not work!
     def keyPressEvent(self, event):

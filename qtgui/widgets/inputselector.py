@@ -1,10 +1,9 @@
-from controller import ActivationsController
-import observer
-
+from controller import DataSourceController, DataSourceObserver
+from model import Model, ModelObserver
 
 from PyQt5.QtWidgets import QWidget, QGroupBox, QHBoxLayout
 
-class QInputSelector(QWidget, observer.Observer):
+class QInputSelector(QWidget, DataSourceObserver):
     '''A Widget to select input data (probably images).  There are
     different modes of selection: from an array, from a file, from a
     directory or from some predefined data source.
@@ -29,7 +28,6 @@ class QInputSelector(QWidget, observer.Observer):
     '''
     _index: int = None
 
-
     def __init__(self, parent=None):
         '''Initialization of the QInputSelector.
 
@@ -42,15 +40,14 @@ class QInputSelector(QWidget, observer.Observer):
         self._initUI()
 
 
-    def setController(self, controller: ActivationsController):
+    def setController(self, controller: DataSourceController) -> None:
         """Set the controller for this QInputSelector. Will trigger
-        observation of the controller's model.
+        observation of the controller.
 
         Parameters
         ----------
-        controller  :   ActivationsController
-                        Controller for mediating commands for
-                        the activations panel.
+        controller: DataSourceController
+            Controller for mediating commands for the activations panel.
 
         """
         super().setController(controller)
@@ -76,16 +73,17 @@ class QInputSelector(QWidget, observer.Observer):
 
 
 
-from datasources import DataArray, DataFile, DataDirectory, DataWebcam, DataVideo, Predefined
-
+from datasources import (DataArray, DataFile, DataDirectory, DataWebcam,
+                         DataVideo, Predefined)
 
 from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
-                             QHBoxLayout, QVBoxLayout, QSizePolicy, QInputDialog, QComboBox,
-                             QFileDialog, QListView, QAbstractItemView, QTreeView)
+                             QHBoxLayout, QVBoxLayout, QSizePolicy,
+                             QInputDialog, QComboBox,
+                             QFileDialog, QListView, QAbstractItemView,
+                             QTreeView)
 
 
-
-class QInputSourceSelector(QWidget, observer.Observer):
+class QInputSourceSelector(QWidget, DataSourceObserver):
     '''The QInputSourceSelector provides a controls to select a data
     source. It is mainly a graphical user interface to the datasource
     module, adding some additional logic.
@@ -110,14 +108,13 @@ class QInputSourceSelector(QWidget, observer.Observer):
         super().__init__(parent)
         self._initUI()
 
-
-    def modelChanged(self, model, info):
+    def datasource_changed(self, controller, info):
         '''The QInputSourceSelector is only affected by changes of
-        the model's dataset.
+        the DataSource.
         '''
 
-        if info.dataset_changed:
-            source = model._current_source
+        if info.datasource_changed:
+            source = controller.get_datasource()
 
             if isinstance(source, Predefined):
                 self._radioButtons['Name'].setChecked(True)
@@ -157,9 +154,6 @@ class QInputSourceSelector(QWidget, observer.Observer):
         #                Disable buttons, if necessary                      #
         #####################################################################
 
-        # mode = model._current_mode
-        # self._modeButton[mode].setChecked(True)
-
 
     def _initUI(self):
         '''Initialize the user interface.'''
@@ -189,7 +183,6 @@ class QInputSourceSelector(QWidget, observer.Observer):
         self._datasetDropdown.addItems(dataset_names)
         self._datasetDropdown.setEnabled(False)
         self._datasetDropdown.currentIndexChanged.connect(self._predefinedSelectionChange)
-
         
         buttonsLayout = QVBoxLayout()
         buttonsLayout.addWidget(self._datasetDropdown)
@@ -199,7 +192,6 @@ class QInputSourceSelector(QWidget, observer.Observer):
         sourceLayout.addLayout(radioLayout)
         sourceLayout.addLayout(buttonsLayout)
         self.setLayout(sourceLayout)
-
 
     def _radioButtonChecked(self):
         '''Callback for clicking the radio buttons.'''
@@ -217,7 +209,6 @@ class QInputSourceSelector(QWidget, observer.Observer):
             self._datasetDropdown.setEnabled(False)
             self._openButton.setText('Play')
         self._datasetDropdown.setEnabled(self._radioButtons['Name'].isChecked())
-
 
     def _openButtonClicked(self):
         '''An event handler for the ``Open`` button.'''
@@ -277,7 +268,8 @@ from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
 from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
 
-class QInputNavigator(QWidget, observer.Observer):
+
+class QInputNavigator(QWidget, DataSourceObserver):
 
     def __init__(self, parent=None):
         '''Initialization of the QInputNavigator.
@@ -291,13 +283,14 @@ class QInputNavigator(QWidget, observer.Observer):
         self._initUI()
 
 
-    def modelChanged(self, model, info):
-        datasource = model._current_source
+    def datasource_changed(self, controller, info) -> None:
+        datasource = controller.get_datasource()
         n_elems = 0 if datasource is None else len(datasource)
         valid = n_elems > 0
 
-        if info.dataset_changed:
-            self.infoDataset.setText(datasource.getDescription())
+        if info.datasource_changed:
+            if datasource is not None:
+                self.infoDataset.setText(datasource.getDescription())
             self.infoLabel.setText('of ' + str(n_elems - 1) if valid else '*')
             if valid:
                 self._indexField.setValidator(QIntValidator(0, n_elems))
@@ -310,9 +303,9 @@ class QInputNavigator(QWidget, observer.Observer):
                          self._indexField}:
                 elem.setEnabled(valid)
 
-        if info.input_index_changed and valid:
-            self._indexField.setText(str(model._current_index))
-
+        if info.index_changed and valid:
+            inputIndex = controller.get_index()
+            self._indexField.setText(str(inputIndex))
 
     def _newNavigationButton(self, label: str, icon: str=None):
         button = QPushButton()
@@ -324,7 +317,6 @@ class QInputNavigator(QWidget, observer.Observer):
         button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         button.clicked.connect(self._navigationButtonClicked)
         return button
-
 
     def _initUI(self):
         '''Initialize the user interface.'''
@@ -373,10 +365,10 @@ class QInputNavigator(QWidget, observer.Observer):
         self.setLayout(navigationMainLayout)
         #navigationBox.setLayout(navigationMainLayout)
 
-
+    # FIXME[design]: can't this be directly connected to the controller?
     def _editIndex(self, text):
         '''Event handler for the edit field.'''
-        self._controller.editIndex(text)
+        self._controller.edit_index(text)
 
     def _navigationButtonClicked(self):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
@@ -392,15 +384,12 @@ class QInputNavigator(QWidget, observer.Observer):
             self._controller.random()
 
 
-
-
-
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 import numpy as np
 
 
-class QInputInfoBox(QWidget, observer.Observer):
+class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
 
     # FIXME[hack]: imageView: there should be no explicit reference
     # between widgets We need imageView._show_raw here. Think of some
@@ -414,6 +403,7 @@ class QInputInfoBox(QWidget, observer.Observer):
         super().__init__(parent)
         self._imageView = imageView
         self._initUI()
+        self._description = ''
         self.showInfo()
 
     def _initUI(self):
@@ -433,19 +423,25 @@ class QInputInfoBox(QWidget, observer.Observer):
         layout.addWidget(self._dataLabel)
         self.setLayout(layout)
 
+    def setController(self, controller) -> None:
+        # FIXME[hack]: we need a more reliable way to observe multiple observable!
+        self.observe(controller.get_observable())
+
+    def datasource_changed(self, controller, info):
+        if info.index_changed:
+            datasource = controller.get_datasource()
+            if datasource is not None:
+                index = controller.get_index()
+                self._description = datasource.getName(index)
+            else:
+                self._description = ''
 
     def modelChanged(self, model, info):
-        if info.input_index_changed:
-            data = model.getInputData(self._imageView._show_raw)
-            if data is None:
-                self.showInfo()
-            elif model._current_source is None:
-                self.showInfo(data)
-            else:
-                self.showInfo(data,
-                              model._current_source.getName(model._current_index))
+        if info.input_changed:
+            data = controller.get_input_data(self._imageView._show_raw)
+            self.showInfo(data)
 
-    def showInfo(self, data: np.ndarray=None, description: str=None):
+    def showInfo(self, data: np.ndarray=None):
         '''Show info for the given (image) data.
 
         Parameters
@@ -456,13 +452,18 @@ class QInputInfoBox(QWidget, observer.Observer):
             some string describing the origin of the data
         '''
         self._meta_text = '<b>Input image:</b><br>\n'
-        self._meta_text += f'Description: {description}<br>\n'
+        self._meta_text += f'Description: {self._description}<br>\n'
 
-        self._data_text = '<b>Raw input:</b><br>\n' if self._imageView._show_raw else '<b>Network input:</b><br>\n'
+        self._data_text = ('<b>Raw input:</b><br>\n'
+                           if self._imageView._show_raw else
+                           '<b>Network input:</b><br>\n')
         if data is not None:
-            self._data_text += f'Input shape: {data.shape}, dtype={data.dtype}<br>\n'
-            self._data_text += 'min = {}, max={}, mean={:5.2f}, std={:5.2f}\n'.format(
-                data.min(), data.max(), data.mean(), data.std())
+            self._data_text += (f'Input shape: {data.shape}, '
+                                'dtype={data.dtype}<br>\n')
+            self._data_text += ('min = {}, max={}, mean={:5.2f}, '
+                                'std={:5.2f}\n'.
+                                format(data.min(), data.max(),
+                                       data.mean(), data.std()))
         self.update()
 
     def update(self):

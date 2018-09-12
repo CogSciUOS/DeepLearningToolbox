@@ -1,100 +1,124 @@
-'''
+"""
 File: activations.py
 Author: Petr Byvshev, Ulf Krumnack, Rasmus Diederichsen
 Email: rdiederichse@uni-osnabrueck.de
 Github: https://github.com/themightyoarfish
-'''
+"""
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
-from qtgui.widgets import QNetworkInfoBox
+from qtgui.widgets import QNetworkBox
+from qtgui.widgets import QActivationView
+from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
+from qtgui.widgets import QNetworkBox, QNetworkView, QNetworkSelector
+
 from .panel import Panel
-import controller
-from observer import Observer
-
-import numpy as np
+from controller import ActivationsController
 
 
-class ActivationsPanel(Panel, Observer):
-    '''A complex panel containing elements to display activations in
+class ActivationsPanel(Panel):
+    """A complex panel containing elements to display activations in
     different layers of a network. The panel offers controls to select
     different input stimuli, and to select a specific network layer.
 
-    Attributes
-    ----------
-    _network_map    :   dict A dictionary mapping the strings displayed in the network selector
-                        dropdown to actual network objects.
-    '''
+    Attributes:
+    -----------
+    _activation_view
+    _network_view
+    _input_view
+    _input_selector
+    _input_info
+    _network_view
+    """
 
-    _network_map    :   dict = {}
-
-    def __init__(self, model, parent=None):
-        '''Initialization of the ActivationsPael.
+    def __init__(self, parent=None):
+        """Initialization of the ActivationsPael.
 
         Parameters
         ----------
         parent  :   QWidget
                     The parent argument is sent to the QWidget constructor.
-        model   :   model.Model
-                    The backing model. Communication will be handled by a
-                    controller.
-        '''
-        from controller import ActivationsController
+        """
         super().__init__(parent)
+        _network_map = {}
         self.initUI()
-        self.setController(ActivationsController(model))
-        model
-
-
-    def setController(self, controller):
-        super().setController(controller)
-        controllable_widgets = [self._activation_view,
-                   self._network_view,
-                   self._input_view,
-                   self._input_selector,
-                   self._input_info,
-                   self._network_view]
-        for widget in controllable_widgets:
-            widget.setController(controller)
-
-        # What is this for? Since the Model is initialised with the
-        # network, the first call to setNetwork must somehow
-        # communicate that an update of all observers is desired
-        # despite the fact that the new network is identical to the
-        # old one. Another approach would be to make the network an
-        # optional Model initialiser param, but this requires some
-        # further tweaks. So here I just capture a local variable in a
-        # closure which then gets flipped on first call. I need a
-        # closure anyway for the name -> network map, so might as well
-        # put this in as well.
-        first_call = True
-        def select_net(name):
-            '''closure for _network_map and first_call'''
-            nonlocal first_call # 'global' does not work, dunno why.
-            controller.onNetworkSelected(self._network_map[name], first_call)
-            first_call = False
-
-        self._network_selector.activated[str].connect(select_net)
-        for key, network in controller._model._networks.items():
-            display_name = str(network.__class__)
-            self._network_selector.addItem(display_name)
-            self._network_map[display_name] = network
 
     def initUI(self):
-        '''Add additional UI elements
-
+        """Initialise all UI elements. These are
             * The ``QActivationView`` showing the unit activations on the left
+            * The ``QImageView`` showing the current input image
+            * A ``QInputSelector`` to show input controls
+            * A ``QNetworkView``, a widget to select a layer in a network
+            * A ``QInputInfoBox`` to display information about the input
+        """
 
-        '''
-        super().initUI()
-        ########################################################################
-        #                             Activations                              #
-        ########################################################################
+        #
+        # Input data
+        #
+
+        # QImageView: a widget to display the input data
+        self._input_view = QImageView(self)
+        # FIXME[layout]
+        # keep image view square (TODO: does this make sense for every input?)
+        self._input_view.heightForWidth = lambda w: w
+        self._input_view.hasHeightForWidth = lambda: True
+
+        # QNetworkInfoBox: a widget to select the input to the network
+        # (data array, image directory, webcam, ...)
+        # the 'next' button: used to load the next image
+        self._input_selector = QInputSelector()
+
+        # FIXME[hack]
+        self._input_info = QInputInfoBox(imageView=self._input_view)
+        self._input_view._info_box = self._input_info
+
+        # FIXME[layout]
+        self._input_info.setMinimumWidth(200)
+
+        input_layout = QVBoxLayout()
+        # FIXME[layout]
+        input_layout.setSpacing(0)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+        input_layout.addWidget(self._input_view)
+        input_layout.addWidget(self._input_info)
+        input_layout.addWidget(self._input_selector)
+
+        input_box = QGroupBox('Input')
+        input_box.setLayout(input_layout)
+        self._input_box = input_box
+
+        #
+        # Network
+        #
+
+        # QNetworkSelector: a widget to select a network
+        self._network_selector = QNetworkSelector()
+
+        # QNetworkView: a widget to select a network
+        self._network_view = QNetworkView()
+
+        # QNetworkBox: a widget to select a layer
+        self._network_info = QNetworkBox()
+        # FIXME[layout]
+        # self._network_info.setMinimumWidth(300)
+
+        # Now put the network stuff into one group
+        network_layout = QVBoxLayout()
+        network_layout.addWidget(self._network_selector)
+        network_layout.addWidget(self._network_view)
+        network_layout.addWidget(self._network_info)
+
+        self._network_box = QGroupBox('Network')
+        self._network_box.setLayout(network_layout)
+
+        #
+        # Activations
+        #
+
         # ActivationView: a canvas to display a layer activation
         self._activation_view = QActivationView()
-
         # FIXME[layout]
         self._activation_view.setMinimumWidth(200)
         self._activation_view.resize(400, self._activation_view.height())
@@ -105,19 +129,9 @@ class ActivationsPanel(Panel, Observer):
         activation_box = QGroupBox('Activation')
         activation_box.setLayout(activation_layout)
 
-        ########################################################################
-        #                            Network stuff                             #
-        ########################################################################
-
-        # network info: a widget to select a layer
-        self._network_info = QNetworkInfoBox()
-        # FIXME[layout]
-        # self._network_info.setMinimumWidth(300)
-        self._network_layout.addWidget(self._network_info)
-
-        ########################################################################
-        #                       Attach widgets to window                       #
-        ########################################################################
+        #
+        # Attach widgets to window
+        #
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(activation_box)
         splitter.addWidget(self._input_box)

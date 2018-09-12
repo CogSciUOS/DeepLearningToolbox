@@ -32,3 +32,31 @@ def grayscaleNormalized(array):
     max_value = array.max()
     div = max(max_value - min_value, 1)
     return (((array - min_value) / div) * 255).astype(np.uint8)
+
+
+class Identifiable:
+    _id : str = None
+    _counter : int = 0
+
+    def __init__(self, id = None):
+        if id is None:
+            self._ensure_id()
+        else:
+            self._id = id
+
+    def _ensure_id(self):
+        if self._id is None:
+            Identifiable._counter += 1
+            self._id = self.__class__.__name__ + str(Identifiable._counter)
+        return self._id
+    
+    def get_id(self):
+        return self._ensure_id()
+
+    def __hash__(self):
+        return hash(self._ensure_id())
+        
+    def __eq__(self, other):
+        if isinstance(other, Identifiable):
+            return self._ensure_id() == other._ensure_id()
+        return False

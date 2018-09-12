@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-'''
-A framework-agnostic visualisation tool for deep neural networks
+# -*- coding: utf-8 -*-
+'''A framework-agnostic visualisation tool for deep neural networks
 
-.. moduleauthor:: Rüdiger Busche, Petr Byvshev, Ulf Krumnack, Rasmus Diederichsen
+.. moduleauthor:: Rüdiger Busche, Petr Byvshev, Ulf Krumnack, Rasmus
+Diederichsen
 
 '''
 
@@ -18,12 +19,15 @@ from qtgui.mainwindow import DeepVisMainWindow
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
 # FIXME[todo]: also provide code to check if the framework is available
-#from network.keras import Network as KerasNetwork
-#from network.torch import Network as TorchNetwork
+
 from network import Network
+# from network.keras import Network as KerasNetwork
+# from network.torch import Network as TorchNetwork
 
 
-def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_model.h5') -> Network: # KerasNetwork
+def keras(backend: str, cpu: bool,
+          model_file: str='models/example_keras_mnist_model.h5') -> Network:
+    # actually: KerasNetwork
     '''
     Visualise a Keras-based network
 
@@ -58,7 +62,8 @@ def keras(backend: str, cpu: bool, model_file: str='models/example_keras_mnist_m
         raise RuntimeError('Unknown backend {backend}')
 
 
-def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input_shape: tuple) -> Network: # TorchNetwork
+def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str,
+          input_shape: tuple) -> Network:  # actually: TorchNetwork
     '''
     Visualise a Torch-based network
 
@@ -66,23 +71,26 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str, input
 
     Parameters
     ----------
-    cpu         :   bool
-                    Whether to use only cpu, not gpu
-    model_file  :   str
-                    Filename where the model is defined (a Python file with a
-                    :py:class:`torch.nn.Module` sublcass)
-    net_class   :   str
-                    Name of the model_file class (see ``model_file``)
+    cpu : bool
+        Whether to use only cpu, not gpu
 
-    parameter_file  :   str
-                        Name of the file storing the model weights (pickled torch weights)
-    input_shape     :   tuple
-                        Shape of the input images
+    model_file : str
+        Filename where the model is defined (a Python file with a
+        :py:class:`torch.nn.Module` sublcass)
+
+    net_class : str
+        Name of the model_file class (see ``model_file``)
+
+    parameter_file : str
+        Name of the file storing the model weights (pickled torch weights)
+
+    input_shape : tuple
+        Shape of the input images
 
     Returns
     -------
-    TorchNetwork
-        The concrete network instance to visualise
+    network: TorchNetwork
+        The concrete network instance to visualize.
 
     '''
     # FIXME[todo]: Fix errors when running torch network
@@ -106,7 +114,7 @@ def main():
     if (len(datasets) > 0):
         parser.add_argument('--dataset', help='name of a dataset',
                             choices=datasets,
-                            default=datasets[0]) # 'mnist'
+                            default=datasets[0])  # 'mnist'
     parser.add_argument('--framework', help='The framework to use.',
                         choices=['keras-tensorflow', 'keras-theano', 'torch'],
                         default='keras-tensorflow')
@@ -121,36 +129,35 @@ def main():
     from network.tensorflow import Network as TensorFlowNetwork
     checkpoint = os.path.join('models', 'example_tf_alexnet',
                               'bvlc_alexnet.ckpt')
-    network2 = TensorFlowNetwork(checkpoint=checkpoint)
+    network2 = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
     from datasources.imagenet_classes import class_names2
     network2.set_output_labels(class_names2)
 
     #
     # network: dependes on the selected framework
     #
-    if True:
+    if False:  # FIXME[hack]: two networks seem to cause problems!
         network = None
     elif args.framework.startswith('keras'):
         dash_idx = args.framework.find('-')
-        backend  = args.framework[dash_idx + 1:]
-        network  = keras(backend, args.cpu, model_file=args.model)
+        backend = args.framework[dash_idx + 1:]
+        network = keras(backend, args.cpu, model_file=args.model)
 
     elif args.framework == 'torch':
         # FIXME[hack]: provide these parameters on the command line ...
-        net_file       = 'models/example_torch_mnist_net.py'
-        net_class      = 'Net'
+        net_file = 'models/example_torch_mnist_net.py'
+        net_class = 'Net'
         parameter_file = 'models/example_torch_mnist_model.pth'
-        input_shape    = (28, 28)
+        input_shape = (28, 28)
         network = torch(args.cpu, net_file, net_class,
                         parameter_file, input_shape)
     else:
         network = None
-        
+
     from datasources import DataDirectory
     from model import Model
-    app        = QApplication(sys.argv)
-    model      = Model(network2)
-    #model.addNetwork(network2)
+    app = QApplication(sys.argv)
+    model = Model()
 
     if args.data:
         source = Predefined.get_data_source(args.data)
@@ -158,10 +165,13 @@ def main():
         source = Predefined.get_data_source(args.dataset)
     elif args.datadir:
         source = DataDirectory(args.datadir)
-    model.setDataSource(source)
 
     mainWindow = DeepVisMainWindow(model)
+    mainWindow.setDataSource(source)
     mainWindow.show()
+
+    model.add_network(network)
+    model.add_network(network2)
 
     rc = app.exec_()
     sys.exit(rc)

@@ -9,6 +9,7 @@ from frozendict import FrozenOrderedDict
 import importlib
 
 from .util import convert_data_format
+from util import Identifiable
 
 
 # FIXME[design]: we should decide on some points:
@@ -22,7 +23,7 @@ from .util import convert_data_format
 #
 
 
-class Network:
+class Network(Identifiable):
     """Abstract Network interface for all frameworks.
 
     The Network API will allow to order the dimensions in data arrays
@@ -31,25 +32,36 @@ class Network:
     different frameworks:
 
       * tensorflow default is to use channel last (``NHWC``)
-        (`can be changed to channel first <https://www.tensorflow.org/api_docs/python/tf/nn/conv2d>`_: ``data_format = "NCHW"``)
+        (`can be changed to channel first
+         <https://www.tensorflow.org/api_docs/python/tf/nn/conv2d>`_:
+         ``data_format = "NCHW"``)
 
-      * `pytorch only supports channel first <http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d>`_ (``NCHW``)
+      * `pytorch only supports channel first
+         <http://pytorch.org/docs/master/nn.html#torch.nn.Conv2d>`_ (``NCHW``)
 
-      * `pycaffe seems to default to <http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html>`_ ``NCHW``
+      * `pycaffe seems to default to
+         <http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html>`_
+         (``NCHW``)
 
       * theano: ?
 
     We have decided to use a batch first, channel last ordering, that
-    is ``NHWC``, i.e, ``(batch, height, width, channel)`` as this seems to be the
-    natural ordering for RGB images. However, there may also arguments
-    against this ordering. Rüdiger has mentioned that cuDNN `requires
-    channel first data <https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order>`_
+    is ``NHWC``, i.e, ``(batch, height, width, channel)`` as this
+    seems to be the natural ordering for RGB images. However, there
+    may also be arguments against this ordering. Rüdiger has mentioned
+    that cuDNN `requires channel first data
+    <https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order>`
 
     .. note::
-        It may be more useful to be able to specify the desired order, either globally for a
-        Network, in each method that gets or returns array data.
+        It may be more useful to be able to specify the desired order,
+        either globally for a Network, in each method that gets or
+        returns array data.
 
 
+    Attributes
+    ----------
+    layer_dict: Dict[str,Layer]
+   
     _output_labels: List[str]
         The output labels for this network. Only meaningful
         if this Network is a classifier.
@@ -80,12 +92,11 @@ class Network:
         instance = network_class(*args, **kwargs)
         return instance
 
-        #
 
 
     # ------------ Public interface ----------------
 
-    def __init__(self, **kwargs):
+    def __init__(self, id=None, **kwargs):
         """
 
         Parameters
@@ -96,9 +107,13 @@ class Network:
         """
         # Prohibited instantiation of base class.
         if self.__class__ == Network:
-            raise NotImplementedError('Abstract base class Network cannot be used directl.')
+            raise NotImplementedError('Abstract base class Network '
+                                      'cannot be used directly.')
 
-        # Every loaded_network should know which data format it is using. Default is channels_last.
+        super().__init__(id)
+
+        # Every loaded_network should know which data format it is using.
+        # Default is channels_last.
         data_format = kwargs.get('data_format', 'channels_last')
         self._data_format = data_format
 
@@ -199,12 +214,17 @@ class Network:
 
     # ------------------- Things to be implmeneted by subclasses --------------
 
-    def _compute_activations(self, layer_ids: list, input_samples: np.ndarray) -> List[np.ndarray]:
-        """To be implemented by subclasses. Computes a list of activations from a list of layer ids."""
+    def _compute_activations(self, layer_ids: list,
+                             input_samples: np.ndarray) -> List[np.ndarray]:
+        """To be implemented by subclasses.
+        Computes a list of activations from a list of layer ids.
+        """
         raise NotImplementedError
 
-    def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray) -> np.ndarray:
-        """To be implemented by subclasses. Computes a list of net inputs from a list of layer ids."""
+    def _compute_net_input(self, layer_ids: list,
+                           input_samples: np.ndarray) -> np.ndarray:
+        """To be implemented by subclasses.
+        Computes a list of net inputs from a list of layer ids."""
         raise NotImplementedError
 
     def _create_layer_dict(self) -> FrozenOrderedDict:
@@ -218,9 +238,10 @@ class Network:
 
     # ---------------------- Private helper functions -------------------------
 
-    def _transform_input(self, inputs: np.ndarray, data_format: str) -> np.ndarray:
-        """Fills up the ranks of the input, e.g. if no batch size was specified and
-        converts the input to the data format of the model.
+    def _transform_input(self, inputs: np.ndarray,
+                         data_format: str) -> np.ndarray:
+        """Fills up the ranks of the input, e.g. if no batch size was
+        specified and converts the input to the data format of the model.
 
         Parameters
         ----------
@@ -235,17 +256,22 @@ class Network:
         """
 
         inputs = self._fill_up_ranks(inputs)
-        inputs = convert_data_format(inputs, input_format=data_format, output_format=self._data_format)
+        inputs = convert_data_format(inputs, input_format=data_format,
+                                     output_format=self._data_format)
 
         return inputs
 
 
-    def _transform_outputs(self, outputs: np.ndarray, data_format: str) -> np.ndarray:
-
-        return convert_data_format(outputs, input_format=self._data_format, output_format=data_format)
+    def _transform_outputs(self, outputs: np.ndarray,
+                           data_format: str) -> np.ndarray:
+        """Convert output values into a desired data format.
+        """
+        return convert_data_format(outputs, input_format=self._data_format,
+                                   output_format=data_format)
 
     def _fill_up_ranks(self, inputs: np.ndarray) -> np.ndarray:
-        """Fill up the ranks of the input tensor in case no batch or color dimension is provided.
+        """Fill up the ranks of the input tensor in case no batch or
+        color dimension is provided.
 
         Parameters
         ----------
@@ -264,40 +290,44 @@ class Network:
         network_input_shape = self.get_input_shape()
         # Checking whether input samples was provided with all for channels.
         if len(inputs.shape) == 2:
-            # Only width and height means we are dealing with one grayscale image.
+            # Only width and height means we are dealing with one
+            # grayscale image.
             inputs = inputs[np.newaxis, :, :, np.newaxis]
         elif len(inputs.shape) == 3:
-            # We have to decide whether the batch or the channel dimension is missing.
-            # Ask the loaded_network what shape it expects. Since either the last three dimensions
-            # (in case channel was provided) or second and third dimension (in case batch) was
-            # provided have to match.
-
+            # We have to decide whether the batch or the channel
+            # dimension is missing.
+            #
+            # Ask the loaded_network what shape it expects. Since
+            # either the last three dimensions (in case channel was
+            # provided) or second and third dimension (in case batch)
+            # was provided have to match.
 
             if self._is_channel_provided(inputs.shape, network_input_shape):
                 inputs = inputs[np.newaxis, ...]
             elif self._is_batch_provided(inputs.shape, network_input_shape):
                 inputs = inputs[..., np.newaxis]
             else:
-                raise ValueError('Non matching input dimensions: network={} vs data={}'.format(network_input_shape, inputs.shape))
+                raise ValueError('Non matching input dimensions: '
+                                 'network={} vs data={}'.
+                                 format(network_input_shape, inputs.shape))
         elif len(inputs.shape) > 4:
-            raise ValueError('Too many input dimensions. Should be maximally 4 instead of {}.'.format(
-                len(inputs.shape)
-            ))
-
-
-
+            raise ValueError('Too many input dimensions.'
+                             'Should be maximally 4 instead of {}.'
+                             .format(len(inputs.shape)))
 
         return inputs
 
     @staticmethod
-    def _is_channel_provided(input_sample_shape: tuple, network_input_shape: tuple) -> bool:
+    def _is_channel_provided(input_sample_shape: tuple,
+                             network_input_shape: tuple) -> bool:
         """Check if a given shape includes a channel dimension.
         The channel dimension is assumed to be at the first axis.
         """
         return input_sample_shape == network_input_shape[1:]
 
     @staticmethod
-    def _is_batch_provided(input_sample_shape: tuple, network_input_shape: tuple) -> bool:
+    def _is_batch_provided(input_sample_shape: tuple,
+                           network_input_shape: tuple) -> bool:
         """Check if a given shape includes a batch dimension.
         The batch dimension is assumed to be at the first axis.
         """
@@ -306,9 +336,13 @@ class Network:
     @staticmethod
     def _force_list(maybe_list: Union[List, Any]) -> Tuple[list, bool]:
         """Turn something into a list, if it is none.
+        
         Returns
         -------
-        The input, turned into a list if necessary, and whether the input was a list or not
+        maybe_list: list
+            The input, turned into a list if necessary.
+        is_list: bool
+            A flag indicating whether the input was a list or not
 
         """
         is_list = True
@@ -388,7 +422,7 @@ class Network:
         network_input_shape = self.get_layer_input_shape(self.layer_ids[0])
         return network_input_shape[-1] if len(network_input_shape)>2 else 0
 
-###------------------------- methods for accessing layer attributes ---------
+    ### -------------------- methods for accessing layer attributes ---------
 
     def input_layer_id(self):
         first_layer_id = next(iter(self.layer_dict.keys()))

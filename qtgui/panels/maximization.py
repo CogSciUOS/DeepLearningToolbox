@@ -10,13 +10,11 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets.maximization import QMaximizationConfig
 from .panel import Panel
-import controller
-from observer import Observer
 
 import numpy as np
 
 
-class MaximizationPanel(Panel, Observer):
+class MaximizationPanel(Panel):
     '''A complex panel containing elements to configure the
     activation maximization of individual unites.
 
@@ -28,42 +26,28 @@ class MaximizationPanel(Panel, Observer):
 
     _network_map    :   dict = {}
 
-    def __init__(self, model, parent=None):
+    def __init__(self, parent=None):
         '''Initialization of the ActivationsPael.
 
         Parameters
         ----------
         parent  :   QWidget
                     The parent argument is sent to the QWidget constructor.
-        model   :   model.Model
-                    The backing model. Communication will be handled by a
-                    controller.
         '''
-        from controller import ActivationsController
         super().__init__(parent)
-        self.initUI()
-        self.setController(ActivationsController(model))
+        self._initUI()
 
-    
-    def setController(self, controller):
-        super().setController(controller)
-        controllable_widgets = [self._maximization_config_view]
-        for widget in controllable_widgets:
-            widget.setController(controller)
-
-
-    def initUI(self):
+    def _initUI(self):
         '''Add additional UI elements
 
             * The ``QActivationView`` showing the unit activations on the left
 
         '''
-        super().initUI()
 
+        #
+        # Configuration
+        #
 
-        #######################################################################
-        #                            Configuration                            #
-        #######################################################################
         # QMaximizationConfig: a widget to configure the maximization process
         self._maximization_config_view = QMaximizationConfig()
 
