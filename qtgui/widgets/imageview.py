@@ -155,7 +155,7 @@ class QImageView(QWidget, ModelObserver):
         if (all_activations is not None and
             unit is not None and all_activations.ndim > 1):
             activation_mask_f = all_activations[..., unit]
-            # PROBLEM: Mask not properly updated
+            # FIXME[problem]: Mask not properly updated
             activation_mask = np.ascontiguousarray(grayscaleNormalized(activation_mask_f), np.uint8)
             self.setActivationMask(activation_mask)
         else:

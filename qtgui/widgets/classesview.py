@@ -1,4 +1,6 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox,
+                             QGridLayout, QVBoxLayout)
 from observer import Observer
 from model import Model, ModelObserver, ModelChange
 
@@ -34,6 +36,7 @@ class QClassesView(QWidget, ModelObserver):
         for i in range(self._top_n):
             self._classes.append(QLabel(f"None", self))
             self._classes[i].setMaximumWidth(self._classes[i].width())
+            self._classes[i].setTextInteractionFlags(Qt.TextSelectableByMouse)
             layout.addWidget(self._classes[i], i+1, 0)
             self._scores.append(QLabel("0", self))
             layout.addWidget(self._scores[i], i+1, 1)
@@ -41,7 +44,14 @@ class QClassesView(QWidget, ModelObserver):
         self._target = QLabel(f"?", self)
         self._target.setMaximumWidth(self._target.width())
         layout.addWidget(self._target, self._top_n+1, 1)
-        self.setLayout(layout)
+        
+        layout2 = QVBoxLayout()
+        self._checkbox_active = QCheckBox("Classification")
+        # FIXME[stub]: this checkbox currently does not do anything
+        layout2.addLayout(layout)
+        layout2.addWidget(self._checkbox_active)
+        self.setLayout(layout2)
+        
 
     def modelChanged(self, model: Model, info: ModelChange) -> None:
         """The QClassesView is only interested if the classification result
@@ -54,6 +64,7 @@ class QClassesView(QWidget, ModelObserver):
         if classes is not None:
             for i in range(self._top_n):
                 self._classes[i].setText(str(classes[i]))
+                self._classes[i].setToolTip(str(classes[i]))
                 if target is None:
                     self._classes[i].setStyleSheet('')
                 elif target == classes[i]:

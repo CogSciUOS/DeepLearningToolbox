@@ -11,6 +11,8 @@ This module contains definitions for observer functionality
 # (which not really belongs there!), we could get rid of imports here!
 #import controller.base
 
+import threading
+
 
 class BaseChange(set):
     """.. :py:class:: BaseChange
@@ -143,12 +145,23 @@ class Observable:
         Should be a subclass of BaseChange.
     _change_method: str
         The name of the method to invoke at the observers.
+    _thread_local: threading.local
+        Thread local data for this observable. Can be used to
+        accumulate changes within a task.
     """
 
     def __init__(self, change_type: type, change_method: str):
         self._observers = set()
         self._change_type = change_type
         self._change_method = change_method
+        self._thread_local = threading.local()
+
+    def changelog(self) -> (BaseChange, bool):
+        data = self._thread_local
+        fresh = not hasattr(data, 'change')
+        if fresh:
+            data.change = self._change_type()
+        return data.change, fresh
 
     def addObserver(self, observer):
         """Add an object to observe this Observable.
@@ -171,7 +184,7 @@ class Observable:
         """
         self._observers.remove(observer)
 
-    def notifyObservers(self, info: BaseChange):
+    def notifyObservers(self, info: BaseChange=None):
         """Notify all observers that the state of this Observable has changed.
 
         Parameters
@@ -180,6 +193,10 @@ class Observable:
             Changes in the Observable since the last update.
             If ``None``, do not publish update.
         """
+        if info is None and hasattr(self._thread_local, 'change'):
+            info = self._thread_local.change
+            del self._thread_local.change
+            
         if info:
             for observer in self._observers:
                 self.notify(observer, info)
@@ -195,5 +212,4 @@ class Observable:
         """
         if info is None:
             info = self._change_type.all()
-        print("Notifying:", info)
         getattr(observer, self._change_method)(self, info)

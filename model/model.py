@@ -6,7 +6,7 @@ from network import Network, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from util import ArgumentError
 from observer import Observer, Observable, BaseChange
-
+from util import async
 
 class ModelChange(BaseChange):
     """.. :py:class:: ModelChange
@@ -58,9 +58,7 @@ def modelchange(network_changed=False,
                 layer_changed=False,
                 unit_changed=False,
                 input_changed=False,
-                activation_changed=False,
-                NOTIFY_HACK=False):
-    # FIXME[hack]: we need a better notification concecpt
+                activation_changed=False):
     """A decorator with arguments that will determine the ModelChange
     state. This decorator is intended to be used for methods of the
     Model class that may require informing some observer.
@@ -72,6 +70,10 @@ def modelchange(network_changed=False,
     """
     def modelchange_decorator(function):
         def wrapper(self, *args, **kwargs):
+            change, notify = self.changelog()
+            import threading
+            me = threading.current_thread().name
+            print(f"in[{me}]({function.__name__}): {notify}")
             if network_changed:
                 network = self._network
             if layer_changed:
@@ -83,7 +85,6 @@ def modelchange(network_changed=False,
             if activation_changed:
                 activation = self._current_activation
             function(self, *args, **kwargs)
-            change = ModelChange()
             if network_changed:
                 change.network_changed = (network is not self._network)
             if unit_changed:
@@ -94,13 +95,12 @@ def modelchange(network_changed=False,
                 change.input_changed = (input is not self._input)
             if activation_changed:
                 change.activation_changed = (activation is not
-                                             self._current_activation)
-            if not NOTIFY_HACK:
-                return change if change else None
-            self.notifyObservers(change)
+                                                  self._current_activation)
+            print(f"out[{me}]({function.__name__}):{change}")
+            if notify:
+                self.notifyObservers()
         return wrapper
     return modelchange_decorator
-
 
 
 class Model(Observable):
@@ -185,7 +185,6 @@ class Model(Observable):
     #                          SETTING DATA                                  #
     ##########################################################################
 
-
     @modelchange(input_changed=True)
     def set_input_data(self, data: np.ndarray=None,
                        target: int=None, description: str=None):
@@ -213,8 +212,7 @@ class Model(Observable):
         description: str
             A description of the input data.
         """
-        print(f"DataSourceController.set_input_data(data, label, description)")
-        print(f"{self._input}")
+        input = self._input
         #
         # do some sanity checks and corrections
         #
@@ -250,9 +248,7 @@ class Model(Observable):
         #
         # recompute the network activations
         #
-        self.notifyObservers(ModelChange(input_changed=True))
         self._update_activation()
-        print(f"{self._input}")
 
     def get_input_data(self, raw: bool=False) -> np.ndarray:
         """Obtain the current input data.  This is the current data in a
@@ -278,8 +274,7 @@ class Model(Observable):
 
     # FIXME[hack]: add_network is seemingly not called via a Controller,
     # hence we have to explicitly notify the observers
-    @modelchange(network_changed=True, layer_changed=True, unit_changed=True,
-                 activation_changed=True, NOTIFY_HACK=True)
+    @modelchange(network_changed=True)
     def add_network(self, network: Network, select: bool=True) -> None:
         """Add a model to visualise. This will add the network to the list of
         choices and make it the currently selcted one.
@@ -298,8 +293,7 @@ class Model(Observable):
         if select:
             self.setNetwork(network)
 
-    @modelchange(network_changed=True, layer_changed=True, unit_changed=True,
-                 activation_changed=True)
+    @modelchange(network_changed=True, input_changed=True)
     def setNetwork(self, network=None, force_update: bool=False) -> None:
         """Set the current network. Update will only be published if
         not already selected.
@@ -327,7 +321,7 @@ class Model(Observable):
                     data = self._shape_adaptor(self._data)
                     data = self._channel_adaptor(data)
                     self._input = data
-            self.setLayer(None)
+            self.set_layer(None)
 
     def get_network(self) -> Network:
         """Get the currently selected network.
@@ -383,20 +377,14 @@ class Model(Observable):
         """
         return self._layer
 
-    @modelchange(layer_changed=True, unit_changed=True,
-                 activation_changed=True)
-    def setLayer(self, layer: Layer=None):
+    @modelchange(layer_changed=True, unit_changed=True)
+    def set_layer(self, layer: Layer=None):
         """Set the current layer to choose units from.
 
         Parameters
         ----------
         layer   :   Layer
                     Layer instance to display
-
-        Returns
-        -------
-        ModelChange
-            Change notification for the task runner to handle.
         """
         # FIXME[hack]:
         if layer == "":
@@ -427,7 +415,7 @@ class Model(Observable):
             unit = None
         elif unit is not None:
             layer_shape = self._network.get_layer_output_shape(self._layer)
-            if unit < 0 and unit >= layer_shape[-1]:
+            if unit < 0 or unit >= layer_shape[-1]:
                 unit = None
         if unit != self._unit:
             self._unit = unit
@@ -454,6 +442,8 @@ class Model(Observable):
                 layers.add(self._network.output_layer_id())
             self._layers = list(layers)
 
+    @async
+    @modelchange(activation_changed=True)
     def _update_activation(self):
         """Set the :py:attr:`_current_activation` property by loading
         activations for :py:attr:`_layer` and :py:attr:`_data`.
@@ -488,8 +478,6 @@ class Model(Observable):
             self._current_activation = self._activations.get(self._layer, None)
         else:
             self._activations = {}
-
-        self.notifyObservers(ModelChange(activation_changed=True))
 
     ##########################################################################
     #                             UTILITIES                                  #

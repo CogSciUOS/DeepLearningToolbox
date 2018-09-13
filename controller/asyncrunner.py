@@ -32,7 +32,8 @@ class AsyncRunner(object):
     def __init__(self, observable: Observable) -> None:
         super().__init__()
         self._observable = observable
-        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._executor = ThreadPoolExecutor(max_workers=1,
+                                            thread_name_prefix='runner')
 
     def runTask(self, fn, *args, **kwargs) -> None:
         """Schedule the execution of a function.

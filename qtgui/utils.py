@@ -1,7 +1,7 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from controller import AsyncRunner
-from observer import Observable
+from observer import Observable, BaseChange
 
 class QtAsyncRunner(AsyncRunner, QObject):
     """:py:class:`AsyncRunner` subclass which knows how to update Qt widgets.
@@ -26,4 +26,6 @@ class QtAsyncRunner(AsyncRunner, QObject):
         """Emit the completion signal to have
         :py:meth:`Observable.notifyObservers` called.
         """
-        self._completion_signal.emit(future.result())
+        result = future.result()
+        if isinstance(result, BaseChange):
+            self._completion_signal.emit(result)

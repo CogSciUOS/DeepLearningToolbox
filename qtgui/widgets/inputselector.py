@@ -288,6 +288,7 @@ class QInputNavigator(QWidget, DataSourceObserver):
         n_elems = 0 if datasource is None else len(datasource)
         valid = n_elems > 0
 
+        print(f"QInputNavigator.datasource_changed({info})")
         if info.datasource_changed:
             if datasource is not None:
                 self.infoDataset.setText(datasource.getDescription())
@@ -438,7 +439,7 @@ class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
 
     def modelChanged(self, model, info):
         if info.input_changed:
-            data = controller.get_input_data(self._imageView._show_raw)
+            data = model.get_input_data(self._imageView._show_raw)
             self.showInfo(data)
 
     def showInfo(self, data: np.ndarray=None):

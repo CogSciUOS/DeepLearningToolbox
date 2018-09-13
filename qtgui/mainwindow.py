@@ -118,6 +118,16 @@ class DeepVisMainWindow(QMainWindow):
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(exitAction)
 
+        #
+        # Network Menu
+        #
+        networkMenu = menubar.addMenu('&Network')
+
+        #
+        # Datasource Menu
+        #
+        datasourceMenu = menubar.addMenu('&Data')
+
     def closeEvent(self, event):
         """Callback for x button click."""
         self.onExitClicked()

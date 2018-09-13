@@ -60,3 +60,17 @@ class Identifiable:
         if isinstance(other, Identifiable):
             return self._ensure_id() == other._ensure_id()
         return False
+
+
+from concurrent.futures import ThreadPoolExecutor
+
+_executor = ThreadPoolExecutor(max_workers=4,
+                               thread_name_prefix='async')
+
+def run_async(function, *args, **kwargs):
+    _executor.submit(function, *args, **kwargs)
+
+def async(function):
+    def wrapper(*args, **kwargs):
+        run_async(function, *args, **kwargs)
+    return wrapper

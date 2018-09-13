@@ -84,7 +84,7 @@ class ActivationsController(BaseController):
         layer   :   int or string
                     The index or the name of the layer to activate.
         """
-        self._runner.runTask(self._model.setLayer, layer)
+        self._runner.runTask(self._model.set_layer, layer)
 
     def onNetworkSelected(self, network_id: str):
         """Callback for selection of a new network.

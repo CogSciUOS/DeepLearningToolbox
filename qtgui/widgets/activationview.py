@@ -380,18 +380,28 @@ class QActivationView(QWidget, ModelObserver):
             self.setToolTip(not self.toolTipActive)
         # Arrow keyes will move the selected entry
         elif self._current_unit is not None:
-            row = self._current_unit % self._columns
-            col = self._current_unit // self._columns
+            row = self._current_unit // self._columns
+            col = self._current_unit % self._columns
             if key == Qt.Key_Left:
-                self._controller.onUnitSelected(self._current_unit - 1, self)
+                new_col = max(col-1,0)
+                new_unit =  row * self._columns + new_col
+                self._controller.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Up:
-                self._controller.onUnitSelected(self._current_unit -
-                                                self._columns, self)
+                new_row = max(row-1,0)
+                new_unit = new_row * self._columns + col
+                self._controller.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Right:
-                self._controller.onUnitSelected(self._current_unit + 1, self)
+                new_col = min(col+1,self._columns-1)
+                new_unit = row * self._columns + new_col
+                if new_unit >= self._unit_activations.shape[0]:
+                    new_unit = self._current_unit
+                self._controller.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Down:
-                self._controller.onUnitSelected(self._current_unit +
-                                                self._columns, self)
+                new_row = min(row+1,self._rows-1)
+                new_unit = new_row * self._columns + col
+                if new_unit >= self._unit_activations.shape[0]:
+                    new_unit = self._current_unit
+                self._controller.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Escape:
                 self._controller.onUnitSelected(None, self)
             else:

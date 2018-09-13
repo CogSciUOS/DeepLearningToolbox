@@ -45,17 +45,22 @@ def datasourcechange(datasource_changed=False,
     """
     def datasourcechange_decorator(function):
         def wrapper(self, *args, **kwargs):
+            change, notify = self.changelog()
+            import threading
+            me = threading.current_thread().name
+            print(f"in[{me}]({function.__name__}): {notify}")
             if datasource_changed:
                 datasource = self._datasource
             if index_changed:
                 index = self._index
             function(self, *args, **kwargs)
-            change = DataSourceChange()
             if datasource_changed:
                 change.datasource_changed = (datasource == self._datasource)
             if index_changed:
-                index = (index == self._index)
-            self.notifyObservers(change)
+                change.index_changed = (index == self._index)
+            print(f"out[{me}]({function.__name__}):{change}")
+            if notify:
+                self.notifyObservers()
         return wrapper
     return datasourcechange_decorator
 
