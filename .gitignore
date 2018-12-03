@@ -19,6 +19,9 @@ debug.py
 # core dump default name
 core
 
+# emacs backup files
+*.py~
+
 # I think this is for one of my linters
 .ropeproject/
 
