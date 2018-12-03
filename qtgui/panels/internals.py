@@ -9,6 +9,7 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QGroupBox,
                              QGridLayout, QHBoxLayout, QVBoxLayout,
                              QPlainTextEdit)
+from PyQt5.QtGui import QFontDatabase
 
 from .panel import Panel
 
@@ -18,6 +19,8 @@ import importlib
 #import cv2
 #import keras
 import sys
+import os
+import re
 from types import ModuleType
 
 class InternalsPanel(Panel):
@@ -32,44 +35,44 @@ class InternalsPanel(Panel):
         self.initUI()
     
     def initUI(self):
+        self._layout = QVBoxLayout()
         self._grid = QGridLayout()
         self._grid.addWidget(self.modulesInfo(), 0,0)
-        self._grid.addWidget(self.cudaInfo(), 0,1)
+        self._grid.addLayout(self.cudaInfo(), 0,1)
+
+        self._layout.addLayout(self._grid)
         self._info = self._moduleInfo('cv2')
-        self._grid.addWidget(self._info, 1,0,1,2)
-        # layout.addWidget(self.tensorflowInfo(), 1,1)
-        self.setLayout(self._grid)
+        self._layout.addWidget(self._info)
+        self.setLayout(self._layout)
 
     @QtCore.pyqtSlot()
     def _onInfo(self):
-        print(self.sender().text())
-        print(type(self))
         name = self.sender().text()
-        info = self._info = self._moduleInfo(name)
-        print(f"_info={self._info}")
-        old_info = self._grid.replaceWidget(self._info, info)
-        #old_info = self.getLayout().replaceWidget(self._info, info)
-        print(f"old_info={old_info}")
-        if old_info is not None:
+        info = self._moduleInfo(name)
+        if self._layout.replaceWidget(self._info, info) is not None:
+            self._info.deleteLater()
             self._info = info
-        self.update()
 
     def modulesInfo(self):
         box = QGroupBox('Modules')
+        box.setMinimumWidth(300)
         
         grid = QGridLayout()
         grid.addWidget(QLabel("<b>Package</b>", self), 0,0)
         grid.addWidget(QLabel("<b>Version</b>", self), 0,1)
 
-        modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe"]
+        modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe", "PyQt5", "pycuda"]
         for i,m in enumerate(modules):
             button = QPushButton(m, self)
+            button.setFlat(True)
             button.clicked.connect(self._onInfo)
             grid.addWidget(button, 1+i, 0)
             if m in sys.modules:
                 module = sys.modules[m]
                 if hasattr(module, '__version__'):
                     info = str(module.__version__)
+                elif m == "PyQt5":
+                    info = QtCore.QT_VERSION_STR
                 else:
                     info = "loaded, no version"
                 self._modules[m] = sys.modules[m]
@@ -92,20 +95,84 @@ class InternalsPanel(Panel):
         
         return box
 
-    def cudaInfo(self):
-        box = QGroupBox('CUDA')
+    def get_processor_name(self):
+        import platform
+        import subprocess
+        if platform.system() == "Windows":
+            return platform.processor()
+        elif platform.system() == "Darwin":
+            os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
+            command ="sysctl -n machdep.cpu.brand_string"
+            return subprocess.check_output(command).strip()
+        elif platform.system() == "Linux":
+            command = "cat /proc/cpuinfo"
+            all_info = str(subprocess.check_output(command, shell=True,
+                                                   universal_newlines=True))
+            for line in all_info.split("\n"):
+                if "model name" in line:
+                    return re.sub( ".*model name.*:", "", line,1)
+        return ""
 
+    def cudaInfo(self):
         layout = QVBoxLayout()
+        box = QGroupBox('Python')
+
+        boxLayout = QVBoxLayout()
+
+        boxLayout.addWidget(QLabel(f"Python version: {sys.version}"))
+        boxLayout.addWidget(QLabel(f"Platform: {sys.platform}"))
+        boxLayout.addWidget(QLabel(f"Prefix: {sys.prefix}"))
+        boxLayout.addWidget(QLabel(f"Executable: {sys.executable}"))
+
+        box.setLayout(boxLayout)
+        layout.addWidget(box)
+
+        #
+        # Platform
+        #
+        box = QGroupBox('System')
+        boxLayout = QVBoxLayout()
+
+        import platform
+        boxLayout.addWidget(QLabel(f"uname: {platform.uname()}"))
+        boxLayout.addWidget(QLabel(f"system: {platform.system()}"))
+        boxLayout.addWidget(QLabel(f"node: {platform.node()}"))
+        boxLayout.addWidget(QLabel(f"release: {platform.release()}"))
+        boxLayout.addWidget(QLabel(f"version: {platform.version()}"))
+        boxLayout.addWidget(QLabel(f"machine: {platform.machine()}"))
+        boxLayout.addWidget(QLabel(f"processor: {platform.processor()}"))
+        boxLayout.addWidget(QLabel(f"cpu: {self.get_processor_name()}"))
+
+        box.setLayout(boxLayout)
+        layout.addWidget(box)
+
         #
         # Memory usage
         #
+        box = QGroupBox('Resources')
+        boxLayout = QVBoxLayout()
+        
+
+        import os
+        mem_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
+        # SC_PAGE_SIZE is often 4096.
+        # SC_PAGESIZE and SC_PAGE_SIZE are equal.
+        mem = mem_bytes>>20
+        boxLayout.addWidget(QLabel("Total physical memory: {:,} MiB".
+                                   format(mem)))
+
         
         # a useful solution that works for various operating systems,
         # including Linux, Windows 7, etc.:
-        import os
-        import psutil
-        process = psutil.Process(os.getpid())
-        layout.addWidget(QLabel("Memory usage: {process.memory_info().rss}"))
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            # mem.total: total physical memory available
+            boxlayout.addWidget(QLabel("Total physical memory: {mem.total}"))
+            process = psutil.Process(os.getpid())
+            boxlayout.addWidget(QLabel("Memory usage: {process.memory_info().rss}"))
+        except ModuleNotFoundError:
+            pass
 
         # For Unixes (Linux, Mac OS X, Solaris) you could also use the
         # getrusage() function from the standard library module
@@ -115,27 +182,88 @@ class InternalsPanel(Panel):
         # resource is a standard library module.
         import resource
         
-        
         # The Python docs aren't clear on what the units are exactly,
         # but the Mac OS X man page for getrusage(2) describes the
         # units as bytes. The Linux man page isn't clear, but it seems
         # to be equivalent to the information from /proc/self/status,
         # which is in kilobytes.
-        layout.addWidget(QLabel("Memory usage: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}"))
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        boxLayout.addWidget(QLabel("Peak Memory usage: {:,} kiB".
+                                   format(rusage.ru_maxrss)))
 
-        grid = QGridLayout()
+        box.setLayout(boxLayout)
+        layout.addWidget(box)
 
+
+        box = QGroupBox('CUDA')
+        boxLayout = QVBoxLayout()
+
+        if os.path.exists('/proc/driver/nvidia/version'):
+            with open('/proc/driver/nvidia/version') as f:
+                driver_info = f.read()
+            match = re.search('Kernel Module +([^ ]*)', driver_info)
+            if match:
+                boxLayout.addWidget(QLabel(f"Kernel module: {match.group(1)}"))
+            match = re.search('gcc version +([^ ]*)', driver_info)
+            if match:
+                boxLayout.addWidget(QLabel(f"GCC version: {match.group(1)}"))
+
+        import subprocess
+        try:
+            nvidia_smi = subprocess.check_output(["nvidia-smi"],
+                                                 universal_newlines=True)
+            nvidia_smi_l = subprocess.check_output(["nvidia-smi", "-L"],
+                                                   universal_newlines=True)
+            nvidia_smi_q = subprocess.check_output(["nvidia-smi", "-q"],
+                                                   universal_newlines=True)
+            # -q = query: GPU temperature, memory, ...
+
+            match = re.search('Driver Version: ([^ ]*)', nvidia_smi)
+            if match:
+                driver = match.group(1)
+            else:
+                driver = ''
+
+            match = re.search('CUDA Version: ([^ ]*)', nvidia_smi)
+            if match:
+                cuda_version = match.group(1)
+            else:
+                cuda_version = ''
+
+            match = re.search('GPU [\d]+: (.*) \(UUID', nvidia_smi_l)
+            if match:
+                gpu = match.group(1)
+            else:
+                gpu = ''
+
+            boxLayout.addWidget(QLabel(f"GPU: {gpu}"))
+            boxLayout.addWidget(QLabel(f"Kernel driver version: {driver}"))
+            boxLayout.addWidget(QLabel(f"CUDA Toolkit version: {cuda_version}"))
+
+            text = QPlainTextEdit()
+            fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+            text.document().setDefaultFont(fixedFont)
+            text.setReadOnly(True)
+            text.setPlainText(str(nvidia_smi))
+            text.appendPlainText(str(nvidia_smi_l))
+            boxLayout.addWidget(text)
+
+        except FileNotFoundError as e:
+            boxLayout.addWidget(QLabel(f"Program 'nvidia-smi' not found!"))
+
+
+
+        # Now use the python module pycuda
         try:
             import pycuda.autoinit
-            # ImportError: libcurand.so.8.0: cannot open shared object file: No such file or directory
             import pycuda.driver as cuda
 
-            (free,total)=cuda.mem_get_info()
-            grid.addWidget(QLabel("<b>Global Memory</b>", self), 0,0)
-            grid.addWidget(QLabel(f"{total}", self), 0,1)
-            grid.addWidget(QLabel(f"{free}", self), 0,2)
-
-            print("Global memory occupancy:%f%% free"%(free*100/total))
+            (free,total) = cuda.mem_get_info()
+            boxLayout.addWidget(QLabel("<b>Global Memory</b>"))
+            boxLayout.addWidget(QLabel(f"{total}"))
+            boxLayout.addWidget(QLabel(f"{free}"))
+            boxLayout.addWidget(QLabel("Global memory occupancy: "
+                                       f"{free*100/total}%% free"))
 
             for devicenum in range(cuda.Device.count()):
                 device=cuda.Device(devicenum)
@@ -147,27 +275,21 @@ class InternalsPanel(Panel):
                     print("%s:%s"%(str(key),str(value)))
         except ImportError as e:
             print(e, file=sys.stderr)
-            grid.addWidget(QLabel("<b>CUDA module not installed</b>", self),
-                           0,0)
-        layout.addLayout(grid)
+            # ImportError: libcurand.so.8.0
+            # The problem occurs with the current anaconda version
+            # (2017.1, "conda install -c lukepfister pycuda").
+            # The dynamic library "_driver.cpython-36m-x86_64-linux-gnu.so"
+            # is linked against "libcurand.so.8.0". However, the cudatookit
+            # installed by anaconda is verion 9.0.
+            boxLayout.addWidget(QLabel("Python CUDA module (pycuda) not availabe"))
 
-        import subprocess
-        #nvidia_smi = str(subprocess.check_output(["nvidia-smi", "-L"]))
-        #n = str(subprocess.check_output(["nvidia-smi", "-L"])).count('UUID')
-        nvidia_smi = subprocess.check_output(["nvidia-smi"])
-
-        text = QPlainTextEdit()
-        text.setReadOnly(True)
-        text.setPlainText(nvidia_smi)
-        layout.addWidget(text)
+        box.setLayout(boxLayout)
+        layout.addWidget(box)
 
         layout.addStretch()
-        box.setLayout(layout)
-        return box
+        return layout
 
     def _moduleInfo(self, name):
-        print(f"HELLO module {name}")
-
         labels = {
             'cv2': 'OpenCV',
             'tensorflow': 'TensorFlow',
@@ -192,7 +314,14 @@ class InternalsPanel(Panel):
             else:
                 boxLayout = QVBoxLayout()
                 boxLayout = QVBoxLayout()
-                boxLayout.addWidget(QLabel(f"Version = {module.__version__}"))
+                if hasattr(module, '__version__'):
+                    version = str(module.__version__)
+                elif m == "PyQt5":
+                    version = QtCore.QT_VERSION_STR
+                else:
+                    version = "no version info"
+                boxLayout.addWidget(QLabel(f"Version = {version}"))
+                boxLayout.addWidget(QLabel(f"Library = {module.__file__}"))
                 boxLayout.addStretch()
                 
         else:
@@ -205,33 +334,38 @@ class InternalsPanel(Panel):
         return box
 
     def cv2Info(self, cv2):
-        print("HELLO CV2")
         layout = QVBoxLayout()
         
         info = cv2.getBuildInformation()
         
         text = QPlainTextEdit()
+        fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        text.document().setDefaultFont(fixedFont)
         text.setReadOnly(True)
         text.setPlainText(info)
 
         layout.addWidget(QLabel(f"Version: {cv2.__version__}"))
-        layout.addWidget(QLabel(f"Version: {cv2.__file__}"))
+        layout.addWidget(QLabel(f"Library: {cv2.__file__}"))
         layout.addWidget(text)
         layout.addStretch()
         return layout
 
     def tensorflowInfo(self, tf):
-        # from tensorflow.python.client import device_lib
+        layout = QVBoxLayout()
+        label = QLabel("<b>Tensorflow<b>\n"
+                       f"Version = {tf.__version__}")
+        layout.addWidget(label)
 
+        layout.addWidget(QLabel(f"Tensorflow devices:"))
         #  There is an undocumented method called
         #  device_lib.list_local_devices() that enables you to list
         #  the devices available in the local process (As an
         #  undocumented method, this is subject to backwards
         #  incompatible changes.)
-
-        # def get_available_gpus():
-        #     local_device_protos = device_lib.list_local_devices()
-        #     return [x.name for x in local_device_protos if x.device_type == 'GPU']
+        from tensorflow.python.client import device_lib
+        local_device_protos = device_lib.list_local_devices()
+        for dev in local_device_protos:
+            layout.addWidget(QLabel(f"Device: {dev.name} ({dev.device_type})"))
 
         # Note that (at least up to TensorFlow 1.4), calling
         # device_lib.list_local_devices() will run some initialization
@@ -243,9 +377,5 @@ class InternalsPanel(Panel):
         # more details
 
         # https://stackoverflow.com/questions/38009682/how-to-tell-if-tensorflow-is-using-gpu-acceleration-from-inside-python-shell
-        label = QLabel("<b>Tensorflow<b>\n"
-                       f"Version = {tf.__version__}")
-        layout = QVBoxLayout()
-        layout.addWidget(label)
         layout.addStretch()
         return layout

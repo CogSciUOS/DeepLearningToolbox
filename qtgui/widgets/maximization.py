@@ -935,6 +935,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._button_run = QPushButton("run")
         self._button_run.clicked.connect(self.onMaximize)
         self._button_stop = QPushButton("stop")
+        self._button_stop.setEnabled(False)
         self._button_show = QPushButton("show")
         self._button_show.clicked.connect(self.onShow)
 
@@ -1060,6 +1061,9 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
 
         if info.image_changed:
             self.logMessage("!!! QMaximizationControls: image changed")
+            self._button_run.setEnabled(True)
+            self._button_stop.setEnabled(False)
+            self._button_show.setEnabled(True)
             self._button_record_save.setEnabled(self._stack is not None)
             if engine.image is not None:
                 image_normalized = self._normalizeImage(engine.image[0])
@@ -1093,6 +1097,10 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
             self._stack = None
         self._stack_size = 0
         self._button_record_save.setEnabled(False)
+
+        self._button_run.setEnabled(False)
+        self._button_stop.setEnabled(True)
+        self._button_show.setEnabled(False)
 
         self._info_iteration.setText("")
         self._info_loss.setText("")
