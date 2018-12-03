@@ -880,6 +880,11 @@ class QMaximizationConfigView(QWidget):
 from PyQt5.QtWidgets import QPlainTextEdit
 
 class MyLogWindow(QPlainTextEdit):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        
     def appendMessage(self, text: str):
         self.appendPlainText(text)
         self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
@@ -918,6 +923,8 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._stack = None
+        self._stack_grow = False
+        self._stack_size = 0
         self._losses = []
         self._maximization_controller = None
         self._initUI()
@@ -933,6 +940,9 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
 
         self._checkbox_record = QCheckBox("Record images")
         self._info_record = QLabel()
+        self._button_record_save = QPushButton("Save")
+        self._button_record_save.clicked.connect(self.onSaveMovie)
+        self._button_record_save.setEnabled(False)
 
         self._imageView = QImageView()
 
@@ -980,6 +990,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         record_box = QHBoxLayout()
         record_box.addWidget(self._checkbox_record)
         record_box.addWidget(self._info_record)
+        record_box.addWidget(self._button_record_save)
         record_box.addStretch()
         info.addLayout(record_box)
         info.addStretch()
@@ -1049,26 +1060,40 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
 
         if info.image_changed:
             self.logMessage("!!! QMaximizationControls: image changed")
+            self._button_record_save.setEnabled(self._stack is not None)
             if engine.image is not None:
-                image_normalized = self._normalizeImage(engine.image)
-                self._imageView.setImage(image_normalized.astype(np.uint8))
+                image_normalized = self._normalizeImage(engine.image[0])
+                self._imageView.setImage(image_normalized)
                 if self.display is not None:
-                    self.display.showImage(image_normalized.astype(np.uint8),
+                    self.display.showImage(image_normalized,
                                            engine._config.copy()) # FIXME[hack]: private variable
 
 
-    def _normalizeImage(self, image: np.ndarray) -> np.ndarray:
+    def _normalizeImage(self, image: np.ndarray,
+                        as_uint8:bool = True,
+                        as_bgr = False) -> np.ndarray:
         # FIXME[design]: this put be done somewhere else ...
-        image_normalized = np.ndarray(image.shape, image.dtype)
-        cv2.normalize(image, image_normalized, 0, 255, cv2.NORM_MINMAX)
+        normalized = np.ndarray(image.shape, image.dtype)
+        cv2.normalize(image, normalized, 0, 255, cv2.NORM_MINMAX)
         # self.image_normalized = (self.image-min_value)*255/(max_value-min_value)
-        return image_normalized
+        if as_uint8:
+            normalized = normalized.astype(np.uint8)
+        if as_bgr:
+            normalized = normalized[...,::-1]
+        return normalized
 
     def onMaximize(self):
         if self._checkbox_record.checkState():
-            self._stack = np.ndarray((0,) + tuple(self._image_shape))
+            if self._stack_grow:
+                self._stack = np.ndarray((0,) + tuple(self._image_shape))
+            else:
+                self._stack = np.ndarray((self._config.MAX_STEPS+1,) +
+                                         tuple(self._image_shape))
         else:
             self._stack = None
+        self._stack_size = 0
+        self._button_record_save.setEnabled(False)
+
         self._info_iteration.setText("")
         self._info_loss.setText("")
         self._info_minmax.setText("")
@@ -1090,35 +1115,67 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._controller.onNewInput(self._imageView.getImage(),
                                     self._config.UNIT_INDEX,
                                     self._engine.description)
-        # FIXME[hack]: layers may be None!?
-        #               f"'{self.layer[0]}'/"
-        #               f"'{self.layer[1].name}'")
-        #self._controller.onNewInput(self.image, self._config.UNIT_INDEX, self.description)
-        #self._controller.onNewInput(self.image_normalized, self._config.UNIT_INDEX, self.description)
-        #self._controller.onNewInput(self.image_uint8, self._config.UNIT_INDEX, self.description)
 
+    def onSaveMovie(self):
+        # http://www.fourcc.org/codecs.php
+        #fourcc, suffix = 'PIM1', 'avi'
+        #fourcc, suffix = 'ffds', 'mp4'
+        fourcc, suffix = 'MJPG', 'avi' # https://en.wikipedia.org/wiki/Motion_JPEG
+        #fourcc, suffix = 'XVID', 'avi'
+
+        filename = 'activation_maximization.' + suffix
+        fps = 25
+        frameSize = self._stack.shape[1:3]
+        isColor = (self._stack.ndim==4)
+        print(f"onSaveMovie: preparing {filename} ({fourcc}) ... ")
+        writer = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*fourcc),
+                                 fps, frameSize, isColor=isColor)
+        print(f"onSaveMovie: writer.isOpened: {writer.isOpened()}")
+        if writer.isOpened():
+            print(f"onSaveMovie: writing {len(self._stack_size)} frames ... ")
+            # FIXME[todo]: we need the number of actual frames!
+            for frame in range(self._stack_size):
+                writer.write(self._normalizeImage(self._stack[frame],
+                                                  as_bgr=True))
+        print(f"onSaveMovie: releasing the writer")
+        writer.release()
+        print(f"onSaveMovie: done")
 
     #@async
     def logOptimizationStep(self, image: np.ndarray,
                             iteration: int, loss: float):
         self._losses.append(loss) 
         if self._stack is not None:
-            self._stack = np.concatenate((self._stack, image[np.newaxis]),
-                                         axis=0)
-            self._info_record.setText("(memory={:,} bytes)".
-                                      format(self._stack.nbytes))
+            if self._stack_grow:
+                self._stack = np.concatenate((self._stack, image[np.newaxis]),
+                                             axis=0)
+            else:
+                self._stack[iteration] = image
+            self._stack_size += 1
+            # 10^6 Bytes = 1 MB, 2^20 Bytes = 1 MiB
+            self._info_record.setText("(memory={:,}/{:,} MiB)".
+                                      format((self._stack[:self._stack_size].nbytes) >> 20,
+                                             self._stack.nbytes >> 20))
+        self._showImage(image)
+
         self._slider.setMaximum(len(self._losses)-1)
-        self._slider.setSliderPosition(len(self._losses)-1)
         # FIXME[concept]: this triggers the valueChanged signal,
         # i.e. it will call selectIteration
+        self._slider.setSliderPosition(len(self._losses)-1)
 
-        image_normalized = self._normalizeImage(image)
-
-        self._imageView.setImage(image_normalized.astype(np.uint8))
-        self._info_iteration.setText(f"{iteration}")
-        self._info_loss.setText(f"{loss:.2f}")
         self.update()
 
+    def _showImage(self, image: np.ndarray):
+        image_min = image.min()
+        image_max = image.max()
+        image_mean = image.mean()
+        image_std = image.std()
+        self._info_minmax.setText(f"{image_min:.2f}/{image_max:.2f}"
+                                  f" ({image_max-image_min:.2f})")
+        self._info_mean.setText(f"{image_mean:.2f} +/- {image_std:.2f}")
+
+        self._imageView.setImage(self._normalizeImage(image))       
+        
     def logMessage(self, message: str) -> None:
         me = threading.current_thread().name
         print(f"logMessage: [{me}] {message}")
@@ -1128,19 +1185,8 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._info_iteration.setText(f"{iteration}")
         self._info_loss.setText(f"{self._losses[iteration]:.2f}")
         if self._stack is not None:
-            image = self._stack[iteration]
-            image_normalized = np.ndarray(image.shape, image.dtype)
-            cv2.normalize(image, image_normalized, 0, 255, cv2.NORM_MINMAX)
-            # self.image_normalized = (self.image-min_value)*255/(max_value-min_value)
-            self._imageView.setImage(image_normalized.astype(np.uint8))
-            image_min = image.min()
-            image_max = image.max()
-            image_mean = image.mean()
-            image_std = image.std()
-            self._info_minmax.setText(f"{image_min:.2f}/{image_max:.2f}"
-                                      f" ({image_max-image_min:.2f})")
-            self._info_mean.setText(f"{image_mean:.2f} +/- {image_std:.2f}")
-            self._slider.setSliderPosition(iteration)
+            self._showImage(self._stack[iteration])
+        self._slider.setSliderPosition(iteration)
         self.update()
     
 
