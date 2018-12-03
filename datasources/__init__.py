@@ -1,4 +1,4 @@
-'''.. moduleauthor:: Rasmus Diederichsen, Ulf Krumnack
+""".. moduleauthor:: Rasmus Diederichsen, Ulf Krumnack
 
 .. module:: datasources
 
@@ -13,7 +13,7 @@ For these datasets, it (should) know how to download the dataset, how
 to locate it (e.g., by means of environment variables or some standard
 locations), and how access it (i.e., which DataSource class to use).
 
-'''
+"""
 from .source import DataSource, InputData, Predefined
 from .array import DataArray
 from .file import DataFile
@@ -32,6 +32,6 @@ for d in KerasDataSource.KERAS_IDS:
     except ValueError as err:
         print(f"Error instantiating keras data source '{d}': {err}",
               file=sys.stderr)
-ImageNet(section = 'train')
+ImageNet(section='train')
 
 print(Predefined.get_data_source_ids())

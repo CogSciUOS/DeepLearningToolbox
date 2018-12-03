@@ -167,8 +167,15 @@ class Network(BaseNetwork):
         """
         layer_dict = OrderedDict()
         layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
-        #for tensor in self._sess.graph.as_graph_def().node:
-        #    print(type(self), type(tensor), tensor.name)
+        
+        debug = False
+        # Output information about the underlying graph:
+        if debug:
+            print(f"debug: Network: {self.get_id()} ({type(self)}):") 
+            for i, tensor in enumerate(self._sess.graph.as_graph_def().node):
+                print(f"debug:   {i}) {tensor.name}: {type(tensor)}")
+                #print(tf.get_default_graph().get_tensor_by_name(tensor.name+":0")[0])
+            print(f"debug: Layer dict:") 
 
         ops = self._sess.graph.get_operations()
         op_idx = 0
@@ -176,8 +183,13 @@ class Network(BaseNetwork):
 
 
         while op_idx < len(self._sess.graph.get_operations()):
-            #print(op_idx, type(ops[op_idx]), ops[op_idx].type, ops[op_idx].name, ops[op_idx].values())
-
+            if debug:
+                print(f"debug:  op-{op_idx}: "
+                      # "{type(ops[op_idx])}, "
+                      # always <class 'tensorflow.python.framework.ops.Operation'>
+                      f"{ops[op_idx].type} with name '{ops[op_idx].name}', "
+                      f"{ops[op_idx].values()}")
+                
             if self._input_placeholder is None:
                 if ops[op_idx].type == 'Placeholder':
                     self._input_placeholder = ops[op_idx]
@@ -191,6 +203,9 @@ class Network(BaseNetwork):
                     layer_counts[layer_type] += 1
                     layer_name = '{}_{}'.format(self._to_keras_name(layer_type), layer_counts[layer_type])
                     layer_dict[layer_name] = self._LAYER_TYPES_TO_CLASSES[layer_type](self, matching_ops)
+                    if debug:
+                        print(f"debug:   ** {layer_name}"
+                              f" => {type(layer_dict[layer_name])}")
                     # If the layer definition was successfully
                     # matched, advance the number of ops that were
                     # matched. Don't try to match another layer
@@ -285,7 +300,7 @@ class Network(BaseNetwork):
     def get_input_shape(self, include_batch = True) -> tuple:
         """Get the shape of the input data for the network.
         """
-        shape = self._get_network_input_tensor().shape
+        shape = tuple(self._get_network_input_tensor().shape.as_list())
         return shape if include_batch else shape[1:]
 
 

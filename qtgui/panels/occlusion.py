@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
-from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
+from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
+from qtgui.utils import QImageView
 
 from .panel import Panel
 
@@ -45,9 +46,9 @@ class OcclusionPanel(Panel):
         occlusionBox = QGroupBox('Occlusion')
         occlusionBox.setLayout(occlusionLayout)
 
-        ########################################################################
-        #                       Attach widgets to window                       #
-        ########################################################################
+        #######################################################################
+        #                      Attach widgets to window                       #
+        #######################################################################
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(occlusionBox)
         splitter.addWidget(self._input_box)

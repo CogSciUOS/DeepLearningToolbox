@@ -5,9 +5,8 @@ import numpy as np
 #   DataSource -> Model -> controller -> DataSource
 # from model import Model
 from controller import BaseController
-from observer import Observer, Observable, BaseChange
+from observer import Observer, Observable, BaseChange, change
 from datasources import DataSource, DataArray, DataDirectory, DataFile
-
 
 
 class DataSourceChange(BaseChange):
@@ -26,50 +25,17 @@ class DataSourceChange(BaseChange):
     input_changed: bool
         Whether the input signal changed
     """
-    
+
     ATTRIBUTES = ['datasource_changed', 'index_changed']
 
-
-
-def datasourcechange(datasource_changed=False,
-                     index_changed=False):
-    # FIXME[hack]: we need a better notification concecpt
-    """A decorator with arguments that will determine the DataSourceChange
-    state. This decorator is intended to be used for methods of the
-    Model class that may require informing some observer.
-
-    This decorator tries to be cautious to prevent sending unnecessary
-    notifications by checking for actual changes. Hence it requires
-    some knowledge on the internals of the model class, to be able
-    detect relevant changes.
-    """
-    def datasourcechange_decorator(function):
-        def wrapper(self, *args, **kwargs):
-            change, notify = self.changelog()
-            import threading
-            me = threading.current_thread().name
-            print(f"in[{me}]({function.__name__}): {notify}")
-            if datasource_changed:
-                datasource = self._datasource
-            if index_changed:
-                index = self._index
-            function(self, *args, **kwargs)
-            if datasource_changed:
-                change.datasource_changed = (datasource == self._datasource)
-            if index_changed:
-                change.index_changed = (index == self._index)
-            print(f"out[{me}]({function.__name__}):{change}")
-            if notify:
-                self.notifyObservers()
-        return wrapper
-    return datasourcechange_decorator
 
 class DataSourceObserver(Observer):
 
     def datasource_changed(self, datasource: 'DataSourceController',
                            change: DataSourceChange):
         pass
-    
+
+
 class DataSourceController(BaseController, Observable):
     """Base controller backed by a datasource. Contains functionality for
     manipulating input data from a data source.
@@ -108,7 +74,7 @@ class DataSourceController(BaseController, Observable):
         """
         return 0 if self._datasource is None else len(self._datasource)
 
-    @datasourcechange(datasource_changed=True)
+    @change
     def set_datasource(self, datasource: DataSource) -> None:
         """Set the :py:class:`DataSource` used by this DataSourceController.
 
@@ -123,6 +89,7 @@ class DataSourceController(BaseController, Observable):
         datasource.prepare()
         self._datasource = datasource
         self.set_index(0)
+        self.change(datasource_changed=True)
 
     def get_datasource(self) -> DataSource:
         """Get the :py:class:`DataSource` used by this
@@ -135,8 +102,8 @@ class DataSourceController(BaseController, Observable):
             :py:class:`DataSourceController`.
         """
         return self._datasource
-    
-    @datasourcechange(index_changed=True)
+
+    @change
     def set_index(self, index: int) -> None:
         """Set the current index in the :py:class:`DataSource`.
 
@@ -147,23 +114,29 @@ class DataSourceController(BaseController, Observable):
             :py:class:`DataSourceController`.
         """
         print(f"DataSourceController.set_index(index)")
-        if (index is None or self._datasource is None or
-            len(self._datasource) < 1):
+        if index is None:
+            pass
+        elif self._datasource is None or len(self._datasource) < 1:
             index = None
         elif index < 0:
             index = 0
         elif index >= len(self._datasource):
             index = len(self._datasource) - 1
 
+        if index == self._index:
+            return
+        
         self._index = index
+        self.change(index_changed=True)
+
         if not self._datasource or index is None:
             pass
-            # self.set_input_data(None, None) #  FIXME: Data cannot be None!
+            # self._model.input_data = None  #  FIXME: Data cannot be None!
         else:
             data, target = self._datasource[index]
             description = self._datasource.get_description(index)
-            self._model.set_input_data(data, target=target,
-                                       description=description)
+            self._runner.runTask(self._model.set_input_data,
+                                 data, target, description)
 
     def get_index(self) -> int:
         """Get the current index in the :py:class:`DataSource`.
@@ -225,7 +198,6 @@ class DataSourceController(BaseController, Observable):
             except ValueError:
                 index = self._index
         self.set_index(index)
-
 
     def set_data_array(self, data: np.ndarray=None):
         """Set the data array to be used.

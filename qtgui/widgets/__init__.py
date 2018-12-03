@@ -1,5 +1,5 @@
 from .activationview import QActivationView
-from .imageview import QImageView
+from .imageview import QModelImageView
 from .inputselector import QInputSelector
 from .inputselector import QInputInfoBox
 from .matrixview import QMatrixView

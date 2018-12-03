@@ -1,176 +1,101 @@
 import numpy as np
 from scipy.misc import imresize
 
-from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
-from PyQt5.QtGui import QImage, QPainter, QPen, QColor, QBrush
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QWidget
 
 from model import Model, ModelObserver, ModelChange
+from qtgui.utils import QImageView
 
 # FIXME[todo]: add docstrings!
 
 
-class QImageView(QWidget, ModelObserver):
-    """An experimental class to display images using the ``QImage``
-    class.  This may be more efficient than using matplotlib for
-    displaying images.
+class QModelImageView(QImageView, ModelObserver):
+    """A QImageView to display the input image of the model.
 
     Attributes
     ----------
-    _image  :   QImage
-                The image to display
-    _overlay    :   QImage
-                    Overlay for displaying on top of the image
-    _show_raw : bool
-                a flag indicating whether this QImageView will show
-                the raw input data, or the data acutally fed to the network.
-                
+    _model: Model
+        The model observed by this QModelImageView.
+    _show_raw: bool
+        A flag indicating if the raw or the preprocessed input
+        to the network is shown.
+
+    Signals
+    -------
     """
 
-    _image: QImage = None
+    modeChange = pyqtSignal(bool)
 
-    _overlay: QImage = None
+    def __init__(self, parent: QWidget=None):
+        """Initialize this QModelImageView.
 
-    _show_raw: bool = False
-
-    # FIXME[hack]: remove
-    _info_box = None
-    
-    def __init__(self, parent):
+        Arguments
+        ---------
+        parent: QWidget
+        """
         super().__init__(parent)
-        self._imageRect = None
-
-    def setImage(self):
-        image = (self._model.get_input_data(self._show_raw)
-                 if self._model else None)
-
-        if image is not None:
-            # To construct an 8-bit monochrome QImage, we need a
-            # 2-dimensional, uint8 numpy array
-            if image.ndim == 4:
-                image = image[0]
-
-            img_format = QImage.Format_Grayscale8
-            bytes_per_line = image.shape[1]
-
-            if image.ndim == 3:
-                # three channels -> probably rgb
-                if image.shape[2] == 3:
-                    img_format = QImage.Format_RGB888
-                    bytes_per_line *= 3
-                else:
-                    image = image[:, :, 0]
-
-            if image.dtype != np.uint8:
-                image = (image * 255).astype(np.uint8)
-            image = image.copy()
-
-            self._image = QImage(image,
-                                 image.shape[1], image.shape[0],
-                                 bytes_per_line, img_format)
+        self._show_raw: bool = False
+        self.modeChange.connect(self.onModeChange)
+        # FIXME[hack]: remove
+        self._info_box = None
+        
+    def _setImageFromModel(self):
+        """Set the image to be displayed based on the current state of
+        the model. This will also take the current display mode (raw
+        or reshaped) into account.
+        """
+        if self._model is None:
+            image = None
+        elif self._show_raw:
+            image = self._model.raw_input_data
         else:
-            self._image = None
-
-        self.update()
-
-    def setActivationMask(self, mask):
-        """Set an (activation) mask to be displayed on top of
-        the actual image.
-
-        Parameters
-        ----------
-        mask : numpy.ndarray
-
-        """
-        if mask is None:
-            self._overlay = None
-        else:
-            mask = imresize(mask, (self._image.height(), self._image.width()),
-                                    interp='nearest')
-            self._overlay = QImage(mask.shape[1], mask.shape[0],
-                                   QImage.Format_ARGB32)
-            self._overlay.fill(Qt.red)
-
-            alpha = QImage(mask, mask.shape[1], mask.shape[0],
-                           mask.shape[1], QImage.Format_Alpha8)
-            painter = QPainter(self._overlay)
-            painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-            painter.drawImage(QPoint(), alpha)
-            painter.end()
-        self.update()
-
-    def paintEvent(self, event):
-        """Process the paint event by repainting this Widget.
-
-        Parameters
-        ----------
-        event : QPaintEvent
-        """
-        painter = QPainter()
-        painter.begin(self)
-        self._drawImage(painter)
-        self._drawMask(painter)
-        painter.end()
-
-    def _drawImage(self, painter: QPainter):
-        """Draw current image into this ``QImageView``.
-
-        Parameters
-        ----------
-        painter :   QPainter
-        """
-        if self._image is not None:
-            w = self._image.width()
-            h = self._image.height()
-            # scale maximally while maintaining aspect ratio
-            w_ratio = self.width() / w
-            h_ratio = self.height() / h
-            ratio = min(w_ratio, h_ratio)
-            # the rect is created such that it is centered on the current widget
-            # pane both horizontally and vertically
-            self._imageRect = QRect((self.width() - w * ratio) // 2,
-                                    (self.height() - h * ratio) // 2,
-                                    w * ratio, h * ratio)
-            painter.drawImage(self._imageRect, self._image)
-
-    def _drawMask(self, painter: QPainter):
-        """Display the given image.
-
-        Parameters
-        ----------
-        painter :   QPainter
-        """
-        if self._image is not None and self._overlay is not None:
-            painter.drawImage(self._imageRect, self._overlay)
+            image = self._model.input_data
+        self.setImage(image)
 
     def modelChanged(self, model: Model, info: ModelChange):
-        from util import grayscaleNormalized
-        all_activations = model._current_activation
-        unit = model._unit
-        # skip if dense layer
+        """
+        The QModelImageView is mainly interested in 'input_changed'
+        events. 
+        """
+        # FIXME[hack]: this is not an appropriate way to set the model!
         self._model = model
-        if info.input_changed:
-            self.setImage()
 
-        if (all_activations is not None and
-            unit is not None and all_activations.ndim > 1):
-            activation_mask_f = all_activations[..., unit]
-            # FIXME[problem]: Mask not properly updated
-            activation_mask = np.ascontiguousarray(grayscaleNormalized(activation_mask_f), np.uint8)
-            self.setActivationMask(activation_mask)
+        # If the input changed, we will display the new input image
+        if info.input_changed:
+            self._setImageFromModel()
+
+        # For convolutional layers add a activation mask on top of the
+        # image, if a unit is selected
+        activation = model._current_activation
+        unit = model.unit
+        if (activation is not None and unit is not None and
+            activation.ndim > 1):  # exclude dens layers
+            from util import grayscaleNormalized
+            activation_mask = grayscaleNormalized(activation[..., unit])
+            self.setMask(activation_mask)
         else:
-            self.setActivationMask(None)
-            
+            self.setMask(None)
+
+    def onModeChange(self, showRaw: bool):
+        """The display mode was changed.
+
+        Arguments
+        ---------
+        mode: bool
+            The new display mode (False=raw, True=reshaped).
+        """
+        self._show_raw = showRaw
+        self._setImageFromModel()
+
     def mousePressEvent(self, event):
-        self._show_raw = not self._show_raw
-        self.setImage()
-        # FIXME[hack]: whit is this supposed to do?!
-        from model import ModelChange
-        self._info_box.modelChanged(self._model, ModelChange(input_changed=True))
+        """A mouse press toggles between raw and reshaped mode.
+        """
+        self.modeChange.emit(not self._show_raw)
 
     # FIXME[todo]: does not work!
     def keyPressEvent(self, event):
         key = event.key()
+        print(f"{self.__class__.__name__}.keyPressEvent(key)")
         if key == Qt.Key_Space:
-            self._show_raw = not self._show_raw
-            self.setImage()
+            self.modeChange.emit(not self._show_raw)

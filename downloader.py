@@ -29,7 +29,9 @@ def get_free_space_mb(dirname):
     """Return folder/drive free space (in megabytes)."""
     if platform.system() == 'Windows':
         free_bytes = ctypes.c_ulonglong(0)
-        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(dirname), None, None, ctypes.pointer(free_bytes))
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(dirname),
+                                                   None, None,
+                                                   ctypes.pointer(free_bytes))
         return free_bytes.value / 1024 / 1024
     else:
         st = os.statvfs(dirname)
@@ -43,15 +45,16 @@ def download_to_file(url, file):
         return
 
     # Silent version (no progress report ...)
-    #print(f"downloading {url} as {file} ...",
-    #      file=sys.stderr, end='', flush=True)        
-    #urllib.request.urlretrieve(url,file)
-    #print(" done",
+
+    # print(f"downloading {url} as {file} ...",
+    #      file=sys.stderr, end='', flush=True)
+    # urllib.request.urlretrieve(url,file)
+    # print(" done",
     #      file=sys.stderr)
 
     with open(file, 'wb') as f:
         with urllib.request.urlopen(url) as u:
-            file_size = int(u.getheader('Content-Length')) 
+            file_size = int(u.getheader('Content-Length'))
             print(f"Downloading: file Bytes: file_size",
                   file=sys.stderr)
 
@@ -64,17 +67,17 @@ def download_to_file(url, file):
 
                 file_size_dl += len(buffer)
                 f.write(buffer)
-                status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
+                status = r"%10d  [%3.2f%%]" % (file_size_dl,
+                                               file_size_dl * 100. / file_size)
                 status = status + chr(8)*(len(status)+1)
-                print(status,file=sys.stderr)
-
+                print(status, file=sys.stderr)
 
 
 def main():
     '''Command line interface to the download frunctions.'''
-    
+
     parser = argparse.ArgumentParser(
-    description='Download models and datasets.')
+        description='Download models and datasets.')
     parser.add_argument('--model', help='name of a model',
                         choices=models)
     parser.add_argument('--dataset', help='name of a dataset',
@@ -99,10 +102,10 @@ def main():
               file=sys.stderr)
         sys.exit(1)
     if not args.model and not args.dataset:
-        print("error: you either have to specify a model or a dataset to download!",
-              file=sys.stderr)
+        print("error: you either have to specify a model or a dataset"
+              "to download!", file=sys.stderr)
         sys.exit(1)
-    
+
     if args.dataset == 'mnist':
         print("Downloading mnist")
         urls = [
@@ -121,6 +124,7 @@ def main():
         print("error: operation not supported yet. sorry!",
               file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

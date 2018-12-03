@@ -288,7 +288,6 @@ class QInputNavigator(QWidget, DataSourceObserver):
         n_elems = 0 if datasource is None else len(datasource)
         valid = n_elems > 0
 
-        print(f"QInputNavigator.datasource_changed({info})")
         if info.datasource_changed:
             if datasource is not None:
                 self.infoDataset.setText(datasource.getDescription())
@@ -402,10 +401,12 @@ class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
                     Parent widget
         '''
         super().__init__(parent)
-        self._imageView = imageView
         self._initUI()
         self._description = ''
-        self.showInfo()
+        self._description2 = ''
+        self._show_raw = False
+        self._model = None
+        self._showInfo()
 
     def _initUI(self):
         '''Initialise the UI'''
@@ -438,11 +439,23 @@ class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
                 self._description = ''
 
     def modelChanged(self, model, info):
+        self._model = model
         if info.input_changed:
-            data = model.get_input_data(self._imageView._show_raw)
-            self.showInfo(data)
+            self._description2 = model.input_data_description
+            self._showInfo()
 
-    def showInfo(self, data: np.ndarray=None):
+    def onModeChange(self, showRaw: bool):
+        """The display mode was changed.
+
+        Arguments
+        ---------
+        mode: bool
+            The new display mode (False=raw, True=reshaped).
+        """
+        self._show_raw = showRaw
+        self._showInfo()
+
+    def _showInfo(self, data: np.ndarray=None):
         '''Show info for the given (image) data.
 
         Parameters
@@ -452,11 +465,18 @@ class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
         description:
             some string describing the origin of the data
         '''
+        if self._model is not None:
+            if self._show_raw:
+                data = self._model.raw_input_data
+            else:
+                data = self._model.input_data
+        
         self._meta_text = '<b>Input image:</b><br>\n'
-        self._meta_text += f'Description: {self._description}<br>\n'
+        self._meta_text += f'Description 1: {self._description}<br>\n'
+        self._meta_text += f'Description 2: {self._description2}<br>\n'
 
         self._data_text = ('<b>Raw input:</b><br>\n'
-                           if self._imageView._show_raw else
+                           if self._show_raw else
                            '<b>Network input:</b><br>\n')
         if data is not None:
             self._data_text += (f'Input shape: {data.shape}, '

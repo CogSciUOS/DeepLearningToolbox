@@ -1,1 +1,1 @@
-from .observer import Observer, Observable, BaseChange
+from .observer import Observer, Observable, BaseChange, change

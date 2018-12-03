@@ -3,9 +3,10 @@
 #   BaseController -> AsyncRunner -> Observable -> BaseController
 # from .asyncrunner import AsyncRunner
 
+
 class BaseController:
     """Base class for all kinds of controllers.
-    
+
     Attributes
     ----------
     _datasource : DataSource
@@ -13,7 +14,7 @@ class BaseController:
     """
     def __init__(self, runner: 'AsyncRunner'=None):
         self._runner = runner
-    
+
     def set_runner(self, runner: 'AsyncRunner') -> None:
         """Set that the :py:class:`AsyncRunner` for this Controller.
 
@@ -26,8 +27,10 @@ class BaseController:
         """
         self._runner = runner
 
+    # FIXME[design]: can there be multiple Observables that are
+    # controlled by one Controller?
     def get_observable(self) -> 'observer.Observable':
-        """Get the Observable for the ActivationsController.  This will be the
+        """Get the Observable for the Controller.  This will be the
         object, that sends out notification in response to commands
         issued by this controller. Everyone interested in such
         notifications should register to this Observable:
@@ -37,4 +40,4 @@ class BaseController:
         model: Observable
             The model controlled by this ActivationsController.
         """
-        raise
+        raise Error("No default Observable available!")

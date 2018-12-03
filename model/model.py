@@ -5,8 +5,9 @@ import numpy as np
 from network import Network, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from util import ArgumentError
-from observer import Observer, Observable, BaseChange
+from observer import Observer, Observable, BaseChange, change
 from util import async
+
 
 class ModelChange(BaseChange):
     """.. :py:class:: ModelChange
@@ -54,54 +55,6 @@ class ModelObserver(Observer):
         pass
 
 
-def modelchange(network_changed=False,
-                layer_changed=False,
-                unit_changed=False,
-                input_changed=False,
-                activation_changed=False):
-    """A decorator with arguments that will determine the ModelChange
-    state. This decorator is intended to be used for methods of the
-    Model class that may require informing some observer.
-
-    This decorator tries to be cautious to prevent sending unnecessary
-    notifications by checking for actual changes. Hence it requires
-    some knowledge on the internals of the model class, to be able
-    detect relevant changes.
-    """
-    def modelchange_decorator(function):
-        def wrapper(self, *args, **kwargs):
-            change, notify = self.changelog()
-            import threading
-            me = threading.current_thread().name
-            print(f"in[{me}]({function.__name__}): {notify}")
-            if network_changed:
-                network = self._network
-            if layer_changed:
-                layer = self._layer
-            if unit_changed:
-                unit = self._unit
-            if input_changed:
-                input = self._input
-            if activation_changed:
-                activation = self._current_activation
-            function(self, *args, **kwargs)
-            if network_changed:
-                change.network_changed = (network is not self._network)
-            if unit_changed:
-                change.unit_changed = (unit != self._unit)
-            if layer_changed:
-                change.layer_changed = (layer != self._layer)
-            if input_changed:
-                change.input_changed = (input is not self._input)
-            if activation_changed:
-                change.activation_changed = (activation is not
-                                                  self._current_activation)
-            print(f"out[{me}]({function.__name__}):{change}")
-            if notify:
-                self.notifyObservers()
-        return wrapper
-    return modelchange_decorator
-
 
 class Model(Observable):
     """.. :py:class:: Model
@@ -110,31 +63,32 @@ class Model(Observable):
 
     Attributes
     ----------
-    _input : np.ndarray
+    _input: np.ndarray
         Current input data, suitable for the current network
         (this is an adapted version of _data)
-    _current_activation : np.ndarray
+    _current_activation: np.ndarray
         The last computed activations
-    _layer : Layer
+    _layer: Layer
         Currently selected layer
-    _classification : bool
+    _classification: bool
         If True, the model will consider the current model
         as a classifier and record the output of the output layer
         in addition to the current (hidden) layer.
-    _unit : int
+    _unit: int
         Currently selected unit in the layer
-    _network : Network
+    _network: Network
         Currently active network
-    _networks : Dict[str, Network]
-        All available networks. FIXME[todo]: Move this out of the model       
-    _data : np.ndarray
+    _networks: Dict[str, Network]
+        All available networks. FIXME[todo]: Move this out of the model
+    _data: np.ndarray
         Current data provided by the data source
-    _data_target : int
+    _data_target: int
         A target value (i.e., label) for the current _data as provided by
         the data source, None if no such information is provided.
         If set, this integer value will indicate the index of the
         correct target unit in the classification layer (usually the
         last layer of the network).
+    _data_description: str
 
     New:
     _layers: List[layer_ids]
@@ -159,6 +113,7 @@ class Model(Observable):
         self._data = None
         self._input = None
         self._data_target = None
+        self._data_description = None
         self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
         self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
 
@@ -185,9 +140,28 @@ class Model(Observable):
     #                          SETTING DATA                                  #
     ##########################################################################
 
-    @modelchange(input_changed=True)
-    def set_input_data(self, data: np.ndarray=None,
-                       target: int=None, description: str=None):
+    def get_input_data(self, raw: bool=False) -> np.ndarray:
+        """Obtain the current input data.  This is the current data in a
+        format suitable to be fed to the current network.
+
+        Parameters
+        ----------
+        raw   :   bool
+            If true, the method will return the raw data (as it was
+            provided by the input source). Otherwise it will provide
+            data in a format suitable for the current network.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+        return self._data if raw else self._input
+
+
+    @change
+    def set_input_data(self, data: np.ndarray, target: int=None,
+                       description: str = None):
         """Provide one data vector as input for the network.
         The input data must have 2, 3, or 4 dimensions.
 
@@ -207,12 +181,12 @@ class Model(Observable):
         ----------
         data: np.ndarray
             The data array
-        label: int
+        target: int
             The data label. None if no label is available.
         description: str
             A description of the input data.
         """
-        input = self._input
+        print(f"Model.set_input_data({data.shape},{target},{description})")
         #
         # do some sanity checks and corrections
         #
@@ -240,33 +214,47 @@ class Model(Observable):
         #
         # adapt the data to match the network input shape
         #
-        if data is not None:
-            data = self._shape_adaptor(data)
-            data = self._channel_adaptor(data)
-        self._input = data
+        self._update_input()
+        self.change(input_changed=True)
 
         #
         # recompute the network activations
         #
         self._update_activation()
 
-    def get_input_data(self, raw: bool=False) -> np.ndarray:
-        """Obtain the current input data.  This is the current data in a
-        format suitable to be fed to the current network.
+    @property
+    def input_data(self):
+        return self._input
 
-        Parameters
-        ----------
-        raw   :   bool
-            If true, the method will return the raw data (as it was
-            provided by the input source). Otherwise it will provide
-            data in a format suitable for the current network.
+    @input_data.setter
+    def input_data(self, data):
+        target = None
+        description = None
+        if isinstance(data, tuple):
+            for d in data[1:]:
+                if isinstance(d, int):
+                    label = d
+                elif isinstance(d, str):
+                    description = d
+            data = data[0]
+        self.set_input_data(data, target, description)
 
-        Returns
-        -------
-        np.ndarray
+    @property
+    def raw_input_data(self):
+        return self._data
 
+    @property
+    def input_data_description(self):
+        return self._data_description
+
+    def _update_input(self) -> None:
+        """Update the input data from the current raw data.
         """
-        return self._data if raw else self._input
+        data = self._data
+        if data is not None:
+            data = self._shape_adaptor(data)
+            data = self._channel_adaptor(data)
+        self._input = data
 
     ##########################################################################
     #                     SETTING THE NETWORK                                #
@@ -274,7 +262,7 @@ class Model(Observable):
 
     # FIXME[hack]: add_network is seemingly not called via a Controller,
     # hence we have to explicitly notify the observers
-    @modelchange(network_changed=True)
+    @change
     def add_network(self, network: Network, select: bool=True) -> None:
         """Add a model to visualise. This will add the network to the list of
         choices and make it the currently selcted one.
@@ -291,10 +279,31 @@ class Model(Observable):
         if network is not None:
             self._networks[network.get_id()] = network
         if select:
-            self.setNetwork(network)
+            self.network = network
+        self.change(network_changed=True)
 
-    @modelchange(network_changed=True, input_changed=True)
-    def setNetwork(self, network=None, force_update: bool=False) -> None:
+    @property
+    def networks(self) -> Iterable[Network]:
+        """Get the currently selected network.
+
+        Returns
+        -------
+        The currently selected network or None if no network
+        is selected.
+        """
+        return self._networks.values()
+
+    def network_by_id(self, network_id: str) -> Network:
+        """Get a network by an unique identifier.
+        The network has to be registered with this Model
+        (via :py:meth:`add_network`) before it can be retrieved
+        by this method.
+        """
+        return self._networks.get(network_id)
+        
+
+    @change
+    def set_network(self, network: Network) -> None:
         """Set the current network. Update will only be published if
         not already selected.
 
@@ -302,11 +311,6 @@ class Model(Observable):
         ----------
         network : str or int or network.network.Network
             Key for the network
-        force_update : bool
-            Force update to be published. This is useful if the
-            current network was passed to the constructor, but not
-            loaded in the GUI yet. The GUI may make sure updates are
-            published by setting this argument.
         """
         if isinstance(network, str):
             network = self._networks.get(network)
@@ -317,13 +321,16 @@ class Model(Observable):
             if self._shape_adaptor is not None:
                 self._shape_adaptor.setNetwork(network)
                 self._channel_adaptor.setNetwork(network)
-                if self._data is not None:
-                    data = self._shape_adaptor(self._data)
-                    data = self._channel_adaptor(data)
-                    self._input = data
-            self.set_layer(None)
+                self._update_input()
 
-    def get_network(self) -> Network:
+            self.change(network_changed=True)
+
+            # Finally unset the layer (this will also trigger
+            # a computation of the activations)
+            self.layer = None
+
+    @property
+    def network(self) -> Network:
         """Get the currently selected network.
 
         Returns
@@ -333,15 +340,9 @@ class Model(Observable):
         """
         return self._network
 
-    def networks(self) -> Iterable[Network]:
-        """Get the currently selected network.
-
-        Returns
-        -------
-        The currently selected network or None if no network
-        is selected.
-        """
-        return self._networks.values()
+    @network.setter
+    def network(self, network: Network) -> None:
+        self.set_network(network)
 
     # FIXME[old]: check if this is still needed.
     # make a clear concept of layer, layer_id and layer_index!
@@ -359,6 +360,12 @@ class Model(Observable):
         -------
         int
             layer index
+
+        Raises
+        ------
+        ValueError:
+            The given layer_id does not identify a Layer in the
+            current model.
         """
         if layer_id is None:
             return None
@@ -366,19 +373,13 @@ class Model(Observable):
             layer_keys = list(self._network.layer_dict.keys())
             return layer_keys.index(layer_id)
         except ValueError:
-            raise ValueError(f'Layer for string {layer_id} not found.')
+            raise ValueError(f"Layer for string '{layer_id}' not found."
+                             f" valid keys are: {layer_keys}"
+                             f", current layer is '{self._layer}'"
+                             f"/'{self.layer}'")
 
-    def get_layer_id(self):
-        """Get the id of the currently selected network layer.
-
-        Returns
-        -------
-        The currently selected layer id. None if no layer is selected.
-        """
-        return self._layer
-
-    @modelchange(layer_changed=True, unit_changed=True)
-    def set_layer(self, layer: Layer=None):
+    @change
+    def set_layer(self, layer: Layer):
         """Set the current layer to choose units from.
 
         Parameters
@@ -395,15 +396,30 @@ class Model(Observable):
         if self._layer != layer:
             self._unit = None
             self._layer = layer
-            self._update_layer_list()
+            self.change(layer_changed=True, unit_changed=True)
+
             # FIXME[concept]: reconsider the update logic!
             #  should updating the layer_list automatically update the
             #  activation? or may there be another update to the layer list?
             if self._input is not None and layer is not None:
                 self._update_activation()
 
-    @modelchange(unit_changed=True)
-    def setUnit(self, unit: int=None):
+    @property
+    def layer_id(self):
+        """Get the id of the currently selected network layer.
+
+        Returns
+        -------
+        The currently selected layer id. None if no layer is selected.
+        """
+        return self._layer
+
+    @layer_id.setter
+    def layer_id(self, layer: Layer):
+        self.set_layer(layer)
+
+    @change
+    def set_unit(self, unit: int):
         """Change the currently visualised channel/unit.
 
         Parameters
@@ -419,6 +435,22 @@ class Model(Observable):
                 unit = None
         if unit != self._unit:
             self._unit = unit
+            self.change(unit_changed=True)
+
+    @property
+    def unit(self) -> int:
+        """The currently selected unit.
+
+        Result
+        ------
+        unit: int
+            Index of the unit in the layer (0-based).
+        """
+        return self._unit
+
+    @unit.setter
+    def unit(self, unit: int):
+        self.set_unit(unit)
 
     def set_classification(self, classication: bool=True):
         """Record the classification results.  This assumes that the network
@@ -428,7 +460,6 @@ class Model(Observable):
         old_classification = self._classification
         self._classification = classication
         if old_classification != self._classification:
-            self._update_layer_list()
             self._update_activation()
 
     def _update_layer_list(self):
@@ -443,13 +474,15 @@ class Model(Observable):
             self._layers = list(layers)
 
     @async
-    @modelchange(activation_changed=True)
+    @change
     def _update_activation(self):
         """Set the :py:attr:`_current_activation` property by loading
         activations for :py:attr:`_layer` and :py:attr:`_data`.
         This is a noop if no layers are selected or no data is
         set."""
 
+        self._update_layer_list()
+        print(f"Model._update_activation: LAYERS={self._layers}")
         if self._layers and self._input is not None:
             layers = list(self._layers)
 
@@ -478,6 +511,7 @@ class Model(Observable):
             self._current_activation = self._activations.get(self._layer, None)
         else:
             self._activations = {}
+        self.change(activation_changed=True)
 
     ##########################################################################
     #                             UTILITIES                                  #
@@ -552,5 +586,4 @@ class Model(Observable):
             top_n = top_n_indices
 
         return top_n, class_scores[top_n_indices], target
-
 

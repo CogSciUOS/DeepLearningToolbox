@@ -3,6 +3,7 @@ from os.path import isfile, isdir, join, basename
 
 from datasources import DataArray
 
+
 class DataFile(DataArray):
     '''Data source for reading from a file.
 

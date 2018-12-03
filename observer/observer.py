@@ -9,7 +9,7 @@ This module contains definitions for observer functionality
 # FIXME[design]: There are some problems with circular import.
 # However: when removing the `set_controller` method from the observer
 # (which not really belongs there!), we could get rid of imports here!
-#import controller.base
+# import controller.base
 
 import threading
 
@@ -55,7 +55,7 @@ class BaseChange(set):
         """
         if attr not in self.ATTRIBUTES:
             raise AttributeError(f'{self.__class__.__name__} has no '
-                                 'attribute \'{attr}\'.')
+                                 f'attribute \'{attr}\'.')
         return attr in self
 
     def __setattr__(self, attr: str, value: bool):
@@ -84,6 +84,20 @@ class BaseChange(set):
         return cls(*cls.ATTRIBUTES)
 
 
+def change(function):
+    """A decorator that indicates methods that can change the state of
+    an Observable.
+    """
+    def wrapper(self, *args, **kwargs):
+        self.begin_change()
+        me = threading.current_thread().name
+        print(f"[{me}]in-{self._thread_local.change_count}({self.__class__.__name__},{function.__name__})")
+        function(self, *args, **kwargs)
+        print(f"[{me}]out-{self._thread_local.change_count}({self.__class__.__name__},{function.__name__}):{self._thread_local.change}")
+        return self.end_change()
+    return wrapper
+
+
 class Observer(object):
     """Mixin for inheriting observer functionality. An observer registers
     itself to a class which notifies its observers in case something
@@ -97,7 +111,7 @@ class Observer(object):
 
         Parameters
         ----------
-        _model: Observable
+        model: Observable
             Observable to observe.
         """
         self._model = kwargs.get('model', None)
@@ -113,7 +127,12 @@ class Observer(object):
         """
         observable.addObserver(self)
 
-    def setController(self, controller: 'controller.base.BaseController'):
+    # FIXME[concept]: this does not really belong here, but is a
+    # different concept. Also it is problematic, as an observer may
+    # observe multiple observables and hence also have multiple
+    # controllers.
+    def setController(self, controller: 'controller.base.BaseController',
+                      name: str='_controller'):
         """Set the controller for this observer. Will trigger observation of
         the controller's model and also cause this Observer to be
         notified with a general (change.all()) change object, allowing
@@ -125,9 +144,9 @@ class Observer(object):
             Controller for mediating communication with the observer object.
 
         """
-        if self._controller is not None:
-            self._controller.get_observable().remove_observer(self)
-        self._controller = controller
+        if getattr(self, name) is not None:
+            getattr(self, name).get_observable().remove_observer(self)
+        setattr(self, name, controller)
         observable = controller.get_observable()
         self.observe(observable)
         observable.notify(self)
@@ -156,12 +175,36 @@ class Observable:
         self._change_method = change_method
         self._thread_local = threading.local()
 
-    def changelog(self) -> (BaseChange, bool):
+    def begin_change(self):
         data = self._thread_local
-        fresh = not hasattr(data, 'change')
-        if fresh:
+        if not hasattr(data, 'change'):
             data.change = self._change_type()
-        return data.change, fresh
+            data.change_count = 0
+        else:
+            data.change_count += 1
+        return data.change
+
+    def end_change(self):
+        data = self._thread_local
+        if not hasattr(data, 'change'):
+            raise RuntimeError("No change was startetd.")
+
+        if data.change_count > 0:
+            data.change_count -= 1
+        else:
+            change = data.change
+            del data.change
+            del data.change_count
+            if threading.current_thread() is threading.main_thread():
+                self.notifyObservers(change)
+            else:
+                return self, change
+
+    def change(self, **kwargs):
+        if not hasattr(self._thread_local, 'change'):
+            raise RuntimeError("No change was startetd.")
+        self._thread_local.change |= {k for k,v in kwargs.items() if v}
+        
 
     def addObserver(self, observer):
         """Add an object to observe this Observable.
@@ -184,7 +227,7 @@ class Observable:
         """
         self._observers.remove(observer)
 
-    def notifyObservers(self, info: BaseChange=None):
+    def notifyObservers(self, info: BaseChange):
         """Notify all observers that the state of this Observable has changed.
 
         Parameters
@@ -193,10 +236,8 @@ class Observable:
             Changes in the Observable since the last update.
             If ``None``, do not publish update.
         """
-        if info is None and hasattr(self._thread_local, 'change'):
-            info = self._thread_local.change
-            del self._thread_local.change
-            
+        me = threading.current_thread().name
+        print(f"[{me}]{self.__class__.__name__}.notifyObservers({info})")
         if info:
             for observer in self._observers:
                 self.notify(observer, info)

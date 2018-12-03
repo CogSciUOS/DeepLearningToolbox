@@ -39,7 +39,6 @@ class QNetworkView(QWidget, ModelObserver):
             The parent argument is sent to the QWidget constructor.
         '''
         super().__init__(parent)
-        self._controller = None
         self.initUI()
 
     def initUI(self) -> None:
@@ -57,6 +56,7 @@ class QNetworkView(QWidget, ModelObserver):
         layout = QVBoxLayout()
         layout.addLayout(self._layer_layout)
         layout.addLayout(info_layout)
+        layout.addStretch(1)
         layout.addWidget(self._classes_view)
         self.setLayout(layout)
 
@@ -64,6 +64,7 @@ class QNetworkView(QWidget, ModelObserver):
         super().setController(controller)
         self._network_info.setController(controller)
         self._classes_view.setController(controller)
+
 
     def _layerButtonClicked(self):
         '''Callback for clicking one of the layer buttons.'''
@@ -130,8 +131,13 @@ class QNetworkView(QWidget, ModelObserver):
             #
             # Respond to layer change
             #
-            layer_id = model.get_layer_id()
-            layer_index = model.idForLayer(layer_id)
+            layer_id = model.layer_id
+            try:
+                layer_index = model.idForLayer(layer_id)
+            except ValueError as error:
+                print(f"ERROR: {self.__class__.__name__}.modelChanged(): "
+                      "{error}")
+                layer_index = None
             if layer_index != self._current_selected:
                 
                 # unmark the previously active layer
@@ -142,6 +148,8 @@ class QNetworkView(QWidget, ModelObserver):
                 self._current_selected = layer_index
                 if self._current_selected is not None:
                     # and mark the new layer
+                    print(f"debug: self._current_selected:{self._current_selected}")
+                    print(f"debug: self._layer_buttons:{len(self._layer_buttons)}")
                     newItem = self._layer_buttons[self._current_selected]
                     if newItem is not None:
                         newItem.setStyleSheet('background-color: red')
@@ -169,6 +177,8 @@ class QNetworkBox(QLabel, ModelObserver):
     def __init__(self, parent=None):
         '''Create a new :py:class:``QNetworkInfoBox``'''
         super().__init__(parent)
+        self._network_text = ''
+        self._layer_text = ''
         self.setWordWrap(True)
 
     def modelChanged(self, model: Model, info: ModelChange) -> None:
@@ -179,29 +189,39 @@ class QNetworkBox(QLabel, ModelObserver):
         # Set Network info text
         #
         network = model._network
-        if info.network_changed and network is not None:
+        if info.network_changed:
             network_text += '<b>Network info:</b> '
-            network_name = type(network).__name__
-            network_text += 'FIXME[todo]: obtain network information ...'
-            network_text += f'<br>\n<b>class:</b> {network_name}'
+            if network is not None:
+                network_name = type(network).__name__
+                network_text += 'FIXME[todo]: obtain network information ...'
+                network_text += ('<br>\n<b>class:</b> '
+                                 f'{network.__class__.__name__}')
+                network_text += f'<br>\n<b>name:</b> {network}'
+            else:
+                network_text += "No network"
+            self._network_text = network_text
 
         #
         # Set Layer info text
         #
         layer_id = model._layer
-        if info.layer_changed and layer_id:
-            layer = network.layer_dict[layer_id]
+        if info.layer_changed:
             layer_text += '<br>\n<br>\n'
             layer_text += '<b>Layer info:</b><br>\n'
-            layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val)
-                                   for key, val in layer.info.items())
-            layer_text += layer_info
+            if layer_id:
+                layer = network.layer_dict[layer_id]
+                layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val)
+                                       for key, val in layer.info.items())
+                layer_text += layer_info
+            else:
+                layer_text += "No layer selected"
+            self._layer_text = layer_text
 
-        self.setText(network_text + layer_text)
+        self.setText(self._network_text + self._layer_text)
 
 
 ###############################################################################
-###                           QNetworkBox                                   ###
+###                           QNetworkSelector                              ###
 ###############################################################################
 
 from PyQt5.QtWidgets import QComboBox
@@ -234,9 +254,9 @@ class QNetworkSelector(QComboBox, ModelObserver):
 
     def modelChanged(self, model: Model, info: ModelChange) -> None:
         if info.network_changed:
-            self._update_networks(model.networks())
+            self._update_networks(model.networks)
 
-            network = model.get_network()
+            network = model.network
             if network is not None:
                 new_index = self.findText(network.get_id())
                 self.setCurrentIndex(new_index)
@@ -245,3 +265,7 @@ class QNetworkSelector(QComboBox, ModelObserver):
         self.clear()
         for network in networks:
             self.addItem(network.get_id(), network)
+
+    @property
+    def network(self) -> Network:
+        return self.currentData()

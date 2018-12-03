@@ -23,10 +23,11 @@ except ImportError:
           "See: https://github.com/ActiveState/appdirs\n"
           "---------------------------------------------------------------\n")
 
+
 class ImageNet(DataDirectory, Predefined):
 
     _section_ids = ['train', 'test', 'val']
-    
+
     def __init__(self, prefix=None, section='train'):
         self._section = section
         self._imagenet_data = os.getenv('IMAGENET_DATA', '.')
@@ -47,17 +48,18 @@ class ImageNet(DataDirectory, Predefined):
         # This may take some time ...
         self.setDirectory(self._prefix)
         # FIXME[hack]: just randomly choose one subdir
-        self._category = random.randint(0,len(self._categories))
-        #self.setDirectory(os.path.join(self._prefix,
+        self._category = random.randint(0, len(self._categories))
+        # self.setDirectory(os.path.join(self._prefix,
         #                               self._categories[self._category]))
 
         if AppDirs is not None:
-            appname = "deepvis"
+            appname = "deepvis"  # FIXME: not the right place to define here!
             appauthor = "krumnack"
             dirs = AppDirs(appname, appauthor)
             imagenet_filelist = os.path.join(dirs.user_cache_dir,
                                              "imagenet_filelist.p")
-            print(f"ImageNet: trying to load filelist from '{imagenet_filelist}")
+            print(f"ImageNet: trying to load filelist from "
+                  f"'{imagenet_filelist}")
             if os.path.isfile(imagenet_filelist):
                 self._filenames = pickle.load(open(imagenet_filelist, 'rb'))
         else:
@@ -88,27 +90,25 @@ class ImageNet(DataDirectory, Predefined):
         else:
             category = None
         return category
-        
 
     def get_section_ids(self):
         '''Get a list of sections provided by this data source.  A data source
         may for example be divided into training and test data.
         '''
         return self._section_ids
-    
+
     def get_section(self):
         '''Get the current section in the data source.
         '''
         return self._section
 
-
     def random(self):
-        category = random.randint(0,len(self._categories)-1)
+        category = random.randint(0, len(self._categories)-1)
         img_dir = os.path.join(self._prefix, self._categories[category])
         self._image = random.choice(os.listdir(img_dir))
         img_file = os.path.join(img_dir, self._image)
         im = imread(img_file)
-        return InputData(im,category)
+        return InputData(im, category)
 
     def set_section(self, section_id):
         '''Set the current section in the data source.
@@ -118,7 +118,7 @@ class ImageNet(DataDirectory, Predefined):
 
     def check_availability():
         '''Check if this Datasource is available.
-        
+
         Returns
         -------
         True if the DataSource can be instantiated, False otherwise.
@@ -126,5 +126,5 @@ class ImageNet(DataDirectory, Predefined):
         return self._prefix
 
     def download():
-        raise NotImplementedError("Downloading ImageNet is not implemented yet")
-
+        raise NotImplementedError("Downloading ImageNet is "
+                                  "not implemented yet.")

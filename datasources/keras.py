@@ -5,18 +5,19 @@ import importlib.util
 
 from datasources import DataArray, DataDirectory, Predefined
 
+
 class KerasDataSource(DataArray, Predefined):
-    '''Data source for Keras builtin datasets.
+    """Data source for Keras builtin datasets.
 
     Keras provides some methods to access standard datasets via its
     keras.datasets API. This API will automatically download and
     unpack required data into ~/.keras/datasets/.
 
-    '''
+    """
     KERAS_IDS = ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']
-    
+
     _keras_dataset_name = None
-    
+
     def __init__(self, name: str):
         if importlib.util.find_spec(f'keras.datasets.{name}') is None:
             raise ValueError(f'Unknown Keras dataset: {name}')
@@ -24,15 +25,14 @@ class KerasDataSource(DataArray, Predefined):
         DataArray.__init__(self, description=f"Keras Datasoure '{name}'")
         Predefined.__init__(self, name)
 
-        
     def prepare(self):
         if self._array is not None:
-            return # Just prepare once!
-        
+            return  # Just prepare once!
+
         name = self._keras_dataset_name
         module = importlib.import_module(f'keras.datasets.{name}')
         data = module.load_data()
-        
+
         # The Keras data are provided as a pair of pair of arrays:
         #   (x_train, y_train), (x_test, y_test)
         # That is: data[0][0] are the input data from the training set
@@ -56,11 +56,10 @@ class KerasDataSource(DataArray, Predefined):
             # with 20 categories
 
     def check_availability():
-        '''Check if this Datasource is available.
-        
+        """Check if this Datasource is available.
+
         Returns
         -------
         True if the DataSource can be instantiated, False otherwise.
-        '''
+        """
         return True
-

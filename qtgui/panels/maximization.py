@@ -1,48 +1,67 @@
-'''
+"""
 File: maximization.py
 Author: Ulf Krumnack, Antonia Hain
 Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
-'''
+"""
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
+                             QSplitter)
 
-from qtgui.widgets.maximization import QMaximizationConfig
+from qtgui.widgets.maximization import (QMaximizationConfig,
+                                        QMaximizationControls,
+                                        QMaximizationDisplay)
 from .panel import Panel
 
 import numpy as np
-
+from tools.am import Config, Engine
+from controller import MaximizationController
 
 class MaximizationPanel(Panel):
-    '''A complex panel containing elements to configure the
-    activation maximization of individual unites.
+    """A panel containing elements to configure and run activation
+    maximization and to display results.
+
+    * MaximizationControls: 
+
+    * 
 
     Attributes
     ----------
-    _network_map    :   dict A dictionary mapping the strings displayed in the network selector
-                        dropdown to actual network objects.
-    '''
+    _maximization_controls: QMaximizationControls
+        A set of controls to start and stop the maximization process
+        and to display intermediate results.
+    _maximization_config_view: QMaximizationConfig
 
-    _network_map    :   dict = {}
+    """
 
     def __init__(self, parent=None):
-        '''Initialization of the ActivationsPael.
+        """Initialization of the ActivationsPael.
 
         Parameters
         ----------
         parent  :   QWidget
                     The parent argument is sent to the QWidget constructor.
-        '''
+        """
         super().__init__(parent)
         self._initUI()
 
     def _initUI(self):
-        '''Add additional UI elements
+        """Add the UI elements
 
             * The ``QActivationView`` showing the unit activations on the left
 
-        '''
+        """
+        #
+        # Controls
+        #
+        self._maximization_controls = QMaximizationControls()
+
+        #
+        # Display
+        #
+        self._maximization_display = QMaximizationDisplay()
+        self._maximization_controls.display = self._maximization_display
 
         #
         # Configuration
@@ -51,9 +70,23 @@ class MaximizationPanel(Panel):
         # QMaximizationConfig: a widget to configure the maximization process
         self._maximization_config_view = QMaximizationConfig()
 
-        # FIXME[layout]
+        self._layoutComponents()
+
+
+    def _layoutComponents(self):
+        """Layout the UI elements.
+
+            * The ``QActivationView`` showing the unit activations on the left
+
+        """
+
+        #
+        # Set dimensions for the QMaximizationConfig
+        #
         self._maximization_config_view.setMinimumWidth(200)
-        self._maximization_config_view.resize(400, self._maximization_config_view.height())
+        height = self._maximization_config_view.height()
+        self._maximization_config_view.resize(400, height)
+
 
         config_layout = QVBoxLayout()
         config_layout.addWidget(self._maximization_config_view)
@@ -61,6 +94,14 @@ class MaximizationPanel(Panel):
         config_box = QGroupBox('Configuration')
         config_box.setLayout(config_layout)
 
-        layout = QHBoxLayout()
+        #
+        # Panel
+        #
+
+        layout = QVBoxLayout()
+        layout.addWidget(self._maximization_controls)
+        layout.addWidget(self._maximization_display)
+        layout.addStretch(1)
         layout.addWidget(config_box)
+
         self.setLayout(layout)

@@ -156,8 +156,11 @@ def main():
 
     from datasources import DataDirectory
     from model import Model
+    from tools.am import Engine as AMEngine
+    from tools.am import Config as AMConfig
     app = QApplication(sys.argv)
     model = Model()
+    am_engine = AMEngine(model, AMConfig())
 
     if args.data:
         source = Predefined.get_data_source(args.data)
@@ -166,7 +169,7 @@ def main():
     elif args.datadir:
         source = DataDirectory(args.datadir)
 
-    mainWindow = DeepVisMainWindow(model)
+    mainWindow = DeepVisMainWindow(model, maximization_engine=am_engine)
     mainWindow.setDataSource(source)
     mainWindow.show()
 

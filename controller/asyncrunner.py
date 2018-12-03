@@ -1,5 +1,5 @@
-from observer import Observable
 from concurrent.futures import ThreadPoolExecutor, Future
+
 
 class AsyncRunner(object):
     """Base class for runner objects which must be provided for each
@@ -22,16 +22,13 @@ class AsyncRunner(object):
 
     Attributes
     ----------
-    _observable: Observable
-        An observable whose updates should be broadcast asynchronously
     _executor: ThreadPoolExecutor
         Singular reusable thread to run computations in.
 
     """
 
-    def __init__(self, observable: Observable) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._observable = observable
         self._executor = ThreadPoolExecutor(max_workers=1,
                                             thread_name_prefix='runner')
 

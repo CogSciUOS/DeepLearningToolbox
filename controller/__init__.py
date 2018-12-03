@@ -12,3 +12,4 @@ from .base import BaseController
 from .asyncrunner import AsyncRunner
 from .datasource import DataSourceController, DataSourceObserver
 from .activations import ActivationsController
+from .maximization import MaximizationController

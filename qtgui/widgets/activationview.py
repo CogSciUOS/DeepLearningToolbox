@@ -97,14 +97,14 @@ class QActivationView(QWidget, ModelObserver):
 
         '''
         if info.unit_changed:
-            self._current_unit = model._unit
+            self._current_unit = model.unit
 
         # get activation and update overlay only when
         # significant properties change
         if info & {'network_changed', 'layer_changed', 'input_changed',
                    'activation_changed'}:
             activation = model._current_activation
-            self._current_unit = model._unit
+            self._current_unit = model.unit
 
             if activation is not None:
                 if activation.dtype != np.float32:

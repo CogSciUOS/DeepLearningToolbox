@@ -50,7 +50,30 @@ class InternalsPanel(Panel):
 
     def tensorFlowInfo(self):
         pass
+        # from tensorflow.python.client import device_lib
+
+        #  There is an undocumented method called
+        #  device_lib.list_local_devices() that enables you to list
+        #  the devices available in the local process (As an
+        #  undocumented method, this is subject to backwards
+        #  incompatible changes.)
+
+        # def get_available_gpus():
+        #     local_device_protos = device_lib.list_local_devices()
+        #     return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
+        # Note that (at least up to TensorFlow 1.4), calling
+        # device_lib.list_local_devices() will run some initialization
+        # code that, by default, will allocate all of the GPU memory
+        # on all of the devices (GitHub issue). To avoid this, first
+        # create a session with an explicitly small
+        # per_process_gpu_fraction, or allow_growth=True, to prevent
+        # all of the memory being allocated. See this question for
+        # more details
+
     # https://stackoverflow.com/questions/38009682/how-to-tell-if-tensorflow-is-using-gpu-acceleration-from-inside-python-shell
+
+    
 
     def cudaInfo(self):
 
@@ -76,8 +99,11 @@ class InternalsPanel(Panel):
                 print("\n===Attributes for device %d"%devicenum)
                 for (key,value) in attrs.iteritems():
                     print("%s:%s"%(str(key),str(value)))
-        except ImportError:
+        except ImportError as e:
+            print(e, file=sys.stderr)
             layout.addWidget(QLabel("<b>CUDA module not installed</b>", self),
                              0,0)
-                    
+
+        # import subprocess
+        # n = str(subprocess.check_output(["nvidia-smi", "-L"])).count('UUID')
         return layout

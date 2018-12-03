@@ -9,9 +9,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
-from qtgui.widgets import QNetworkBox
 from qtgui.widgets import QActivationView
-from qtgui.widgets import QInputSelector, QInputInfoBox, QImageView
+from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
 from qtgui.widgets import QNetworkBox, QNetworkView, QNetworkSelector
 
 from .panel import Panel
@@ -48,7 +47,7 @@ class ActivationsPanel(Panel):
     def initUI(self):
         """Initialise all UI elements. These are
             * The ``QActivationView`` showing the unit activations on the left
-            * The ``QImageView`` showing the current input image
+            * The ``QModelImageView`` showing the current input image
             * A ``QInputSelector`` to show input controls
             * A ``QNetworkView``, a widget to select a layer in a network
             * A ``QInputInfoBox`` to display information about the input
@@ -58,21 +57,21 @@ class ActivationsPanel(Panel):
         # Input data
         #
 
-        # QImageView: a widget to display the input data
-        self._input_view = QImageView(self)
+        # QModelImageView: a widget to display the input data
+        self._input_view = QModelImageView(self)
         # FIXME[layout]
         # keep image view square (TODO: does this make sense for every input?)
         self._input_view.heightForWidth = lambda w: w
         self._input_view.hasHeightForWidth = lambda: True
 
-        # QNetworkInfoBox: a widget to select the input to the network
+        # QInputSelector: a widget to select the input to the network
         # (data array, image directory, webcam, ...)
         # the 'next' button: used to load the next image
         self._input_selector = QInputSelector()
 
         # FIXME[hack]
         self._input_info = QInputInfoBox(imageView=self._input_view)
-        self._input_view._info_box = self._input_info
+        self._input_view.modeChange.connect(self._input_info.onModeChange)
 
         # FIXME[layout]
         self._input_info.setMinimumWidth(200)
@@ -99,16 +98,10 @@ class ActivationsPanel(Panel):
         # QNetworkView: a widget to select a network
         self._network_view = QNetworkView()
 
-        # QNetworkBox: a widget to select a layer
-        self._network_info = QNetworkBox()
-        # FIXME[layout]
-        # self._network_info.setMinimumWidth(300)
-
         # Now put the network stuff into one group
         network_layout = QVBoxLayout()
         network_layout.addWidget(self._network_selector)
         network_layout.addWidget(self._network_view)
-        network_layout.addWidget(self._network_info)
 
         self._network_box = QGroupBox('Network')
         self._network_box.setLayout(network_layout)
