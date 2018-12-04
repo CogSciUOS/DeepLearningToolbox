@@ -111,10 +111,12 @@ class InternalsPanel(Panel):
 
         hardwareBox = QGroupBox('Hardware')
         boxLayout = QVBoxLayout()
-        for i, cpu in enumerate(util.recources.cpus):
-            boxLayout.addWidget(QLabel(f"{i}. CPU: {cpu.name}"))
-        for i, gpu in enumerate(util.recources.gpus):
-            boxLayout.addWidget(QLabel(f"{i}. GPU: {gpu.name}"))
+        for i, cpu in enumerate(util.resources.cpus):
+            prefix = f"{i+1}. " if len(util.resources.cpus) > 1 else ""
+            boxLayout.addWidget(QLabel(f"{prefix}CPU: {cpu.name}"))
+        for i, gpu in enumerate(util.resources.gpus):
+            prefix = f"{i+1}. " if len(util.resources.gpus) > 1 else ""
+            boxLayout.addWidget(QLabel(f"{prefix}GPU: {gpu.name}"))
         # Memory (1)
         import os
         mem_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
@@ -133,11 +135,11 @@ class InternalsPanel(Panel):
         boxLayout = QVBoxLayout()
 
         import platform
+        boxLayout.addWidget(QLabel(f"node: {platform.node()}"))
         # boxLayout.addWidget(QLabel(f"uname: {platform.uname()}"))
         boxLayout.addWidget(QLabel(f"system: {platform.system()}"))
-        boxLayout.addWidget(QLabel(f"node: {platform.node()}"))
         boxLayout.addWidget(QLabel(f"release: {platform.release()}"))
-        boxLayout.addWidget(QLabel(f"version: {platform.version()}"))
+        # boxLayout.addWidget(QLabel(f"version: {platform.version()}"))
         boxLayout.addWidget(QLabel(f"machine/processor: "
                                    f"{platform.machine()}/"
                                    f"{platform.processor()}"))

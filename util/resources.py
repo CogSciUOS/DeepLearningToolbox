@@ -2,6 +2,10 @@
 # Hardware/CUDA stuff
 #
 
+import resource
+import subprocess
+import re
+
 class _component(dict):
     def __init__(self, name = None):
         if name is not None:
@@ -14,8 +18,6 @@ class _component(dict):
     def __setattr__(self, key, value):
         self[key] = value
 
-import subprocess
-import re
 
 cuda = _component()
 try:
@@ -76,3 +78,47 @@ elif platform.system() == "Linux":
         if "model name" in line:
             _processor_name = re.sub( ".*model name.*:", "", line,1)
 cpus = [_component(_processor_name)]
+
+mem = _component()
+
+def update(initialize:bool = False):
+    global gpus, mem
+    rusage = resource.getrusage(resource.RUSAGE_SELF)
+    # The Python docs aren't clear on what the units are exactly,
+    # but the Mac OS X man page for getrusage(2) describes the
+    # units as bytes. The Linux man page isn't clear, but it seems
+    # to be equivalent to the information from /proc/self/status,
+    # which is in kilobytes.
+    mem.shared = rusage.ru_ixrss
+    mem.unshared = rusage.ru_idrss
+    mem.peak = rusage.ru_maxrss
+
+    if cuda is not None:
+        gpu = -1
+        mem_section = False
+        for line in subprocess.check_output(["nvidia-smi", "-q"],
+                                            universal_newlines=True).splitlines():
+            if re.match('GPU ', line):
+                gpu += 1; continue
+            elif gpu < 0:
+                continue
+
+            match = re.match(' *GPU Current Temp *: ([^ ]*) C', line)
+            if match: gpus[gpu].temperature = match.group(1); continue
+            if initialize:
+                match = re.match(' *GPU Shutdown Temp *: ([^ ]*) C', line)
+                if match: gpus[gpu].temperature_max = match.group(1); continue
+
+            match = re.match('  *(\w*) Memory Usage', line)
+            if match: mem_section = (match.group(1) == 'FB'); continue
+
+            if mem_section:
+                match = re.match(' *Used *: ([^ ]*) MiB', line)
+                if match: gpus[gpu].mem = int(match.group(1)); continue
+
+                if initialize:
+                    match = re.match(' *Total *: ([^ ]*) MiB', line)
+                    if match:
+                        gpus[gpu].mem_total = int(match.group(1)); continue
+
+update(True)

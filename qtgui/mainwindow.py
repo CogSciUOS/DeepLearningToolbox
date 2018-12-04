@@ -3,7 +3,7 @@ import numpy as np
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
-                             QWidget)
+                             QWidget, QLabel)
 
 from model import Model, ModelObserver
 from qtgui.utils import QtAsyncRunner
@@ -17,7 +17,8 @@ from tools.am import Engine as MaximizationEngine
 from tools.am import EngineObserver as MaximizationEngineObserver
 
 from datasources import DataSource
-from util import ArgumentError
+from util import ArgumentError, resources
+import time
 
 class DeepVisMainWindow(QMainWindow):
     """The main window of the Deep Visualization Toolbox. The window
@@ -100,7 +101,8 @@ class DeepVisMainWindow(QMainWindow):
         self.setCentralWidget(self._tabs)
 
         # Initialize the status bar
-        self._statusBar = QStatusBar()
+        self._statusResources = QLabel()
+        self.statusBar().addWidget(self._statusResources)
 
     def _createTabWidget(self):
         self._tabs = QTabWidget(self)
@@ -184,7 +186,21 @@ class DeepVisMainWindow(QMainWindow):
         self._internals = InternalsPanel()
 
     def showStatusMessage(self, message):
-        self._statusBar.showMessage(message, 2000)
+        self.statusBar().showMessage(message, 2000)
+
+    def showStatusResources(self):
+        message = f"{time.ctime()}"
+        message += (", Memory: " +
+                    "Shared={:,} kiB, ".format(resources.mem.shared) +
+                    "Unshared={:,} kiB, ".format(resources.mem.unshared) +
+                    "Peak={:,} kiB".format(resources.mem.peak))
+        if len(resources.gpus) > 0:
+            message += (f", GPU: temperature={resources.gpus[0].temperature}/"
+                        f"{resources.gpus[0].temperature_max}\u00b0C")
+            message += (", memory={:,}/{:,}MiB".
+                        format(resources.gpus[0].mem,
+                               resources.gpus[0].mem_total))
+        self._statusResources.setText(message)
 
     ###########################################################################
     #                        MainWindowController                             #

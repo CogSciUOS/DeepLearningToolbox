@@ -84,37 +84,28 @@ def async(function):
         #run_async(function, *args, **kwargs)
     return wrapper
 
-
-import resource
-        
-           
-timer = True
 import time, threading
-def foo():
+from . import resources
+          
+_timer = None
+_timer_callback = None
+def _timer_loop():
+    resources.update()
+    if _timer_callback is not None:
+        _timer_callback()
+    if _timer is not None:
+        start_timer()
 
-    # The Python docs aren't clear on what the units are exactly,
-    # but the Mac OS X man page for getrusage(2) describes the
-    # units as bytes. The Linux man page isn't clear, but it seems
-    # to be equivalent to the information from /proc/self/status,
-    # which is in kilobytes.
-    rusage = resource.getrusage(resource.RUSAGE_SELF)
-
-    nvidia_smi_q = subprocess.check_output(["nvidia-smi", "-q"],
-                                           universal_newlines=True)
-    match = re.search('GPU Current Temp *: ([^ ]*) C', nvidia_smi_q)
-    temperature = match.group(1) if match else '?'
+def start_timer(timer_callback = None):
+    global _timer, _timer_callback
+    if timer_callback is not None:
+        _timer_callback = timer_callback
+    _timer = threading.Timer(1, _timer_loop)
+    _timer.start()
     
-    print(f"{time.ctime()}, Memory: " +
-          "Shared={:,} kiB, ".format(rusage.ru_ixrss) +
-          "Unshared={:,} kiB, ".format(rusage.ru_idrss) +
-          "Peak={:,} kiB, ".format(rusage.ru_maxrss) +
-          f"GPU temperature={temperature}C")
-    if timer:
-        threading.Timer(1, foo).start()
-
-def start_timer():
-    foo()
-
 def stop_timer():
-    global timer
-    timer = False
+    global _timer
+    if _timer is not None:
+        _timer.cancel()
+    _timer = None
+    print("Timer stopped.")

@@ -559,32 +559,34 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
         def slot(text): config.LAYER_KEY = text
         self._layerSelector.activated[str].connect(slot)
 
-        def slot(text):
-            try:
-                config.UNIT_INDEX = int(text)
-            except ValueError:
-                config.UNIT_INDEX = 0
-        self._unitIndex.textEdited.connect(slot)
-
+        def connect_to_config(widget, attr):
+            if isinstance(widget, QLineEdit):
+                if isinstance(getattr(config, attr), int):
+                    def slot(text):
+                        try: value = int(text)
+                        except ValueError: value = 0
+                        setattr(config, attr, value)
+                else:
+                    def slot(text):
+                        try: value = float(text)
+                        except ValueError: value = 0
+                        setattr(config, attr, value)
+                widget.textEdited.connect(slot)
+            elif isinstance(widget, QGroupBox):
+                def slot(state): setattr(config, attr, bool(state))
+                widget.toggled.connect(slot)
+            elif isinstance(widget, QCheckBox):
+                def slot(state): setattr(config, attr, bool(state))
+                widget.stateChanged.connect(slot)
+        
+        connect_to_config(self._unitIndex, 'UNIT_INDEX')
         def slot(): config.random_unit()
         self._buttonRandomUnit.clicked.connect(slot)
 
-        #
-        def slot(text):
-            try:
-                config.ETA = int(text)
-            except ValueError:
-                config.ETA = 0
-        self._eta.textEdited.connect(slot)
+        connect_to_config(self._eta, 'ETA')
+        connect_to_config(self._checkRandomizeInput, 'RANDOMIZE_INPUT')
 
-        #
-        def slot(state): config.RANDOMIZE_INPUT = bool(state)
-        self._checkRandomizeInput.stateChanged.connect(slot)
-
-        #
-        def slot(state): config.BLUR_ACTIVATED = bool(state)
-        self._checkBlur.toggled.connect(slot)
-
+        connect_to_config(self._checkBlur, 'BLUR_ACTIVATED')
         def slot(text):
             try:
                 w = self._blurKernelWidth.text()
@@ -597,67 +599,38 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
             config.BLUR_KERNEL = (w,h)
         self._blurKernelWidth.textEdited.connect(slot)
         self._blurKernelHeight.textEdited.connect(slot)
+        connect_to_config(self._blurKernelSigma, 'BLUR_SIGMA')
+        connect_to_config(self._blurKernelFrequency, 'BLUR_FREQUENCY')
 
-        def slot(text):
-            try:
-                config.BLUR_SIGMA = int(text)
-            except ValueError:
-                config.BLUR_SIGMA = 0
-        self._blurKernelSigma.textEdited.connect(slot)
+        connect_to_config(self._checkL2Activated, 'L2_ACTIVATED')
+        connect_to_config(self._l2Lambda, 'L2_LAMBDA')
 
-        def slot(text):
-            try:
-                config.BLUR_FREQUENCY = int(text)
-            except ValueError:
-                config.BLUR_FREQUENCY = 0
-        self._blurKernelFrequency.textEdited.connect(slot)
-
-        #
-        def slot(state): config.L2_ACTIVATED = bool(state)
-        self._checkL2Activated.toggled.connect(slot)
-
-        def slot(text): config.L2_LAMBDA = float(text)
-        self._l2Lambda.textEdited.connect(slot)
-
-        #
-        def slot(state): config.NORM_CLIPPING_ACTIVATED = bool(state)
-        self._checkNormClipping.toggled.connect(slot)
-
-        def slot(text): config.NORM_CLIPPING_FREQUENCY = int(text)
-        self._normClippingFrequency.textEdited.connect(slot)
-
-        def slot(text): config.NORM_PERCENTILE = int(text)
-        self._normPercentile.textEdited.connect(slot)
+        connect_to_config(self._checkNormClipping, 'NORM_CLIPPING_ACTIVATED')
+        connect_to_config(self._normClippingFrequency,
+                          'NORM_CLIPPING_FREQUENCY')
+        connect_to_config(self._normPercentile, 'NORM_PERCENTILE')
 
         #
         # contribution clipping
         #
-        def slot(state): config.CONTRIBUTION_CLIPPING_ACTIVATED = bool(state)
-        self._checkContributionClipping.toggled.connect(slot)
-
-        def slot(text): config.CONTRIBUTION_CLIPPING_FREQUENCY = int(text)
-        self._contributionClippingFrequency.textEdited.connect(slot)
-
-        def slot(text): config.CONTRIBUTION_PERCENTILE = int(text)
-        self._contributionPercentile.textEdited.connect(slot)
+        connect_to_config(self._checkContributionClipping,
+                          'CONTRIBUTION_CLIPPING_ACTIVATED')
+        connect_to_config(self._contributionClippingFrequency,
+                          'CONTRIBUTION_CLIPPING_FREQUENCY')
+        connect_to_config(self._contributionPercentile,
+                          'CONTRIBUTION_PERCENTILE')
 
         #
         # border regularization
         #
-        def slot(state): config.BORDER_REG_ACTIVATED = bool(state)
-        self._checkBorderReg.toggled.connect(slot)
-
-        def slot(text): config.BORDER_FACTOR = float(text)
-        self._borderFactor.textEdited.connect(slot)
-
-        def slot(text): config.BORDER_EXP = float(text)
-        self._borderExp.textEdited.connect(slot)
+        connect_to_config(self._checkBorderReg, 'BORDER_REG_ACTIVATED')
+        connect_to_config(self._borderFactor, 'BORDER_FACTOR')
+        connect_to_config(self._borderExp, 'BORDER_EXP')
 
         #
         # larger image
         #
-        def slot(state): config.LARGER_IMAGE = bool(state)
-        self._largerImage.toggled.connect(slot)
+        connect_to_config(self._largerImage, 'LARGER_IMAGE')
 
         def slot(text):
             try:
@@ -676,34 +649,18 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
         #
         # jitter
         #
-        def slot(state): config.JITTER = bool(state)
-        self._jitter.toggled.connect(slot)
+        connect_to_config(self._jitter, 'JITTER')
+        connect_to_config(self._jitterStrength, 'JITTER_STRENGTH')
 
-        def slot(text): config.JITTER_STRENGTH = int(text)
-        self._jitterStrength.textEdited.connect(slot)
+        connect_to_config(self._checkWrapAround, 'WRAP_AROUND')
 
-        #
-        # wrap around
-        #
-        def slot(state): config.WRAP_AROUND = bool(state)
-        self._checkWrapAround.stateChanged.connect(slot)
+        connect_to_config(self._lossGoal, 'LOSS_GOAL')
+        connect_to_config(self._lossCount, 'LOSS_COUNT')
+        connect_to_config(self._maxSteps, 'MAX_STEPS')
 
-        #
-        def slot(text): config.LOSS_GOAL = float(text)
-        self._lossGoal.textEdited.connect(slot)
+        connect_to_config(self._checkTensorboard, 'TENSORBOARD_ACTIVATED')
 
-        def slot(text): config.LOSS_COUNT = int(text)
-        self._lossCount.textEdited.connect(slot)
-
-        def slot(text): config.MAX_STEPS = int(text)
-        self._maxSteps.textEdited.connect(slot)
-
-        #
-        def slot(state): config.TENSORBOARD_ACTIVATED = bool(state)
-        self._checkTensorboard.stateChanged.connect(slot)
-
-        def slot(state): config.NORMALIZE_OUTPUT = bool(state)
-        self._checkNormalizeOutput.stateChanged.connect(slot)
+        connect_to_config(self._checkNormalizeOutput, 'NORMALIZE_OUTPUT')
 
         self._updateFromConfig(config)
 
@@ -717,7 +674,6 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
         network = self._networkSelector.network
         if network is None:
             return None
-        # value = network.get_layer_input_units(layer_id)
         value = network.get_layer_output_units(layer_id)
         return value
 
@@ -729,12 +685,11 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
         ----------
         config: Config
         """
-
         #
         # update the _layerSelector
         #
         index = self._layerSelector.findText(config.LAYER_KEY)
-        if index != self._layerSelector.currentIndex:
+        if True or index != self._layerSelector.currentIndex:
             if index != -1:
                 self._layerSelector.setCurrentText(config.LAYER_KEY)
                 maxUnit = self._maxUnit(config.LAYER_KEY)
@@ -744,7 +699,6 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
                     self._unitMax.setText(str(maxUnit))
             else:
                 self._unitMax.setText("*")
-
 
         # manually chosen unit to run activation maximization on
         self._unitIndex.setText(str(config.UNIT_INDEX))
