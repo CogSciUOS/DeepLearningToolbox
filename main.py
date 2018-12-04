@@ -11,6 +11,8 @@ import sys
 import argparse
 import os
 
+import util
+
 from PyQt5.QtWidgets import QApplication
 
 from qtgui.mainwindow import DeepVisMainWindow
@@ -176,7 +178,9 @@ def main():
     model.add_network(network)
     model.add_network(network2)
 
+    util.start_timer()
     rc = app.exec_()
+    util.stop_timer()
     sys.exit(rc)
 
 

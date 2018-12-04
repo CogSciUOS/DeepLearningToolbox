@@ -83,3 +83,38 @@ def async(function):
         runner.runTask(function, *args, **kwargs)
         #run_async(function, *args, **kwargs)
     return wrapper
+
+
+import resource
+        
+           
+timer = True
+import time, threading
+def foo():
+
+    # The Python docs aren't clear on what the units are exactly,
+    # but the Mac OS X man page for getrusage(2) describes the
+    # units as bytes. The Linux man page isn't clear, but it seems
+    # to be equivalent to the information from /proc/self/status,
+    # which is in kilobytes.
+    rusage = resource.getrusage(resource.RUSAGE_SELF)
+
+    nvidia_smi_q = subprocess.check_output(["nvidia-smi", "-q"],
+                                           universal_newlines=True)
+    match = re.search('GPU Current Temp *: ([^ ]*) C', nvidia_smi_q)
+    temperature = match.group(1) if match else '?'
+    
+    print(f"{time.ctime()}, Memory: " +
+          "Shared={:,} kiB, ".format(rusage.ru_ixrss) +
+          "Unshared={:,} kiB, ".format(rusage.ru_idrss) +
+          "Peak={:,} kiB, ".format(rusage.ru_maxrss) +
+          f"GPU temperature={temperature}C")
+    if timer:
+        threading.Timer(1, foo).start()
+
+def start_timer():
+    foo()
+
+def stop_timer():
+    global timer
+    timer = False

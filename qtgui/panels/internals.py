@@ -22,6 +22,7 @@ import sys
 import os
 import re
 from types import ModuleType
+import util.resources
 
 class InternalsPanel(Panel):
     '''A Panel displaying system internals.
@@ -38,7 +39,7 @@ class InternalsPanel(Panel):
         self._layout = QVBoxLayout()
         self._grid = QGridLayout()
         self._grid.addWidget(self.modulesInfo(), 0,0)
-        self._grid.addLayout(self.cudaInfo(), 0,1)
+        self._grid.addLayout(self.systemInfo(), 0,1)
 
         self._layout.addLayout(self._grid)
         self._info = self._moduleInfo('cv2')
@@ -48,7 +49,9 @@ class InternalsPanel(Panel):
     @QtCore.pyqtSlot()
     def _onInfo(self):
         name = self.sender().text()
-        info = self._moduleInfo(name)
+        self.showInfo(self._moduleInfo(name))
+
+    def showInfo(self, info: QWidget):
         if self._layout.replaceWidget(self._info, info) is not None:
             self._info.deleteLater()
             self._info = info
@@ -95,64 +98,24 @@ class InternalsPanel(Panel):
         
         return box
 
-    def get_processor_name(self):
-        import platform
-        import subprocess
-        if platform.system() == "Windows":
-            return platform.processor()
-        elif platform.system() == "Darwin":
-            os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
-            command ="sysctl -n machdep.cpu.brand_string"
-            return subprocess.check_output(command).strip()
-        elif platform.system() == "Linux":
-            command = "cat /proc/cpuinfo"
-            all_info = str(subprocess.check_output(command, shell=True,
-                                                   universal_newlines=True))
-            for line in all_info.split("\n"):
-                if "model name" in line:
-                    return re.sub( ".*model name.*:", "", line,1)
-        return ""
+    def systemInfo(self):
 
-    def cudaInfo(self):
-        layout = QVBoxLayout()
-        box = QGroupBox('Python')
-
+        pythonBox = QGroupBox('Python')
         boxLayout = QVBoxLayout()
-
         boxLayout.addWidget(QLabel(f"Python version: {sys.version}"))
         boxLayout.addWidget(QLabel(f"Platform: {sys.platform}"))
         boxLayout.addWidget(QLabel(f"Prefix: {sys.prefix}"))
         boxLayout.addWidget(QLabel(f"Executable: {sys.executable}"))
+        boxLayout.addStretch()
+        pythonBox.setLayout(boxLayout)
 
-        box.setLayout(boxLayout)
-        layout.addWidget(box)
-
-        #
-        # Platform
-        #
-        box = QGroupBox('System')
+        hardwareBox = QGroupBox('Hardware')
         boxLayout = QVBoxLayout()
-
-        import platform
-        boxLayout.addWidget(QLabel(f"uname: {platform.uname()}"))
-        boxLayout.addWidget(QLabel(f"system: {platform.system()}"))
-        boxLayout.addWidget(QLabel(f"node: {platform.node()}"))
-        boxLayout.addWidget(QLabel(f"release: {platform.release()}"))
-        boxLayout.addWidget(QLabel(f"version: {platform.version()}"))
-        boxLayout.addWidget(QLabel(f"machine: {platform.machine()}"))
-        boxLayout.addWidget(QLabel(f"processor: {platform.processor()}"))
-        boxLayout.addWidget(QLabel(f"cpu: {self.get_processor_name()}"))
-
-        box.setLayout(boxLayout)
-        layout.addWidget(box)
-
-        #
-        # Memory usage
-        #
-        box = QGroupBox('Resources')
-        boxLayout = QVBoxLayout()
-        
-
+        for i, cpu in enumerate(util.recources.cpus):
+            boxLayout.addWidget(QLabel(f"{i}. CPU: {cpu.name}"))
+        for i, gpu in enumerate(util.recources.gpus):
+            boxLayout.addWidget(QLabel(f"{i}. GPU: {gpu.name}"))
+        # Memory (1)
         import os
         mem_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
         # SC_PAGE_SIZE is often 4096.
@@ -160,17 +123,44 @@ class InternalsPanel(Panel):
         mem = mem_bytes>>20
         boxLayout.addWidget(QLabel("Total physical memory: {:,} MiB".
                                    format(mem)))
-
+        boxLayout.addStretch()
+        hardwareBox.setLayout(boxLayout)
         
+        #
+        # Platform
+        #
+        systemBox = QGroupBox('System')
+        boxLayout = QVBoxLayout()
+
+        import platform
+        # boxLayout.addWidget(QLabel(f"uname: {platform.uname()}"))
+        boxLayout.addWidget(QLabel(f"system: {platform.system()}"))
+        boxLayout.addWidget(QLabel(f"node: {platform.node()}"))
+        boxLayout.addWidget(QLabel(f"release: {platform.release()}"))
+        boxLayout.addWidget(QLabel(f"version: {platform.version()}"))
+        boxLayout.addWidget(QLabel(f"machine/processor: "
+                                   f"{platform.machine()}/"
+                                   f"{platform.processor()}"))
+        boxLayout.addStretch()
+        systemBox.setLayout(boxLayout)
+        
+
+        resourcesBox = QGroupBox('Resources')
+        boxLayout = QVBoxLayout()
+
+
+        # Memory (2)
         # a useful solution that works for various operating systems,
         # including Linux, Windows 7, etc.:
         try:
             import psutil
             mem = psutil.virtual_memory()
             # mem.total: total physical memory available
-            boxlayout.addWidget(QLabel("Total physical memory: {mem.total}"))
+            boxLayout.addWidget(QLabel("Total physical memory: "
+                                       f"{mem.total}"))
             process = psutil.Process(os.getpid())
-            boxlayout.addWidget(QLabel("Memory usage: {process.memory_info().rss}"))
+            boxLayout.addWidget(QLabel("Memory usage: "
+                                       f"{process.memory_info().rss}"))
         except ModuleNotFoundError:
             pass
 
@@ -191,101 +181,28 @@ class InternalsPanel(Panel):
         boxLayout.addWidget(QLabel("Peak Memory usage: {:,} kiB".
                                    format(rusage.ru_maxrss)))
 
-        box.setLayout(boxLayout)
-        layout.addWidget(box)
 
+        if util.resources.cuda is not None:
+            button = QPushButton("CUDA")
+            #button.setFlat(True)
+            def slot(clicked: bool): self.showInfo(self.cudaInfo())
+            button.clicked.connect(slot)
+            boxLayout.addWidget(button)
 
-        box = QGroupBox('CUDA')
-        boxLayout = QVBoxLayout()
-
-        if os.path.exists('/proc/driver/nvidia/version'):
-            with open('/proc/driver/nvidia/version') as f:
-                driver_info = f.read()
-            match = re.search('Kernel Module +([^ ]*)', driver_info)
-            if match:
-                boxLayout.addWidget(QLabel(f"Kernel module: {match.group(1)}"))
-            match = re.search('gcc version +([^ ]*)', driver_info)
-            if match:
-                boxLayout.addWidget(QLabel(f"GCC version: {match.group(1)}"))
-
-        import subprocess
-        try:
-            nvidia_smi = subprocess.check_output(["nvidia-smi"],
-                                                 universal_newlines=True)
-            nvidia_smi_l = subprocess.check_output(["nvidia-smi", "-L"],
-                                                   universal_newlines=True)
-            nvidia_smi_q = subprocess.check_output(["nvidia-smi", "-q"],
-                                                   universal_newlines=True)
-            # -q = query: GPU temperature, memory, ...
-
-            match = re.search('Driver Version: ([^ ]*)', nvidia_smi)
-            if match:
-                driver = match.group(1)
-            else:
-                driver = ''
-
-            match = re.search('CUDA Version: ([^ ]*)', nvidia_smi)
-            if match:
-                cuda_version = match.group(1)
-            else:
-                cuda_version = ''
-
-            match = re.search('GPU [\d]+: (.*) \(UUID', nvidia_smi_l)
-            if match:
-                gpu = match.group(1)
-            else:
-                gpu = ''
-
-            boxLayout.addWidget(QLabel(f"GPU: {gpu}"))
-            boxLayout.addWidget(QLabel(f"Kernel driver version: {driver}"))
-            boxLayout.addWidget(QLabel(f"CUDA Toolkit version: {cuda_version}"))
-
-            text = QPlainTextEdit()
-            fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-            text.document().setDefaultFont(fixedFont)
-            text.setReadOnly(True)
-            text.setPlainText(str(nvidia_smi))
-            text.appendPlainText(str(nvidia_smi_l))
-            boxLayout.addWidget(text)
-
-        except FileNotFoundError as e:
-            boxLayout.addWidget(QLabel(f"Program 'nvidia-smi' not found!"))
+        resourcesBox.setLayout(boxLayout)
 
 
 
-        # Now use the python module pycuda
-        try:
-            import pycuda.autoinit
-            import pycuda.driver as cuda
-
-            (free,total) = cuda.mem_get_info()
-            boxLayout.addWidget(QLabel("<b>Global Memory</b>"))
-            boxLayout.addWidget(QLabel(f"{total}"))
-            boxLayout.addWidget(QLabel(f"{free}"))
-            boxLayout.addWidget(QLabel("Global memory occupancy: "
-                                       f"{free*100/total}%% free"))
-
-            for devicenum in range(cuda.Device.count()):
-                device=cuda.Device(devicenum)
-                attrs=device.get_attributes()
-            
-                # Beyond this point is just pretty printing
-                print("\n===Attributes for device %d"%devicenum)
-                for (key,value) in attrs.iteritems():
-                    print("%s:%s"%(str(key),str(value)))
-        except ImportError as e:
-            print(e, file=sys.stderr)
-            # ImportError: libcurand.so.8.0
-            # The problem occurs with the current anaconda version
-            # (2017.1, "conda install -c lukepfister pycuda").
-            # The dynamic library "_driver.cpython-36m-x86_64-linux-gnu.so"
-            # is linked against "libcurand.so.8.0". However, the cudatookit
-            # installed by anaconda is verion 9.0.
-            boxLayout.addWidget(QLabel("Python CUDA module (pycuda) not availabe"))
-
-        box.setLayout(boxLayout)
-        layout.addWidget(box)
-
+        #
+        # layout the boxes
+        #
+        layout = QVBoxLayout()
+        row = QHBoxLayout()
+        row.addWidget(hardwareBox)
+        row.addWidget(pythonBox)
+        row.addWidget(systemBox)        
+        layout.addLayout(row)
+        layout.addWidget(resourcesBox)
         layout.addStretch()
         return layout
 
@@ -379,3 +296,64 @@ class InternalsPanel(Panel):
         # https://stackoverflow.com/questions/38009682/how-to-tell-if-tensorflow-is-using-gpu-acceleration-from-inside-python-shell
         layout.addStretch()
         return layout
+
+    def cudaInfo(self):
+        cudaBox = QGroupBox('CUDA')
+        boxLayout = QVBoxLayout()
+
+        if os.path.exists('/proc/driver/nvidia/version'):
+            with open('/proc/driver/nvidia/version') as f:
+                driver_info = f.read()
+            match = re.search('Kernel Module +([^ ]*)', driver_info)
+            if match:
+                boxLayout.addWidget(QLabel(f"Kernel module: {match.group(1)}"))
+            match = re.search('gcc version +([^ ]*)', driver_info)
+            if match:
+                boxLayout.addWidget(QLabel(f"GCC version: {match.group(1)}"))
+
+
+            boxLayout.addWidget(QLabel(f"NVIDIA Kernel driver: "
+                                       f"{util.resources.cuda.driver_version}"))
+            boxLayout.addWidget(QLabel(f"CUDA Toolkit version: "
+                                       f"{util.resources.cuda.toolkit_version}"))
+
+            text = QPlainTextEdit()
+            fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+            text.document().setDefaultFont(fixedFont)
+            text.setReadOnly(True)
+            text.setPlainText(str(util.resources.cuda.nvidia_smi))
+            text.appendPlainText(str(util.resources.cuda.nvidia_smi_l))
+            boxLayout.addWidget(text)
+
+        # Now use the python module pycuda
+        try:
+            import pycuda.autoinit
+            import pycuda.driver as cuda
+
+            (free,total) = cuda.mem_get_info()
+            boxLayout.addWidget(QLabel("<b>Global Memory</b>"))
+            boxLayout.addWidget(QLabel(f"{total}"))
+            boxLayout.addWidget(QLabel(f"{free}"))
+            boxLayout.addWidget(QLabel("Global memory occupancy: "
+                                       f"{free*100/total}%% free"))
+
+            for devicenum in range(cuda.Device.count()):
+                device=cuda.Device(devicenum)
+                attrs=device.get_attributes()
+            
+                # Beyond this point is just pretty printing
+                print("\n===Attributes for device %d"%devicenum)
+                for (key,value) in attrs.iteritems():
+                    print("%s:%s"%(str(key),str(value)))
+        except ImportError as e:
+            print(e, file=sys.stderr)
+            # ImportError: libcurand.so.8.0
+            # The problem occurs with the current anaconda version
+            # (2017.1, "conda install -c lukepfister pycuda").
+            # The dynamic library "_driver.cpython-36m-x86_64-linux-gnu.so"
+            # is linked against "libcurand.so.8.0". However, the cudatookit
+            # installed by anaconda is verion 9.0.
+            boxLayout.addWidget(QLabel("Python CUDA module (pycuda) not availabe"))
+
+        cudaBox.setLayout(boxLayout)
+        return cudaBox
