@@ -97,6 +97,13 @@ class Engine(Observable):
         self._logger2 = lambda x,y,z: None
         self._running = False
 
+        self._loss = np.zeros(0)
+        self._min = np.zeros(0)
+        self._max = np.zeros(0)
+        self._mean = np.zeros(0)
+        self._std = np.zeros(0)
+        self._images = None
+
         self.image = None
         self.activation = None
         self.finish = None
@@ -396,6 +403,18 @@ class Engine(Observable):
             raise NotImplementedError(f"Networks of type {type(network)}"
                                       " are currently not supported. Sorry!")
 
+        self._loss = np.zeros(self._config.MAX_STEPS)
+        if self._min is not None:
+            self._min = np.zeros(self._config.MAX_STEPS)
+        if self._max is not None:
+            self._max = np.zeros(self._config.MAX_STEPS)
+        if self._mean is not None:
+            self._mean = np.zeros(self._config.MAX_STEPS)
+        if self._std is not None:
+            self._std = np.zeros(self._config.MAX_STEPS)
+        if self._images is not None:
+            self._images = None # FIXME!
+
         self._logger("-Engine.prepare() -- end")
 
     def stop(self):
@@ -504,15 +523,28 @@ class Engine(Observable):
             # iterations ago
             loss_list[i % 50] = loss
 
-            # increase steps
-            i += 1
-
             # get time that was needed for this step
             avg_steptime += time.time() - start
+
+
+            # record history
+            self._loss[i] = loss
+
+            img = image.take(batch_index, axis=batch_axis)
+            if self._min is not None:
+                self._min[i] = img.min()
+            if self._max is not None:
+                self._max[i] = img.max()
+            if self._mean is not None:
+                self._mean[i] = img.mean()
+            if self._std is not None:
+                self._std[i] = img.std()
 
             if self._logger2 is not None:
                 self._logger2(image.take(batch_index, axis=batch_axis),
                               i, loss)
+            # increase steps
+            i += 1
 
         self._running = False
 

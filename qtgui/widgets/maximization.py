@@ -35,8 +35,9 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox, QLineEdit,
 
 import cv2
 
-
+from .matplotlib import QMatplotlib
 from tools.am import Config, ConfigObserver, ConfigChange, EngineObserver
+
 
 class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver):
     """
@@ -914,6 +915,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._slider.valueChanged.connect(self.selectIteration)
 
         self._logWindow = MyLogWindow()
+        self._plt = QMatplotlib()
         
         self._layoutComponents()
 
@@ -955,6 +957,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         layout.addLayout(info)
         layout.addWidget(self._imageView)
         layout.addWidget(self._logWindow)
+        layout.addWidget(self._plt)
         layout.addStretch()
         
         self.setLayout(layout)
@@ -1119,6 +1122,10 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
                                       format((self._stack[:self._stack_size].nbytes) >> 20,
                                              self._stack.nbytes >> 20))
         self._showImage(image)
+        self._plt._ax.clear()
+        self._plt._ax.plot(np.arange(iteration+1),
+                           self._engine._loss[:iteration+1])
+        self._plt._ax.figure.canvas.draw()
 
         self._slider.setMaximum(len(self._losses)-1)
         # FIXME[concept]: this triggers the valueChanged signal,

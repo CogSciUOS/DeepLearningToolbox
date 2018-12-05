@@ -64,7 +64,7 @@ class InternalsPanel(Panel):
         grid.addWidget(QLabel("<b>Package</b>", self), 0,0)
         grid.addWidget(QLabel("<b>Version</b>", self), 0,1)
 
-        modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe", "PyQt5", "pycuda"]
+        modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe", "PyQt5", "pycuda", "lucid"]
         for i,m in enumerate(modules):
             button = QPushButton(m, self)
             button.setFlat(True)
