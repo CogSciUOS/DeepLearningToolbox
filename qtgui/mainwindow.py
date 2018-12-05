@@ -8,7 +8,8 @@ from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
 from model import Model, ModelObserver
 from qtgui.utils import QtAsyncRunner
 from qtgui.panels import (ActivationsPanel, OcclusionPanel,
-                          MaximizationPanel, InternalsPanel)
+                          MaximizationPanel, InternalsPanel,
+                          LucidPanel)
 
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
@@ -78,6 +79,7 @@ class DeepVisMainWindow(QMainWindow):
         self._activations = None
         self._maximization = None
         self._internals = None
+        self._lucid = None
         self._initUI()
 
     def setDataSource(self, datasource: DataSource) -> None:
@@ -95,6 +97,7 @@ class DeepVisMainWindow(QMainWindow):
         self.initActivationPanel()
         self.initMaximizationPanel()
         self.initInternalsPanel()
+        self.initLucidPanel()
 
         self._createTabWidget()
 
@@ -110,6 +113,8 @@ class DeepVisMainWindow(QMainWindow):
             self._tabs.addTab(self._activations, 'Activations')
         if self._maximization is not None:
             self._tabs.addTab(self._maximization, 'Maximization')
+        if self._lucid is not None:
+            self._tabs.addTab(self._lucid, 'Lucid')
         if self._internals is not None:
             self._tabs.addTab(self._internals, 'Internals')
         self._tabs.currentChanged.connect(self.onPanelSelected)
@@ -184,6 +189,11 @@ class DeepVisMainWindow(QMainWindow):
         """Initialise the 'internals' panel.
         """
         self._internals = InternalsPanel()
+
+    def initLucidPanel(self):
+        """Initialise the 'lucid' panel.
+        """
+        self._lucid = LucidPanel()
 
     def showStatusMessage(self, message):
         self.statusBar().showMessage(message, 2000)
