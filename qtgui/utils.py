@@ -6,6 +6,15 @@ from observer import Observable, BaseChange
 class QtAsyncRunner(AsyncRunner, QObject):
     """:py:class:`AsyncRunner` subclass which knows how to update Qt widgets.
 
+    The important thing about Qt is that you must work with Qt GUI
+    only from the GUI thread (that is the main thread). The proper way
+    to do this is to notify the main thread from worker and the code
+    in the main thread will actually update the GUI.
+
+    Another point is that there seems to be a difference between
+    python threads and Qt threads. When interacting with Qt always
+    use Qt threads.
+
     Attributes
     ----------
     _completion_signal: pyqtSignal
@@ -30,12 +39,14 @@ class QtAsyncRunner(AsyncRunner, QObject):
         emit a pyqtSignal that is received in the main Thread and
         therefore can notify the Qt GUI.
         """
-        observable, info = future.result()
-        import threading
-        me = threading.current_thread().name
-        print(f"[{me}]{self.__class__.__name__}.onCompletion():{info}")
-        if isinstance(info, BaseChange):
-            self._completion_signal.emit(observable, info)
+        result = future.result()
+        if result is not None:
+            observable, info = result
+            import threading
+            me = threading.current_thread().name
+            print(f"[{me}]{self.__class__.__name__}.onCompletion():{info}")
+            if isinstance(info, BaseChange):
+                self._completion_signal.emit(observable, info)
 
     def _notifyObservers(self, observable, info):
         """The method is intended as a receiver of th pyqtSignal.

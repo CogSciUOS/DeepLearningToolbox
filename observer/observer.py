@@ -13,7 +13,6 @@ This module contains definitions for observer functionality
 
 import threading
 
-
 class BaseChange(set):
     """.. :py:class:: BaseChange
 
@@ -87,14 +86,21 @@ class BaseChange(set):
 def change(function):
     """A decorator that indicates methods that can change the state of
     an Observable.
+
+    The change logic:
+    * A change is only reported to the observers (by calling
+      :py:meth:`notifyObservers`) after the decorated method of
+      the :py:class:`Observable` returns.
+    * Changes can be nested. The change is only reported at the
+      outermost function finishes.
     """
     def wrapper(self, *args, **kwargs):
-        self.begin_change()
+        self._begin_change()
         me = threading.current_thread().name
         print(f"[{me}]in-{self._thread_local.change_count}({self.__class__.__name__},{function.__name__})")
         function(self, *args, **kwargs)
         print(f"[{me}]out-{self._thread_local.change_count}({self.__class__.__name__},{function.__name__}):{self._thread_local.change}")
-        return self.end_change()
+        return self._end_change()
     return wrapper
 
 
@@ -104,6 +110,9 @@ class Observer(object):
     changes. Every observer has an associated controller object for
     dispatching changes to the observed object.
 
+
+    FIXME[hack]: this is still a hack! It assumes that the
+    @change-decorated method is run by the :py:class:`AsyncRunner`.
     """
 
     def __init__(self, **kwargs):
@@ -175,7 +184,7 @@ class Observable:
         self._change_method = change_method
         self._thread_local = threading.local()
 
-    def begin_change(self):
+    def _begin_change(self):
         data = self._thread_local
         if not hasattr(data, 'change'):
             data.change = self._change_type()
@@ -184,7 +193,19 @@ class Observable:
             data.change_count += 1
         return data.change
 
-    def end_change(self):
+    def _end_change(self):
+        """End a change. This is an auxiliary function called by the
+        change decorator.
+
+        The function checks the nesting level of the change and if the
+        outermost call is reached it notifies the observers. How the
+        actual notification is realized depends on the executing
+        thread. If we are in the main thread, we can simply call
+        :py:meth:`notifyObservers`. If we run in another thread, we
+        will return the :py:class:`Observable` along with the
+        :py:class:`BaseChange` object. The idea is that this will
+        be passed to the main thread by the :py:class:`AsyncRunner`.
+        """
         data = self._thread_local
         if not hasattr(data, 'change'):
             raise RuntimeError("No change was startetd.")
@@ -196,8 +217,10 @@ class Observable:
             del data.change
             del data.change_count
             if threading.current_thread() is threading.main_thread():
+                print(f"end_change({change}): current_thread is main_thread")
                 self.notifyObservers(change)
             else:
+                print(f"end_change({change}): not in main thread")
                 return self, change
 
     def change(self, **kwargs):

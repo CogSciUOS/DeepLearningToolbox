@@ -14,8 +14,12 @@ from qtgui.panels import (ActivationsPanel, OcclusionPanel,
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
 from controller import MaximizationController
+from controller import LucidController
 from tools.am import Engine as MaximizationEngine
 from tools.am import EngineObserver as MaximizationEngineObserver
+
+from tools.lucid import Engine as LucidEngine
+
 
 from datasources import DataSource
 from util import ArgumentError, resources
@@ -73,6 +77,13 @@ class DeepVisMainWindow(QMainWindow):
                                        runner=self._runner)
         else:
             self._maximization_controller = None
+
+        self._lucid_engine = LucidEngine()
+        # FIXME[hack]
+        self._lucid_engine.load_model('InceptionV1')
+        self._lucid_engine.set_layer('mixed4a', 476)
+        self._lucid_controller = LucidController(self._lucid_engine,
+                                                 runner=self._runner)
             
         self._current_panel = None
         
@@ -194,6 +205,7 @@ class DeepVisMainWindow(QMainWindow):
         """Initialise the 'lucid' panel.
         """
         self._lucid = LucidPanel()
+        self._lucid.setController(self._lucid_controller)
 
     def showStatusMessage(self, message):
         self.statusBar().showMessage(message, 2000)

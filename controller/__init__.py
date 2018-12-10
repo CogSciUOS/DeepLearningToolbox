@@ -13,3 +13,4 @@ from .asyncrunner import AsyncRunner
 from .datasource import DataSourceController, DataSourceObserver
 from .activations import ActivationsController
 from .maximization import MaximizationController
+from .lucid import LucidController
