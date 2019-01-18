@@ -15,7 +15,7 @@ from qtgui.utils import QImageView
 import numpy as np
 import tensorflow as tf
 
-import lucid.modelzoo.vision_models as models
+from network import loader
 
 from tools.lucid import Engine, EngineObserver, EngineChange
 from controller import LucidController
@@ -104,7 +104,7 @@ class LucidPanel(Panel, EngineObserver):
 
         self._networks.clear()
         if engine is not None:
-            self._networks.addItems(engine.model_names)
+            self._networks.addItems(loader.lucid_names())
 
         self._button.clicked.connect(controller.onMaximize)
         self._buttonAll.clicked.connect(controller.onMaximizeMulti)
@@ -141,21 +141,25 @@ class LucidPanel(Panel, EngineObserver):
     def layoutUI(self):
         layout = QVBoxLayout(self)
         layout.addWidget(self._imageView)
-        h1 = QHBoxLayout(self)
-        h2 = QVBoxLayout(self)
-        h2.addWidget(self._networks)
-        h3 = QHBoxLayout(self)
-        h3.addWidget(self._layerName)
-        h3.addWidget(self._unitNumber)
-        h3.addWidget(QLabel("/"))
-        h3.addWidget(self._numberOfUnits)
-        h3.addWidget(self._unitID)
-        h2.addLayout(h3)
-        h1.addLayout(h2)
+
+        h1 = QHBoxLayout()
+        v1 = QVBoxLayout()
+        v1.addWidget(self._networks)
+
+        h2 = QHBoxLayout()
+        h2.addWidget(self._layerName)
+        h2.addWidget(self._unitNumber)
+        h2.addWidget(QLabel("/"))
+        h2.addWidget(self._numberOfUnits)
+        h2.addWidget(self._unitID)
+        v1.addLayout(h2)
+        
+        h1.addLayout(v1)
         h1.addWidget(self._button)
         h1.addWidget(self._buttonAll)
         h1.addWidget(self._buttonStop)
         h1.addStretch()
+        
         layout.addLayout(h1)
         layout.addWidget(self._modelView)
 

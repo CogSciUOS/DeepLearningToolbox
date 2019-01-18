@@ -5,6 +5,10 @@ import numpy as np
 import sys
 import os
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 from collections import OrderedDict
 from frozendict import FrozenOrderedDict
@@ -69,8 +73,7 @@ class Network(KerasNetwork):
             # FIXME[todo]: the following setting causes a TensorFlow
             # error: failed call to cuInit: CUDA_ERROR_NO_DEVICE
             #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-            print('{}: Running in CPU-only mode.'.format(__name__),
-                  file=sys.stderr)
+            logger.info("Running in CPU-only mode.")
             import tensorflow as tf
             from multiprocessing import cpu_count
             num_cpus = cpu_count()
@@ -86,12 +89,8 @@ class Network(KerasNetwork):
         #   'tf' - "tensorflow":
         #   'th' - "theano":
         K.set_image_dim_ordering('tf')
-        print("{}: image_dim_ordering: {}".
-              format(__name__, K.image_dim_ordering()),
-              file=sys.stderr)
-        print("{}: image_data_format: {}".
-              format(__name__, K.image_data_format()),
-              file=sys.stderr)
+        logger.info(f"image_dim_ordering: {K.image_dim_ordering()}")
+        logger.info(f"image_data_format: {K.image_data_format()}")
 
         if cpu:
             K.set_session(session)

@@ -1,5 +1,9 @@
 import os
 import re
+
+import logging
+logger = logging.getLogger(__name__)
+
 import random
 import pickle
 from scipy.misc import imread, imresize
@@ -17,11 +21,12 @@ try:
     from appdirs import AppDirs
 except ImportError:
     AppDirs = None
-    print("---------------------------------------------------------------\n"
-          "info: module 'appdirs' is not installed. We can live without it,\n"
-          "but having it around will provide additional features.\n"
-          "See: https://github.com/ActiveState/appdirs\n"
-          "---------------------------------------------------------------\n")
+    logger.warning(
+        "---------------------------------------------------------------\n"
+        "info: module 'appdirs' is not installed. We can live without it,\n"
+        "but having it around will provide additional features.\n"
+        "See: https://github.com/ActiveState/appdirs\n"
+        "---------------------------------------------------------------\n")
 
 
 class ImageNet(DataDirectory, Predefined):
@@ -38,12 +43,12 @@ class ImageNet(DataDirectory, Predefined):
         self._prefix = os.path.join(self._imagenet_data, self._section)
         self._available = os.path.isdir(self._prefix)
 
-        print(f"PREPARING ImageNet : {self._prefix}: {self._available}")
+        logger.info(f"PREPARING ImageNet : {self._prefix}: {self._available}")
         self._categories = os.listdir(self._prefix)
 
         from .imagenet_classes import wn_table
         self._wn_table = wn_table
-        print(len(self._wn_table))
+        logger.info(f"Length of wn_table: {len(self._wn_table)}")
 
         # This may take some time ...
         self.setDirectory(self._prefix)
@@ -58,8 +63,8 @@ class ImageNet(DataDirectory, Predefined):
             dirs = AppDirs(appname, appauthor)
             imagenet_filelist = os.path.join(dirs.user_cache_dir,
                                              "imagenet_filelist.p")
-            print(f"ImageNet: trying to load filelist from "
-                  f"'{imagenet_filelist}")
+            logger.info(f"ImageNet: trying to load filelist from "
+                        f"'{imagenet_filelist}")
             if os.path.isfile(imagenet_filelist):
                 self._filenames = pickle.load(open(imagenet_filelist, 'rb'))
         else:
@@ -68,11 +73,11 @@ class ImageNet(DataDirectory, Predefined):
         if self._filenames is None:
             super().prepare()
             if imagenet_filelist is not None:
-                print("ImageNet: writing filenames to {imagenet_filelist}")
+                logger.info(f"Writing filenames to {imagenet_filelist}")
                 if not os.path.isdir(dirs.user_cache_dir):
                     os.makedirs(dirs.user_cache_dir)
                 pickle.dump(self._filenames, open(imagenet_filelist, 'wb'))
-        print(f"ImageNet is now prepared: {len(self)}")
+        logger.info(f"ImageNet is now prepared: {len(self)}")
 
     def __getitem__(self, index):
         if not self._filenames:

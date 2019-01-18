@@ -8,7 +8,7 @@ Github: https://github.com/krumnack
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QGroupBox,
                              QGridLayout, QHBoxLayout, QVBoxLayout,
-                             QPlainTextEdit)
+                             QPlainTextEdit, QComboBox)
 from PyQt5.QtGui import QFontDatabase
 
 from .panel import Panel
@@ -23,6 +23,7 @@ import os
 import re
 from types import ModuleType
 import util.resources
+import util
 
 class InternalsPanel(Panel):
     '''A Panel displaying system internals.
@@ -357,5 +358,92 @@ class InternalsPanel(Panel):
             # installed by anaconda is verion 9.0.
             boxLayout.addWidget(QLabel("Python CUDA module (pycuda) not availabe"))
 
+        try:
+            nvmlInfo = QNvmlInfo()
+            boxLayout.addWidget(nvmlInfo)
+            util.add_timer_callback(nvmlInfo.update)
+        except ImportError as e:
+            print(e, file=sys.stderr)
+            boxLayout.addWidget(QLabel("Python NVML module (py3nvml) not availabe"))
+
         cudaBox.setLayout(boxLayout)
         return cudaBox
+
+
+class QNvmlInfo(QWidget):
+
+    nvml = importlib.import_module('py3nvml.py3nvml')
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.nvml.nvmlInit()
+        self._deviceCount = self.nvml.nvmlDeviceGetCount()
+        self._handle = None
+        self._initUI()
+        
+    def __del__(self):
+        self.nvml.nvmlShutdown()
+
+    def _initUI(self):
+        layout = QVBoxLayout()
+
+        grid = QGridLayout()
+
+        self._driver_version = QLabel(self.nvml.nvmlSystemGetDriverVersion())
+        grid.addWidget(QLabel("Driver Version"), 0,0)
+        grid.addWidget(self._driver_version, 0,1)
+
+        layout.addLayout(grid)
+
+        self._devices = QComboBox()
+        for i in range(self._deviceCount):
+            handle = self.nvml.nvmlDeviceGetHandleByIndex(i)
+            self._devices.addItem(self.nvml.nvmlDeviceGetName(handle))
+        layout.addWidget(self._devices)
+            
+        
+        grid = QGridLayout()
+        
+        self._name = QLabel()
+        grid.addWidget(QLabel("Name"), 0,0)
+        grid.addWidget(self._name, 0,1)
+
+        self._temperature = QLabel()
+        grid.addWidget(QLabel("Temperatur"), 1,0)
+        box = QHBoxLayout()
+        box.addWidget(self._temperature)
+        box.addWidget(QLabel(u'\N{DEGREE SIGN}C'))
+        box.addStretch()
+        grid.addLayout(box, 1,1)
+
+        self._temperature_slowdown = QLabel()
+        grid.addWidget(QLabel("Slowdown Temperatur"), 2,0)
+        box = QHBoxLayout()
+        box.addWidget(self._temperature_slowdown)
+        box.addWidget(QLabel(u'\N{DEGREE SIGN}C'))
+        box.addStretch()
+        grid.addLayout(box, 2,1)
+
+        self._temperature_shutdown = QLabel()
+        grid.addWidget(QLabel("Shutdown Temperatur"), 3,0)
+        box = QHBoxLayout()
+        box.addWidget(self._temperature_shutdown)
+        box.addWidget(QLabel(u'\N{DEGREE SIGN}C'))
+        box.addStretch()
+        grid.addLayout(box, 3,1)
+
+        layout.addLayout(grid)
+        layout.addStretch()
+        self.setLayout(layout)
+
+    def update(self):
+        if self._handle is None and self._devices.currentIndex() is not None:
+            self._handle = self.nvml.nvmlDeviceGetHandleByIndex(self._devices.currentIndex())
+            self._name.setText(self.nvml.nvmlDeviceGetName(self._handle))
+            self._temperature_slowdown.setText(str(self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,self.nvml.NVML_TEMPERATURE_THRESHOLD_SLOWDOWN)))
+            self._temperature_shutdown.setText(str(self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,self.nvml.NVML_TEMPERATURE_THRESHOLD_SHUTDOWN)))
+
+        if self._handle is not None:
+            self._temperature.setText(str(self.nvml.nvmlDeviceGetTemperature(self._handle,self.nvml.NVML_TEMPERATURE_GPU)))
+        
+

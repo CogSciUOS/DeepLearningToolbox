@@ -1,5 +1,9 @@
 from typing import Tuple, Any, Union, List
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 import functools
 import operator
 import numpy as np
@@ -85,14 +89,12 @@ class Network(Identifiable):
     # FIXME[todo]: add additional parameters, e.g. cpu / gpu
     @classmethod
     def load(cls, module_name, *args, **kwargs):
-        print("Loading module: {}".format(module_name))
+        logger.info(f"Loading module: {module_name}")
         module = importlib.import_module(module_name)
         network_class = getattr(module, "Network")
         network_class.import_framework()
         instance = network_class(*args, **kwargs)
         return instance
-
-
 
     # ------------ Public interface ----------------
 

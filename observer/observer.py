@@ -12,6 +12,10 @@ This module contains definitions for observer functionality
 # import controller.base
 
 import threading
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 class BaseChange(set):
     """.. :py:class:: BaseChange
@@ -96,10 +100,12 @@ def change(function):
     """
     def wrapper(self, *args, **kwargs):
         self._begin_change()
-        me = threading.current_thread().name
-        print(f"[{me}]in-{self._thread_local.change_count}({self.__class__.__name__},{function.__name__})")
+        logger.debug(f"in-{self._thread_local.change_count}"
+                     f"({self.__class__.__name__},{function.__name__})")
         function(self, *args, **kwargs)
-        print(f"[{me}]out-{self._thread_local.change_count}({self.__class__.__name__},{function.__name__}):{self._thread_local.change}")
+        logger.debug(f"out-{self._thread_local.change_count}"
+                     f"({self.__class__.__name__},{function.__name__}):"
+                     f"{self._thread_local.change}")
         return self._end_change()
     return wrapper
 
@@ -217,10 +223,11 @@ class Observable:
             del data.change
             del data.change_count
             if threading.current_thread() is threading.main_thread():
-                print(f"end_change({change}): current_thread is main_thread")
+                logger.debug(f"end_change({change}):"
+                             "current_thread is main_thread")
                 self.notifyObservers(change)
             else:
-                print(f"end_change({change}): not in main thread")
+                logger.debug(f"end_change({change}): not in main thread")
                 return self, change
 
     def change(self, **kwargs):
@@ -260,7 +267,7 @@ class Observable:
             If ``None``, do not publish update.
         """
         me = threading.current_thread().name
-        print(f"[{me}]{self.__class__.__name__}.notifyObservers({info})")
+        logger.debug(f"{self.__class__.__name__}.notifyObservers({info})")
         if info:
             for observer in self._observers:
                 self.notify(observer, info)

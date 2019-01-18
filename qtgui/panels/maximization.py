@@ -16,7 +16,8 @@ from .panel import Panel
 
 import numpy as np
 from tools.am import Config, Engine
-from controller import MaximizationController
+from controller import MaximizationController, BaseController
+from observer import Observer
 
 class MaximizationPanel(Panel):
     """A panel containing elements to configure and run activation
@@ -105,3 +106,9 @@ class MaximizationPanel(Panel):
         layout.addWidget(config_box)
 
         self.setLayout(layout)
+
+    def setController(self, controller: BaseController,
+                      observerType: type=Observer):
+        super().setController(controller, observerType)
+        if isinstance(controller, MaximizationController):
+            self._maximization_display.connectToConfigViews(controller.onConfigViewSelected)

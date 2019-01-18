@@ -1,6 +1,10 @@
+import logging
+logger = logging.getLogger(__name__)
+print(f"!!!!!!!!!! getEffectiveLevel: {logger.getEffectiveLevel()} !!!!!!!!!!!!!")
 
 from observer import Observer, Observable, BaseChange, change
-from network import Network
+from network import Network, loader
+from network.lucid import Network as LucidNetwork
 from model import Model
 
 # lucid.modelzoo.vision_models:
@@ -15,8 +19,6 @@ import lucid.optvis.param as param
 import lucid.optvis.render as render
 import lucid.optvis.transform as transform
 
-
-from typing import Iterator
 
 class EngineChange(BaseChange):
     ATTRIBUTES = ['engine_changed', 'model_changed', 'unit_changed']
@@ -45,27 +47,20 @@ class Engine(Observable):
 
     Attributes
     ----------
+    _network: LucidNetwork
+        The currently selected lucid network. None if no model
+        is selected.
+
     _model: LucidModel
         The currently selected lucid model. None if no model is
         selected.
-
-    _model_name: str
-        The name of the currently selected lucid model. None if
-        no model is selected.
         
-    _models_map: dict
-        This is simply a reference to the
-        lucid.modelzoo.nets_factory.models_map.
-        It maps model name (`str`) to lucid models
-        (lucid.modelzoo.vision_base.Model)
-
     """
 
     def __init__(self):
         super().__init__(EngineChange, 'engineChanged')
-        self._models_map = nets.models_map
+        self._network = None
         self._model = None
-        self._model_name = None
         self._layer = None
         self._unit = None
         self.image = None
@@ -83,18 +78,7 @@ class Engine(Observable):
         """The name of the currently selected lucid model. None if
         no model is selected.
         """
-        return self._model_name
-
-    @property
-    def model_names(self) -> Iterator[str]:
-        """Provide an iterator vor the available Lucid model names.
-
-        Returns
-        -------
-        names: Iterator[str]
-            An iterartor for the model names.
-        """
-        return self._models_map.keys()
+        return None if self._network is None else self._network.name
 
     @change
     def load_model(self, name: str) -> LucidModel:
@@ -106,16 +90,15 @@ class Engine(Observable):
             A reference to the LucidModel.
         """
 
+        logger.info(f"load_model({name})")
         try:
-            factory = self._models_map[name]
-            self._model = factory()
-            self._model_name = name
-            # load the graph definition (tf.GraphDef) from a binary
-            # protobuf file and reset all devices in that GraphDef.
-            self._model.load_graphdef()
-        except:
+            #self._network = LucidNetwork(name=name)
+            self._network = loader.load_lucid(name)
+            self._model = self._network.model
+        except KeyError as e:
+            self._network = None
             self._model = None
-            self._model_name = None
+        logger.info(f"NAME={name}/{self.model_name} : {self._model}")
         self._layer = None
         self._unit = None
         self.change(model_changed=True, unit_changed=True)
@@ -133,6 +116,8 @@ class Engine(Observable):
             The index of the unit in the layer.
         """
         if name == self.layer:
+            return
+        if self._model is None:
             return
         try:
             self._layer = next(x for x in self._model.layers
@@ -238,11 +223,11 @@ class Engine(Observable):
         self.image = None
         self._doRun(True)
 
-        print("!!! running all:")
+        logger.info("!!! running all:")
         for unit in range(self.layer_units):
             self.unit = unit
             self.notifyObservers(EngineChange(unit_changed=True))
-            print(f"!!! running unit {unit}")
+            logger.info(f"!!! running unit {unit}")
             obj = objectives.channel(self.layer_id, unit)
             self.image = render.render_vis(self.model, obj)
             if not self.running:

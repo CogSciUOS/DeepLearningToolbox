@@ -5,11 +5,12 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
                              QWidget, QLabel)
 
+
 from model import Model, ModelObserver
 from qtgui.utils import QtAsyncRunner
 from qtgui.panels import (ActivationsPanel, OcclusionPanel,
                           MaximizationPanel, InternalsPanel,
-                          LucidPanel)
+                          LucidPanel, LoggingPanel)
 
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
@@ -50,14 +51,12 @@ class DeepVisMainWindow(QMainWindow):
         The currently selected Panel (FIXME: currently not used!)
     """
 
-    def __init__(self, model: Model,
-                 maximization_engine:MaximizationEngine =None,
-                 data=None, title='QtPyVis'):
+    def __init__(self, title:str='QtPyVis') -> None:
         """Initialize the main window.
 
         Parameters
         ----------
-        model: Model
+        title: str
         """
         super().__init__()
         self._title = title
@@ -65,12 +64,35 @@ class DeepVisMainWindow(QMainWindow):
 
         import util
         util.runner = self._runner # FIXME[hack]
+
+        self._current_panel = None      
+        self._activations = None
+        self._maximization = None
+        self._internals = None
+        self._lucid = None
+        self._logging = None
+        self._initUI()
+
+    def setModel(self, model: Model) -> None:
         self._activations_controller = \
             ActivationsController(model, runner=self._runner)
+
+        if self._activations is not None:
+            self._activations.setController(self._activations_controller,
+                                            ModelObserver)
+        if self._maximization is not None:
+            self._maximization.setController(self._activations_controller,
+                                             ModelObserver)
+
         self._datasource_controller = \
             DataSourceController(model, runner=self._runner)
 
-        self._maximization_engine = maximization_engine
+        if self._activations is not None:
+            self._activations.setController(self._datasource_controller,
+                                            DataSourceObserver)
+
+    def setMaximizationEngine(self, engine:MaximizationEngine=None) -> None:
+        self._maximization_engine = engine
         if self._maximization_engine is not None:
             self._maximization_controller = \
                 MaximizationController(self._maximization_engine,
@@ -78,25 +100,25 @@ class DeepVisMainWindow(QMainWindow):
         else:
             self._maximization_controller = None
 
-        self._lucid_engine = LucidEngine()
-        # FIXME[hack]
-        self._lucid_engine.load_model('InceptionV1')
-        self._lucid_engine.set_layer('mixed4a', 476)
+        if self._maximization is not None:
+            self._maximization.setController(self._maximization_controller,
+                                             MaximizationEngineObserver)
+
+
+    def setLucidEngine(self, engine:LucidEngine=None) -> None:
+        self._lucid_engine = engine
         self._lucid_controller = LucidController(self._lucid_engine,
                                                  runner=self._runner)
-            
-        self._current_panel = None
-        
-        self._activations = None
-        self._maximization = None
-        self._internals = None
-        self._lucid = None
-        self._initUI()
+        if self._lucid is not None:
+            self._lucid.setController(self._lucid_controller)
 
     def setDataSource(self, datasource: DataSource) -> None:
         """Set the datasource.
         """
         self._datasource_controller.set_datasource(datasource)
+        if self._activations is not None:
+            self._activations.setController(self._datasource_controller,
+                                            DataSourceObserver)
     
     def _initUI(self):
         """Initialize the graphical components of this user interface."""
@@ -108,6 +130,7 @@ class DeepVisMainWindow(QMainWindow):
         self.initActivationPanel()
         self.initMaximizationPanel()
         self.initInternalsPanel()
+        self.initLoggingPanel()
         self.initLucidPanel()
 
         self._createTabWidget()
@@ -128,6 +151,8 @@ class DeepVisMainWindow(QMainWindow):
             self._tabs.addTab(self._lucid, 'Lucid')
         if self._internals is not None:
             self._tabs.addTab(self._internals, 'Internals')
+        if self._logging is not None:
+            self._tabs.addTab(self._logging, 'Logging')
         self._tabs.currentChanged.connect(self.onPanelSelected)
 
     def getTab(self, index: int) -> QWidget:
@@ -172,6 +197,16 @@ class DeepVisMainWindow(QMainWindow):
         #
         datasourceMenu = menubar.addMenu('&Data')
 
+        #
+        # Tools Menu
+        #
+        toolsMenu = menubar.addMenu('&Tools')
+
+        loggingAction = QAction('Logging', self)
+        loggingAction.setStatusTip('Show the logging panel')
+        # loggingAction.triggered.connect(self.)
+        toolsMenu.addAction(loggingAction)
+
     def closeEvent(self, event):
         """Callback for x button click."""
         self.onExitClicked()
@@ -182,19 +217,11 @@ class DeepVisMainWindow(QMainWindow):
 
         """
         self._activations = ActivationsPanel()
-        self._activations.setController(self._activations_controller,
-                                        ModelObserver)
-        self._activations.setController(self._datasource_controller,
-                                        DataSourceObserver)
 
     def initMaximizationPanel(self):
         """Initialise the maximization panel.
         """
         self._maximization = MaximizationPanel()
-        self._maximization.setController(self._activations_controller,
-                                         ModelObserver)
-        self._maximization.setController(self._maximization_controller,
-                                         MaximizationEngineObserver)
 
     def initInternalsPanel(self):
         """Initialise the 'internals' panel.
@@ -205,7 +232,19 @@ class DeepVisMainWindow(QMainWindow):
         """Initialise the 'lucid' panel.
         """
         self._lucid = LucidPanel()
-        self._lucid.setController(self._lucid_controller)
+
+    def initLoggingPanel(self):
+        """Initialise the log panel.
+
+        """
+        self._logging = LoggingPanel()
+        # FIXME[hack]:
+        import logging
+        logger = logging.getLogger()
+        logger.handlers = []
+        self._logging.addLogger(logger)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!! Logger changed !!!!!!!!!!!!!!!!!!!!")
+
 
     def showStatusMessage(self, message):
         self.statusBar().showMessage(message, 2000)

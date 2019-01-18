@@ -11,6 +11,15 @@ import sys
 import argparse
 import os
 
+# FIXME[hack]: avoid a lot of debug output from matplotlib ...
+import matplotlib
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
+
 import util
 
 from PyQt5.QtWidgets import QApplication
@@ -101,11 +110,99 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str,
                         input_shape=input_shape, use_cuda=not cpu)
 
 
+def initializeToolbox(args, gui):
+    try:
+        from datasources import DataDirectory
+        from model import Model
+        from tools.am import Engine as AMEngine
+        from tools.am import Config as AMConfig
+        from tools.lucid import Engine as LucidEngine
+
+        model = Model()
+        gui.setModel(model)
+
+        am_engine = AMEngine(model, AMConfig())
+        gui.setMaximizationEngine(am_engine)
+
+        lucid_engine = LucidEngine()
+        # FIXME[hack]
+        lucid_engine.load_model('InceptionV1')
+        lucid_engine.set_layer('mixed4a', 476)
+        gui.setLucidEngine(lucid_engine)
+
+        from datasources import Predefined
+        if args.data:
+            source = Predefined.get_data_source(args.data)
+        elif args.dataset:
+            source = Predefined.get_data_source(args.dataset)
+        elif args.datadir:
+            source = DataDirectory(args.datadir)
+
+        gui.setDataSource(source)
+
+
+
+        #
+        # network: dependes on the selected framework
+        #
+        if False:  # FIXME[hack]: two networks seem to cause problems!
+            network = None
+        elif args.framework.startswith('keras'):
+            dash_idx = args.framework.find('-')
+            backend = args.framework[dash_idx + 1:]
+            network = keras(backend, args.cpu, model_file=args.model)
+
+        elif args.framework == 'torch':
+            # FIXME[hack]: provide these parameters on the command line ...
+            net_file = 'models/example_torch_mnist_net.py'
+            net_class = 'Net'
+            parameter_file = 'models/example_torch_mnist_model.pth'
+            input_shape = (28, 28)
+            network = torch(args.cpu, net_file, net_class,
+            parameter_file, input_shape)
+        else:
+            network = None
+
+        model.add_network(network)
+
+        #
+        # network2: AlexNet trained on ImageNet data (TensorFlow)
+        #
+        logger.debug("network2: import tensorflow")
+        from network.tensorflow import Network as TensorFlowNetwork
+        checkpoint = os.path.join('models', 'example_tf_alexnet',
+                                  'bvlc_alexnet.ckpt')
+        logger.debug("network2: TensorFlowNetwork")
+        network2 = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
+        logger.debug("network2: prepare")
+        network2._online()
+        logger.debug("network2: Load Class Names")
+        from datasources.imagenet_classes import class_names2
+        network2.set_output_labels(class_names2)
+        logger.debug("network2: Done")
+
+        # FIXME[hack]: the @change decorator does not work in different thread
+        #model.add_network(network2)
+        m,change = model.add_network(network2)
+        m.notifyObservers(change)
+
+    except Exception as e:
+        # FIXME[hack]: rethink error handling in threads!
+        import traceback
+        print(e)
+        traceback.print_tb(e.__traceback__)
+
+
 def main():
     '''Start the program.'''
 
+
+    logger.debug("importing datasources")
+
     from datasources import Predefined
     datasets = Predefined.get_data_source_ids()
+
+    logger.debug(f"got datesets: {datasets}")
 
     parser = argparse.ArgumentParser(
         description='Visual neural network analysis.')
@@ -125,58 +222,19 @@ def main():
                         default=False)
     args = parser.parse_args()
 
-    #
-    # network2: AlexNet trained on ImageNet data (TensorFlow)
-    #
-    from network.tensorflow import Network as TensorFlowNetwork
-    checkpoint = os.path.join('models', 'example_tf_alexnet',
-                              'bvlc_alexnet.ckpt')
-    network2 = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
-    from datasources.imagenet_classes import class_names2
-    network2.set_output_labels(class_names2)
+
 
     #
-    # network: dependes on the selected framework
+    # create the actual application
     #
-    if False:  # FIXME[hack]: two networks seem to cause problems!
-        network = None
-    elif args.framework.startswith('keras'):
-        dash_idx = args.framework.find('-')
-        backend = args.framework[dash_idx + 1:]
-        network = keras(backend, args.cpu, model_file=args.model)
-
-    elif args.framework == 'torch':
-        # FIXME[hack]: provide these parameters on the command line ...
-        net_file = 'models/example_torch_mnist_net.py'
-        net_class = 'Net'
-        parameter_file = 'models/example_torch_mnist_model.pth'
-        input_shape = (28, 28)
-        network = torch(args.cpu, net_file, net_class,
-                        parameter_file, input_shape)
-    else:
-        network = None
-
-    from datasources import DataDirectory
-    from model import Model
-    from tools.am import Engine as AMEngine
-    from tools.am import Config as AMConfig
     app = QApplication(sys.argv)
-    model = Model()
-    am_engine = AMEngine(model, AMConfig())
 
-    if args.data:
-        source = Predefined.get_data_source(args.data)
-    elif args.dataset:
-        source = Predefined.get_data_source(args.dataset)
-    elif args.datadir:
-        source = DataDirectory(args.datadir)
-
-    mainWindow = DeepVisMainWindow(model, maximization_engine=am_engine)
-    mainWindow.setDataSource(source)
+    mainWindow = DeepVisMainWindow()
     mainWindow.show()
 
-    model.add_network(network)
-    model.add_network(network2)
+    # FIXME[hack]
+    mainWindow._runner.runTask(initializeToolbox, args, mainWindow)
+    #initializeToolbox(args, mainWindow)
 
     util.start_timer(mainWindow.showStatusResources)
     rc = app.exec_()

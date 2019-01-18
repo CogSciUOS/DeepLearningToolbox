@@ -33,11 +33,11 @@ class TensorFlowNeuralLayer(TensorFlowLayer, layers.NeuralLayer):
 
     @property
     def weights(self):
-        return self._network._sess.run(self.weight_tensor)
+        return self._network._session.run(self.weight_tensor)
 
     @property
     def bias(self):
-        return self._network._sess.run(self.bias_tensor)
+        return self._network._session.run(self.bias_tensor)
 
     @property
     def activation_tensor(self):

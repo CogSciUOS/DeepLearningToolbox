@@ -3,6 +3,11 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from controller import AsyncRunner
 from observer import Observable, BaseChange
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
 class QtAsyncRunner(AsyncRunner, QObject):
     """:py:class:`AsyncRunner` subclass which knows how to update Qt widgets.
 
@@ -44,7 +49,7 @@ class QtAsyncRunner(AsyncRunner, QObject):
             observable, info = result
             import threading
             me = threading.current_thread().name
-            print(f"[{me}]{self.__class__.__name__}.onCompletion():{info}")
+            logger.debug(f"{self.__class__.__name__}.onCompletion():{info}")
             if isinstance(info, BaseChange):
                 self._completion_signal.emit(observable, info)
 
@@ -200,3 +205,50 @@ class QImageView(QWidget):
         """
         if self._image is not None and self._overlay is not None:
             painter.drawImage(self._imageRect, self._overlay)
+
+
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import QPlainTextEdit
+from logging import Handler
+import threading
+import logging
+
+from collections import deque
+
+class QLogHandler(QPlainTextEdit, Handler):
+
+    # signals must be declared outside the constructor, for some weird reason
+    _message_signal = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        QPlainTextEdit.__init__(self, parent)
+        Handler.__init__(self)
+        self._records = deque()
+        self._new_records = deque()
+        self.setReadOnly(True)
+        self._message_signal.connect(self.appendMessage)
+        FORMAT = "[%(processName)s/%(threadName)s(%(name)s) %(module)s [%(filename)s:%(lineno)d] %(levelname)s: %(message)s"
+        formatter = logging.Formatter(fmt=FORMAT, datefmt="%(asctime)s")
+        self.setFormatter(formatter)
+
+    @QtCore.pyqtSlot(str)
+    def appendMessage(self, message: str):
+        while self._new_records:
+            self._records.append(self._new_records.popleft())
+
+        self.appendPlainText(message)
+        self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+
+    def emit(self, record):
+        # Here we have to be careful: adding the text directly to the
+        # widget from another thread causes problems: The program
+        # crashes with the following message:
+        #   QObject::connect: Cannot queue arguments of type 'QTextBlock'
+        #   (Make sure 'QTextBlock' is registered using qRegisterMetaType().)
+        # Hence we are doing this via a signal now.        
+        self._new_records.append(record)
+        self._message_signal.emit(self.format(record))
+
+    @property
+    def total(self):
+        return len(self._records)

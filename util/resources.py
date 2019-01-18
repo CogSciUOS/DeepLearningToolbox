@@ -6,6 +6,20 @@ import resource
 import subprocess
 import re
 
+try:
+    from py3nvml import py3nvml
+    try:
+        py3nvml.nvmlInit()
+    except py3nvml.NVMLError_LibRmVersionMismatch as e:
+        # "RM has detected an NVML/RM version mismatch."
+        py3nvml = None
+except ModuleNotFoundError as e:
+    # "No module named 'py3nvml'"
+    py3nvml = None
+except ImportError as e:
+    # "cannot import name 'py3nvml'"
+    py3nvml = None
+
 class _component(dict):
     def __init__(self, name = None):
         if name is not None:
@@ -57,6 +71,12 @@ try:
 except FileNotFoundError as e:
     cuda = None
     gpus = []
+
+except subprocess.CalledProcessError as e:
+    # Command '['nvidia-smi']' returned non-zero exit status 231.
+    cuda = None
+    gpus = []
+
 
 #
 # processor name

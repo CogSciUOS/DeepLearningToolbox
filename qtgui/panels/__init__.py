@@ -5,3 +5,4 @@ from .occlusion import OcclusionPanel
 from .maximization import MaximizationPanel
 from .lucid import LucidPanel
 from .internals import InternalsPanel
+from .logging import LoggingPanel

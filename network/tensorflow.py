@@ -2,10 +2,16 @@ from __future__ import absolute_import
 
 import os
 import re
-import numpy as np
-import tensorflow as tf
+
 from collections import OrderedDict
 from frozendict import FrozenOrderedDict
+
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+import numpy as np
+import tensorflow as tf
 
 from . import Network as BaseNetwork
 from .exceptions import ParsingError
@@ -21,8 +27,25 @@ from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
 class NonMatchingLayerDefinition(Exception):
     pass
 
+class TensorflowException(Exception):
+    pass
+
+
 class Network(BaseNetwork):
-    """Network interface to TensorFlow."""
+    """Network interface to TensorFlow.
+
+
+    _graph: tf.Graph
+        The internal representation of the computational graph.
+        Can be initialized from the graph_def by calling
+        `tf.import_graph_def(graph_def, name='')`
+        May be modified by for special needs, e.g. by adding nodes
+        (operations).
+
+    _session: tf.Session
+        The session running the graph. Before any computation can be
+        perfomed, a session has to be initialized.
+    """
 
     _OPERATION_TYPES = {
         'activation_functions': {'Relu',
@@ -113,8 +136,18 @@ class Network(BaseNetwork):
 
         Parameters
         ----------
-        checkpoint:
-        session:
+        checkpoint: str
+        session: tf.Session
+
+        graph_def: tf.GraphDef
+            A Protobuf represetnation of the model. This representation
+            is immutable. One may however use it to create new GraphDefs
+            by calling methods from `tf.graph_util`.
+    
+            A GraphDef can be loaded from a protobuf file by calling
+              graph_def = tf.GraphDef()
+              graph_def.ParseFromString(f.read())
+
 
         Returns
         -------
@@ -122,40 +155,99 @@ class Network(BaseNetwork):
 
 
         TensorFlow provides two ways to store models: checkpoints
-        ans SavedModel.
+        and SavedModel.
         """
-        checkpoint = kwargs.get('checkpoint', None)
-        sess = kwargs.get('session', None)
-        if checkpoint is not None and sess is None:
-            # Restore the tensorflow model from checkpoint files.
-            # The consists basically of two parts:
-            # (a) The meta graph ({checkpoint}.meta):
-            #     a protocol buffer containing the complete Tensorflow
-            #     graph, i.e. all variables, operations, collections, etc.
-            # (b) The actual checkpoint files
-            # (b1) {checkpoint}.data-00000-of-00001
-            #      a binary file containing all weights, biases,
-            #      gradients, etc.
-            # (b2) {checkpoint}.index
-            # (b3) a textfile alled "checkpoint" keeping record of
-            #      the latest checkpoint files saved
-            
-            #self._sess = tf.Session()
-            #tf_config = tf.ConfigProto(log_device_placement=True)
-            tf_config = tf.ConfigProto()
-            self._sess = tf.Session(config=tf_config)
-            saver = tf.train.import_meta_graph(checkpoint + '.meta', clear_devices=True)
-            model_dir = os.path.dirname(checkpoint)
-            saver.restore(self._sess, tf.train.latest_checkpoint(model_dir))
-        elif checkpoint is None and sess is not None:
-            # Just store the session since the model is already there.
-            self._sess = sess
-        # TensorFlow uses channels last as data format by default. This can however be changed
-        # by the user.
-        # TODO make this more flexible.
+
+        self._graph = None
+        self._session = None
+
+        if 'graph_def' in kwargs:
+            self._init_from_graph_def(kwargs['graph_def'])
+        elif 'checkpoint' in kwargs:
+            self._init_from_checkpoint(kwargs['checkpoint'])
+        elif 'session' in kwargs:
+            self._init_from_session(kwargs['session'])
+
+        # TensorFlow uses channels last as data format by
+        # default. This can however be changed by the user.
+        # FIXME[todo]: make this more flexible.
+        
         kwargs['data_format'] = 'channels_last'
         super().__init__(**kwargs)
 
+    def __del__(self):
+        self._offline()
+
+    def _init_from_graph_def(self, graph_def: tf.GraphDef):
+        """Initialize this tensorflow.Network from a TensorFlow
+        Graph Definition.
+        """
+        logger.info("Initialize TensorflowNetwork from GraphDef")
+        self._offline()
+        self._graph = tf.Graph()
+        with self._graph.as_default():
+            tf.import_graph_def(graph_def, name='')
+
+
+    def _init_from_checkpoint(self, checkpoint: str):
+        """Restore the tensorflow model from checkpoint files.
+      
+        These files consists basically of two parts:
+        (a) The meta graph ({checkpoint}.meta):
+            a protocol buffer containing the complete Tensorflow
+            graph, i.e. all variables, operations, collections, etc.
+        (b) The actual checkpoint files
+        (b1) {checkpoint}.data-00000-of-00001
+             a binary file containing all weights, biases,
+             gradients, etc.
+        (b2) {checkpoint}.index
+        (b3) a textfile called 'checkpoint' keeping record of
+             the latest checkpoint files saved
+
+        Arguments
+        ---------
+        checkpoint: str
+            Name identifying a Checkpoint file.
+
+        """
+        logger.info(f"Initialize TensorflowNetwork from Checkpoint ({checkpoint})")
+        self._graph = tf.Graph()
+        self._online()
+        with self._graph.as_default():
+            saver = tf.train.import_meta_graph(checkpoint + '.meta',
+                                               clear_devices=True)
+            model_dir = os.path.dirname(checkpoint)
+            saver.restore(self._session, tf.train.latest_checkpoint(model_dir))
+
+    def _init_from_session(self, session: tf.Session):
+        """Initialize this :py:class:`Network` from a TensorFlow session.
+        This will use the given session to run the model, that is the
+        Network will immediatly be online (no neeed to call
+        :py:meth:`Network._online` explicitly.
+        """
+        logger.info("Initialize TensorflowNetwork from Session")
+        self._offline()
+        self._session = session
+        self._graph = session.graph
+
+    def _online(self) -> None:
+        if self._session is None:
+            logger.info("online -> starting tf.Session")
+            tf_config = tf.ConfigProto()
+            # tf_config = tf.ConfigProto(log_device_placement=True)
+            self._session = tf.Session(graph = self._graph, config=tf_config)
+
+
+    def _offline(self) -> None:
+        """Put this model in offline mode. In offline mode, no
+        inference will be possible.
+
+        In TensorFlow offline mode means that no tf.Session is
+        available. The tf.Graph may however still be present.
+        """
+        if self._session is not None:
+            self._session.close()
+            self._session = None
 
     def _create_layer_dict(self) -> FrozenOrderedDict:
         """Try to find the sequences in operations of the graph that
@@ -166,29 +258,31 @@ class Network(BaseNetwork):
         A mapping of layer_ids to layer objects.
         """
         layer_dict = OrderedDict()
-        layer_counts = {layer_type: 0 for layer_type in self._LAYER_DEFS.keys()}
-        
-        debug = False
-        # Output information about the underlying graph:
-        if debug:
-            print(f"debug: Network: {self.get_id()} ({type(self)}):") 
-            for i, tensor in enumerate(self._sess.graph.as_graph_def().node):
-                print(f"debug:   {i}) {tensor.name}: {type(tensor)}")
-                #print(tf.get_default_graph().get_tensor_by_name(tensor.name+":0")[0])
-            print(f"debug: Layer dict:") 
+        layer_counts = {
+            layer_type: 0 for layer_type in self._LAYER_DEFS.keys()
+        }
 
-        ops = self._sess.graph.get_operations()
+        graph_def = self._graph.as_graph_def()
+        
+        # Output information about the underlying graph:
+        logger.debug(f"Network: {self.get_id()} ({type(self)}):") 
+        for i, tensor in enumerate(graph_def.node):
+            logger.debug(f"  {i}) {tensor.name}: {type(tensor)}")
+            #logger.debug(tf.get_default_graph().get_tensor_by_name(tensor.name+":0")[0])
+        logger.debug(f"debug: Layer dict:") 
+
+
+        ops = self._graph.get_operations()
         op_idx = 0
         self._input_placeholder = None
 
 
-        while op_idx < len(self._sess.graph.get_operations()):
-            if debug:
-                print(f"debug:  op-{op_idx}: "
-                      # "{type(ops[op_idx])}, "
-                      # always <class 'tensorflow.python.framework.ops.Operation'>
-                      f"{ops[op_idx].type} with name '{ops[op_idx].name}', "
-                      f"{ops[op_idx].values()}")
+        while op_idx < len(ops):
+            logger.debug(f"debug:  op-{op_idx}: "
+                         # "{type(ops[op_idx])}, "
+                         # always <class 'tensorflow.python.framework.ops.Operation'>
+                         f"{ops[op_idx].type} with name '{ops[op_idx].name}', "
+                         f"{ops[op_idx].values()}")
                 
             if self._input_placeholder is None:
                 if ops[op_idx].type == 'Placeholder':
@@ -203,9 +297,8 @@ class Network(BaseNetwork):
                     layer_counts[layer_type] += 1
                     layer_name = '{}_{}'.format(self._to_keras_name(layer_type), layer_counts[layer_type])
                     layer_dict[layer_name] = self._LAYER_TYPES_TO_CLASSES[layer_type](self, matching_ops)
-                    if debug:
-                        print(f"debug:   ** {layer_name}"
-                              f" => {type(layer_dict[layer_name])}")
+                    logger.debug(f"debug:   ** {layer_name}"
+                                 f" => {type(layer_dict[layer_name])}")
                     # If the layer definition was successfully
                     # matched, advance the number of ops that were
                     # matched. Don't try to match another layer
@@ -225,8 +318,8 @@ class Network(BaseNetwork):
         return layer_dict
 
     def _match_layer_def(self, op_idx: int, layer_def: dict) -> list:
-        """Check whether the layer definition match the operations starting from a
-        certain index.
+        """Check whether the layer definition match the operations
+        starting from a certain index.
 
         Parameters
         ----------
@@ -237,7 +330,7 @@ class Network(BaseNetwork):
         -------
 
         """
-        ops = self._sess.graph.get_operations()
+        ops = self._graph.get_operations()
         matched_ops = []
         for i, op_group in enumerate(layer_def):
             if ops[op_idx + i].type in op_group:
@@ -282,7 +375,7 @@ class Network(BaseNetwork):
 
         return self._feed_input(net_input_tensors, input_samples)
 
-    def _get_network_input_tensor(self):
+    def get_input_tensor(self, include_batch=False):
         """Determine the input node of the network.
         This should be a Placeholder, that can be used to feed the network.
 
@@ -290,33 +383,36 @@ class Network(BaseNetwork):
         -------
         The tf.Placeholder object representing the network input.
         """
-        return self._input_placeholder.outputs[0]
+        tensor = self._input_placeholder.outputs
+        if not include_batch:
+            tensor = tensor[0]
+        return tensor
 
+    def get_output_tensor(self, pre_activation=False, include_batch=False):
+        """Determine the output node of the network.
+
+        Returns
+        -------
+        The tf.Placeholder object representing the network input.
+        """
+        output_layer = self.layer_dict[self.output_layer_id()]
+        tensor = (output_layer.net_input_tensor if pre_activation else
+                  output_layer.activation_tensor)
+        if not include_batch:
+            tensor = tensor[0]
+        return tensor
 
     def _feed_input(self, fetches: list, input_samples: np.ndarray):
-        input = self._get_network_input_tensor()
-        return self._sess.run(fetches=fetches, feed_dict={input: input_samples})
+        if self._session is None:
+            raise TensorflowException(f"{self.id()} was not prepared.")
+        input = self.get_input_tensor()
+        return self._session.run(fetches=fetches,
+                                 feed_dict={input: input_samples})
 
     def get_input_shape(self, include_batch = True) -> tuple:
         """Get the shape of the input data for the network.
         """
-        shape = tuple(self._get_network_input_tensor().shape.as_list())
+        shape = tuple(self.get_input_tensor().shape.as_list())
         return shape if include_batch else shape[1:]
 
 
-
-def load_alexnet():
-    if 'ALEXNET_MODEL' in os.environ:
-        model_path = os.getenv('ALEXNET_MODEL', '.')
-    else:
-        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                  'models', 'example_tf_alexnet')
-    checkpoint = os.path.join(model_path, 'bvlc_alexnet.ckpt')
-    if not os.path.isfile(checkpoint + '.meta'):
-        raise ValueError('AlexNet checkpoint files do not exist. You can generate them by downloading "bvlc_alexnet.npy" and then running models/example_tf_alexnet/alexnet.py.')
-
-    network = Network(checkpoint=checkpoint)
-    
-    from datasources.imagenet_classes import class_names
-    network.set_output_labels(class_names)
-    return network

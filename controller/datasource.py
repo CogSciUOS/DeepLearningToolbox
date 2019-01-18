@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 from random import randint
 import numpy as np
 
@@ -113,7 +116,7 @@ class DataSourceController(BaseController, Observable):
             The index to become the current index in this
             :py:class:`DataSourceController`.
         """
-        print(f"DataSourceController.set_index(index)")
+        logger.info(f"DataSourceController.set_index(index)")
         if index is None:
             pass
         elif self._datasource is None or len(self._datasource) < 1:

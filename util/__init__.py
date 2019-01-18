@@ -88,18 +88,19 @@ import time, threading
 from . import resources
           
 _timer = None
-_timer_callback = None
+_timer_callbacks = []
+
 def _timer_loop():
     resources.update()
-    if _timer_callback is not None:
-        _timer_callback()
+    for callback in _timer_callbacks:
+        callback()
     if _timer is not None:
         start_timer()
 
 def start_timer(timer_callback = None):
-    global _timer, _timer_callback
+    global _timer
     if timer_callback is not None:
-        _timer_callback = timer_callback
+        add_timer_callback(timer_callback)
     _timer = threading.Timer(1, _timer_loop)
     _timer.start()
     
@@ -109,3 +110,7 @@ def stop_timer():
         _timer.cancel()
     _timer = None
     print("Timer stopped.")
+
+def add_timer_callback(callback):
+    global _timer_callbacks
+    _timer_callbacks.append(callback)

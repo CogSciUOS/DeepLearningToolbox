@@ -13,7 +13,7 @@ or if for some reason
 
 FIXME[old]: The functions 'createNetwork()' (together with the
 auxiliary `conv()' function) seem to be obsolete. The code to create
-the network has been moved to network.tensorflow (function
+the network has been moved to network.loader (function
 'load_alexnet()').
 
 FIXME[old]: Also the code in main() seems to be redundand with code in
@@ -163,7 +163,7 @@ def createNetwork(with_tensorboard:bool=False):
 
 
 from network.tensorflow import Network as TensorFlowNetwork
-from network.tensorflow import load_alexnet
+from network.loader import load_alexnet
 
 from tools.caffe_classes import class_names
 

@@ -18,6 +18,6 @@ class Panel(QWidget):
         super().__init__(parent)
 
     def setController(self, controller: BaseController,
-                      observerType:type = Observer):
+                      observerType: type=Observer):
         for child in self.findChildren(observerType):
             child.setController(controller)

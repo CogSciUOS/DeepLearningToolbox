@@ -51,7 +51,6 @@ class MaximizationController(BaseController):
         """Run the activation maximization process.
 
         """
-        self._engine.prepare()
         self._runner.runTask(self._engine.maximize_activation)
 
 
@@ -61,3 +60,9 @@ class MaximizationController(BaseController):
         """
         self._engine.stop()
 
+    def onConfigViewSelected(self, configView):
+        """Set the engine configuration from a configuration view.
+
+        """
+        if configView.config is not None:
+            self._engine.config.assign(configView.config)
