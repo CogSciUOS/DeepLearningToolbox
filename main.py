@@ -21,6 +21,7 @@ logger.setLevel(logging.DEBUG)
 logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
 
 import util
+from util import addons
 
 from PyQt5.QtWidgets import QApplication
 
@@ -116,7 +117,6 @@ def initializeToolbox(args, gui):
         from model import Model
         from tools.am import Engine as AMEngine
         from tools.am import Config as AMConfig
-        from tools.lucid import Engine as LucidEngine
 
         model = Model()
         gui.setModel(model)
@@ -124,11 +124,14 @@ def initializeToolbox(args, gui):
         am_engine = AMEngine(model, AMConfig())
         gui.setMaximizationEngine(am_engine)
 
-        lucid_engine = LucidEngine()
-        # FIXME[hack]
-        lucid_engine.load_model('InceptionV1')
-        lucid_engine.set_layer('mixed4a', 476)
-        gui.setLucidEngine(lucid_engine)
+        if addons.use('lucid'):
+            from tools.lucid import Engine as LucidEngine
+
+            lucid_engine = LucidEngine()
+            # FIXME[hack]
+            lucid_engine.load_model('InceptionV1')
+            lucid_engine.set_layer('mixed4a', 476)
+            gui.setLucidEngine(lucid_engine)
 
         from datasources import Predefined
         if args.data:
@@ -222,7 +225,7 @@ def main():
                         default=False)
     args = parser.parse_args()
 
-
+    util.use_cpu = args.cpu
 
     #
     # create the actual application

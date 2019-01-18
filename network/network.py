@@ -434,6 +434,12 @@ class Network(Identifiable):
         for last_layer_id in iter(self.layer_dict.keys()): pass
         return last_layer_id
 
+    def get_input_layer(self):
+        return self.layer_dict[self.input_layer_id()]
+
+    def get_output_layer(self):
+        return self.layer_dict[self.output_layer_id()]
+    
     def get_input_shape(self, include_batch = True) -> tuple:
         """Get the shape of the input data for the network.
         """

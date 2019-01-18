@@ -8,7 +8,7 @@ Github: https://github.com/krumnack
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QWidget, QLabel, QListWidget, QRadioButton,
                              QVBoxLayout, QHBoxLayout, QGroupBox,
-                             QSplitter)
+                             QSplitter, QComboBox)
 
 from qtgui.utils import QLogHandler
 from qtgui.widgets.maximization import (QMaximizationConfig,
@@ -16,7 +16,7 @@ from qtgui.widgets.maximization import (QMaximizationConfig,
                                         QMaximizationDisplay)
 from .panel import Panel
 
-
+import logging
 
 class LoggingPanel(Panel):
     """A panel containing elements to log messages.
@@ -76,10 +76,17 @@ class LoggingPanel(Panel):
         
 
         row = QHBoxLayout()
+        box = QVBoxLayout()
         text = QHBoxLayout()
         text.addWidget(QLabel("Messages: "))
         text.addWidget(self._total)
-        row.addLayout(text)
+        box.addLayout(text)
+        
+        logger_list = QComboBox()
+        logger_list.addItems(logging.Logger.manager.loggerDict.keys())
+        box.addWidget(logger_list)
+
+        row.addLayout(box)
         
         radio = QGroupBox("Level")
         radio_layout = QVBoxLayout()
@@ -94,7 +101,7 @@ class LoggingPanel(Panel):
         row.addWidget(self._modules)
 
         layout.addLayout(row)
-
+        
         self.setLayout(layout)
 
     def addLogger(self, logger):

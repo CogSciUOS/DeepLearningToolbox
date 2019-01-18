@@ -1,66 +1,36 @@
-import numpy as np
-
-from observer import Observer, Observable, BaseChange, change
-
-from network import Network
-
-class ConfigChange(BaseChange):
-    ATTRIBUTES = ['network_changed', 'layer_changed', 'unit_changed',
-                  'config_changed']
+"""Configuration data for the "activation maximization" (am) module.
+"""
+from base import Config as BaseConfig
+from observer import Observer, BaseChange, change
 
 
-class ConfigObserver(Observer):
-
-    def configChanged(self, config: 'Config', info: ConfigChange) -> None:
-        """Respond to change in the config.
-
-        Parameters
-        ----------
-        config : Config
-            Config which changed (since we could observer multiple ones)
-        info : ConfigChange
-            Object for communicating which parts of the model changed.
-        """
-        print("HELLO base: configChanged!")
-        #pass
-
-
-class Config(Observable):
+class Config(BaseConfig):
     """Configuration data for the "activation maximization" (am) module.
-
-    Attributes
-    ----------
-    _network: Network
-        FIXME[concept]: we want to remember which network was used
-        for maximization, but we probably do not want access any
-        properties of this network here - so probably an id/key
-        would be sufficient here.
-
-    _layer: Layer
-        FIXME[concept]: some as above. Actually accessing a layer
-        should be done by the engine!
-        
-    # FIXME[old]:
-    RANDOM_UNIT = True
-        whether a unit from the chosen layer to perform activation
-    SAVE_PATH = "" # defaults to cwd
     """
+
+    class Change(BaseChange):
+        ATTRIBUTES = ['network_changed', 'layer_changed', 'unit_changed',
+                      'config_changed']
+
     _config = {
         'UNIT_INDEX': {
             'default': 0,
-            'doc': 'The unit to maximize.'
+            'doc': 'The unit to maximize.',
+            'change': 'unit_changed'
         },
         'NETWORK_KEY': {
             'default': '',
             'doc': 'The name of the network in which the unit to maximize '
                    'is found. Needs to be a key that allows to get '
-                   'the network.'
+                   'the network.',
+            'change': 'network_changed'
         },
         'LAYER_KEY': {
             'default': '',
             'doc': 'The name of the layer in which the unit to maximize '
                    'is found. Needs to be a key that allows to get '
-                   'the layer from a network object.'
+                   'the layer from a network object.',
+            'change': 'layer_changed'
         },
         'RANDOMIZE_INPUT': {
             'default': True,
@@ -96,7 +66,7 @@ class Config(Observable):
             'default': 0.000001,
             'doc': 'L2 decay parameter, totally arbitrarily chosen'
         },
-            
+
         'NORM_CLIPPING_ACTIVATED': {
             'default': False,
             'doc': 'apply low norm pixel pixel clipping'
@@ -192,7 +162,7 @@ class Config(Observable):
             'default': False,
             'doc': 'switch on and off the logging of the image and loss'
         },
-        
+
         'NORMALIZE_OUTPUT': {
             'default': True,
             'doc': 'whether to save output image normalized'
@@ -200,89 +170,34 @@ class Config(Observable):
     }
 
     def __init__(self):
-        super().__init__(ConfigChange, 'configChanged')
-        self._values = {}
-        self._network = None
-        self._layer = None
+        super().__init__(Config.Change, 'configChanged', 'config_changed')
 
-
-    def __getattr__(self, name):
-        if name in self._config:
-            return self._values.get(name, self._config[name]['default'])
-        else:
-            raise AttributeError(name)
-
+    # FIXME[hack]: set preferred parameters for specific networks
     @change
     def _helper_setattr(self, name, value):
-        entry = self._config[name]
-        if value != getattr(self, name):
-            if value == entry['default']:
-                del self._values[name]
-            else:
-                self._values[name] = value
-            if name == 'NETWORK_KEY':
-                self.change(network_changed=True)
-                # FIXME[hack]
-                if value == 'AlexNet':
-                    #self.LAYER_KEY = 'fc8' # default for AlexNet
-                    # -> does not exist ... use 'dense_3'
-                    self.UNIT_INDEX = 947
-            elif name == 'LAYER_KEY':
-                self.change(layer_changed=True)
-
-                if self.NETWORK_KEY == 'AlexNet':
-                    # FIXME[hack]:
-                    # "dense_3" -> "strided_slice_3:0"
-                    # while 'xw_plus_b:0' -> "strided_slice_4:0"
-                    # 
-                    # The function graph.get_tensor_by_name() takes a
-                    # tensor name that is derived from an
-                    # operatorname. There is an operator called
-                    # "xw_plus_b". The tensor name is than "xw_plus_b:0"
-                    # (where 0 refers to endpoint which is somewhat
-                    # redundant)
-                    #import tensorflow as tf
-                    #t = tf.get_default_graph().get_tensor_by_name('xw_plus_b:0')
-                    #print(f"*** A: {type(t)}, {t} ***")
-                    #self._layer = t[0]
-                    #print(f"*** B: {type(self._layer)}, {self._layer} ***")
-                    pass
-
-            elif name == 'UNIT_INDEX':
-                self.change(unit_changed=True)
-            else:
-                self.change(config_changed=True)
-
-    def __setattr__(self, name, value):
-        if name in self._config:
-            self._helper_setattr(name, value)
-        else:
-            super().__setattr__(name, value)
-
-    @property
-    def network(self) -> Network:
-        return self._network
-
-    def random_unit(self):
-        if self._layer is None:
-            self.UNIT_INDEX = None
-        else:
-            self.UNIT_INDEX = np.random.randint(0, self._layer.shape[0])
-
-    @change
-    def _set_randomize_input(self, randomize_input: bool) -> None:
-        if self._RANDOMIZE_INPUT != randomize_input:
-            self._RANDOMIZE_INPUT = randomize_input
-            self.change(config_changed=True)
+        super()._helper_setattr(name, value)
+        if name == 'NETWORK_KEY':
+            if self.NETWORK_KEY == 'AlexNet':
+                # self.LAYER_KEY = 'fc8' # default for AlexNet
+                # -> does not exist ... use 'dense_3'
+                # "dense_3" -> "strided_slice_3:0"
+                # while 'xw_plus_b:0' -> "strided_slice_4:0"
+                self.LAYER_KEY = "dense_3"
+                self.UNIT_INDEX = 947
 
 
-    @change
-    def assign(self, other):
-        for name in self._config:
-            self._helper_setattr(name, getattr(other, name))
+class ConfigObserver(Observer):
 
-    def __copy__(self):
-        other = Config()
-        other.assign(self)
-        return other
+    def configChanged(self, config: Config, info: Config.Change) -> None:
+        """Respond to change in the config.
 
+        Parameters
+        ----------
+        config: Config
+            Config which changed (since we could observer multiple ones)
+        info: Config.Change
+            Object for communicating which parts of the model changed.
+        """
+        print("FIXME[debug]: Bad tools.am.ConfigObserver: "
+              f"configChanged({info}) is not implement")
+        # pass

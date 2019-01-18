@@ -10,20 +10,17 @@ from model import Model, ModelObserver
 from qtgui.utils import QtAsyncRunner
 from qtgui.panels import (ActivationsPanel, OcclusionPanel,
                           MaximizationPanel, InternalsPanel,
-                          LucidPanel, LoggingPanel)
+                          LoggingPanel)
 
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
 from controller import MaximizationController
-from controller import LucidController
 from tools.am import Engine as MaximizationEngine
 from tools.am import EngineObserver as MaximizationEngineObserver
 
-from tools.lucid import Engine as LucidEngine
-
 
 from datasources import DataSource
-from util import ArgumentError, resources
+from util import ArgumentError, resources, addons
 import time
 
 class DeepVisMainWindow(QMainWindow):
@@ -105,8 +102,9 @@ class DeepVisMainWindow(QMainWindow):
                                              MaximizationEngineObserver)
 
 
-    def setLucidEngine(self, engine:LucidEngine=None) -> None:
+    def setLucidEngine(self, engine:'LucidEngine'=None) -> None:
         self._lucid_engine = engine
+        from controller import LucidController
         self._lucid_controller = LucidController(self._lucid_engine,
                                                  runner=self._runner)
         if self._lucid is not None:
@@ -131,7 +129,8 @@ class DeepVisMainWindow(QMainWindow):
         self.initMaximizationPanel()
         self.initInternalsPanel()
         self.initLoggingPanel()
-        self.initLucidPanel()
+        if addons.use('lucid'):
+            self._lucid = self.initLucidPanel()
 
         self._createTabWidget()
 
@@ -231,7 +230,8 @@ class DeepVisMainWindow(QMainWindow):
     def initLucidPanel(self):
         """Initialise the 'lucid' panel.
         """
-        self._lucid = LucidPanel()
+        from .panels.lucid import LucidPanel
+        return LucidPanel()
 
     def initLoggingPanel(self):
         """Initialise the log panel.

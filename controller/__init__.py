@@ -7,10 +7,15 @@ This module includes all classes which relate to the controller
 portion of the MVC pattern.
 
 '''
+from util import addons
 
 from .base import BaseController
 from .asyncrunner import AsyncRunner
 from .datasource import DataSourceController, DataSourceObserver
 from .activations import ActivationsController
 from .maximization import MaximizationController
-from .lucid import LucidController
+
+if addons.use('lucid'):
+    from .lucid import LucidController
+
+del addons

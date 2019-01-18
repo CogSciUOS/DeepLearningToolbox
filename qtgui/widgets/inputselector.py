@@ -480,7 +480,7 @@ class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
                            '<b>Network input:</b><br>\n')
         if data is not None:
             self._data_text += (f'Input shape: {data.shape}, '
-                                'dtype={data.dtype}<br>\n')
+                                f'dtype={data.dtype}<br>\n')
             self._data_text += ('min = {}, max={}, mean={:5.2f}, '
                                 'std={:5.2f}\n'.
                                 format(data.min(), data.max(),

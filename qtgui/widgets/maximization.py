@@ -45,7 +45,7 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox, QLineEdit,
 import cv2
 
 from .matplotlib import QMatplotlib
-from tools.am import Config, ConfigObserver, ConfigChange, EngineObserver
+from tools.am import Config, ConfigObserver, EngineObserver
 
 
 class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver):
@@ -172,16 +172,18 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
                                           "for visualization")
         def slot():
             if self._config is not None:
-                 self._config.random_unit()
+                maxUnit = self._maxUnit()
+                if maxUnit is not None:
+                    self._config.UNIT_INDEX = np.random.randint(0, maxUnit)
         self._buttonRandomUnit.clicked.connect(slot)
 
         # _unitIndex: A text field to manually enter the index of
         # desired input (UNIT_INDEX).
         self._unitIndex = QLineEdit()
-        self._unitIndex.setMaxLength(8)
+        self._unitIndex.setMaxLength(5)
         self._unitIndex.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self._unitIndex.setMinimumWidth(
-            QFontMetrics(self.font()).width('8') * 4)
+            QFontMetrics(self.font()).width('5') * 4)
         self._connect_to_config(self._unitIndex, 'UNIT_INDEX')
 
         self._unitMax = QLabel()
@@ -511,14 +513,14 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
         #
 
         box2 = QVBoxLayout()
-        box2.addWidget(self._checkBlur)
         box2.addWidget(self._checkL2Activated)
+        box2.addWidget(self._checkBorderReg)
         box2.addStretch()
 
         box3 = QVBoxLayout()
+        box3.addWidget(self._checkBlur)
         box3.addWidget(self._checkNormClipping)
         box3.addWidget(self._checkContributionClipping)
-        box3.addWidget(self._checkBorderReg)
         box3.addStretch()
         
         box4 = QVBoxLayout()
@@ -578,10 +580,8 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
         self._config = config
 
         if self._config is not None:
-            self._config.addObserver(self)
-        
-        self._updateFromConfig(config)
-
+            self._config.addObserver(self, notify=True)
+            
     def setFromConfigView(self, configView: 'QMaximizationConfigView'):
         self.setConfig(configView.config)
 
@@ -631,17 +631,7 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
                     setattr(self._config, attr, bool(state))
             widget.stateChanged.connect(slot)
 
-    def _setConfig(self, config: Config) -> None:
         
-        if self._config is not None:
-            self._config.remove_observer(self)
-        self._config = config
-
-        if self._config is not None:
-            self._config.addObserver(self)
-        
-        self._updateFromConfig(config)
-
     def _maxUnit(self, layer_id=None) -> int:
         if layer_id is None:
             layer_id = self._config.LAYER_KEY
@@ -653,41 +643,6 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
             return None
         value = network.get_layer_output_units(layer_id)
         return value
-
-    def _updateFromConfig(self, config: Config) -> None:
-        """Update the values displayed in this QMaximizationConfig from
-        the given Config object.
-
-        Parameters
-        ----------
-        config: Config
-        """
-        #
-        # update the _layerSelector
-        #
-        index = self._layerSelector.findText(config.LAYER_KEY)
-        if True or index != self._layerSelector.currentIndex:
-            if index != -1:
-                self._layerSelector.setCurrentText(config.LAYER_KEY)
-                maxUnit = self._maxUnit(config.LAYER_KEY)
-                if maxUnit is None:
-                    self._unitMax.setText("*")
-                else:
-                    self._unitMax.setText(str(maxUnit))
-            else:
-                self._unitMax.setText("*")
-
-        for name in self._widgets.keys():
-            widget = self._widgets[name]
-            if isinstance(widget, tuple):
-                for i,w in enumerate(widget):
-                    w.setText(str(getattr(config, name)[i]))
-            elif isinstance(widget, QLineEdit):
-                widget.setText(str(getattr(config, name)))
-            elif isinstance(widget, QGroupBox):
-                widget.setChecked(getattr(config, name))
-            elif isinstance(widget, QCheckBox):
-                widget.setChecked(getattr(config, name))
 
     def setController(self, controller: BaseController):
         logger.info(f"!!! QMaximizationConfig: set Controller of type {type(controller)}")
@@ -713,15 +668,48 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver
             network = model.network
             self._layerSelector.clear()
             if network is not None:
-                self._config.NETWORK_KEY = network.get_id()
                 self._layerSelector.addItems(network.layer_dict.keys())
-                
-                self._layerSelector.setCurrentIndex(self._layerSelector.count()-1)
+                self._config.NETWORK_KEY = network.get_id()
+                # Default strategy: select the last layer:
+                self._config.LAYER_KEY = network.output_layer_id()
 
-    def configChanged(self, config: Config, info: ConfigChange) -> None:
+    def configChanged(self, config: Config, info: Config.Change) -> None:
         """Handle a change in configuration.
         """
-        self._updateFromConfig(config)
+        """Update the values displayed in this QMaximizationConfig from
+        the given Config object.
+
+        Parameters
+        ----------
+        config: Config
+        """
+        #
+        # update the _layerSelector
+        #
+
+        for name in self._widgets.keys():
+            widget = self._widgets[name]
+            if isinstance(widget, tuple):
+                for i,w in enumerate(widget):
+                    w.setText(str(getattr(config, name)[i]))
+            elif isinstance(widget, QLineEdit):
+                widget.setText(str(getattr(config, name)))
+            elif isinstance(widget, QGroupBox):
+                widget.setChecked(getattr(config, name))
+            elif isinstance(widget, QCheckBox):
+                widget.setChecked(getattr(config, name))
+
+        if info.layer_changed:
+            if self._layerSelector.findText(config.LAYER_KEY) != -1:
+                self._layerSelector.setCurrentText(config.LAYER_KEY)
+                maxUnit = self._maxUnit(config.LAYER_KEY)
+                if maxUnit is None:
+                    self._unitMax.setText("*")
+                else:
+                    self._unitMax.setText(str(maxUnit))
+            else:
+                self._unitMax.setText("*")
+
 
 
 from PyQt5.QtCore import pyqtSignal
@@ -843,13 +831,17 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         
         self._button_run = QPushButton("run")
         self._button_run.clicked.connect(self.onMaximize)
+
         self._button_stop = QPushButton("stop")
         self._button_stop.clicked.connect(self.onStop)
-
         self._button_stop.setEnabled(False)
+
         self._button_show = QPushButton("show")
         self._button_show.clicked.connect(self.onShow)
 
+        self._button_reset = QPushButton("reset")
+        self._button_reset.clicked.connect(self.onReset)
+        
         self._checkbox_record = QCheckBox("Record images")
         self._info_record = QLabel()
         self._button_record_save = QPushButton("Save")
@@ -887,6 +879,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         buttons.addWidget(self._button_run)
         buttons.addWidget(self._button_stop)
         buttons.addWidget(self._button_show)
+        buttons.addWidget(self._button_reset)
         info.addLayout(buttons)
         info_state = QHBoxLayout()
         info_state.addWidget(QLabel("Engine:"))
@@ -989,20 +982,20 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
             logger.info("!!! QMaximizationControls: config changed")
 
         if info.engine_changed:
+            logger.info("!!! QMaximizationControls: engine changed")
             self._info.setText(engine.status)
             self._info.setText(engine.status)
             self._button_run.setEnabled(not engine.running)
             self._button_stop.setEnabled(engine.running)
             self._button_show.setEnabled(not engine.running)
+            self._button_reset.setEnabled(not engine.running)
             self._button_record_save.setEnabled(self._stack is not None)
-            logger.info("!!! QMaximizationControls: engine changed")
 
-            if not engine.running and engine._iteration > 0:
+            if not engine.running and engine._iteration > 0:  # FIXME[hack]: private variable
                 image_normalized = self._normalizeImage(engine.image)
                 self._imageView.setImage(image_normalized)
                 if self.display is not None:
-                    self.display.showImage(image_normalized, engine) # FIXME[hack]: private variable
-
+                    self.display.showImage(image_normalized, engine)
 
         if info.image_changed:
             logger.info("!!! QMaximizationControls: image changed")
@@ -1042,29 +1035,6 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
     def onMaximize(self):
         """
         """
-        if self._checkbox_record.checkState():
-            if self._stack_grow:
-                self._stack = np.ndarray((0,) + tuple(self._image_shape))
-            else:
-                self._stack = np.ndarray((self._config.MAX_STEPS+1,) +
-                                         tuple(self._image_shape))
-        else:
-            self._stack = None
-        self._stack_size = 0
-        self._button_record_save.setEnabled(False)
-
-        self._button_run.setEnabled(False)
-        self._button_stop.setEnabled(True)
-        self._button_show.setEnabled(False)
-
-        self._info_iteration.setText("")
-        self._info_loss.setText("")
-        self._info_minmax.setText("")
-        self._info_mean.setText("")
-        self._info_record.setText("")
-        self._losses = []
-        self._slider.setEnabled(self._losses is not None)
-
         logger.info("QMaximizationControls.onMaximize() -- begin")
         self._maximization_controller.onMaximize()
         logger.info("QMaximizationControls.onMaximize() -- end")
@@ -1078,6 +1048,42 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._controller.onNewInput(self._imageView.getImage(),
                                     self._config.UNIT_INDEX,
                                     self._engine.description)
+
+    def onReset(self):
+        """Respond to the 'reset' button. This will reset the engine
+        and start a new maximization run.
+        """
+
+        # FIXME[concept]: this should be done by the Engine.
+        if self._checkbox_record.checkState():
+            if self._stack_grow:
+                self._stack = np.ndarray((0,) + tuple(self._image_shape))
+            else:
+                self._stack = np.ndarray((self._config.MAX_STEPS+1,) +
+                                         tuple(self._image_shape))
+        else:
+            self._stack = None
+        self._stack_size = 0
+        
+        # FIXME[concept]: this should be done in response to engine events
+        self._button_record_save.setEnabled(False)
+
+        # FIXME[concept]: this should be done in response to engine events
+        #self._button_run.setEnabled(False)
+        #self._button_stop.setEnabled(True)
+        #self._button_show.setEnabled(False)
+
+        # FIXME[concept]: this should be done in response to engine events
+        self._info_iteration.setText("")
+        self._info_loss.setText("")
+        self._info_minmax.setText("")
+        self._info_mean.setText("")
+        self._info_record.setText("")
+        self._losses = []
+        self._slider.setEnabled(self._losses is not None)
+        logger.info("QMaximizationControls.onMaximize(True) -- begin")
+        self._maximization_controller.onMaximize(True)
+        logger.info("QMaximizationControls.onMaximize() -- end")
 
     def onSaveMovie(self):
         # http://www.fourcc.org/codecs.php

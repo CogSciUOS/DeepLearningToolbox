@@ -97,6 +97,14 @@ class Engine(Observable):
         self._status = "stopped"
 
         self._iteration = -1
+        # The current image (can be batch of images), used for the
+        # maximization process
+        self._image = None
+        # A snapshot (copy) of the current image (a singe image), can
+        # be used for display, etc.
+        self._snapshot = None
+
+        # FIXME[todo]: we need some recorder concept here ...
         self._loss = np.zeros(0)
         self._min = np.zeros(0)
         self._max = np.zeros(0)
@@ -104,9 +112,13 @@ class Engine(Observable):
         self._std = np.zeros(0)
         self._images = None
 
-        self.image = None
-        self.activation = None
-        self.finish = None
+    @property
+    def image(self):
+        return self._snapshot
+
+    @property
+    def iteration(self):
+        return self._iteration
 
     # FIXME[concept]: as Config is observable, the question arises
     # what to do if the config of an engine is changed. I see three
@@ -376,9 +388,11 @@ class Engine(Observable):
         if status != self.status:
             self._status = status
             self._running = running
+            # FIXME[hack]: we need a better notification concept!
             #self.change(engine_changed=True)
             self.notifyObservers(EngineChange(engine_changed=True))
 
+    @change
     def prepare(self):
         """Prepare a new run of the activation maximization engine.
         """
@@ -406,13 +420,22 @@ class Engine(Observable):
         if self._images is not None:
             self._images = None # FIXME!
 
+        self._sanity_check()
+        self._helper.prepare_maximization2()
+
+
+        logger.debug("STEP 2: initialize image")
+        self._image = self.initialize_image()
+        logger.debug(f"STEP 2: image: {self._image.shape}")
+
+        self._loss_list = np.ones(self._config.LOSS_COUNT) * -100000
+
         logger.info("-Engine.prepare() -- end")
 
     def stop(self):
         if self._helper is not None:
             self._set_status("stopped", False)
             logger.info("!!! Engine stopped !!!")
-
 
     def initialize_image(self) -> np.ndarray:
         """Provide an initial image for optimization.
@@ -433,7 +456,9 @@ class Engine(Observable):
         return image
 
 
+    # FIXME[question]: what is the idea of this function?
     def _sanity_check(self):
+        
         if self._helper is None:
             logger.warning("Engine: maximize activation: No Helper. STOP")
             return
@@ -453,19 +478,11 @@ class Engine(Observable):
 
 
     @change
-    def maximize_activation(self):
+    def maximize_activation(self, reset: bool=True):
         """This is the actual maximization method.
         
         """
         logger.info("Engine: maximize activation: BEGIN")
-        # step counter
-        self._iteration = -1
-        self.prepare()
-
-        self._set_status("initialization")
-
-        self._sanity_check()
-        self._helper.prepare_maximization2()
 
         # FIXME[hack]: determine these values automatically!x
         # The axis along which the batches are arranged
@@ -475,9 +492,14 @@ class Engine(Observable):
         # The index of the image in the batch
         batch_index = 0
 
-        logger.debug("STEP 2: initialize image")
-        image = self.initialize_image()
-        logger.debug(f"STEP 2: image: {image.shape}")
+        if self._image is None or reset:
+            # step counter
+            self._iteration = -1
+            self._set_status("initialization")
+            self.prepare()
+            # step counter
+            self._iteration = 0
+            self._set_status("start")
 
         #
         # main part
@@ -496,28 +518,26 @@ class Engine(Observable):
         #logger.debug("Loss:", loss)
         # list containing last Config.LOSS_COUNT losses
         avg_steptime = 0 # step time counter
-        loss_list = [-100000 for _ in range(self._config.LOSS_COUNT)]
-
-        # step counter
-        self._iteration = 0
 
         # while current loss diverges from average of last losses by a
         # factor Config.LOSS_GOAL or more, continue, alternatively
         # stop if we took too many steps
         while (self._running
-               and np.abs(1-loss/np.mean(loss_list)) > self._config.LOSS_GOAL
+               and (np.abs(1-loss/np.mean(self._loss_list))
+                    > self._config.LOSS_GOAL)
                and self._iteration < self._config.MAX_STEPS):
 
             # start measuring time for this step
             start = time.time()
 
             # perform one optimization step
-            image, loss = self._helper.perform_step(image, self._iteration)
+            self._image, loss = self._helper.perform_step(self._image,
+                                                          self._iteration)
 
             # add previous loss to list. order of the losses doesn't
             # matter so just reassign the value that was assigned 50
             # iterations ago
-            loss_list[self._iteration % 50] = loss
+            self._loss_list[self._iteration % len(self._loss_list)] = loss
 
             # get time that was needed for this step
             avg_steptime += time.time() - start
@@ -526,16 +546,16 @@ class Engine(Observable):
             # record history
             self._loss[self._iteration] = loss
 
-            self._image = image.take(batch_index, axis=batch_axis).copy()
-            self.image = self._image
+            self._snapshot = self._image.take(batch_index,
+                                              axis=batch_axis).copy()
             if self._min is not None:
-                self._min[self._iteration] = self._image.min()
+                self._min[self._iteration] = self._snapshot.min()
             if self._max is not None:
-                self._max[self._iteration] = self._image.max()
+                self._max[self._iteration] = self._snapshot.max()
             if self._mean is not None:
-                self._mean[self._iteration] = self._image.mean()
+                self._mean[self._iteration] = self._snapshot.mean()
             if self._std is not None:
-                self._std[self._iteration] = self._image.std()
+                self._std[self._iteration] = self._snapshot.std()
 
             # increase steps
             self._iteration += 1
@@ -553,19 +573,24 @@ class Engine(Observable):
 
         logger.debug(f"-TensorflowHelper.onMaximization() -- end")
         logger.debug(f"Computation time: {time.time()-t}")
-        logger.debug(f"image: {image.shape}")
+        logger.debug(f"image: {self.image.shape}")
 
         #
         # store the result
         #
         self.finish = finish
-        self.description = ("Artificial input generated to maximize "
-                            f"unit {self._config.UNIT_INDEX} in layer ")
 
         self.change(image_changed=True)
         logger.info(f"Engine.maximize_activation() -- end")
 
-    
+
+    @property
+    def description(self):
+        return ("Artificial input generated to maximize "
+                f"unit {self._config.UNIT_INDEX} "
+                f"in layer {self._config.LAYER_KEY}")
+
+        
     def old(self):
 
         #
@@ -595,7 +620,7 @@ class Engine(Observable):
             #
             impath = ""
             paramfilename = "parameters.csv"
-            self.save_am_data(self.image, self._config.UNIT_INDEX,
+            self.save_am_data(self._snapshot, self._config.UNIT_INDEX,
                               finish, top_n,
                               impath=impath,
                               paramfilename=paramfilename)

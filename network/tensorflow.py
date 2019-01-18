@@ -10,6 +10,8 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+import util
+
 import numpy as np
 import tensorflow as tf
 
@@ -217,6 +219,10 @@ class Network(BaseNetwork):
             saver = tf.train.import_meta_graph(checkpoint + '.meta',
                                                clear_devices=True)
             model_dir = os.path.dirname(checkpoint)
+            # the following can fail (for different reasons):
+            # - not enough memory on session device
+            # - checkpoint files have been corrupted
+            # FIXME[todo]: we should raise some exception here!
             saver.restore(self._session, tf.train.latest_checkpoint(model_dir))
 
     def _init_from_session(self, session: tf.Session):
@@ -233,8 +239,11 @@ class Network(BaseNetwork):
     def _online(self) -> None:
         if self._session is None:
             logger.info("online -> starting tf.Session")
-            tf_config = tf.ConfigProto()
             # tf_config = tf.ConfigProto(log_device_placement=True)
+            if util.use_cpu:
+                tf_config = tf.ConfigProto(device_count = {'GPU': 0})
+            else:
+                tf_config = tf.ConfigProto()
             self._session = tf.Session(graph = self._graph, config=tf_config)
 
 

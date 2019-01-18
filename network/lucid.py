@@ -6,14 +6,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # lucid.modelzoo.vision_models:
-#     A module providinge the pretrained networks by name, e.g.
+#     A module providing the pretrained networks by name, e.g.
 #     models.AlexNet
 import lucid.modelzoo.vision_models as models
 import lucid.modelzoo.nets_factory as nets
 from lucid.modelzoo.vision_base import Model as LucidModel
 
 from .tensorflow import Network as TensorflowNetwork
-
 
 
 class Network(TensorflowNetwork):

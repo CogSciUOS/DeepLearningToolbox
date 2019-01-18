@@ -47,11 +47,11 @@ class MaximizationController(BaseController):
         return self._engine
 
 
-    def onMaximize(self):
+    def onMaximize(self, reset=False):
         """Run the activation maximization process.
 
         """
-        self._runner.runTask(self._engine.maximize_activation)
+        self._runner.runTask(self._engine.maximize_activation, reset)
 
 
     def onStop(self):

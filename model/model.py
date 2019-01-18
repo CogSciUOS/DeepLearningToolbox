@@ -8,6 +8,10 @@ from util import ArgumentError
 from observer import Observer, Observable, BaseChange, change
 from util import async
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 class ModelChange(BaseChange):
     """.. :py:class:: ModelChange
@@ -186,7 +190,7 @@ class Model(Observable):
         description: str
             A description of the input data.
         """
-        print(f"Model.set_input_data({data.shape},{target},{description})")
+        logger.info(f"Model.set_input_data({data.shape},{target},{description})")
         #
         # do some sanity checks and corrections
         #
@@ -482,7 +486,7 @@ class Model(Observable):
         set."""
 
         self._update_layer_list()
-        print(f"Model._update_activation: LAYERS={self._layers}")
+        logger.info(f"Model._update_activation: LAYERS={self._layers}")
         if self._layers and self._input is not None:
             layers = list(self._layers)
 
@@ -503,7 +507,7 @@ class Model(Observable):
             # FIXME[debug]: if we work we multiple Threads, we have to
             # care for synchroization!
             if layers != self._layers:
-                print(f"Model.update_activation(): "
+                logger.info(f"Model.update_activation(): "
                       "LAYERS CHANGED DURING UPDATE "
                       "{layers} vs. {self._layers}")
 

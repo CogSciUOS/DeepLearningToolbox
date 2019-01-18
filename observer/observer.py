@@ -230,13 +230,22 @@ class Observable:
                 logger.debug(f"end_change({change}): not in main thread")
                 return self, change
 
-    def change(self, **kwargs):
+    def change(self, *args, **kwargs):
+        """Register a change to be sent to the observers.
+
+        The observers will not be notified immediatly, but only after
+        the current change context is ended
+        (:py:meth:_end_change). The ratio behind is that one may want
+        to perform multiple changes and only notify observers on the
+        final result.
+        """
         if not hasattr(self._thread_local, 'change'):
             raise RuntimeError("No change was startetd.")
+        self._thread_local.change |= {a for a in args}
         self._thread_local.change |= {k for k,v in kwargs.items() if v}
         
 
-    def addObserver(self, observer):
+    def addObserver(self, observer, notify: bool=False):
         """Add an object to observe this Observable.
 
         Parameters
@@ -246,6 +255,8 @@ class Observable:
             a suitable change method.
         """
         self._observers.add(observer)
+        if notify:
+            self.notify(observer)
 
     def remove_observer(self, observer: Observer):
         """Remove an observer from this Observable.
