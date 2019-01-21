@@ -181,11 +181,6 @@ class LoggingPanel(Panel):
         LogRecords emitted by that logger will be processed.
         """
         logger.addHandler(self._log_handler)
-        # FIXME[hack]: a recorder should be set by calling
-        # setLoggingRecorder() from outside ...
-        logging.getLogger().handlers = []
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!! Logger changed !!!!!!!!!!!!!!!!!!!!")
-        self.setLoggingRecorder(util.RecorderHandler())
         if self._loggingRecorder is not None:
             logger.addHandler(self._loggingRecorder)
 
@@ -203,6 +198,7 @@ class LoggingPanel(Panel):
         recorded by that recorder.
         """
         self._loggingRecorder = recorder
+        self._onUpdateLogView()
         self._updateLogViewButton.setEnabled(recorder is not None)
 
     def _new_message(self, message):

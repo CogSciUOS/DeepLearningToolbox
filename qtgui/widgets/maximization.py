@@ -38,7 +38,7 @@ from PyQt5.QtCore import Qt
 
 from PyQt5.QtGui import QFontMetrics, QIntValidator, QDoubleValidator
 from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox, QLineEdit,
-                             QComboBox, QPushButton,
+                             QComboBox, QPushButton, QTabWidget,
                              QGridLayout, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QSizePolicy)
 
@@ -910,11 +910,14 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         imageView.addWidget(self._imageView)
         imageView.addStretch()
 
+        tabs = QTabWidget()
+        tabs.addTab(self._plt, 'Plot')
+        tabs.addTab(self._logWindow, 'Log')
+        
         layout = QHBoxLayout()
         layout.addLayout(info)        
         layout.addLayout(imageView)
-        layout.addWidget(self._plt)
-        layout.addWidget(self._logWindow)
+        layout.addWidget(tabs)
         layout.addStretch()
         
         self.setLayout(layout)

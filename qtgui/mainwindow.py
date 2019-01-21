@@ -18,9 +18,11 @@ from controller import MaximizationController
 from tools.am import Engine as MaximizationEngine, EngineObserver as MaximizationEngineObserver
 
 
+import time
+import logging
+import util
 from datasources import DataSource
 from util import ArgumentError, resources, addons
-import time
 
 class DeepVisMainWindow(QMainWindow):
     """The main window of the Deep Visualization Toolbox. The window
@@ -290,3 +292,17 @@ class DeepVisMainWindow(QMainWindow):
         '''
         self._saveState()
         QCoreApplication.quit()
+
+    ##########################################################################
+    #                          Public Interface                              #
+    ##########################################################################
+
+    def activateLogging(self, logger: logging.Logger,
+                        recorder: util.RecorderHandler=None,
+                        show: bool=False) -> None:
+        if self._logging is not None:
+            if recorder is not None:
+                self._logging.setLoggingRecorder(recorder)
+            self._logging.addLogger(logger)
+            if show:
+                self._tabs.setCurrentWidget(self._logging)

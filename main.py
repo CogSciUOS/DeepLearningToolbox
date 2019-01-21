@@ -15,17 +15,22 @@ import os
 import matplotlib
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
 import util
 
+#
+# Changing global logging Handler
+#
+print("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
+logging.basicConfig(level=logging.DEBUG)
 
-# FIXME[hack]: currently done qtgui.panel.logging
-#logging.getLogger().handlers = []
-#logging_recorder = util.RecorderHandler()
-#logging.getLogger().addHandler(logging_recorder)
-logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
+root_logger = logging.getLogger()
+root_logger.handlers = []
+logRecorder = util.RecorderHandler()
+root_logger.addHandler(logRecorder)
+
+# local loggger
+logger = logging.getLogger(__name__)
+logger.debug(f"Effective debug level: {logger.getEffectiveLevel()}")
 
 from util import addons
 
@@ -240,6 +245,7 @@ def main():
 
     mainWindow = DeepVisMainWindow()
     mainWindow.show()
+    mainWindow.activateLogging(root_logger, logRecorder, True)
 
     # FIXME[hack]
     mainWindow._runner.runTask(initializeToolbox, args, mainWindow)
