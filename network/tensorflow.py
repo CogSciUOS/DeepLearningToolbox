@@ -8,7 +8,8 @@ from frozendict import FrozenOrderedDict
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+del logging
+
 
 import util
 

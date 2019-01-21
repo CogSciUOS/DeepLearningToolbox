@@ -17,10 +17,16 @@ import matplotlib
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
 
 import util
+
+
+# FIXME[hack]: currently done qtgui.panel.logging
+#logging.getLogger().handlers = []
+#logging_recorder = util.RecorderHandler()
+#logging.getLogger().addHandler(logging_recorder)
+logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
+
 from util import addons
 
 from PyQt5.QtWidgets import QApplication

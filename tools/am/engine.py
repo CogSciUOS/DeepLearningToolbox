@@ -8,7 +8,10 @@ Antonia Hain, 2018
 FIXME[todo]: wish list
  * stop/pause and continue optimization
  * remove extra nodes from graph
- *
+ * we could try to decouple the am stuff from the rest of the system
+   so that it may be used standalone, i.e. make the Engine just
+   a wrapper around some more stand alone activation maximization code.
+
 
 """
 
@@ -70,11 +73,6 @@ class Engine(Observable):
     seeds. Restarting the engine with the same Config object should
     yield identical results.
 
-    FIXME[todo]: There are some other aspects that we may work on in
-    future:
-      * we could try to decouple the am stuff from the rest of the system
-        so that it may be used standalone, i.e. make the Engine just
-        a wrapper around some more stand alone activation maximization code.
 
     Attributes
     ----------
@@ -96,7 +94,9 @@ class Engine(Observable):
         self._running = False
         self._status = "stopped"
 
-        self._iteration = -1
+        self._iteration = 0
+        self._snapshot_index = -1
+
         # The current image (can be batch of images), used for the
         # maximization process
         self._image = None
@@ -104,34 +104,10 @@ class Engine(Observable):
         # be used for display, etc.
         self._snapshot = None
 
-        # FIXME[todo]: we need some recorder concept here ...
-        self._loss = np.zeros(0)
-        self._min = np.zeros(0)
-        self._max = np.zeros(0)
-        self._mean = np.zeros(0)
-        self._std = np.zeros(0)
-        self._images = None
-
-    @property
-    def image(self):
-        return self._snapshot
-
-    @property
-    def iteration(self):
-        return self._iteration
-
-    # FIXME[concept]: as Config is observable, the question arises
-    # what to do if the config of an engine is changed. I see three
-    # possible ways:
-    #  (1) do not care about Observers [this is what currently happens]
-    #  (2) move the Observers from the old Config to the new Config.
-    #  (3) do not actually set the Config but just copy its values
-    #      (so the Observers will be informed about new values).
-    # The last (3) seems the cleanest solution.
-    @change
-    def _set_config(self, config: Config) -> None:
-        self._config = config
-        self.change(config_changed=True)
+        # Initialize the recorders
+        self._recorder = {}
+        for recorder in 'loss', 'min', 'max', 'mean', 'std':
+            self._recorder[recorder] = None
 
     @property
     def config(self):
@@ -139,65 +115,311 @@ class Engine(Observable):
 
     @config.setter
     def config(self, config: Config) -> None:
-        self._set_config(config)
+        self._config.assign(config)
 
-    def get_image_shape(self, include_batch: bool=True,
-                        include_colors: bool=True) -> tuple:
-        """The image (data) shape.  This is the shape of the actual
-        image created during the optimization process. It should be at
-        least input_shape, but may be larger if the 'larger image'
-        technique is used.
+    @property
+    def image(self):
+        """Get the current snapshot.
+        Usually a better way to get a copy of the snapshot is
+        to call :py:meth:get_snapshot.
+        """
+        return self._snapshot
 
-        Parameters
-        ----------
-        include_batch: bool
-            A flag indicating if the shape tuple should include the
-            batch axis.
-        include_colors: bool
-            A flag indicating if the shape tuple should include the
-            color axis (if available).
+    @property
+    def iteration(self):
+        return self._snapshot_index
+
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def running(self):
+        return self._running
+
+    @property
+    def description(self):
+        return ("Artificial input generated to maximize "
+                f"unit {self._config.UNIT_INDEX} "
+                f"in layer {self._config.LAYER_KEY}")
+
+    @change
+    def _set_status(self, status, running=True):
+        if status != self.status:
+            self._status = status
+            self._running = running
+            # FIXME[hack]: we need a better notification concept!
+            #self.change(engine_changed=True)
+            self.notifyObservers(EngineChange(engine_changed=True))
+
+    @change
+    def prepare(self, network: Network=None):
+        """Prepare a new run of the activation maximization engine.
+        """
+        logger.info("-Engine.prepare() -- begin")
+        self._set_status("preparation")
+
+        if network is None:
+            network = self._model.network_by_id(self._config.NETWORK_KEY)
+
+        # FIXME[hack]: determine these values automatically!
+        # The axis along which the batches are arranged
+        self._batch_axis = 0
+        # The batch dimension (how many images per batch)
+        self._batch_dimension = 1
+        # The index of the image in the batch
+        self._batch_index = 0
+
+        if self._helper is None:
+            HelperClass = _EngineHelper.class_for_network(network)
+            self._helper = HelperClass(self, self._config, network)
+
+        if self._helper is None:
+            logger.warning("Engine: maximize activation: No Helper. STOP")
+            return
+
+        self._helper.prepare_maximization1(initialize_variables=False)
+
+        #
+        # Set up the recorders
+        #
+        for recorder in 'loss', 'min', 'max', 'mean', 'std':
+            if recorder in self._recorder:
+                self._recorder[recorder] = np.zeros(self._config.MAX_STEPS)
+        if 'images' in self._recorder:
+            shape = (self._config.MAX_STEPS,) + self._helper.get_image_shape()
+            self._recorder['images'] = np.ndarray(shape)           
+
+        #
+        # sanity checks
+        #
+
+        # FIXME[design]: bad place to check this now. should be
+        # checked by the config object.
+        if self._config.LARGER_IMAGE and self._config.JITTER:
+            raise Exception("Upscaling and jitter cannot be used simultaneously.")
+
+        self._helper.prepare_maximization2()
+
+        logger.debug("STEP 2: initialize image")
+        self._image = self.initialize_image()
+        logger.debug(f"STEP 2: image: {self._image.shape}")
+
+        self._loss_list = np.ones(self._config.LOSS_COUNT) * -100000
+
+        logger.info("-Engine.prepare() -- end")
+
+    def _update_max_steps(self):
+        for recorder in self._recorder.values():
+            if recorder is not None:
+                recorder.resize((self._config.MAX_STEPS,) + recorder.shape[1:])
+
+    def stop(self):
+        if self._helper is not None:
+            self._set_status("stopped", False)
+            logger.info("!!! Engine stopped !!!")
+
+    def initialize_image(self) -> np.ndarray:
+        """Provide an initial image for optimization.
 
         Returns
         -------
-        shape: tuple
-            The shape of the image.
+        image: np.ndarray
+            The initial image (size is given by
+            :py:meth:`_EngineHelper.get_image_shape`).
         """
-        image_shape = self.get_input_shape(include_batch)
+        # FIXME[hack]: deal with large batch size and other batch axis
+        batch_shape = (1,) + self._helper.get_image_shape(include_batch=False)
+        if self._config.RANDOMIZE_INPUT:
+            #image = np.random.randint(-127, 128, batch_shape)
+            image = np.random.rand(*batch_shape) * 256 - 128
+        else:
+            image = np.full(batch_shape, 0, dtype=np.float)
+        return image
 
-        # FIXME[hack]: assuming (batch,dim_x,dim_y,colors)
-        # This may actually be different, depending on the network.
-        if self._config.LARGER_IMAGE:
-            image_shape = (image_shape[:1] +
-                           (self._config.IMAGE_SIZE_X,
-                            self._config.IMAGE_SIZE_Y) +
-                           image_shape[3:])
-
-        if not include_colors:
-            image_shape = image_shape[:-1]
-
-        return image_shape
-
-
-    def get_input_shape(self, include_batch: bool=True) -> tuple:
-        """The input shape.  That is the shape in which the network
-        expects its data, i.e., the shape of the input layer of the
-        network.
-
-        Parameters
-        ----------
-        include_batch:
-            A flag indicating if the shape tuple should include the
-            batch axis.
-
-        Returns
-        -------
-        shape: tuple
-            The shape of the input data.
+    @change
+    def maximize_activation(self, network: Network=None, reset: bool=True):
+        """This is the actual maximization method.
+        
         """
-        network = self._model.network_by_id(self._config.NETWORK_KEY)
-        return network.get_input_shape(include_batch)
+        logger.info("Engine: maximize activation: BEGIN")
 
+        if self._image is None or reset:
+            # step counter
+            self._iteration = -1
+            self._set_status("initialization")
+            self.prepare(network)
+            # step counter
+            self._iteration = 0
+            self._set_status("start")
 
+        #
+        # main part
+        #
+
+        logger.debug(f"-Starting computation:")
+        t = time.time() # to meaure computation time
+        self._set_status("running")
+
+        #
+        # get first loss
+        #
+        logger.debug("--STEP 1: get first loss (skipped)")
+        loss = 0
+        #loss = self._helper.network_loss(image)
+        #logger.debug("Loss:", loss)
+        # list containing last Config.LOSS_COUNT losses
+        avg_steptime = 0 # step time counter
+
+        # while current loss diverges from average of last losses by a
+        # factor Config.LOSS_GOAL or more, continue, alternatively
+        # stop if we took too many steps
+        while (self._running
+               and (np.abs(1-loss/np.mean(self._loss_list))
+                    > self._config.LOSS_GOAL)
+               and self._iteration < self._config.MAX_STEPS):
+
+            # start measuring time for this step
+            start = time.time()
+
+            # perform one optimization step
+            self._image, loss = self._helper.perform_step(self._image,
+                                                          self._iteration)
+
+            # add previous loss to list. order of the losses doesn't
+            # matter so just reassign the value that was assigned 50
+            # iterations ago
+            self._loss_list[self._iteration % len(self._loss_list)] = loss
+
+            # get time that was needed for this step
+            avg_steptime += time.time() - start
+          
+            self._take_snapshot(loss)
+
+            # increase steps
+            self._iteration += 1
+
+        self._set_status("stopped", False)
+
+        # check if computation converged
+        finish = (self._iteration < self._config.MAX_STEPS)
+
+        # computation time
+        comptime = time.time()-t
+        # average step time
+        avg_steptime /= self._iteration
+
+        logger.debug(f"-TensorflowHelper.onMaximization() -- end")
+        logger.debug(f"Computation time: {time.time()-t}")
+        logger.debug(f"image: {self.image.shape}")
+
+        #
+        # store the result
+        #
+        self.finish = finish
+
+        self.change(image_changed=True)
+        logger.info(f"Engine.maximize_activation() -- end")
+
+    def _take_snapshot(self, loss):
+
+        self._snapshot = self._image.take(self._batch_index,
+                                          axis=self._batch_axis).copy()
+
+        # record history
+        self._snapshot_index = self._iteration
+        self._recorder['loss'][self._snapshot_index] = loss
+        if 'min' in self._recorder:
+            self._recorder['min'][self._snapshot_index] = self._snapshot.min()
+        if 'max' in self._recorder:
+            self._recorder['max'][self._snapshot_index] = self._snapshot.max()
+        if 'mean' in self._recorder:
+            self._recorder['mean'][self._snapshot_index] = self._snapshot.mean()
+        if 'std' in self._recorder:
+            self._recorder['std'][self._snapshot_index] = self._snapshot.std()
+        if 'images' in self._recorder:
+            self._recorder['images'][self._snapshot_index] = self._snapshot
+
+        self.notifyObservers(EngineChange(image_changed=True))
+
+    def get_recorder_value(self, recorder, iteration=None, history=False):
+        if iteration is None:
+            iteration = self._snapshot_index
+        if history:
+            return self._recorder[recorder][:iteration]
+        return self._recorder[recorder][iteration]
+
+    def get_loss(self, iteration=None, history=False):
+        return self.get_recorder_value('loss', iteration, history)
+
+    def get_snapshot(self, normalize=False, iteration=None):
+        if iteration is None:
+            if self._snapshot is None:
+                return None
+            iteration = self._snapshot_index
+            image = self._snapshot.copy()
+        elif 'images' in self._recorder:
+            image = self._recorder['images'][iteration].copy()
+        else:
+            return None
+        if normalize:
+            a = (self._recorder['max'][iteration]
+                 if 'max' in self._recorder else  image.max())
+            b = (self._recorder['min'][iteration]
+                 if 'min' in self._recorder else
+                 image.min())
+            if b < a:
+                image = (image - b)/(a-b)
+            else:
+                image -= .5
+        return image
+
+    def record_video(self, enabled=True):
+        if enabled and not 'images' in self._recorder:
+            self._recorder['images'] = None
+        elif not enabled and 'images' in self._recorder:
+            del self._recorder['images']
+
+    def has_video(self):
+        return 'images' in self._recorder
+
+    def save_video(self, filename, fps=25):
+        # http://www.fourcc.org/codecs.php
+        # fourcc, suffix = 'PIM1', 'avi'
+        # fourcc, suffix = 'ffds', 'mp4'
+        fourcc, suffix = 'MJPG', 'avi' # Motion_JPEG
+        # fourcc, suffix = 'XVID', 'avi'
+
+        filename += 'activation_maximization.'
+        
+        frameSize = self._stack.shape[1:3]
+        isColor = (self._stack.ndim==4)
+        logger.info(f"save_video: preparing {filename} ({fourcc}) ... ")
+        writer = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*fourcc),
+                                 fps, frameSize, isColor=isColor)
+        logger.info(f"save_video: writer.isOpened: {writer.isOpened()}")
+        if writer.isOpened():
+            logger.info(f"save_video: writing {len(self._stack_size)} frames ... ")
+            # FIXME[todo]: we need the number of actual frames!
+            for frame in range(self._stack_size):
+                writer.write(self._normalizeImage(self._stack[frame],
+                                                  as_bgr=True))
+        logger.info(f"save_video: releasing the writer")
+        writer.release()
+        logger.info(f"save_video: done")
+
+    def _normalizeImage(self, image: np.ndarray,
+                        as_uint8:bool = True,
+                        as_bgr = False) -> np.ndarray:
+        # FIXME[design]: this put be done somewhere else ...
+        normalized = np.ndarray(image.shape, image.dtype)
+        cv2.normalize(image, normalized, 0, 255, cv2.NORM_MINMAX)
+        # self.image_normalized = (self.image-min_value)*255/(max_value-min_value)
+        if as_uint8:
+            normalized = normalized.astype(np.uint8)
+        if as_bgr:
+            normalized = normalized[...,::-1]
+        return normalized
 
 
     #
@@ -375,222 +597,6 @@ class Engine(Observable):
                                  paramfilename="parameters.csv")
 
 
-    @property
-    def status(self):
-        return self._status
-
-    @property
-    def running(self):
-        return self._running
-
-    @change
-    def _set_status(self, status, running=True):
-        if status != self.status:
-            self._status = status
-            self._running = running
-            # FIXME[hack]: we need a better notification concept!
-            #self.change(engine_changed=True)
-            self.notifyObservers(EngineChange(engine_changed=True))
-
-    @change
-    def prepare(self):
-        """Prepare a new run of the activation maximization engine.
-        """
-        logger.info("-Engine.prepare() -- begin")
-        self._set_status("preparation")
-
-        network = self._model.network_by_id(self._config.NETWORK_KEY)
-
-        if self._helper is None:
-            HelperClass = _EngineHelper.class_for_network(network)
-            self._helper = HelperClass(self, self._config, network)
-            self._helper.prepare_maximization1(initialize_variables=False)
-        else:
-            self._helper.prepare_maximization1(initialize_variables=False)
-
-        self._loss = np.zeros(self._config.MAX_STEPS)
-        if self._min is not None:
-            self._min = np.zeros(self._config.MAX_STEPS)
-        if self._max is not None:
-            self._max = np.zeros(self._config.MAX_STEPS)
-        if self._mean is not None:
-            self._mean = np.zeros(self._config.MAX_STEPS)
-        if self._std is not None:
-            self._std = np.zeros(self._config.MAX_STEPS)
-        if self._images is not None:
-            self._images = None # FIXME!
-
-        self._sanity_check()
-        self._helper.prepare_maximization2()
-
-
-        logger.debug("STEP 2: initialize image")
-        self._image = self.initialize_image()
-        logger.debug(f"STEP 2: image: {self._image.shape}")
-
-        self._loss_list = np.ones(self._config.LOSS_COUNT) * -100000
-
-        logger.info("-Engine.prepare() -- end")
-
-    def stop(self):
-        if self._helper is not None:
-            self._set_status("stopped", False)
-            logger.info("!!! Engine stopped !!!")
-
-    def initialize_image(self) -> np.ndarray:
-        """Provide an initial image for optimization.
-
-        Returns
-        -------
-        image: np.ndarray
-            The initial image (size is given by
-            :py:meth:`Engine.get_image_shape`).
-        """
-        # FIXME[hack]: deal with large batch size and other batch axis
-        batch_shape = (1,) + self.get_image_shape(include_batch=False)
-        if self._config.RANDOMIZE_INPUT:
-            #image = np.random.randint(-127, 128, batch_shape)
-            image = np.random.rand(*batch_shape) * 256 - 128
-        else:
-            image = np.full(batch_shape, 0, dtype=np.float)
-        return image
-
-
-    # FIXME[question]: what is the idea of this function?
-    def _sanity_check(self):
-        
-        if self._helper is None:
-            logger.warning("Engine: maximize activation: No Helper. STOP")
-            return
-
-        # FIXME[hack]: should not check private variable
-        #if self._config._layer is None:
-        #    return  # Nothing to do
-
-        # FIXME[hack]: should only be selected on explicit demand!
-        #if self._config.UNIT_INDEX is None:
-        #    self._config.random_unit()
-
-        # FIXME[design]: bad place to check this now. should be
-        # checked by the config object.
-        if self._config.LARGER_IMAGE and self._config.JITTER:
-            raise Exception("Upscaling and jitter cannot be used simultaneously.")
-
-
-    @change
-    def maximize_activation(self, reset: bool=True):
-        """This is the actual maximization method.
-        
-        """
-        logger.info("Engine: maximize activation: BEGIN")
-
-        # FIXME[hack]: determine these values automatically!x
-        # The axis along which the batches are arranged
-        batch_axis = 0
-        # The batch dimension
-        batch_dimension = 1
-        # The index of the image in the batch
-        batch_index = 0
-
-        if self._image is None or reset:
-            # step counter
-            self._iteration = -1
-            self._set_status("initialization")
-            self.prepare()
-            # step counter
-            self._iteration = 0
-            self._set_status("start")
-
-        #
-        # main part
-        #
-
-        logger.debug(f"-Starting computation:")
-        t = time.time() # to meaure computation time
-        self._set_status("running")
-
-        #
-        # get first loss
-        #
-        logger.debug("--STEP 1: get first loss (skipped)")
-        loss = 0
-        #loss = self._helper.network_loss(image)
-        #logger.debug("Loss:", loss)
-        # list containing last Config.LOSS_COUNT losses
-        avg_steptime = 0 # step time counter
-
-        # while current loss diverges from average of last losses by a
-        # factor Config.LOSS_GOAL or more, continue, alternatively
-        # stop if we took too many steps
-        while (self._running
-               and (np.abs(1-loss/np.mean(self._loss_list))
-                    > self._config.LOSS_GOAL)
-               and self._iteration < self._config.MAX_STEPS):
-
-            # start measuring time for this step
-            start = time.time()
-
-            # perform one optimization step
-            self._image, loss = self._helper.perform_step(self._image,
-                                                          self._iteration)
-
-            # add previous loss to list. order of the losses doesn't
-            # matter so just reassign the value that was assigned 50
-            # iterations ago
-            self._loss_list[self._iteration % len(self._loss_list)] = loss
-
-            # get time that was needed for this step
-            avg_steptime += time.time() - start
-
-
-            # record history
-            self._loss[self._iteration] = loss
-
-            self._snapshot = self._image.take(batch_index,
-                                              axis=batch_axis).copy()
-            if self._min is not None:
-                self._min[self._iteration] = self._snapshot.min()
-            if self._max is not None:
-                self._max[self._iteration] = self._snapshot.max()
-            if self._mean is not None:
-                self._mean[self._iteration] = self._snapshot.mean()
-            if self._std is not None:
-                self._std[self._iteration] = self._snapshot.std()
-
-            # increase steps
-            self._iteration += 1
-            self.notifyObservers(EngineChange(image_changed=True))
-
-        self._set_status("stopped", False)
-
-        # check if computation converged
-        finish = (self._iteration < self._config.MAX_STEPS)
-
-        # computation time
-        comptime = time.time()-t
-        # average step time
-        avg_steptime /= self._iteration
-
-        logger.debug(f"-TensorflowHelper.onMaximization() -- end")
-        logger.debug(f"Computation time: {time.time()-t}")
-        logger.debug(f"image: {self.image.shape}")
-
-        #
-        # store the result
-        #
-        self.finish = finish
-
-        self.change(image_changed=True)
-        logger.info(f"Engine.maximize_activation() -- end")
-
-
-    @property
-    def description(self):
-        return ("Artificial input generated to maximize "
-                f"unit {self._config.UNIT_INDEX} "
-                f"in layer {self._config.LAYER_KEY}")
-
-        
     def old(self):
 
         #
@@ -688,6 +694,62 @@ class _EngineHelper:
         self._engine = engine
         self._config = config
         self._network = network
+
+    def get_input_shape(self, include_batch: bool=True) -> tuple:
+        """The input shape is the shape in which the network
+        expects its data, i.e., the shape of the input layer of the
+        network.
+
+        Parameters
+        ----------
+        include_batch:
+            A flag indicating if the shape tuple should include the
+            batch axis.
+
+        Returns
+        -------
+        shape: tuple
+            The shape of the input data.
+        """
+        return self._network.get_input_shape(include_batch)
+
+    def get_image_shape(self, include_batch: bool=True,
+                        include_colors: bool=True) -> tuple:
+        """The image (data) shape is the shape of the actual
+        image created during the optimization process. It should be at
+        least input_shape, but may be larger if the 'larger image'
+        technique is used.
+
+        Parameters
+        ----------
+        include_batch: bool
+            A flag indicating if the shape tuple should include the
+            batch axis.
+        include_colors: bool
+            A flag indicating if the shape tuple should include the
+            color axis (if available).
+
+        Returns
+        -------
+        shape: tuple
+            The shape of the image.
+        """
+        image_shape = self.get_input_shape(include_batch)
+
+        # FIXME[hack]: assuming (batch,dim_x,dim_y,colors)
+        # This may actually be different, depending on the network.
+        if self._config.LARGER_IMAGE:
+            image_shape = (image_shape[:1] +
+                           (self._config.IMAGE_SIZE_X,
+                            self._config.IMAGE_SIZE_Y) +
+                           image_shape[3:])
+
+        if not include_colors:
+            image_shape = image_shape[:-1]
+
+        return image_shape
+
+
 
     def get_subcoords(self, shape: tuple, subshape: tuple):
         """Get coordinates for a subimage. This can be used for

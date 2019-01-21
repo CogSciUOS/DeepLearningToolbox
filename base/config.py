@@ -1,4 +1,5 @@
-from observer import Observable, change
+from observer import Observable, Observer as BaseObserver, BaseChange, change
+
 
 class Config(Observable):
     """A :py:class:Config object provides configuration data.  It is an
@@ -8,11 +9,24 @@ class Config(Observable):
     """
     _config = {}
 
-    def __init__(self, change_type: type, change_method: str,
-                 default_change: str):
-        super().__init__(change_type, change_method)
+    def __init_subclass__(cls, changes=['config_changed'],
+                          default='config_changed',
+                          method='configChanged'):
+        cls._change_method = method
+        cls.Change = type(cls.__name__ + ".Change", (BaseChange,),
+                          {'ATTRIBUTES': changes})
+        cls._default_change = default
+        def XChanged(self, config:cls, info:cls.Change):
+            raise NotImplementedError(f"{type(self).__name__} claims to be "
+                                      f"{cls.__name__}.Observer "
+                                      f"but does not implement {method}.")
+        cls.Observer = type(cls.__name__ + ".Observer", (BaseObserver,),
+                            {method: XChanged})
+        
+
+    def __init__(self):
+        super().__init__(self.Change, self._change_method)
         self._values = {}
-        self._default_change = default_change
 
     def __getattr__(self, name):
         if name in self._config:
@@ -45,8 +59,13 @@ class Config(Observable):
         """Create a copy of this :py:class:Config object.
         This will copy the configuration values, but not the observers.
         """
-        other = Config(self._change_type,
-                       self._change_method,
-                       self._default_change)
+        cls = self.__class__
+        other = cls()
+        # FIXME[concept]: we have to create a new instance of the
+        #  - hence we have to have some idea what arguments we have
+        #    to give to the constructor ...
+        #    self._change_type,
+        #    self._change_method,
+        #    self._default_change)
         other.assign(self)
         return other

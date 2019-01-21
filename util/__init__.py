@@ -118,3 +118,33 @@ def add_timer_callback(callback):
 
 # Should we use CPU (even if GPU is available)?
 use_cpu = True
+
+
+
+#
+# Logging
+#
+import logging
+
+class RecorderHandler(logging.Handler, list):
+    """A RecorderHandler store :py:class:logging.LogEvent, allowing to
+    replay the log history. Similar to a logging.BufferingHandler, but
+    allowing multiple replays.
+    """
+
+    def __init__(self):
+        logging.Handler.__init__(self)
+        list.__init__(self)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """
+        Handle a signal Remove the specified handler from this Recorder.
+        """
+        self.append(record)
+
+    def replay(self, handler: logging.Handler) -> None:
+        """
+        Replay all records stored in this Recorder.
+        """
+        for record in self:
+            handler.handle(record)

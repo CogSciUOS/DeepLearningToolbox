@@ -4,13 +4,11 @@ from base import Config as BaseConfig
 from observer import Observer, BaseChange, change
 
 
-class Config(BaseConfig):
+class Config(BaseConfig,
+             changes=['network_changed', 'layer_changed', 'unit_changed',
+                      'config_changed'], default='config_changed'):
     """Configuration data for the "activation maximization" (am) module.
     """
-
-    class Change(BaseChange):
-        ATTRIBUTES = ['network_changed', 'layer_changed', 'unit_changed',
-                      'config_changed']
 
     _config = {
         'UNIT_INDEX': {
@@ -169,9 +167,6 @@ class Config(BaseConfig):
         }
     }
 
-    def __init__(self):
-        super().__init__(Config.Change, 'configChanged', 'config_changed')
-
     # FIXME[hack]: set preferred parameters for specific networks
     @change
     def _helper_setattr(self, name, value):
@@ -184,20 +179,3 @@ class Config(BaseConfig):
                 # while 'xw_plus_b:0' -> "strided_slice_4:0"
                 self.LAYER_KEY = "dense_3"
                 self.UNIT_INDEX = 947
-
-
-class ConfigObserver(Observer):
-
-    def configChanged(self, config: Config, info: Config.Change) -> None:
-        """Respond to change in the config.
-
-        Parameters
-        ----------
-        config: Config
-            Config which changed (since we could observer multiple ones)
-        info: Config.Change
-            Object for communicating which parts of the model changed.
-        """
-        print("FIXME[debug]: Bad tools.am.ConfigObserver: "
-              f"configChanged({info}) is not implement")
-        # pass

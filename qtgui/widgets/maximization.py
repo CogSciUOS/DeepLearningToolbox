@@ -45,10 +45,10 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox, QLineEdit,
 import cv2
 
 from .matplotlib import QMatplotlib
-from tools.am import Config, ConfigObserver, EngineObserver
+from tools.am import Config, EngineObserver
 
 
-class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, ConfigObserver):
+class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, Config.Observer):
     """
     A widget to displaying controls for the parameters of the
     activation maximization visualization algorithm.
@@ -819,10 +819,6 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._stack = None
-        self._stack_grow = False
-        self._stack_size = 0
-        self._losses = []
         self._maximization_controller = None
         self._initUI()
         self.display = None
@@ -857,7 +853,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._info_mean = QLabel()
 
         self._slider = QSlider(Qt.Horizontal)
-        self._slider.setEnabled(self._losses is not None)
+        self._slider.setEnabled(False)
         self._slider.setMinimum(0)
         self._slider.setMaximum(0)
         self._slider.setSliderPosition(0)
@@ -989,10 +985,10 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
             self._button_stop.setEnabled(engine.running)
             self._button_show.setEnabled(not engine.running)
             self._button_reset.setEnabled(not engine.running)
-            self._button_record_save.setEnabled(self._stack is not None)
+            self._button_record_save.setEnabled(engine.has_video())
 
-            if not engine.running and engine._iteration > 0:  # FIXME[hack]: private variable
-                image_normalized = self._normalizeImage(engine.image)
+            if not engine.running and engine.iteration > 0:
+                image_normalized = engine.get_snapshot(normalize=True)
                 self._imageView.setImage(image_normalized)
                 if self.display is not None:
                     self.display.showImage(image_normalized, engine)
@@ -1000,14 +996,14 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         if info.image_changed:
             logger.info("!!! QMaximizationControls: image changed")
 
-            iteration = engine._iteration
+            iteration = engine.iteration
             self._info_iteration.setText(str(iteration))
             if iteration >= 0:
-                self._info_loss.setText(f"{engine._loss[iteration-1]:.2f}")
+                self._info_loss.setText(f"{engine.get_loss():.2f}")
 
                 self._plt._ax.clear()
                 self._plt._ax.plot(np.arange(iteration),
-                                   engine._loss[:iteration])
+                                   engine.get_loss(history=True))
                 self._plt._ax.figure.canvas.draw()
 
                 self._slider.setMaximum(iteration)
@@ -1015,22 +1011,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
                 # i.e. it will call selectIteration
                 #self._slider.setSliderPosition(iteration)
 
-            self._showImage(engine.image)
-
-
-
-    def _normalizeImage(self, image: np.ndarray,
-                        as_uint8:bool = True,
-                        as_bgr = False) -> np.ndarray:
-        # FIXME[design]: this put be done somewhere else ...
-        normalized = np.ndarray(image.shape, image.dtype)
-        cv2.normalize(image, normalized, 0, 255, cv2.NORM_MINMAX)
-        # self.image_normalized = (self.image-min_value)*255/(max_value-min_value)
-        if as_uint8:
-            normalized = normalized.astype(np.uint8)
-        if as_bgr:
-            normalized = normalized[...,::-1]
-        return normalized
+            self._showImage(engine.get_snapshot(normalize=True))
 
     def onMaximize(self):
         """
@@ -1053,18 +1034,6 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         """Respond to the 'reset' button. This will reset the engine
         and start a new maximization run.
         """
-
-        # FIXME[concept]: this should be done by the Engine.
-        if self._checkbox_record.checkState():
-            if self._stack_grow:
-                self._stack = np.ndarray((0,) + tuple(self._image_shape))
-            else:
-                self._stack = np.ndarray((self._config.MAX_STEPS+1,) +
-                                         tuple(self._image_shape))
-        else:
-            self._stack = None
-        self._stack_size = 0
-        
         # FIXME[concept]: this should be done in response to engine events
         self._button_record_save.setEnabled(False)
 
@@ -1079,63 +1048,28 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._info_minmax.setText("")
         self._info_mean.setText("")
         self._info_record.setText("")
-        self._losses = []
-        self._slider.setEnabled(self._losses is not None)
+        self._slider.setEnabled(self._engine.iteration > 0)
         logger.info("QMaximizationControls.onMaximize(True) -- begin")
         self._maximization_controller.onMaximize(True)
         logger.info("QMaximizationControls.onMaximize() -- end")
 
     def onSaveMovie(self):
-        # http://www.fourcc.org/codecs.php
-        #fourcc, suffix = 'PIM1', 'avi'
-        #fourcc, suffix = 'ffds', 'mp4'
-        fourcc, suffix = 'MJPG', 'avi' # https://en.wikipedia.org/wiki/Motion_JPEG
-        #fourcc, suffix = 'XVID', 'avi'
-
-        filename = 'activation_maximization.' + suffix
-        fps = 25
-        frameSize = self._stack.shape[1:3]
-        isColor = (self._stack.ndim==4)
-        logger.info(f"onSaveMovie: preparing {filename} ({fourcc}) ... ")
-        writer = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*fourcc),
-                                 fps, frameSize, isColor=isColor)
-        logger.info(f"onSaveMovie: writer.isOpened: {writer.isOpened()}")
-        if writer.isOpened():
-            logger.info(f"onSaveMovie: writing {len(self._stack_size)} frames ... ")
-            # FIXME[todo]: we need the number of actual frames!
-            for frame in range(self._stack_size):
-                writer.write(self._normalizeImage(self._stack[frame],
-                                                  as_bgr=True))
-        logger.info(f"onSaveMovie: releasing the writer")
-        writer.release()
-        logger.info(f"onSaveMovie: done")
+        self._engine.save_video('activation_maximization')
 
     #@async
     # FIXME[old]
     def logOptimizationStep(self, image: np.ndarray,
                             iteration: int, loss: float):
-        self._losses.append(loss) 
-        if self._stack is not None:
-            if self._stack_grow:
-                self._stack = np.concatenate((self._stack, image[np.newaxis]),
-                                             axis=0)
-            else:
-                self._stack[iteration] = image
-            self._stack_size += 1
-            # 10^6 Bytes = 1 MB, 2^20 Bytes = 1 MiB
-            self._info_record.setText("(memory={:,}/{:,} MiB)".
-                                      format((self._stack[:self._stack_size].nbytes) >> 20,
-                                             self._stack.nbytes >> 20))
         self._showImage(image)
         self._plt._ax.clear()
         self._plt._ax.plot(np.arange(iteration+1),
                            self._engine._loss[:iteration+1])
         self._plt._ax.figure.canvas.draw()
 
-        self._slider.setMaximum(len(self._losses)-1)
+        self._slider.setMaximum(self._engine.iteration)
         # FIXME[concept]: this triggers the valueChanged signal,
         # i.e. it will call selectIteration
-        self._slider.setSliderPosition(len(self._losses)-1)
+        self._slider.setSliderPosition(self._engine.iteration)
 
         self.update()
 
@@ -1155,14 +1089,15 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._info_mean.setText(f"{image_mean:.2f} +/- {image_std:.2f}")
 
         if image is not None:
-            self._imageView.setImage(self._normalizeImage(image))
+            self._imageView.setImage(image)
 
         
     def selectIteration(self, iteration: int) -> None:
         self._info_iteration.setText(f"{iteration}")
-        #self._info_loss.setText(f"{self._losses[iteration]:.2f}")
-        #if self._stack is not None:
-        #    self._showImage(self._stack[iteration])
+        self._info_loss.setText(f"{self._engine.get_loss(iteration=iteration):.2f}")
+        if self._engine.has_video():
+            self._showImage(self._engine.get_snapshot(normalize=True,
+                                                      iteration=iteration))
         self._slider.setSliderPosition(iteration)
         self.update()
     

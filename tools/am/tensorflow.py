@@ -143,7 +143,7 @@ class _TensorflowHelper(_EngineHelper):
                 self._graph.get_tensor_by_name('CenterDistance:0')
             logger.info(f"-TensorflowHelper.createLoss() -- reusing CenterDistance")
         except KeyError:
-            input_shape = self._engine.get_image_shape(include_batch=False)
+            input_shape = self.get_image_shape(include_batch=False)
             self._center_distance = \
                 tf.placeholder(dtype=tf.float32, shape=input_shape,
                                name='CenterDistance')
@@ -330,7 +330,7 @@ class _TensorflowHelper(_EngineHelper):
         # The distance image is used for border region punishment. As
         # it is now a placeholder this has to be included here, though
         # it may end up unused.
-        image_shape = self._engine.get_image_shape(False,False)
+        image_shape = self.get_image_shape(False,False)
         logger.info(f"-Preparation2 STEP 2: {image_shape}, {type(image_shape)}")
         coords = np.asarray(np.meshgrid(*[np.arange(d)
                                           for d in image_shape])).T
@@ -388,7 +388,7 @@ class _TensorflowHelper(_EngineHelper):
             # FIXME[todo]: do not recompute shape on every iteration!
             # FIXME[todo]: allow for larger batch sizes!
             image_shape = image.shape[1:]
-            input_shape = self._engine.get_input_shape(include_batch=False)
+            input_shape = self.get_input_shape(include_batch=False)
             coords = self.get_subcoords(image_shape, input_shape)
             subimage = self.get_subimage(image, *coords, is_batch=True)
             subdistances = self.get_subimage(self._distances, *coords)
@@ -471,7 +471,7 @@ class _TensorflowHelper(_EngineHelper):
         # to be very costly
         if self._config.LARGER_IMAGE:
             # resized = np.zeros((1,227,227,3))
-            input_shape = self._engine.get_input_shape()
+            input_shape = self.get_input_shape()
             size = input_shape[1:3] # FIXME[hack]
             resized = np.zeros(input_shape)
             resized[0] = cv2.resize(im_big[0], size)

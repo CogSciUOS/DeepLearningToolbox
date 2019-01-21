@@ -15,8 +15,7 @@ from qtgui.panels import (ActivationsPanel, OcclusionPanel,
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
 from controller import MaximizationController
-from tools.am import Engine as MaximizationEngine
-from tools.am import EngineObserver as MaximizationEngineObserver
+from tools.am import Engine as MaximizationEngine, EngineObserver as MaximizationEngineObserver
 
 
 from datasources import DataSource
@@ -170,6 +169,9 @@ class DeepVisMainWindow(QMainWindow):
         return self._tabs.widget(index)
 
     def _setAppIcon(self):
+        # FIXME[problem]: currently this prints the following method:
+        # "libpng warning: iCCP: extra compressed data"
+        # probably due to some problem with the file 'logo.png'
         self.setWindowIcon(QIcon('assets/logo.png'))
 
     def _createMenu(self):
@@ -238,13 +240,9 @@ class DeepVisMainWindow(QMainWindow):
 
         """
         self._logging = LoggingPanel()
-        # FIXME[hack]:
-        import logging
-        logger = logging.getLogger()
-        logger.handlers = []
-        self._logging.addLogger(logger)
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!! Logger changed !!!!!!!!!!!!!!!!!!!!")
 
+        import logging
+        self._logging.addLogger(logging.getLogger())
 
     def showStatusMessage(self, message):
         self.statusBar().showMessage(message, 2000)

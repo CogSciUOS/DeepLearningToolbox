@@ -209,46 +209,51 @@ class QImageView(QWidget):
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QPlainTextEdit
-from logging import Handler
 import threading
 import logging
 
 from collections import deque
 
-class QLogHandler(QPlainTextEdit, Handler):
+class QLogHandler(QPlainTextEdit, logging.Handler):
+    """A log handler that displays log messages in a QWidget.
+    """
 
-    # signals must be declared outside the constructor, for some weird reason
     _message_signal = pyqtSignal(str)
 
     def __init__(self, parent=None):
         QPlainTextEdit.__init__(self, parent)
-        Handler.__init__(self)
-        self._records = deque()
-        self._new_records = deque()
+        logging.Handler.__init__(self)
         self.setReadOnly(True)
+        self._counter = 1
         self._message_signal.connect(self.appendMessage)
-        FORMAT = "[%(processName)s/%(threadName)s(%(name)s) %(module)s [%(filename)s:%(lineno)d] %(levelname)s: %(message)s"
-        formatter = logging.Formatter(fmt=FORMAT, datefmt="%(asctime)s")
-        self.setFormatter(formatter)
+        self._message_signal.emit("Log view initialized")
+
+    def __len__(self):
+        """The number of lines in this QLogHandler.
+        """
+        return self._counter
+
+    def clear(self):
+        """Clear this :py:class:QLogHandler.
+        """
+        super().clear()
+        self._counter = 1
+        self._message_signal.emit("Log view cleared")
 
     @QtCore.pyqtSlot(str)
     def appendMessage(self, message: str):
-        while self._new_records:
-            self._records.append(self._new_records.popleft())
-
         self.appendPlainText(message)
         self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
 
     def emit(self, record):
+        """Handle a :py:class:logging.logRecord.
+        """
         # Here we have to be careful: adding the text directly to the
         # widget from another thread causes problems: The program
         # crashes with the following message:
         #   QObject::connect: Cannot queue arguments of type 'QTextBlock'
         #   (Make sure 'QTextBlock' is registered using qRegisterMetaType().)
         # Hence we are doing this via a signal now.        
-        self._new_records.append(record)
+        self._counter += 1
         self._message_signal.emit(self.format(record))
 
-    @property
-    def total(self):
-        return len(self._records)

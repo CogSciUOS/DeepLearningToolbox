@@ -24,6 +24,10 @@ from .video import DataVideo
 from .keras import KerasDataSource
 from .imagenet import ImageNet
 
+import logging
+logger = logging.getLogger(__name__)
+del logging
+
 import sys
 
 for d in KerasDataSource.KERAS_IDS:
@@ -34,4 +38,5 @@ for d in KerasDataSource.KERAS_IDS:
               file=sys.stderr)
 ImageNet(section='train')
 
-print(Predefined.get_data_source_ids())
+logger.info(f"Predefined data sources: {Predefined.get_data_source_ids()}")
+
