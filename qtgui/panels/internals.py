@@ -213,6 +213,7 @@ class InternalsPanel(Panel):
         labels = {
             'cv2': 'OpenCV',
             'tensorflow': 'TensorFlow',
+            'keras': 'Keras',
         }
         box = QGroupBox(labels.get(name, name))
 
@@ -297,6 +298,12 @@ class InternalsPanel(Panel):
         # more details
 
         # https://stackoverflow.com/questions/38009682/how-to-tell-if-tensorflow-is-using-gpu-acceleration-from-inside-python-shell
+        layout.addStretch()
+        return layout
+
+    def kerasInfo(self, keras):
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel(f"Backend: {keras.backend.backend()}"))
         layout.addStretch()
         return layout
 

@@ -154,8 +154,6 @@ def initializeToolbox(args, gui):
 
         gui.setDataSource(source)
 
-
-
         #
         # network: dependes on the selected framework
         #
@@ -182,23 +180,24 @@ def initializeToolbox(args, gui):
         #
         # network2: AlexNet trained on ImageNet data (TensorFlow)
         #
-        logger.debug("network2: import tensorflow")
-        from network.tensorflow import Network as TensorFlowNetwork
-        checkpoint = os.path.join('models', 'example_tf_alexnet',
-                                  'bvlc_alexnet.ckpt')
-        logger.debug("network2: TensorFlowNetwork")
-        network2 = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
-        logger.debug("network2: prepare")
-        network2._online()
-        logger.debug("network2: Load Class Names")
-        from datasources.imagenet_classes import class_names2
-        network2.set_output_labels(class_names2)
-        logger.debug("network2: Done")
+        if False:
+            logger.debug("network2: import tensorflow")
+            from network.tensorflow import Network as TensorFlowNetwork
+            checkpoint = os.path.join('models', 'example_tf_alexnet',
+                                      'bvlc_alexnet.ckpt')
+            logger.debug("network2: TensorFlowNetwork")
+            network2 = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
+            logger.debug("network2: prepare")
+            network2._online()
+            logger.debug("network2: Load Class Names")
+            from datasources.imagenet_classes import class_names2
+            network2.set_output_labels(class_names2)
+            logger.debug("network2: Done")
 
-        # FIXME[hack]: the @change decorator does not work in different thread
-        #model.add_network(network2)
-        m,change = model.add_network(network2)
-        m.notifyObservers(change)
+            # FIXME[hack]: the @change decorator does not work in different thread
+            #model.add_network(network2)
+            m,change = model.add_network(network2)
+            m.notifyObservers(change)
 
     except Exception as e:
         # FIXME[hack]: rethink error handling in threads!

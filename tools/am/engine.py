@@ -94,8 +94,7 @@ class Engine(Observable):
         self._running = False
         self._status = "stopped"
 
-        self._iteration = 0
-        self._snapshot_index = -1
+        self._iteration = None
 
         # The current image (can be batch of images), used for the
         # maximization process
@@ -108,6 +107,8 @@ class Engine(Observable):
         self._recorder = {}
         for recorder in 'loss', 'min', 'max', 'mean', 'std':
             self._recorder[recorder] = None
+
+        self._cache = {}
 
     @property
     def config(self):
@@ -127,7 +128,7 @@ class Engine(Observable):
 
     @property
     def iteration(self):
-        return self._snapshot_index
+        return self._iteration
 
     @property
     def status(self):
@@ -183,12 +184,8 @@ class Engine(Observable):
         #
         # Set up the recorders
         #
-        for recorder in 'loss', 'min', 'max', 'mean', 'std':
-            if recorder in self._recorder:
-                self._recorder[recorder] = np.zeros(self._config.MAX_STEPS)
-        if 'images' in self._recorder:
-            shape = (self._config.MAX_STEPS,) + self._helper.get_image_shape()
-            self._recorder['images'] = np.ndarray(shape)           
+        for recorder in self._recorder.keys():
+            self._init_recorder(recorder)
 
         #
         # sanity checks
@@ -250,7 +247,6 @@ class Engine(Observable):
             self._set_status("initialization")
             self.prepare(network)
             # step counter
-            self._iteration = 0
             self._set_status("start")
 
         #
@@ -279,6 +275,8 @@ class Engine(Observable):
                     > self._config.LOSS_GOAL)
                and self._iteration < self._config.MAX_STEPS):
 
+            self._iteration += 1
+
             # start measuring time for this step
             start = time.time()
 
@@ -293,11 +291,14 @@ class Engine(Observable):
 
             # get time that was needed for this step
             avg_steptime += time.time() - start
-          
-            self._take_snapshot(loss)
+
+            snapshot = self._image.take(self._batch_index,
+                                        axis=self._batch_axis)
+            self._take_snapshot(self._iteration, image=snapshot, loss=loss)
+            self._record_snapshot()
+            self.notifyObservers(EngineChange(image_changed=True))
 
             # increase steps
-            self._iteration += 1
 
         self._set_status("stopped", False)
 
@@ -311,7 +312,7 @@ class Engine(Observable):
 
         logger.debug(f"-TensorflowHelper.onMaximization() -- end")
         logger.debug(f"Computation time: {time.time()-t}")
-        logger.debug(f"image: {self.image.shape}")
+        logger.debug(f"image: {self._image.shape}")
 
         #
         # store the result
@@ -321,67 +322,109 @@ class Engine(Observable):
         self.change(image_changed=True)
         logger.info(f"Engine.maximize_activation() -- end")
 
-    def _take_snapshot(self, loss):
+    def _take_snapshot(self, iteration: int, image: np.ndarray=None,
+                       loss: float=None) -> None:
+        """Take a snapshot of the engine state. Such a snapshot acts
+        as short term memory to allow observers to access the state of
+        the engine, while it already computes new values. It also acts
+        as a cache to avoid recomputing values.
+        """
+        self._snapshot = { 'iteration': iteration }
+        if image is not None:
+            self._snapshot['image'] = image.copy()
+        elif 'image' in self._recorder:
+            self._snapshot['image'] = self._recorder['image'][iteration]
+        if loss is not None:
+            self._snapshot['loss'] = loss
 
-        self._snapshot = self._image.take(self._batch_index,
-                                          axis=self._batch_axis).copy()
+    def _get_snapshot(self, what, iteration=None):
+        if self._snapshot is None:
+            return None
+        if iteration is not None and self._snapshot['iteration'] != iteration:
+            self._take_snapshot(iteration)
+        if what in self._snapshot:
+            return self._snapshot[what]
+        if (self._snapshot['iteration'] < self._iteration and
+            what in self._recorder):
+            self._snapshot[what] = self._recorder[what][iteration]
+            return self._snapshot[what]
+        if 'image' not in self._snapshot:
+            return None
+        
+        if what == 'min':
+            self._snapshot[what] = self._snapshot['image'].min()
+        elif what == 'max':
+            self._snapshot[what] = self._snapshot['image'].max()
+        elif what == 'mean':
+            self._snapshot[what] = self._snapshot['image'].mean()
+        elif what == 'std':
+            self._snapshot[what] = self._snapshot['image'].std()
+        elif what == 'normal':
+            a = self._get_snapshot('max')
+            b = self._get_snapshot('min')
+            self._snapshot[what] = (0.5 if a==b else
+                                    (self._snapshot['image'] - b)/(a-b))
+        else:
+            return None
+        return self._snapshot[what]
 
-        # record history
-        self._snapshot_index = self._iteration
-        self._recorder['loss'][self._snapshot_index] = loss
-        if 'min' in self._recorder:
-            self._recorder['min'][self._snapshot_index] = self._snapshot.min()
-        if 'max' in self._recorder:
-            self._recorder['max'][self._snapshot_index] = self._snapshot.max()
-        if 'mean' in self._recorder:
-            self._recorder['mean'][self._snapshot_index] = self._snapshot.mean()
-        if 'std' in self._recorder:
-            self._recorder['std'][self._snapshot_index] = self._snapshot.std()
-        if 'images' in self._recorder:
-            self._recorder['images'][self._snapshot_index] = self._snapshot
+    def get_snapshot(self, iteration: int=None, normalize: bool=False):
+        return (self._get_snapshot('normal', iteration) if normalize else
+                self._get_snapshot('image', iteration))
 
-        self.notifyObservers(EngineChange(image_changed=True))
+    def get_loss(self, iteration: int=None) -> float:
+        return self._get_snapshot('loss', iteration)
+
+    def get_min(self, iteration: int=None) -> float:
+        return self._get_snapshot('min', iteration)
+
+    def get_max(self, iteration: int=None) -> float:
+        return self._get_snapshot('max', iteration)
+    
+    def get_mean(self, iteration: int=None) -> float:
+        return self._get_snapshot('mean', iteration)
+
+    def get_std(self, iteration: int=None) -> float:
+        return self._get_snapshot('std', iteration)
+
+    def _init_recorder(self, recorder):
+        if recorder in self._recorder:
+            shape = (self._config.MAX_STEPS,)
+            if recorder == 'image':
+                shape += self._helper.get_image_shape(include_batch=False)
+            self._recorder[recorder] = np.ndarray(shape)
+
+    def _record_snapshot(self):
+        iteration = self._snapshot['iteration']
+        for key in self._recorder.keys():
+            self._recorder[key][iteration] = self._get_snapshot(key)
+
+    def record(self, recorder, enabled: bool=True):
+        if enabled and recorder not in self._recorder:
+            self._recorder[recorder] = None
+        elif not enabled and recorder in self._recorder:
+            del self._recorder[recorder]
+
+    def record_video(self, enabled: bool=True):
+        """Activate or deactivate video recording.
+        """
+        self.record('image', enabled)
+
+    def has_video(self):
+        """Check if this engine provides an video.
+        Video recording is deactivated by default, but can be turned on
+        by calling :py:meth:record_video.
+        """
+        return 'image' in self._recorder
 
     def get_recorder_value(self, recorder, iteration=None, history=False):
         if iteration is None:
-            iteration = self._snapshot_index
+            iteration = self._iteration
+        if iteration is None:
+            return None
         if history:
             return self._recorder[recorder][:iteration]
         return self._recorder[recorder][iteration]
-
-    def get_loss(self, iteration=None, history=False):
-        return self.get_recorder_value('loss', iteration, history)
-
-    def get_snapshot(self, normalize=False, iteration=None):
-        if iteration is None:
-            if self._snapshot is None:
-                return None
-            iteration = self._snapshot_index
-            image = self._snapshot.copy()
-        elif 'images' in self._recorder:
-            image = self._recorder['images'][iteration].copy()
-        else:
-            return None
-        if normalize:
-            a = (self._recorder['max'][iteration]
-                 if 'max' in self._recorder else  image.max())
-            b = (self._recorder['min'][iteration]
-                 if 'min' in self._recorder else
-                 image.min())
-            if b < a:
-                image = (image - b)/(a-b)
-            else:
-                image -= .5
-        return image
-
-    def record_video(self, enabled=True):
-        if enabled and not 'images' in self._recorder:
-            self._recorder['images'] = None
-        elif not enabled and 'images' in self._recorder:
-            del self._recorder['images']
-
-    def has_video(self):
-        return 'images' in self._recorder
 
     def save_video(self, filename, fps=25):
         # http://www.fourcc.org/codecs.php
@@ -390,20 +433,21 @@ class Engine(Observable):
         fourcc, suffix = 'MJPG', 'avi' # Motion_JPEG
         # fourcc, suffix = 'XVID', 'avi'
 
-        filename += 'activation_maximization.'
-        
-        frameSize = self._stack.shape[1:3]
-        isColor = (self._stack.ndim==4)
+        filename += '.' + suffix
+
+        frames = self._recorder['image']
+        frameSize = frames.shape[1:3]
+        isColor = (frames.ndim==4)
+        number_of_frames = self._iteration-1
         logger.info(f"save_video: preparing {filename} ({fourcc}) ... ")
         writer = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*fourcc),
                                  fps, frameSize, isColor=isColor)
         logger.info(f"save_video: writer.isOpened: {writer.isOpened()}")
         if writer.isOpened():
-            logger.info(f"save_video: writing {len(self._stack_size)} frames ... ")
+            logger.info(f"save_video: writing {number_of_frames} frames ... ")
             # FIXME[todo]: we need the number of actual frames!
-            for frame in range(self._stack_size):
-                writer.write(self._normalizeImage(self._stack[frame],
-                                                  as_bgr=True))
+            for frame in range(number_of_frames):
+                writer.write(self._normalizeImage(frames[frame], as_bgr=True))
         logger.info(f"save_video: releasing the writer")
         writer.release()
         logger.info(f"save_video: done")

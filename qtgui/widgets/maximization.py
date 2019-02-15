@@ -839,6 +839,7 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._button_reset.clicked.connect(self.onReset)
         
         self._checkbox_record = QCheckBox("Record images")
+        self._checkbox_record.stateChanged.connect(self.onRecordClicked)
         self._info_record = QLabel()
         self._button_record_save = QPushButton("Save")
         self._button_record_save.clicked.connect(self.onSaveMovie)
@@ -988,9 +989,13 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
             self._button_stop.setEnabled(engine.running)
             self._button_show.setEnabled(not engine.running)
             self._button_reset.setEnabled(not engine.running)
-            self._button_record_save.setEnabled(engine.has_video())
+            self._button_record_save.setEnabled(not engine.running and
+                                                engine.has_video())
+            self._checkbox_record.setEnabled(not engine.running)
+            self._slider.setEnabled(not engine.running)
 
-            if not engine.running and engine.iteration > 0:
+            if (engine.iteration is not None and
+                not engine.running and engine.iteration > 0):
                 image_normalized = engine.get_snapshot(normalize=True)
                 self._imageView.setImage(image_normalized)
                 if self.display is not None:
@@ -1000,21 +1005,20 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
             logger.info("!!! QMaximizationControls: image changed")
 
             iteration = engine.iteration
-            self._info_iteration.setText(str(iteration))
-            if iteration >= 0:
-                self._info_loss.setText(f"{engine.get_loss():.2f}")
-
+            self._showSnapshot(engine, iteration)
+            
+            if iteration is not None and iteration >= 0:
                 self._plt._ax.clear()
-                self._plt._ax.plot(np.arange(iteration),
-                                   engine.get_loss(history=True))
+                loss = engine.get_recorder_value('loss', iteration,
+                                                 history=True)
+                self._plt._ax.plot(np.arange(iteration), loss)
                 self._plt._ax.figure.canvas.draw()
 
                 self._slider.setMaximum(iteration)
                 # FIXME[concept]: this triggers the valueChanged signal,
                 # i.e. it will call selectIteration
-                #self._slider.setSliderPosition(iteration)
+                self._slider.setSliderPosition(iteration)
 
-            self._showImage(engine.get_snapshot(normalize=True))
 
     def onMaximize(self):
         """
@@ -1029,7 +1033,11 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         (and the classification result) to be displayed in the
         'Activations' panel.
         """
-        self._controller.onNewInput(self._imageView.getImage(),
+        #self._imageView.getImage(),
+        image = self._engine.get_snapshot()
+        a,b = self._engine.get_min(), self._engine.get_max()
+        image2 = (image-a)*255/(b-a)
+        self._controller.onNewInput(image2,
                                     self._config.UNIT_INDEX,
                                     self._engine.description)
 
@@ -1056,53 +1064,44 @@ class QMaximizationControls(QWidget, ModelObserver, EngineObserver):
         self._maximization_controller.onMaximize(True)
         logger.info("QMaximizationControls.onMaximize() -- end")
 
+    def onRecordClicked(self, state):
+        self._engine.record_video(bool(state))
+        self._button_record_save.setEnabled(bool(state))
+
     def onSaveMovie(self):
         self._engine.save_video('activation_maximization')
-
-    #@async
-    # FIXME[old]
-    def logOptimizationStep(self, image: np.ndarray,
-                            iteration: int, loss: float):
-        self._showImage(image)
-        self._plt._ax.clear()
-        self._plt._ax.plot(np.arange(iteration+1),
-                           self._engine._loss[:iteration+1])
-        self._plt._ax.figure.canvas.draw()
-
-        self._slider.setMaximum(self._engine.iteration)
-        # FIXME[concept]: this triggers the valueChanged signal,
-        # i.e. it will call selectIteration
-        self._slider.setSliderPosition(self._engine.iteration)
-
-        self.update()
-
-    def _showImage(self, image: np.ndarray):
-        if image is not None:
-            image_min = image.min()
-            image_max = image.max()
-            image_mean = image.mean()
-            image_std = image.std()
-        else:
-            image_min = 0
-            image_max = 0
-            image_mean = 0
-            image_std = 0
-        self._info_minmax.setText(f"{image_min:.2f}/{image_max:.2f}"
-                                  f" ({image_max-image_min:.2f})")
-        self._info_mean.setText(f"{image_mean:.2f} +/- {image_std:.2f}")
-
-        if image is not None:
-            self._imageView.setImage(image)
-
-        
+     
     def selectIteration(self, iteration: int) -> None:
+        self._showSnapshot(self._engine, iteration)
+
+    def _showSnapshot(self, engine: Engine, iteration: int=None) -> None:
+        if iteration is None:
+            iteration = engine.iteration
+        if iteration is None:
+            return
         self._info_iteration.setText(f"{iteration}")
-        self._info_loss.setText(f"{self._engine.get_loss(iteration=iteration):.2f}")
-        if self._engine.has_video():
-            self._showImage(self._engine.get_snapshot(normalize=True,
-                                                      iteration=iteration))
         self._slider.setSliderPosition(iteration)
-        self.update()
+        loss = self._engine.get_loss(iteration)
+        loss_text = "" if loss is None else f"{loss:.2f}"
+        self._info_loss.setText(loss_text)
+
+        image_min = engine.get_min(iteration)
+        image_max = engine.get_max(iteration)
+        image_mean = engine.get_mean(iteration)
+        image_std = engine.get_std(iteration)
+
+        minmax_text = ("" if image_min is None or image_max is None else
+                       f"{image_min:.2f}/{image_max:.2f}"
+                       f" ({image_max-image_min:.2f})")
+        mean_text  = ("" if image_mean is None or image_std is None else
+                      f"{image_mean:.2f} +/- {image_std:.2f}")
+
+        self._info_minmax.setText(minmax_text)
+        self._info_mean.setText(mean_text)
+
+        image = engine.get_snapshot(iteration, normalize=True)
+        self._imageView.setImage(image)
+
     
 
 from PyQt5.QtWidgets import QFrame

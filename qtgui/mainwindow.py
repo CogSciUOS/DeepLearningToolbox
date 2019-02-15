@@ -10,7 +10,7 @@ from model import Model, ModelObserver
 from qtgui.utils import QtAsyncRunner
 from qtgui.panels import (ActivationsPanel, OcclusionPanel,
                           MaximizationPanel, InternalsPanel,
-                          LoggingPanel)
+                          LoggingPanel, AutoencoderPanel)
 
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
@@ -69,6 +69,7 @@ class DeepVisMainWindow(QMainWindow):
         self._internals = None
         self._lucid = None
         self._logging = None
+        self._autoencoder = None
         self._initUI()
 
     def setModel(self, model: Model) -> None:
@@ -132,6 +133,7 @@ class DeepVisMainWindow(QMainWindow):
         self.initLoggingPanel()
         if addons.use('lucid'):
             self._lucid = self.initLucidPanel()
+        self._lucid = self.initAutoencoderPanel()
 
         self._createTabWidget()
 
@@ -149,6 +151,8 @@ class DeepVisMainWindow(QMainWindow):
             self._tabs.addTab(self._maximization, 'Maximization')
         if self._lucid is not None:
             self._tabs.addTab(self._lucid, 'Lucid')
+        if self._autoencoder is not None:
+            self._tabs.addTab(self._autoencoder, 'Autoencoder')
         if self._internals is not None:
             self._tabs.addTab(self._internals, 'Internals')
         if self._logging is not None:
@@ -236,6 +240,12 @@ class DeepVisMainWindow(QMainWindow):
         """
         from .panels.lucid import LucidPanel
         return LucidPanel()
+
+    def initAutoencoderPanel(self):
+        """Initialise the autoencoder panel.
+
+        """
+        self._autoencoder = AutoencoderPanel()
 
     def initLoggingPanel(self):
         """Initialise the log panel.

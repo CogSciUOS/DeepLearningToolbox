@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
 
 class QMatplotlib(FigureCanvas):
+    
     def __init__(self, parent=None, figsize=(8, 3)):
         super().__init__(Figure(figsize))
 

@@ -245,7 +245,7 @@ class Network(BaseNetwork):
                 tf_config = tf.ConfigProto(device_count = {'GPU': 0})
             else:
                 tf_config = tf.ConfigProto()
-            self._session = tf.Session(graph = self._graph, config=tf_config)
+            self._session = tf.Session(graph=self._graph, config=tf_config)
 
 
     def _offline(self) -> None:
