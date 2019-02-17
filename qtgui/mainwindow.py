@@ -10,7 +10,7 @@ from model import Model, ModelObserver
 from qtgui.utils import QtAsyncRunner
 from qtgui.panels import (ActivationsPanel, OcclusionPanel,
                           MaximizationPanel, InternalsPanel,
-                          LoggingPanel, AutoencoderPanel)
+                          LoggingPanel) #, AutoencoderPanel)
 
 from controller import ActivationsController
 from controller import DataSourceController, DataSourceObserver
@@ -133,7 +133,7 @@ class DeepVisMainWindow(QMainWindow):
         self.initLoggingPanel()
         if addons.use('lucid'):
             self._lucid = self.initLucidPanel()
-        self._lucid = self.initAutoencoderPanel()
+        #self._lucid = self.initAutoencoderPanel()
 
         self._createTabWidget()
 

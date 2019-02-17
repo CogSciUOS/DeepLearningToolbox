@@ -157,7 +157,7 @@ def initializeToolbox(args, gui):
         #
         # network: dependes on the selected framework
         #
-        if False:  # FIXME[hack]: two networks seem to cause problems!
+        if True:  # FIXME[hack]: two networks seem to cause problems!
             network = None
         elif args.framework.startswith('keras'):
             dash_idx = args.framework.find('-')
@@ -180,7 +180,7 @@ def initializeToolbox(args, gui):
         #
         # network2: AlexNet trained on ImageNet data (TensorFlow)
         #
-        if False:
+        if True:
             logger.debug("network2: import tensorflow")
             from network.tensorflow import Network as TensorFlowNetwork
             checkpoint = os.path.join('models', 'example_tf_alexnet',
