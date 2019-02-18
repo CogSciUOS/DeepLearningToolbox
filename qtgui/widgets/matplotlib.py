@@ -46,3 +46,13 @@ class QMatplotlib(FigureCanvas):
         # Shift the sinusoid as a function of time.
         self._ax.plot(t, np.sin(t + time.time()))
         self._ax.figure.canvas.draw()
+
+    def scatter(self, *args, **kwargs):
+        self._ax.clear()
+        self._ax.scatter(*args, **kwargs)
+        self._ax.figure.canvas.draw()
+
+    def imshow(self, *args, **kwargs):
+        self._ax.clear()
+        self._ax.imshow(*args, **kwargs)
+        self._ax.figure.canvas.draw()

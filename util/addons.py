@@ -11,6 +11,11 @@ _infos = {
         'type': 'module',
         'info': 'A collection of infrastructure and tools '
                 'for research in neural network interpretability.'
+    },
+    'autoencoder': {
+        'type': 'tool',
+        'info': 'A tool for inspecting autoencoders',
+        'use': False
     }
 }
 
@@ -23,10 +28,12 @@ def available(name, type=None):
     if type == 'module':
         spec = importlib.util.find_spec(name)
         return spec is not None
+    if type == 'tool':
+        return True
     else:
         return False
 
-def use(name):
+def use(name, set=None, type=None):
     """Check if an add on should be used.
 
     This is not used yet, but it may be used for more fine grained
@@ -34,7 +41,12 @@ def use(name):
     toolbox, allowing to deactivate resource intense add ons that are
     not needed for the task at hand.
     """
-    return available(name)
+    if type is None:
+        type = _infos[name]['type']
+    if set is not None:
+        _infos[name]['use'] = set
+        return    
+    return available(name) and _infos[name].get('use', True)
 
 
 def install(name, force=False):

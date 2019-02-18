@@ -157,9 +157,26 @@ def initializeToolbox(args, gui):
         #
         # network: dependes on the selected framework
         #
-        if True:  # FIXME[hack]: two networks seem to cause problems!
-            network = None
+        # FIXME[hack]: two networks/models seem to cause problems!
+        if args.alexnet:
+            #
+            # AlexNet trained on ImageNet data (TensorFlow)
+            #
+            logger.debug("alexnet: import tensorflow")
+            from network.tensorflow import Network as TensorFlowNetwork
+            checkpoint = os.path.join('models', 'example_tf_alexnet',
+                                      'bvlc_alexnet.ckpt')
+            logger.debug("alexnet: TensorFlowNetwork")
+            network = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
+            logger.debug("alexnet: prepare")
+            network._online()
+            logger.debug("alexnet: Load Class Names")
+            from datasources.imagenet_classes import class_names2
+            network.set_output_labels(class_names2)
+            logger.debug("alexnet: Done")
+
         elif args.framework.startswith('keras'):
+            # "keras-tensorflow" or "keras-theaono""
             dash_idx = args.framework.find('-')
             backend = args.framework[dash_idx + 1:]
             network = keras(backend, args.cpu, model_file=args.model)
@@ -175,29 +192,10 @@ def initializeToolbox(args, gui):
         else:
             network = None
 
-        model.add_network(network)
-
-        #
-        # network2: AlexNet trained on ImageNet data (TensorFlow)
-        #
-        if True:
-            logger.debug("network2: import tensorflow")
-            from network.tensorflow import Network as TensorFlowNetwork
-            checkpoint = os.path.join('models', 'example_tf_alexnet',
-                                      'bvlc_alexnet.ckpt')
-            logger.debug("network2: TensorFlowNetwork")
-            network2 = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
-            logger.debug("network2: prepare")
-            network2._online()
-            logger.debug("network2: Load Class Names")
-            from datasources.imagenet_classes import class_names2
-            network2.set_output_labels(class_names2)
-            logger.debug("network2: Done")
-
-            # FIXME[hack]: the @change decorator does not work in different thread
-            #model.add_network(network2)
-            m,change = model.add_network(network2)
-            m.notifyObservers(change)
+        # FIXME[hack]: the @change decorator does not work in different thread
+        #model.add_network(network)
+        m,change = model.add_network(network)
+        m.notifyObservers(change)
 
     except Exception as e:
         # FIXME[hack]: rethink error handling in threads!
@@ -217,8 +215,19 @@ def main():
 
     logger.debug(f"got datesets: {datasets}")
 
+    class UseAddon(argparse.Action):
+        """Turn on use of given addon."""
+        def __init__(self, option_strings, dest, nargs=None, **kwargs):
+            if nargs is not None:
+                raise ValueError("nargs not allowed")
+            super().__init__(option_strings, dest, nargs=0, **kwargs)
+        def __call__(self, parser, namespace, values, option_string=None):
+            addons.use(self.dest, True)
+            setattr(namespace, self.dest, values)
+
     parser = argparse.ArgumentParser(
         description='Visual neural network analysis.')
+    
     parser.add_argument('--model', help='Filename of model to use',
                         default='models/example_keras_mnist_model.h5')
     parser.add_argument('--data', help='filename of dataset to visualize')
@@ -232,6 +241,13 @@ def main():
                         default='keras-tensorflow')
     parser.add_argument('--cpu', help='Do not attempt to use GPUs',
                         action='store_true',
+                        default=False)
+    parser.add_argument('--alexnet', help='Load the AlexNet model',
+                        action='store_true',
+                        default=False)
+    parser.add_argument('--autoencoder',
+                        help='Load the autoencoder module (experimental!)',
+                        action=UseAddon,
                         default=False)
     args = parser.parse_args()
 
