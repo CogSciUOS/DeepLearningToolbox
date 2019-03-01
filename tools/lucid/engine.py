@@ -2,7 +2,7 @@ import logging
 logger = logging.getLogger(__name__)
 print(f"!!!!!!!!!! getEffectiveLevel: {logger.getEffectiveLevel()} !!!!!!!!!!!!!")
 
-from observer import Observer, Observable, BaseChange, change
+from base.observer import Observable, change
 from network import Network, loader
 from network.lucid import Network as LucidNetwork
 from model import Model
@@ -20,29 +20,8 @@ import lucid.optvis.render as render
 import lucid.optvis.transform as transform
 
 
-class EngineChange(BaseChange):
-    ATTRIBUTES = ['engine_changed', 'model_changed', 'unit_changed']
-
-
-class EngineObserver(Observer):
-    """An EngineObserver is notfied whenever some change in the state
-    of the activation maximization Engine occurs.
-    """
-
-    def engineChanged(self, engine: 'Engine', info: EngineChange) -> None:
-        """Respond to change in the activation maximization Engine.
-
-        Parameters
-        ----------
-        engine: Engine
-            Engine which changed (since we could observe multiple ones)
-        info: ConfigChange
-            Object for communicating which aspect of the engine changed.
-        """
-        pass
-
-
-class Engine(Observable):
+class Engine(Observable, method='engineChanged',
+             changes=['engine_changed', 'model_changed', 'unit_changed']):
     """The Engine is a wrapper around the lucid module.
 
     Attributes
@@ -58,7 +37,7 @@ class Engine(Observable):
     """
 
     def __init__(self):
-        super().__init__(EngineChange, 'engineChanged')
+        super().__init__()
         self._network = None
         self._model = None
         self._layer = None
@@ -235,3 +214,8 @@ class Engine(Observable):
             self._doRun(True)
             
         self._doRun(False)
+
+# FIXME[old]: this is too make old code happy. New code should use
+# Engine.Change and Engine.Observer directly.
+EngineChange = Engine.Change
+EngineObserver = Engine.Observer

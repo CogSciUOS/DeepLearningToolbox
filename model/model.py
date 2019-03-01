@@ -5,7 +5,7 @@ import numpy as np
 from network import Network, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from util import ArgumentError
-from observer import Observer, Observable, BaseChange, change
+from base.observer import Observable, change
 from util import async
 
 import logging
@@ -13,16 +13,22 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class ModelChange(BaseChange):
-    """.. :py:class:: ModelChange
+class Model(Observable, method='modelChanged',
+            changes=['network_changed',
+                     'layer_changed',
+                     'unit_changed',
+                     'input_changed',
+                     'activation_changed']):
+    """.. :py:class:: Model
 
-    A class whose instances are passed to observers in
-    :py:meth:`Observer.modelChanged` in order to inform them
-    as to the exact nature of the model's change.
+    Model class encompassing network, current activations, and the like.
 
+    An model is Observable. Changes in the model are passed to observers
+    calling the :py:meth:`Observer.modelChanged` method in order
+    to inform them as to the exact nature of the model's change.
 
-    Attributes
-    ----------
+    Changes
+    -------
     network_changed : bool
         Whether the underlying :py:class:`network.Network` has changed
     layer_changed : bool
@@ -35,35 +41,6 @@ class ModelChange(BaseChange):
         Whether the network activation changed. This usually coincides
         with a change in input data, but may occur be delayed in case
         of complex computation and multi-threading.
-    """
-
-    ATTRIBUTES = ['network_changed',
-                  'layer_changed',
-                  'unit_changed',
-                  'input_changed',
-                  'activation_changed']
-
-
-class ModelObserver(Observer):
-
-    def modelChanged(self, model: 'Model', info: ModelChange) -> None:
-        """Respond to change in the model.
-
-        Parameters
-        ----------
-        model : Model
-            Model which changed (since we could observer multiple ones)
-        info : ModelChange
-            Object for communicating which parts of the model changed.
-        """
-        pass
-
-
-
-class Model(Observable):
-    """.. :py:class:: Model
-
-    Model class encompassing network, current activations, and the like.
 
     Attributes
     ----------
@@ -109,7 +86,7 @@ class Model(Observable):
         network :   Network
                     Network instance backing the model
         """
-        super().__init__(ModelChange, 'modelChanged')
+        super().__init__()
 
         #
         # data related

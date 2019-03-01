@@ -19,10 +19,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+from qtgui.utils import QObserver
+
 from toolbox import toolbox
+from tools.train import Training, Trainer
 
 # FIXME[hack]
-from network.keras import ObservableCallback
+from network.keras import Training as KerasTraining
 
 from models.example_keras_vae_mnist import KerasAutoencoder
 
@@ -30,7 +33,7 @@ os.environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.datasets import mnist
 
 
-class AutoencoderPanel(Panel, toolbox.Observer):
+class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
     """A panel displaying autoencoders.
 
     Attributes
@@ -56,9 +59,14 @@ class AutoencoderPanel(Panel, toolbox.Observer):
         """
         super().__init__(parent)
         self._autoencoder = None
-        self._progress = ObservableCallback()
+        self._training = KerasTraining()
 
         self._initDataset()
+        # FIXME[hack]
+        self._training._x_train = self._x_train
+        self._training._y_train = self._y_train
+        self._training._x_test = self._x_test
+        self._training._y_test = self._y_test
 
         # h5 model trained weights
         self._weights_file = 'vae_mlp_mnist.h5'
@@ -75,7 +83,9 @@ class AutoencoderPanel(Panel, toolbox.Observer):
         self._enableComponents()
 
         # 
-        self._trainingBox.observe(self._progress)
+        self._trainer = Trainer(self._training)
+        self._trainingBox.observe(self._training)
+        self.observe(self._training)
 
     def _initDataset(self):
         """Initialize the dataset.
@@ -137,7 +147,6 @@ class AutoencoderPanel(Panel, toolbox.Observer):
 
     def _connectComponents(self):
         self._buttonCreateModel.clicked.connect(self._onCreateModel)
-        self._buttonTrainModel.clicked.connect(self._onTrainModel)
         self._buttonLoadModel.clicked.connect(self._onLoadModel)
         self._buttonSaveModel.clicked.connect(self._onSaveModel)
         self._buttonPlotModel.clicked.connect(self._onPlotModel)
@@ -177,7 +186,7 @@ class AutoencoderPanel(Panel, toolbox.Observer):
         self._buttonCreateModel.setEnabled(not running)
         self._spinboxEpochs.setEnabled(available)
         self._spinboxBatchSize.setEnabled(available)
-        self._buttonTrainModel.setEnabled(available)
+        self._buttonTrainModel.setEnabled(self._autoencoder is not None)
         self._buttonLoadModel.setEnabled(available)
         self._buttonSaveModel.setEnabled(available)
         self._buttonPlotModel.setEnabled(available)
@@ -203,19 +212,9 @@ class AutoencoderPanel(Panel, toolbox.Observer):
 
     def _createModel(self, original_dim):
         self._autoencoder = KerasAutoencoder(original_dim)
+        # FIXME[hack]:
+        self._training._model = self._autoencoder
         self._enableComponents()
-
-    def _onTrainModel(self):
-        import util # FIXME[hack]
-        util.runner.runTask(self._trainModel)
-        
-    def _trainModel(self):
-        epochs = self._spinboxEpochs.value()
-        batchSize = self._spinboxBatchSize.value()
-        self._autoencoder.train(self._x_train, self._x_test,
-                                epochs=epochs,
-                                batch_size=batchSize,
-                                progress=self._progress)
 
     def _onPlotModel(self):
         pass
@@ -316,3 +315,12 @@ class AutoencoderPanel(Panel, toolbox.Observer):
     def toolboxChanged(self, toolbox, change):
         self._enableComponents(toolbox.locked())
 
+    def trainingChanged(self, training, change):
+        if 'training_changed' in change and self._trainer is not None:
+            self._buttonTrainModel.clicked.disconnect()
+            if training.running:
+                self._buttonTrainModel.setText("Stop")
+                self._buttonTrainModel.clicked.connect(self._trainer.stop)
+            else:
+                self._buttonTrainModel.setText("Start")
+                self._buttonTrainModel.clicked.connect(self._trainer.start)

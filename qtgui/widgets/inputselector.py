@@ -1,9 +1,9 @@
-from controller import DataSourceController, DataSourceObserver
+from controller import DataSourceController
 from model import Model, ModelObserver
 
 from PyQt5.QtWidgets import QWidget, QGroupBox, QHBoxLayout
 
-class QInputSelector(QWidget, DataSourceObserver):
+class QInputSelector(QWidget, DataSourceController.Observer):
     '''A Widget to select input data (probably images).  There are
     different modes of selection: from an array, from a file, from a
     directory or from some predefined data source.
@@ -70,7 +70,8 @@ class QInputSelector(QWidget, DataSourceObserver):
         layout.addWidget(navigationBox)
         self.setLayout(layout)
 
-
+    def datasource_changed(self, datasource, change):
+        pass  # FIXME[hack]: for some reason, this gets registered as a DataSourceController.Observer, but what changes are we interestend in?
 
 
 from datasources import (DataArray, DataFile, DataDirectory, DataWebcam,
@@ -83,7 +84,7 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
                              QTreeView)
 
 
-class QInputSourceSelector(QWidget, DataSourceObserver):
+class QInputSourceSelector(QWidget, DataSourceController.Observer):
     '''The QInputSourceSelector provides a controls to select a data
     source. It is mainly a graphical user interface to the datasource
     module, adding some additional logic.
@@ -269,7 +270,7 @@ from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
 
 
-class QInputNavigator(QWidget, DataSourceObserver):
+class QInputNavigator(QWidget, DataSourceController.Observer):
 
     def __init__(self, parent=None):
         '''Initialization of the QInputNavigator.
@@ -389,7 +390,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 import numpy as np
 
 
-class QInputInfoBox(QWidget, DataSourceObserver, ModelObserver):
+class QInputInfoBox(QWidget, DataSourceController.Observer, ModelObserver):
 
     # FIXME[hack]: imageView: there should be no explicit reference
     # between widgets We need imageView._show_raw here. Think of some

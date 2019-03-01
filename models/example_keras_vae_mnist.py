@@ -10,8 +10,9 @@ import tensorflow as tf
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 import keras
 
-from distutils.version import LooseVersion
-assert LooseVersion(keras.__version__) >= LooseVersion("2.2.0"), "Keras version to old, need at least 2.2.x"
+from packaging import version
+assert version.parse(keras.__version__) >= version.parse("2.2.0"), \
+    "Keras version too old for the autoencoder, need at least 2.2.x"
 
 from keras import backend as K
 logger.info(f"Backend: {K.backend()}")
@@ -218,6 +219,7 @@ class KerasAutoencoder(Autoencoder, KerasModel):
             with self._session.as_default():
                 self._vae.fit(data,
                               epochs=epochs,
+                              verbose=0,
                               batch_size=batch_size,
                               validation_data=(validation, None),
                               callbacks=[progress])

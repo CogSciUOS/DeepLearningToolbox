@@ -11,7 +11,9 @@ from util import addons
 
 from .base import BaseController
 from .asyncrunner import AsyncRunner
-from .datasource import DataSourceController, DataSourceObserver
+from .datasource import DataSourceController
+DataSourceObserver = DataSourceController.Observer  # FIXME[hack]
+DataSourceChange = DataSourceController.Change  # FIXME[hack]
 from .activations import ActivationsController
 from .maximization import MaximizationController
 

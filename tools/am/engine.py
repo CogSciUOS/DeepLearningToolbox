@@ -31,7 +31,7 @@ import numpy as np
 
 from .config import Config
 
-from observer import Observer, Observable, BaseChange, change
+from base.observer import Observable, change
 from network import Network
 from model import Model
 
@@ -42,30 +42,9 @@ from network.tensorflow import Network as TensorflowNetwork
 from tools.caffe_classes import class_names
 
 
-class EngineChange(BaseChange):
-    ATTRIBUTES = ['engine_changed', 'config_changed', 'network_changed',
-                  'image_changed']
-
-
-class EngineObserver(Observer):
-    """An EngineObserver is notfied whenever some change in the state
-    of the activation maximization Engine occurs.
-    """
-
-    def engineChanged(self, engine: 'Engine', info: EngineChange) -> None:
-        """Respond to change in the activation maximization Engine.
-
-        Parameters
-        ----------
-        engine: Engine
-            Engine which changed (since we could observe multiple ones)
-        info: ConfigChange
-            Object for communicating which aspect of the engine changed.
-        """
-        pass
-
-
-class Engine(Observable):
+class Engine(Observable, method='engineChanged', default='engine_changed',
+             changes=['engine_changed', 'config_changed', 'network_changed',
+                      'image_changed']):
     """Activation Maximization Engine.
 
     The Engine takes all configuration values from the Config
@@ -87,7 +66,7 @@ class Engine(Observable):
     """
 
     def __init__(self, model: Model=None, config: Config=None):
-        super().__init__(EngineChange, 'engineChanged')
+        super().__init__()
         self._config = config
         self._model = model
         self._helper = None
@@ -1119,3 +1098,7 @@ class _EngineHelper:
         return image
 
 
+# FIXME[old]: this is too make old code happy. New code should use
+# Engine.Change and Engine.Observer directly.
+EngineChange = Engine.Change
+EngineObserver = Engine.Observer

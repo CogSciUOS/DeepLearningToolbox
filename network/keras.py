@@ -74,28 +74,52 @@ class Network(BaseNetwork):
         return [layer_spec['config']['name'] for layer_spec in layer_specs]
 
 
+from tools.train import Training as BaseTraining
 from keras.callbacks import Callback
-from base.observer import TrainingObservable, change
+
 import time
 
-class ObservableCallback(Callback, TrainingObservable,
-                         changes=['training_changed', 'epoch_changed',
-                                  'batch_changed', 'metric_changed'],
-                         default='training_changed',
-                         method='trainingChanged'):  # FIXME[hack]: these attributes should be inherited from TrainingObservable!
+class Training(BaseTraining, Callback):
     """Callback that notifies Observers.
 
     """
     
     def __init__(self, count_mode='samples'):
+        BaseTraining.__init__(self)
         Callback.__init__(self)
-        TrainingObservable.__init__(self)
         if count_mode == 'samples':
             self.use_steps = False
         elif count_mode == 'steps':
             self.use_steps = True
         else:
             raise ValueError('Unknown `count_mode`: ' + str(count_mode))
+
+    def start(self):
+        super().start()
+        # FIXME[hack]:
+        #epochs = self._spinboxEpochs.value()
+        #batchSize = self._spinboxBatchSize.value()
+        epochs = 4
+        batchSize = 128
+        self._model.train(self._x_train, self._x_test,
+                          epochs=epochs,
+                          batch_size=batchSize,
+                          progress=self)
+
+    def old_disfunct_star_stop(self):
+        if self._autoencoder:
+            model = self._autoencoder._vae
+            print(f"onTrainModel-1: {type(model)}")
+            if hasattr(model, 'callback_model') and model.callback_model:
+                model = model.callback_model
+            print("onTrainModel-2: {type(model)}")
+            print("onTrainModel-3: {hasattr(model, 'stop_training')}")
+            if not hasattr(model, 'stop_training') or not model.stop_training:
+                import util # FIXME[hack]
+                print("onTrainModel-4a: start training")
+            else:
+                print("onTrainModel-4b: stop training")
+                model.stop_training = True
 
     def on_train_begin(self, logs=None):
         """Called on the beginning of training.

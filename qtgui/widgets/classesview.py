@@ -1,7 +1,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox,
                              QGridLayout, QVBoxLayout)
-from observer import Observer
 from model import Model, ModelObserver, ModelChange
 
 class QClassesView(QWidget, ModelObserver):

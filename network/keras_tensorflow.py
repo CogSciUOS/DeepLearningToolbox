@@ -38,11 +38,7 @@ class Network(KerasNetwork):
 
     @classmethod
     def import_framework(cls, cpu=True):
-        # The only way to configure the keras backend appears to be
-        # via environment variable. We thus inject one for this
-        # process. Keras must be loaded after this is done
-        os.environ['KERAS_BACKEND'] = 'tensorflow'
-
+        
         # TF_CPP_MIN_LOG_LEVEL: Control the amount of TensorFlow log
         # message displayed on the console.
         #  0 = INFO
@@ -61,6 +57,49 @@ class Network(KerasNetwork):
         # log level. It means that in any case, you need a
         # TF_CPP_MIN_LOG_LEVEL of 0 to see any VLOG message.
         #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+
+        import tensorflow as tf
+
+        # The only way to configure the keras backend appears to be
+        # via environment variable. We thus inject one for this
+        # process. Keras must be loaded after this is done
+        os.environ['KERAS_BACKEND'] = 'tensorflow'
+
+        import keras
+
+        # some sanity checks
+        # (C1) keras should not be (much) newer than tensorflow.
+        #      Some ideas a given on
+        #        https://docs.floydhub.com/guides/environments/
+        #      In the following configurations I experienced problems:
+        #      tensorflow 1.3.0, keras 2.2.4
+        #      - keras uses an 'axis' argument when calling the
+        #        tf.nn.softmax() function which is not supported:
+        #        "softmax() got an unexpected keyword argument 'axis'"
+        from packaging import version
+        keras_version = version.parse(keras.__version__)
+        if keras_version >= version.parse("2.2.4"):
+            tf_min_version = "1.11.0"
+        elif keras_version >= version.parse("2.2.0"):
+            tf_min_version = "1.10.0"
+        elif keras_version >= version.parse("2.2.0"):
+            tf_min_version = "1.9.0"
+        elif keras_version >= version.parse("2.1.6"):
+            tf_min_version = "1.5.0"
+        elif keras_version >= version.parse("2.0.8"):
+            tf_min_version = "1.4.0"
+        elif keras_version >= version.parse("2.0.6"):
+            tf_min_version = "1.0.0"
+        else:
+            raise ImportError("Your keras is too old."
+                              f"We require at least keras 2.0.6, "
+                              f"but you have keras {keras.__version__}.")
+
+        if version.parse(tf.__version__) < version.parse(tf_min_version):
+            raise ImportError("Your tensorflow is too old for your keras."
+                              f"keras {keras.__version__} requires "
+                              f"at least tensorflow {tf_min_version}, "
+                              f"but you have tensorflow {tf.__version__}.")
         
         if cpu:
             # unless we do this, TF still checks and finds gpus (not
@@ -74,7 +113,6 @@ class Network(KerasNetwork):
             # error: failed call to cuInit: CUDA_ERROR_NO_DEVICE
             #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
             logger.info("Running in CPU-only mode.")
-            import tensorflow as tf
             from multiprocessing import cpu_count
             num_cpus = cpu_count()
             config = tf.ConfigProto(intra_op_parallelism_threads=num_cpus,
@@ -94,7 +132,7 @@ class Network(KerasNetwork):
 
         if cpu:
             K.set_session(session)
-
+            
         super(Network, cls).import_framework()
 
 

@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QTabWidget, QStackedWidget
 
-from observer import Observer
+from base.observer import Observable
 from controller import BaseController
 
 class Panel(QWidget):
@@ -18,7 +18,7 @@ class Panel(QWidget):
         super().__init__(parent)
 
     def setController(self, controller: BaseController,
-                      observerType: type=Observer):
+                      observerType: type=Observable.Observer):
         for child in self.findChildren(observerType):
             child.setController(controller)
 

@@ -48,11 +48,5 @@ class Config(Observable,
         """
         cls = self.__class__
         other = cls()
-        # FIXME[concept]: we have to create a new instance of the
-        #  - hence we have to have some idea what arguments we have
-        #    to give to the constructor ...
-        #    self._change_type,
-        #    self._change_method,
-        #    self._default_change)
         other.assign(self)
         return other

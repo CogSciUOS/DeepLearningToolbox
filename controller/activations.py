@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 from controller import BaseController
-from observer import Observable
+from base.observer import Observable  # FIXME: should not be needed!
 from network import Network
 from model import Model
 

@@ -1,7 +1,7 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from controller import AsyncRunner
-from observer import Observable, BaseChange
+from base.observer import Observable
 
 import logging
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class QtAsyncRunner(AsyncRunner, QObject):
             import threading
             me = threading.current_thread().name
             logger.debug(f"{self.__class__.__name__}.onCompletion():{info}")
-            if isinstance(info, BaseChange):
+            if isinstance(info, Observable.Change):
                 self._completion_signal.emit(observable, info)
 
     def _notifyObservers(self, observable, info):
@@ -63,8 +63,9 @@ class QtAsyncRunner(AsyncRunner, QObject):
 
 from PyQt5.QtCore import QObject, QMetaObject, pyqtSlot, Q_ARG
 from base.observer import Observable
+import threading
 
-class QObserver(QObject):
+class QObserver:
     """This as a base clas for all QWidgets that shall act as
     Observers in the toolbox. It implements support for asynchronous
     message passing to Qt's main event loop.
@@ -78,56 +79,61 @@ class QObserver(QObject):
     pyqtSlot. We derive from 
     """
 
-    def __init__(self, parent=None):
-        """Initialization of the QObserver.
-        """
-        super().__init__(parent)
-
     def observe(self, observable, interest=None):
-        self._change = None
-        observable.addObserver(self, notification=QObserver._qNotify,
+        # FIXME[question]: do we have to call this from the main thread
+        if not threading.current_thread() is threading.main_thread():
+            raise RuntimeError("QObserver.observe must be called from"
+                               "the main thread, not " +
+                               threading.current_thread().name + ".")
+
+        helper = QObserver.QObserverHelper(self)
+        observable.addObserver(helper,
+                               notification=QObserver.QObserverHelper._qNotify,
                                interest=interest)
 
-    def _qNotify(observable, self, change):
-        if self._change is None:
-            # Currently, there is no change event pending for this
-            # object. So we will queue a new one and remember the
-            # change:
-            self._change = change
-            # This will use Qt.AutoConnection: the member is invoked
-            # synchronously if obj lives in the same thread as the caller;
-            # otherwise it will invoke the member asynchronously.
-            QMetaObject.invokeMethod(self, '_qAsyncNotify',
-                                     Q_ARG("PyQt_PyObject", observable))
-            #     Q_ARG("PyQt_PyObject", change))
-            #   RuntimeError: QMetaObject.invokeMethod() call failed
-        else:
-            # There is already one change pending in the event loop.
-            # We will just update the change, but not queue another
-            # event.
-            self._change |= change
+    class QObserverHelper(QObject):
+        """A helper class for the :py:class:`QObserver`.
 
-    @pyqtSlot(object)
-    def _qAsyncNotify(self, observable):
-        change = self._change
-        if change is not None:
+        We define the functionality in an extra class to avoid
+        problems with multiple inheritance (:py:class:`QObserver` is
+        intended to be inherited from in addition to some
+        :py:class:`QWidget`). The main problem with QWidgets and
+        multiple inheritance is, that signals and slots are only
+        inherited from the first super class, but we have to define
+        our own pyqtSlot here to make asynchronous notification work.
+        """
+        def __init__(self, observer, parent=None):
+            """Initialization of the QObserver.
+            """
+            super().__init__(parent)
+            self._observer = observer
             self._change = None
-            observable.notify(self, change)
+            
+        def _qNotify(observable, self, change):
+            if self._change is None:
+                # Currently, there is no change event pending for this
+                # object. So we will queue a new one and remember the
+                # change:
+                self._change = change
+                # This will use Qt.AutoConnection: the member is invoked
+                # synchronously if obj lives in the same thread as the caller;
+                # otherwise it will invoke the member asynchronously.
+                QMetaObject.invokeMethod(self, '_qAsyncNotify',
+                                         Q_ARG("PyQt_PyObject", observable))
+                #     Q_ARG("PyQt_PyObject", change))
+                #   RuntimeError: QMetaObject.invokeMethod() call failed
+            else:
+                # There is already one change pending in the event loop.
+                # We will just update the change, but not queue another
+                # event.
+                self._change |= change
 
-from PyQt5.QtWidgets import QWidget
-
-class QObserverWidget(QWidget, QObserver):
-    """This as a base clas for all QWidgets that shall act as
-    Observers in the toolbox. It implements support for asynchronous
-    message passing to Qt's main event loop.
-    """
-
-    # FIXME[hack]: Only additional signals (and slots) defined in the
-    # first base class are inherited. However, we can redefine them
-    # here.
-    @pyqtSlot(object)
-    def _qAsyncNotify(self, observable):
-        QObserver._qAsyncNotify(self, observable)
+        @pyqtSlot(object)
+        def _qAsyncNotify(self, observable):
+            change = self._change
+            if change is not None:
+                self._change = None
+                observable.notify(self._observer, change)
 
 
 import numpy as np

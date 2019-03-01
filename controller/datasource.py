@@ -8,11 +8,13 @@ import numpy as np
 #   DataSource -> Model -> controller -> DataSource
 # from model import Model
 from controller import BaseController
-from observer import Observer, Observable, BaseChange, change
+from base.observer import Observable, change
 from datasources import DataSource, DataArray, DataDirectory, DataFile
 
-
-class DataSourceChange(BaseChange):
+class DataSourceObservable(Observable,
+                           changes=['datasource_changed', 'index_changed'],
+                           method='datasource_changed',
+                           default='datasource_changed'):
     """.. :py:class:: DataSourceChange
 
     A class whose instances are passed to observers in
@@ -28,18 +30,8 @@ class DataSourceChange(BaseChange):
     input_changed: bool
         Whether the input signal changed
     """
-
-    ATTRIBUTES = ['datasource_changed', 'index_changed']
-
-
-class DataSourceObserver(Observer):
-
-    def datasource_changed(self, datasource: 'DataSourceController',
-                           change: DataSourceChange):
-        pass
-
-
-class DataSourceController(BaseController, Observable):
+    
+class DataSourceController(BaseController, DataSourceObservable):
     """Base controller backed by a datasource. Contains functionality for
     manipulating input data from a data source.
 
@@ -58,7 +50,7 @@ class DataSourceController(BaseController, Observable):
     def __init__(self, model: 'model.Model',
                  datasource: DataSource = None, **kwargs) -> None:
         super().__init__(**kwargs)
-        Observable.__init__(self, DataSourceChange, 'datasource_changed')
+        Observable.__init__(self)
         self._model = model
         self._datasource = datasource
         self._index = 0

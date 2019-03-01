@@ -1,5 +1,4 @@
 from controller import BaseController
-from observer import Observable
 from network import Network
 from tools.lucid import Engine
 

@@ -4,10 +4,10 @@ from PyQt5.QtWidgets import (QWidget, QProgressBar, QLabel, QCheckBox,
                              QVBoxLayout, QFormLayout)
 from .matplotlib import QMatplotlib
 
-from qtgui.utils import QObserverWidget
-from base.observer import TrainingObservable
+from qtgui.utils import QObserver
+from tools.train import Training
 
-class QTrainingBox(QObserverWidget, TrainingObservable.Observer):
+class QTrainingBox(QWidget, QObserver, Training.Observer):
 
     def __init__(self, parent=None):
         """Initialization of the QTrainingBox.

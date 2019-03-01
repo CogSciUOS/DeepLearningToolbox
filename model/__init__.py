@@ -5,4 +5,7 @@
 
 This module contains all model-related functionality.
 '''
-from .model import Model, ModelObserver, ModelChange 
+from .model import Model
+
+ModelObserver = Model.Observer
+ModelChange = Model.Change

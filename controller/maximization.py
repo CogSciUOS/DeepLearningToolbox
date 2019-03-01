@@ -1,7 +1,6 @@
 import sys
 import numpy as np
 from controller import BaseController
-from observer import Observable
 from network import Network
 from tools.am import Engine
 

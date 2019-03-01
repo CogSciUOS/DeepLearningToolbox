@@ -1,13 +1,11 @@
 """Configuration data for the "activation maximization" (am) module.
 """
 from base import Config as BaseConfig
-from observer import Observer, BaseChange, change
-
+from base.observer import change
 
 class Config(BaseConfig,
              changes=['network_changed', 'layer_changed', 'unit_changed',
-                      'config_changed'], default='config_changed',
-             method='configChanged'):
+                      'config_changed']):
     """Configuration data for the "activation maximization" (am) module.
     """
 
