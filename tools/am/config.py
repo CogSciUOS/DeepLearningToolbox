@@ -6,7 +6,8 @@ from observer import Observer, BaseChange, change
 
 class Config(BaseConfig,
              changes=['network_changed', 'layer_changed', 'unit_changed',
-                      'config_changed'], default='config_changed'):
+                      'config_changed'], default='config_changed',
+             method='configChanged'):
     """Configuration data for the "activation maximization" (am) module.
     """
 

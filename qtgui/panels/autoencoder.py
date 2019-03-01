@@ -8,19 +8,29 @@ Github: https://github.com/krumnack
 # concept. It has to be modularized and integrated into the framework
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QPushButton, QSpinBox, QVBoxLayout, QHBoxLayout)
+from PyQt5.QtWidgets import (QPushButton, QSpinBox,
+                             QVBoxLayout, QHBoxLayout)
 
 from .panel import Panel
 from qtgui.widgets.matplotlib import QMatplotlib
+from qtgui.widgets.training import QTrainingBox
 
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-import tensorflow as tf
+from toolbox import toolbox
+
+# FIXME[hack]
+from network.keras import ObservableCallback
+
+from models.example_keras_vae_mnist import KerasAutoencoder
+
+os.environ['KERAS_BACKEND'] = 'tensorflow'
+from keras.datasets import mnist
 
 
-class AutoencoderPanel(Panel):
+class AutoencoderPanel(Panel, toolbox.Observer):
     """A panel displaying autoencoders.
 
     Attributes
@@ -45,17 +55,27 @@ class AutoencoderPanel(Panel):
                     The parent argument is sent to the QWidget constructor.
         """
         super().__init__(parent)
-        self._initDataset()
+        self._autoencoder = None
+        self._progress = ObservableCallback()
 
+        self._initDataset()
 
         # h5 model trained weights
         self._weights_file = 'vae_mlp_mnist.h5'
 
-        # Training parameters
-        self._batch_size = 128
-        self._epochs = 50
-
         self._initUI()
+        self._layoutComponents()
+        self._connectComponents()
+
+        # Training parameters
+        self._spinboxEpochs.setValue(4)
+        self._spinboxBatchSize.setValue(128)
+
+        toolbox.addObserver(self)
+        self._enableComponents()
+
+        # 
+        self._trainingBox.observe(self._progress)
 
     def _initDataset(self):
         """Initialize the dataset.
@@ -99,19 +119,21 @@ class AutoencoderPanel(Panel):
         self._buttonSaveModel = QPushButton("Save")
         self._buttonPlotModel = QPushButton("Plot Model")
         self._buttonPlotResults = QPushButton("Plot Results")
+        self._buttonPlotReconstruction = QPushButton("Plot Reconstruction")
 
         self._spinboxEpochs = QSpinBox()
         self._spinboxEpochs.setRange(1, 50)
 
+        self._spinboxBatchSize = QSpinBox()
+        self._spinboxBatchSize.setRange(1, 256)
+
         #
         # Plots
         #
-        self._trainingPlot = QMatplotlib()
+        self._trainingBox = QTrainingBox()
+        self._resultPlot0 = QMatplotlib()
         self._resultPlot1 = QMatplotlib()
         self._resultPlot2 = QMatplotlib()
-
-        self._layoutComponents()
-        self._connectComponents()
 
     def _connectComponents(self):
         self._buttonCreateModel.clicked.connect(self._onCreateModel)
@@ -120,6 +142,7 @@ class AutoencoderPanel(Panel):
         self._buttonSaveModel.clicked.connect(self._onSaveModel)
         self._buttonPlotModel.clicked.connect(self._onPlotModel)
         self._buttonPlotResults.clicked.connect(self._onPlotResults)
+        self._buttonPlotReconstruction.clicked.connect(self._onPlotReconstruction)
 
     def _layoutComponents(self):
         """Layout the UI elements.
@@ -128,23 +151,38 @@ class AutoencoderPanel(Panel):
 
         """
         plotBar = QHBoxLayout()
-        plotBar.addWidget(self._trainingPlot)
+        plotBar.addWidget(self._trainingBox)
+        plotBar.addWidget(self._resultPlot0)
         plotBar.addWidget(self._resultPlot1)
         plotBar.addWidget(self._resultPlot2)
 
         buttonBar = QHBoxLayout()
         buttonBar.addWidget(self._buttonCreateModel)
         buttonBar.addWidget(self._spinboxEpochs)
+        buttonBar.addWidget(self._spinboxBatchSize)
         buttonBar.addWidget(self._buttonTrainModel)
         buttonBar.addWidget(self._buttonLoadModel)
         buttonBar.addWidget(self._buttonSaveModel)
         buttonBar.addWidget(self._buttonPlotModel)
         buttonBar.addWidget(self._buttonPlotResults)
+        buttonBar.addWidget(self._buttonPlotReconstruction)
 
         layout = QVBoxLayout()
         layout.addLayout(plotBar)
         layout.addLayout(buttonBar)
         self.setLayout(layout)
+
+    def _enableComponents(self, running=False):
+        available = self._autoencoder is not None and not running
+        self._buttonCreateModel.setEnabled(not running)
+        self._spinboxEpochs.setEnabled(available)
+        self._spinboxBatchSize.setEnabled(available)
+        self._buttonTrainModel.setEnabled(available)
+        self._buttonLoadModel.setEnabled(available)
+        self._buttonSaveModel.setEnabled(available)
+        self._buttonPlotModel.setEnabled(available)
+        self._buttonPlotResults.setEnabled(available)
+        self._buttonPlotReconstruction.setEnabled(available)
 
     def _onLoadModel(self):
         self._autoencoder.load(self._weights_file)
@@ -164,49 +202,39 @@ class AutoencoderPanel(Panel):
         util.runner.runTask(self._createModel, original_dim)
 
     def _createModel(self, original_dim):
-        #self._graph = tf.Graph()
-        #tf_config = tf.ConfigProto()
-        #self._session = tf.Session(graph=self._graph, config=tf_config)
-        #K.set_session(self._session)
-        #with tf.device("/device:GPU:0"):
-        #with tf.Session(graph=tf.Graph()) as sess:
-        #K.set_session(sess)
-        #with tf.device("/device:GPU:0"):
         self._autoencoder = KerasAutoencoder(original_dim)
-        #self._autoencoder.train(self._x_train, self._x_test,
-        #                        epochs=self._epochs,
-        #                        batch_size=self._batch_size)
+        self._enableComponents()
 
     def _onTrainModel(self):
-        # train the autoencoder
-        # FIXME[problem]: we have to run this in the same thread
-        # where the autoencoder was initialized!
-        # https://stackoverflow.com/questions/42322698/tensorflow-keras-multi-threaded-model-fitting
         import util # FIXME[hack]
         util.runner.runTask(self._trainModel)
-
+        
     def _trainModel(self):
-        #K.set_session(self._session)
-        #with tf.device("/device:GPU:0"):
-        self._epochs = self._spinboxEpochs.value()
+        epochs = self._spinboxEpochs.value()
+        batchSize = self._spinboxBatchSize.value()
         self._autoencoder.train(self._x_train, self._x_test,
-                                epochs=self._epochs,
-                                batch_size=self._batch_size)
+                                epochs=epochs,
+                                batch_size=batchSize,
+                                progress=self._progress)
 
     def _onPlotModel(self):
-        # plot_model requires pydot 
-        #plot_model(self._vae, to_file='vae_mlp.png', show_shapes=True)
         pass
 
     def _onPlotResults(self):
         data = (self._x_test, self._y_test)
-        batch_size = self._batch_size
-        self.plot_results1(data, batch_size=batch_size)
+        batchSize = self._spinboxBatchSize.value()
+        self.plot_results1(data, batch_size=batchSize)
 
         # display a 30x30 2D manifold of digits
         n = 30
         digit_size = 28
         self.plot_results2(n, digit_size)
+
+    def _onPlotReconstruction(self):
+        data = (self._x_test, self._y_test)
+        batchSize = self._spinboxBatchSize.value()
+        self.plotReconstruction(data, batch_size=batchSize)
+
 
     def plot_results1(self, data, batch_size=128, model_name="vae_mnist"):
         """Plots labels and MNIST digits as function of 2-dim latent vector
@@ -270,313 +298,21 @@ class AutoencoderPanel(Panel):
         #plt.savefig(filename)
         #plt.show()
 
-
-import os
-os.environ['KERAS_BACKEND'] = 'tensorflow'
-
-from keras.layers import Lambda, Input, Dense
-from keras.models import Model
-from keras.datasets import mnist
-from keras.losses import mse, binary_crossentropy
-# plot_model requires that pydot is installed
-#from keras.utils import plot_model
-
-from distutils.version import LooseVersion
-import keras
-assert LooseVersion(keras.__version__) >= LooseVersion("2.2.0"), "Keras version to old, need at least 2.2.x"
-
-from keras import backend as K
-print(f"Backend: {K.backend()}")
-assert K.backend() == "tensorflow", f"Keras should use the tensorflow backend, not {K.backend()}"
-
-import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-
-class KerasAutoencoder:
-    """A (variational) autoencoder implemented in Keras.
-
-    Attributes
-    ----------
-    _vae
-    _encoder
-    _decoder
-
-    _inputs
-    _outputs
-
-    
-    _epochs
-    _batch_size
-    
-    _weights_file
-    _mse
-
-    """
-
-
-    def __init__(self, original_dim, intermediate_dim = 512, latent_dim = 2,
-                 loss='mse'):
-        """Construct a new, fully connected (dense) autoencoder.
-        Both, encoder and decoder, will have one itermediate layer
-        of the given dimension.
-        """
-        print(f"New VAE: {original_dim}/{intermediate_dim}/{latent_dim}")
-
-        from tensorflow.python.client import device_lib
-        print(device_lib.list_local_devices())
-
-        # network parameters
-        input_shape = (original_dim, )
-
-        #self._session = K.get_session()
-        print("HALLO-1")
-        self._graph = tf.Graph()
-        print("HALLO-2")
-        self._session = tf.Session(graph=self._graph)
-        print("HALLO-3")
-        K.set_session(self._session)
-        print("HALLO-4")
-
-
-        # VAE model = encoder + decoder
-        with self._graph.as_default():
-
-            print("HALLO-5")
-            #
-            # (1) build encoder model
-            #
-            self._inputs = Input(shape=input_shape, name='encoder_input')
-            x = Dense(intermediate_dim, activation='relu')(self._inputs)
-            self._z_mean = Dense(latent_dim, name='z_mean')(x)
-            self._z_log_var = Dense(latent_dim, name='z_log_var')(x)
-
-            # use reparameterization trick to push the sampling out as input
-            # note that "output_shape" isn't necessary with the TensorFlow backend
-            z = Lambda(self._sampling, output_shape=(latent_dim,),
-                       name='z')([self._z_mean, self._z_log_var])
-
-            # instantiate encoder model
-            self._encoder = Model(self._inputs, [self._z_mean, self._z_log_var, z],
-                                  name='encoder')
-            self._encoder.summary()
-            # plot_model requires pydot 
-            #plot_model(self._encoder, to_file='vae_mlp_encoder.png',
-            #           show_shapes=True)
-
-            #
-            # (2) build decoder model
-            #
-            latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
-            x = Dense(intermediate_dim, activation='relu')(latent_inputs)
-            self._outputs = Dense(original_dim, activation='sigmoid')(x)
-
-            # instantiate decoder model
-            self._decoder = Model(latent_inputs, self._outputs, name='decoder')
-            self._decoder.summary()
-            # plot_model require pydot installed
-            #plot_model(self._decoder, to_file='vae_mlp_decoder.png', show_shapes=True)
-
-            #
-            # (3) instantiate VAE model
-            #
-            self._outputs = self._decoder(self._encoder(self._inputs)[2])
-            self._vae = Model(self._inputs, self._outputs, name='vae_mlp')
-
-            if loss == 'mse':
-                reconstruction_loss = mse(self._inputs, self._outputs)
-            else:
-                reconstruction_loss = binary_crossentropy(self._inputs,
-                                                          self._outputs)
-            # VAE loss = mse_loss or xent_loss + kl_loss
-            reconstruction_loss *= original_dim
-            kl_loss = (1 + self._z_log_var -
-                       K.square(self._z_mean) - K.exp(self._z_log_var))
-            kl_loss = K.sum(kl_loss, axis=-1)
-            kl_loss *= -0.5
-            vae_loss = K.mean(reconstruction_loss + kl_loss)
-            self._vae.add_loss(vae_loss)
-            self._vae.compile(optimizer='adam')
-            self._vae.summary()
+    def plotReconstruction(self, data, batch_size=128):
+        idx = np.random.randint(len(data[0]))
+        reconstruction = self._autoencoder.reconstruct(data[0][idx:idx+1],
+                                                       batch_size=batch_size)
         
-    def __del__(self):
-        self._session.close()
+        plt = self._resultPlot0
+        plt.imshow(data[0][idx].reshape(28,28), cmap='Greys_r')
         
-    # use the reparameterization trick:
-    # instead of sampling from Q(z|X), sample eps = N(0,I)
-    # z = z_mean + sqrt(var)*eps
-    def _sampling(self, args):
-        """Reparameterization trick by sampling fr an isotropic unit
-        Gaussian.
-        
-        Arguments
-        ---------
-        args (tensor): mean and log of variance of Q(z|X)
+        plt = self._resultPlot1
+        plt.imshow(reconstruction[0].reshape(28,28), cmap='Greys_r')
 
-        Returns
-        -------
-        z (tensor): sampled latent vector
-        """
-        z_mean, z_log_var = args
-        batch = K.shape(z_mean)[0]
-        dim = K.int_shape(z_mean)[1]
-        # by default, random_normal has mean=0 and std=1.0
-        epsilon = K.random_normal(shape=(batch, dim))
-        return z_mean + K.exp(0.5 * z_log_var) * epsilon
+        plt = self._resultPlot2
+        plt.imshow(data[0][idx].reshape(28,28) -
+                   reconstruction[0].reshape(28,28), cmap='Greys_r')
 
+    def toolboxChanged(self, toolbox, change):
+        self._enableComponents(toolbox.locked())
 
-    @property
-    def encoder(self):
-        return self._encoder
-
-    @property
-    def decoder(self):
-        return self._decoder
-
-    def load(self, filename: str):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.load_weights(filename)
-                logger.info(f'loaded autoencoder from "{filename}"')
-
-
-    def save(self, filename: str):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.save_weights(filename)
-                logger.info(f'saved autoencoder to "{filename}"')
-
-    def train(self, data, validation, epochs, batch_size):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.fit(data,
-                              epochs=epochs,
-                              batch_size=batch_size,
-                              validation_data=(validation, None))
-
-    def encode(self, data, batch_size):
-        with self._graph.as_default():
-            with self._session.as_default():
-                z_mean, _, _ = self._encoder.predict(data,
-                                                     batch_size=batch_size)
-        return z_mean
-
-    def decode(self, data, batch_size=1):
-        with self._graph.as_default():
-            with self._session.as_default():
-                x_decoded = self._decoder.predict(data,
-                                                  batch_size=batch_size)
-        return x_decoded
-
-
-from keras.callback import Callback
-from observer import Observable
-
-class KerasProgressCallback(Callback, Observable):
-    ATTRIBUTES = ['epoch_changed', 'batch_changed']
-
-    """Callback that prints metrics to stdout.
-
-    Arguments:
-      count_mode: One of "steps" or "samples".
-          Whether the progress bar should
-          count samples seens or steps (batches) seen.
-
-    Raises:
-      ValueError: In case of invalid `count_mode`.
-    """
-
-
-    """Inherits the following properties from keras.callbacks.Callback:
-
-      params: dict. Training parameters
-          (eg. verbosity, batch size, number of epochs...).
-          can be set with  set_params(params):
-      model: instance of `keras.models.Model`.
-          Reference of the model being trained.
-
-    The `logs` dictionary that callback methods take as argument will
-    contain keys for quantities relevant to the current batch or
-    epoch.
-
-    Currently, the `.fit()` method of the `Sequential` model class
-    will include the following quantities in the `logs` that it passes
-    to its callbacks:
-
-      on_epoch_end: logs include `acc` and `loss`, and
-          optionally include `val_loss`
-          (if validation is enabled in `fit`), and `val_acc`
-          (if validation and accuracy monitoring are enabled).
-      on_batch_begin: logs include `size`,
-          the number of samples in the current batch.
-      on_batch_end: logs include `loss`, and optionally `acc`
-          (if accuracy monitoring is enabled).
-
-    """
-
-  def __init__(self):
-    self.validation_data = None
-
-  def set_params(self, params):
-    self.params = params
-
-  def set_model(self, model):
-    self.model = model
-
-    """
-    
-    
-    def __init__(self, count_mode='samples'):
-        super().__init__()
-        if count_mode == 'samples':
-            self.use_steps = False
-        elif count_mode == 'steps':
-            self.use_steps = True
-        else:
-            raise ValueError('Unknown `count_mode`: ' + str(count_mode))
-
-    @change
-    def on_train_begin(self, logs=None):
-        self.verbose = self.params['verbose']
-        self.epochs = self.params['epochs']
-
-    def on_epoch_begin(self, epoch, logs=None):
-        if self.verbose:
-            print('Epoch %d/%d' % (epoch + 1, self.epochs))
-            if self.use_steps:
-                target = self.params['steps']
-            else:
-                target = self.params['samples']
-            self.target = target
-            self.progbar = Progbar(target=self.target, verbose=self.verbose)
-        self.seen = 0
-
-    def on_batch_begin(self, batch, logs=None):
-        if self.seen < self.target:
-            self.log_values = []
-
-    def on_batch_end(self, batch, logs=None):
-        logs = logs or {}
-        batch_size = logs.get('size', 0)
-        if self.use_steps:
-            self.seen += 1
-        else:
-            self.seen += batch_size
-
-        for k in self.params['metrics']:
-            if k in logs:
-                self.log_values.append((k, logs[k]))
-
-        # Skip progbar update for the last batch;
-        # will be handled by on_epoch_end.
-        if self.verbose and self.seen < self.target:
-            self.progbar.update(self.seen, self.log_values)
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        for k in self.params['metrics']:
-            if k in logs:
-                self.log_values.append((k, logs[k]))
-        if self.verbose:
-            self.progbar.update(self.seen, self.log_values, force=True)

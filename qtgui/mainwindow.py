@@ -293,7 +293,8 @@ class DeepVisMainWindow(QMainWindow):
         panel   :   qtgui.panels.Panel
                     The newly selected panel
         '''
-        self._panel = panel
+        self._panel = self._tabs.widget(panel)
+        self._panel.attention(False)
 
     def _saveState(self):
         '''Callback for saving any application state inb4 quitting.'''

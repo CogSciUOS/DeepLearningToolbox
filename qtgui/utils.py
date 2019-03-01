@@ -60,6 +60,76 @@ class QtAsyncRunner(AsyncRunner, QObject):
         """
         observable.notifyObservers(info)
 
+
+from PyQt5.QtCore import QObject, QMetaObject, pyqtSlot, Q_ARG
+from base.observer import Observable
+
+class QObserver(QObject):
+    """This as a base clas for all QWidgets that shall act as
+    Observers in the toolbox. It implements support for asynchronous
+    message passing to Qt's main event loop.
+
+    This class provides a convenience method :py:meth:`observe`, which
+    should be used to observer some :py:class:`Observable` (instead
+    of calling :py:meth:`Observable.addObserver` directly). This will
+    set up the required magic.
+
+    This class has to inherit from QObject, as it defines an
+    pyqtSlot. We derive from 
+    """
+
+    def __init__(self, parent=None):
+        """Initialization of the QObserver.
+        """
+        super().__init__(parent)
+
+    def observe(self, observable, interest=None):
+        self._change = None
+        observable.addObserver(self, notification=QObserver._qNotify,
+                               interest=interest)
+
+    def _qNotify(observable, self, change):
+        if self._change is None:
+            # Currently, there is no change event pending for this
+            # object. So we will queue a new one and remember the
+            # change:
+            self._change = change
+            # This will use Qt.AutoConnection: the member is invoked
+            # synchronously if obj lives in the same thread as the caller;
+            # otherwise it will invoke the member asynchronously.
+            QMetaObject.invokeMethod(self, '_qAsyncNotify',
+                                     Q_ARG("PyQt_PyObject", observable))
+            #     Q_ARG("PyQt_PyObject", change))
+            #   RuntimeError: QMetaObject.invokeMethod() call failed
+        else:
+            # There is already one change pending in the event loop.
+            # We will just update the change, but not queue another
+            # event.
+            self._change |= change
+
+    @pyqtSlot(object)
+    def _qAsyncNotify(self, observable):
+        change = self._change
+        if change is not None:
+            self._change = None
+            observable.notify(self, change)
+
+from PyQt5.QtWidgets import QWidget
+
+class QObserverWidget(QWidget, QObserver):
+    """This as a base clas for all QWidgets that shall act as
+    Observers in the toolbox. It implements support for asynchronous
+    message passing to Qt's main event loop.
+    """
+
+    # FIXME[hack]: Only additional signals (and slots) defined in the
+    # first base class are inherited. However, we can redefine them
+    # here.
+    @pyqtSlot(object)
+    def _qAsyncNotify(self, observable):
+        QObserver._qAsyncNotify(self, observable)
+
+
 import numpy as np
 from scipy.misc import imresize
 

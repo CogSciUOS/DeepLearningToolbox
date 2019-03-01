@@ -56,3 +56,8 @@ class QMatplotlib(FigureCanvas):
         self._ax.clear()
         self._ax.imshow(*args, **kwargs)
         self._ax.figure.canvas.draw()
+
+    def plot(self, *args, **kwargs):
+        self._ax.clear()
+        self._ax.plot(*args, **kwargs)
+        self._ax.figure.canvas.draw()

@@ -172,8 +172,9 @@ class Observable:
 
     Attributes
     ----------
-    _observers: set
-        Objects observing this class for changes
+    _observers: dict
+        A mapping of observers (objects observing this class for changes)
+        to pairs (notify, interest)
     _change_type: type
         The type of the change object sent to the observers.
         Should be a subclass of BaseChange.
@@ -185,7 +186,7 @@ class Observable:
     """
 
     def __init__(self, change_type: type, change_method: str):
-        self._observers = set()
+        self._observers = dict()
         self._change_type = change_type
         self._change_method = change_method
         self._thread_local = threading.local()
@@ -212,6 +213,7 @@ class Observable:
         :py:class:`BaseChange` object. The idea is that this will
         be passed to the main thread by the :py:class:`AsyncRunner`.
         """
+        # FIXME[concept]: that does not 
         data = self._thread_local
         if not hasattr(data, 'change'):
             raise RuntimeError("No change was startetd.")
@@ -240,12 +242,14 @@ class Observable:
         final result.
         """
         if not hasattr(self._thread_local, 'change'):
-            raise RuntimeError("No change was startetd.")
-        self._thread_local.change |= {a for a in args}
-        self._thread_local.change |= {k for k,v in kwargs.items() if v}
+            self.notifyObservers(self._change_type(*args, **kwargs))
+        else:
+            self._thread_local.change |= {a for a in args}
+            self._thread_local.change |= {k for k,v in kwargs.items() if v}
         
 
-    def addObserver(self, observer, notify: bool=False):
+    def addObserver(self, observer, notify: bool=False,
+                    notification=None, interest: BaseChange=None) -> None:
         """Add an object to observe this Observable.
 
         Parameters
@@ -254,9 +258,13 @@ class Observable:
             Object which wants to be notified of changes. Must supply
             a suitable change method.
         """
-        self._observers.add(observer)
+        if notification is None:
+            notification = Observable.notify
+        if interest is None:
+            interest = self._change_type.all()
+        self._observers[observer] = (notification, interest)
         if notify:
-            self.notify(observer)
+            self.notify(observer, interest)
 
     def remove_observer(self, observer: Observer):
         """Remove an observer from this Observable.
@@ -266,9 +274,9 @@ class Observable:
         observer: object
             Object which no longer wants to be notified of changes.
         """
-        self._observers.remove(observer)
+        del self._observers[observer]
 
-    def notifyObservers(self, info: BaseChange):
+    def notifyObservers(self, *args, **kwargs):
         """Notify all observers that the state of this Observable has changed.
 
         Parameters
@@ -277,11 +285,17 @@ class Observable:
             Changes in the Observable since the last update.
             If ``None``, do not publish update.
         """
+        if len(args) == 1 and isinstance(args[0], BaseChange):
+            info = args[0]
+        else:
+            info = self._change_type(*args, **kwargs)
+        
         me = threading.current_thread().name
         logger.debug(f"{self.__class__.__name__}.notifyObservers({info})")
         if info:
-            for observer in self._observers:
-                self.notify(observer, info)
+            for observer, (notify, interest)  in self._observers.items():
+                if interest & info:
+                    notify(self, observer, info)
 
     def notify(self, observer: Observer, info: BaseChange=None):
         """Notify all observers that the state of this Observable has changed.

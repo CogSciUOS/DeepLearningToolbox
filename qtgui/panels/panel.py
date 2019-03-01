@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QTabWidget, QStackedWidget
 
 from observer import Observer
 from controller import BaseController
@@ -21,3 +21,26 @@ class Panel(QWidget):
                       observerType: type=Observer):
         for child in self.findChildren(observerType):
             child.setController(controller)
+
+    def attention(self, alert=True):
+        """Indicate that this panel may need some attention.
+
+        FIXME[hack]: this is just a first quick-and-dirty implementation.
+        Do something nicer once there ist time ...
+        """
+        parent = self.parentWidget()
+        if parent is None:
+            return
+
+        if parent is not None and isinstance(parent, QStackedWidget):
+            parent = parent.parentWidget()
+
+        if parent is not None and isinstance(parent, QTabWidget):
+            me = parent.indexOf(self)
+            text = parent.tabText(me)
+            import re # FIXME[hack]
+            text = re.sub(r'^X ', '', text)
+            if alert:
+                text = 'X ' + text
+            text = parent.setTabText(me, text)
+            #parent.item().setTextColor(QColor(color));

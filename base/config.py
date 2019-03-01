@@ -1,7 +1,9 @@
-from observer import Observable, Observer as BaseObserver, BaseChange, change
+from base.observer import Observable, change
 
-
-class Config(Observable):
+class Config(Observable,
+             changes=['config_changed'],
+             default='config_changed',
+             method='configChanged'):
     """A :py:class:Config object provides configuration data.  It is an
     :py:class:Observable, allowing :py:class:Engine and user
     interfaces to be notified on changes.
@@ -9,23 +11,8 @@ class Config(Observable):
     """
     _config = {}
 
-    def __init_subclass__(cls, changes=['config_changed'],
-                          default='config_changed',
-                          method='configChanged'):
-        cls._change_method = method
-        cls.Change = type(cls.__name__ + ".Change", (BaseChange,),
-                          {'ATTRIBUTES': changes})
-        cls._default_change = default
-        def XChanged(self, config:cls, info:cls.Change):
-            raise NotImplementedError(f"{type(self).__name__} claims to be "
-                                      f"{cls.__name__}.Observer "
-                                      f"but does not implement {method}.")
-        cls.Observer = type(cls.__name__ + ".Observer", (BaseObserver,),
-                            {method: XChanged})
-        
-
     def __init__(self):
-        super().__init__(self.Change, self._change_method)
+        super().__init__()
         self._values = {}
 
     def __getattr__(self, name):
