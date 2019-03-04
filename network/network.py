@@ -15,6 +15,7 @@ import importlib
 from .util import convert_data_format
 from util import Identifiable
 
+from base.observer import BusyObservable, busy
 
 # FIXME[design]: we should decide on some points:
 #
@@ -27,7 +28,8 @@ from util import Identifiable
 #
 
 
-class Network(Identifiable):
+class Network(Identifiable, BusyObservable, method='network_changed',
+              changes=['state_changed', 'weights_changed']):
     """Abstract Network interface for all frameworks.
 
     The Network API will allow to order the dimensions in data arrays
@@ -130,7 +132,7 @@ class Network(Identifiable):
         via :py:attr:`layer_dict`."""
         return tuple(self.layer_dict.values())[item]
 
-
+    @busy
     def get_activations(self, layer_ids: Any,
                         input_samples: np.ndarray,
                         data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray]]:
@@ -825,4 +827,7 @@ class Network(Identifiable):
                 print("  {}: {} ({})".format(i,self._output_labels[inds[-1-i]],
                                              output[input_im_ind, inds[-1-i]]))
 
-        
+from base.controller import Controller
+
+class NetworkController(Controller):
+    pass

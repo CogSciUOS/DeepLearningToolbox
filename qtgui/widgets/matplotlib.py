@@ -111,3 +111,15 @@ class QMatplotlib(FigureCanvas):
 
     def noData(self):
         self.showMessage("No data")
+
+    def save(self, filename: str=None) -> None:
+        pass
+        #FIXME[old]:
+        # model_name="vae_mnist"
+        # filename = os.path.join(model_name, "digits_over_latent.png")
+        # plt.savefig(filename)
+
+        # filename = os.path.join(model_name, "vae_mean.png")
+        # os.makedirs(model_name, exist_ok=True)
+        # plt.savefig(filename)
+        # plt.show()

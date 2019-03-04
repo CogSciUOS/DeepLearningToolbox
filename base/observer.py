@@ -350,3 +350,48 @@ class Observable:
 
 
 
+def busy(function):
+    """A decorator that marks a methods affecting the business of an
+    BusyObservable. A method decorated this way sets the busy flag of
+    the object and may not be called when this flag is already set.
+    The change of the busy flag will be reported to the observers.
+    """
+    def wrapper(self, *args, **kwargs):
+        self.busy = True
+        result = function(self, *args, **kwargs)
+        self.busy = False
+        return result
+    return wrapper
+
+
+
+class BusyObservable(Observable, changes=['busy_changed']):
+    """A :py:class:Config object provides configuration data.  It is an
+    :py:class:Observable, allowing :py:class:Engine and user
+    interfaces to be notified on changes.
+
+    """
+
+    def __init_subclass__(cls: type, method: str=None, changes: list=None,
+                          default: str=None):
+        if changes is not None:
+            changes += ['busy_changed'] + changes
+        Observable.__init_subclass__.__func__(cls, method, changes)
+
+    def __init__(self):
+        super().__init__()
+        self._busy = False
+        
+    @property
+    def busy(self) -> bool:
+        return self._busy
+
+    @busy.setter
+    def busy(self, state: bool) -> None:
+        if self._busy == state:
+            if self._busy:
+                raise RuntimeError("Object is currently busy.")
+            else:
+                raise RuntimeError("Trying to unemploy an object "
+                                   "thatis already lazy.")
+        self._busy = state
