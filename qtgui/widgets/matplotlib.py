@@ -39,10 +39,7 @@ class QMatplotlib(FigureCanvas):
         #
         # Place some default content
         #
-        self._ax.text(0.5, 0.5, 'matplotlib',
-                      horizontalalignment='center',
-                      verticalalignment='center',
-                      transform=self._ax.transAxes)
+        self.showMessage('matplotlib')
         
         #t = np.linspace(0, 10, 501)
         #self._ax.plot(t, np.tan(t), ".")
@@ -63,6 +60,13 @@ class QMatplotlib(FigureCanvas):
         #    100, [(self._update_canvas, (), {})])
         #self._timer.start()
 
+    def __enter__(self):
+        self._ax.clear()
+        return self._ax
+
+    def __exit__(self, type, value, traceback):
+        self._ax.figure.canvas.draw()
+
     def _onKeyPress(self, event):
         print(f"Matplotlib: you pressed '{event.key}'")
 
@@ -78,6 +82,7 @@ class QMatplotlib(FigureCanvas):
               ("None" if data_x is None else f"data=({data_x},{data_y})"))
 
     def _update_canvas(self):
+        # FIXME[old]
         self._ax.clear()
         t = np.linspace(0, 10, 101)
         # Shift the sinusoid as a function of time.
@@ -85,16 +90,24 @@ class QMatplotlib(FigureCanvas):
         self._ax.figure.canvas.draw()
 
     def scatter(self, *args, **kwargs):
-        self._ax.clear()
-        self._ax.scatter(*args, **kwargs)
-        self._ax.figure.canvas.draw()
+        with self as ax:
+            ax.scatter(*args, **kwargs)
 
     def imshow(self, *args, **kwargs):
-        self._ax.clear()
-        self._ax.imshow(*args, **kwargs)
-        self._ax.figure.canvas.draw()
+        with self as ax:
+            ax.imshow(*args, **kwargs)
 
     def plot(self, *args, **kwargs):
-        self._ax.clear()
-        self._ax.plot(*args, **kwargs)
-        self._ax.figure.canvas.draw()
+        with self as ax:
+            ax.plot(*args, **kwargs)
+
+    def showMessage(self, message: str):
+        with self as ax:
+            ax.axis('off')
+            ax.text(0.5, 0.5, message,
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    transform=ax.transAxes)
+
+    def noData(self):
+        self.showMessage("No data")

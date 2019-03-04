@@ -16,6 +16,11 @@ _infos = {
         'type': 'tool',
         'info': 'A tool for inspecting autoencoders',
         'use': False
+    },
+    'advexample': {
+        'type': 'tool',
+        'info': 'A tool for inspecting adversarial examples',
+        'use': False
     }
 }
 

@@ -134,6 +134,7 @@ class DeepVisMainWindow(QMainWindow):
         if addons.use('lucid'):
             self._lucid = self.initLucidPanel()
         self.initAutoencoderPanel()
+        self.initAdversarialExamplePanel()
 
         self._createTabWidget()
 
@@ -153,6 +154,8 @@ class DeepVisMainWindow(QMainWindow):
             self._tabs.addTab(self._lucid, 'Lucid')
         if self._autoencoder is not None:
             self._tabs.addTab(self._autoencoder, 'Autoencoder')
+        if self._adversarial_example is not None:
+            self._tabs.addTab(self._adversarial_example, 'Adv. Examples')
         if self._internals is not None:
             self._tabs.addTab(self._internals, 'Internals')
         if self._logging is not None:
@@ -250,6 +253,16 @@ class DeepVisMainWindow(QMainWindow):
             self._autoencoder = AutoencoderPanel()
         else:
             self._autoencoder = None
+
+    def initAdversarialExamplePanel(self):
+        """Initialise the adversarial example panel.
+
+        """
+        if addons.use('advexample'):
+            from .panels.advexample import AdversarialExamplePanel
+            self._adversarial_example = AdversarialExamplePanel()
+        else:
+            self._adversarial_example = None
 
     def initLoggingPanel(self):
         """Initialise the log panel.

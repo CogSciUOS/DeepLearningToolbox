@@ -67,15 +67,20 @@ class Observable:
         accumulate changes within a task.
     """
 
-    # FIXME[problem]: arguments seem to be not accumulated over the
-    # subclass hierarchy, i.e. if am.Config inherits from base.Conf
-    # (which is an Observable) amd am.Config provides changes=..., but not
-    # method=..., then the value for method is taken from here ("changed"),
-    # not from base.Config
-    def __init_subclass__(cls: type, changes: list=None,
-                          default: str=None,
-                          method: str=None):
-        """Initialization of subclasses of :py:class:`Observable`
+    def __init_subclass__(cls: type, method: str=None, changes: list=None):
+        """Initialization of subclasses of :py:class:`Observable`.
+        Each of this classes will provide some extra class members
+        describing the observation (Change, Observer, _change_method).
+        Values to initialize these class members can be passed on
+        class definition as class arguments.
+
+        Arguments
+        ---------
+        method: str
+            Name of the method to be called in the observable.
+        changes: list of str
+            List of changes that can happpen. This is used to construct
+            the :py:class:`Observable.Changes` type.
         """
         if changes is not None:
             cls.Change = type(cls.__name__ + ".Change", (Observable.Change,),
@@ -90,8 +95,6 @@ class Observable:
             cls.Observer = type(cls.__name__ + ".Observer",
                                 (Observable.Observer,), {method: XChanged})
 
-        if default is not None:
-            cls._default_change = default
 
     class Observer(object):
         """Mixin for inheriting observer functionality. An observer registers
@@ -220,7 +223,6 @@ class Observable:
             return cls(*cls.ATTRIBUTES)
 
     _change_method:str = 'changed'
-    _default_change:str = 'changed'
 
     def __init__(self):
         self._observers = dict()

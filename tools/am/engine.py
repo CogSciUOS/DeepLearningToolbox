@@ -42,7 +42,7 @@ from network.tensorflow import Network as TensorflowNetwork
 from tools.caffe_classes import class_names
 
 
-class Engine(Observable, method='engineChanged', default='engine_changed',
+class Engine(Observable, method='engineChanged',
              changes=['engine_changed', 'config_changed', 'network_changed',
                       'image_changed']):
     """Activation Maximization Engine.

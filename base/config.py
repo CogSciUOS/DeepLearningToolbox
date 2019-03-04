@@ -1,14 +1,21 @@
 from base.observer import Observable, change
 
-class Config(Observable,
-             changes=['config_changed'],
-             default='config_changed',
-             method='configChanged'):
+class Config(Observable, method='configChanged', changes=['config_changed']):
     """A :py:class:Config object provides configuration data.  It is an
     :py:class:Observable, allowing :py:class:Engine and user
     interfaces to be notified on changes.
 
     """
+
+    def __init_subclass__(cls: type, method: str=None, changes: list=None,
+                          default: str=None):
+        Observable.__init_subclass__.__func__(cls, method, changes)
+        if default is not None:
+            cls._default_change = default
+
+    _default_change:str = 'config_changed'
+
+    
     _config = {}
 
     def __init__(self):

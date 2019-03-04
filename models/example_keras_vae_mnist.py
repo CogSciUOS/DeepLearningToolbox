@@ -6,7 +6,6 @@ logger.setLevel(logging.DEBUG)
 
 import tensorflow as tf
 
-
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 import keras
 
@@ -23,8 +22,6 @@ from keras.models import Model
 from keras.losses import mse, binary_crossentropy
 # plot_model requires that pydot is installed
 #from keras.utils import plot_model
-
-
 
 from toolbox import toolbox
 
@@ -56,32 +53,8 @@ class VariationalAutoencoder:
     def sampleDataFor(self, input, n=1):
         pass
 
-class KerasModel:
 
-    def __init__(self):
-        from tensorflow.python.client import device_lib
-        logger.info(device_lib.list_local_devices())
-
-        #self._session = K.get_session()
-        self._graph = tf.Graph()
-        self._session = tf.Session(graph=self._graph)
-        K.set_session(self._session)
-
-    def __del__(self):
-        self._session.close()
-   
-    def load(self, filename: str):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.load_weights(filename)
-                logger.info(f'loaded autoencoder from "{filename}"')
-
-    def save(self, filename: str):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.save_weights(filename)
-                logger.info(f'saved autoencoder to "{filename}"')
-
+from network.keras import KerasModel
 
 class KerasAutoencoder(Autoencoder, KerasModel):
     """A (variational) autoencoder implemented in Keras.
@@ -210,8 +183,6 @@ class KerasAutoencoder(Autoencoder, KerasModel):
         # by default, random_normal has mean=0 and std=1.0
         epsilon = K.random_normal(shape=(batch, dim))
         return z_mean + K.exp(0.5 * z_log_var) * epsilon
-
-
 
     def train(self, data, validation, epochs, batch_size, progress):
         toolbox.acquire()

@@ -11,10 +11,8 @@ from controller import BaseController
 from base.observer import Observable, change
 from datasources import DataSource, DataArray, DataDirectory, DataFile
 
-class DataSourceObservable(Observable,
-                           changes=['datasource_changed', 'index_changed'],
-                           method='datasource_changed',
-                           default='datasource_changed'):
+class DataSourceObservable(Observable, method='datasource_changed',
+                           changes=['datasource_changed', 'index_changed']):
     """.. :py:class:: DataSourceChange
 
     A class whose instances are passed to observers in

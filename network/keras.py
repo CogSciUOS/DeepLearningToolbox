@@ -73,14 +73,21 @@ class Network(BaseNetwork):
             raise ValueError('Config is neither a dict nor a list.')
         return [layer_spec['config']['name'] for layer_spec in layer_specs]
 
+# FIXME[hack]:
+import os
+os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 from tools.train import Training as BaseTraining
 from keras.callbacks import Callback
+from keras.datasets import mnist
 
 import time
 
 class Training(BaseTraining, Callback):
-    """Callback that notifies Observers.
+    """
+
+    This keras Training class implements a keras Callback, allowing
+    to get some information on the training process.
 
     """
     
@@ -95,16 +102,21 @@ class Training(BaseTraining, Callback):
             raise ValueError('Unknown `count_mode`: ' + str(count_mode))
 
     def start(self):
-        super().start()
-        # FIXME[hack]:
-        #epochs = self._spinboxEpochs.value()
-        #batchSize = self._spinboxBatchSize.value()
-        epochs = 4
-        batchSize = 128
+        # This will start the keras training loop.
+        # As a result, the on_training_begin callback will be called,
+        # which will also notify the observers.
         self._model.train(self._x_train, self._x_test,
-                          epochs=epochs,
-                          batch_size=batchSize,
+                          epochs=self._epochs,
+                          batch_size=self._batch_size,
                           progress=self)
+
+    def stop(self):
+        print("Stopping Training")
+        print(self.model == self._model)
+        # This will cause the keras training loop to stop.
+        # As a result, the on_training_end callback will be called,
+        # which will also notify the observers.
+        self.model.stop_training = True
 
     def old_disfunct_star_stop(self):
         if self._autoencoder:
@@ -131,9 +143,8 @@ class Training(BaseTraining, Callback):
         self._epoch = 0
         self._batch = 0
         self._batch_duration = 0.
-        self._running = True
         self._start = time.time()
-        self.notifyObservers('training_changed')
+        super().start()
 
     def on_epoch_begin(self, epoch, logs=None):
         self._epoch = epoch
@@ -181,8 +192,7 @@ class Training(BaseTraining, Callback):
         Arguments:
         logs: dictionary of logs.
         """
-        self._running = False
-        self.notifyObservers('training_changed')
+        super().stop()
 
     @property
     def batch_duration(self):
@@ -190,6 +200,8 @@ class Training(BaseTraining, Callback):
 
     @property
     def eta(self):
+        """Estimated time to arival (ETA).
+        """
         now = time.time()
         # current = current step
         # target = last step (-1 = unknown)
@@ -204,3 +216,160 @@ class Training(BaseTraining, Callback):
         else:
             info += ' - %ds' % (now - self.start)
         return info
+
+
+    def set_data(self, x_train, x_test, y_train, y_test):
+        self.notifyObservers('data_changed')
+
+    def hack_load_mnist(self):
+
+        """Initialize the dataset.
+        This will set the self._x_train, self._y_train, self._x_test, and
+        self._y_test variables. Although the actual autoencoder only
+        requires the x values, for visualization the y values (labels)
+        may be interesting as well.
+
+        The data will be flattened (stored in 1D arrays), converted to
+        float32 and scaled to the range 0 to 1. 
+        """
+        #
+        # The dataset
+        #
+        
+        # load the MNIST dataset
+        x, y = mnist.load_data()
+        (self._x_train, self._y_train) = x
+        (self._x_test, self._y_test) = y
+
+        input_shape = self._x_train.shape[1:]
+        original_dim = input_shape[0] * input_shape[1]
+        self._x_train = np.reshape(self._x_train, [-1, original_dim])
+        self._x_test = np.reshape(self._x_test, [-1, original_dim])
+        self._x_train = self._x_train.astype('float32') / 255
+        self._x_test = self._x_test.astype('float32') / 255
+
+
+from packaging import version
+import keras
+if version.parse(keras.__version__) >= version.parse('2.0.0'):
+    from keras.layers import Conv2D
+else:
+    from keras.layers import Convolution2D
+
+def conv_2d(filters, kernel_shape, strides, padding, input_shape=None):
+    """
+    Defines the right convolutional layer according to the
+    version of Keras that is installed.
+    :param filters: (required integer) the dimensionality of the output
+                  space (i.e. the number output of filters in the
+                  convolution)
+    :param kernel_shape: (required tuple or list of 2 integers) specifies
+                       the strides of the convolution along the width and
+                       height.
+    :param padding: (required string) can be either 'valid' (no padding around
+                  input or feature map) or 'same' (pad to ensure that the
+                  output feature map size is identical to the layer input)
+    :param input_shape: (optional) give input shape if this is the first
+                      layer of the model
+    :return: the Keras layer
+    """
+    if version.parse(keras.__version__) >= version.parse('2.0.0'):
+        if input_shape is not None:
+            return Conv2D(filters=filters, kernel_size=kernel_shape,
+                          strides=strides, padding=padding,
+                          input_shape=input_shape)
+        else:
+            return Conv2D(filters=filters, kernel_size=kernel_shape,
+                          strides=strides, padding=padding)
+    else:
+        if input_shape is not None:
+            return Convolution2D(filters, kernel_shape[0], kernel_shape[1],
+                                 subsample=strides, border_mode=padding,
+                                 input_shape=input_shape)
+        else:
+            return Convolution2D(filters, kernel_shape[0], kernel_shape[1],
+                                 subsample=strides, border_mode=padding)
+
+
+# plot_model requires that pydot is installed
+#from keras.utils import plot_model
+import tensorflow as tf
+from keras import backend as K
+
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+class KerasModel:  # FIXME[concept]: this is actually a Keras Tensorflow(!) Model
+
+    def __init__(self):
+        from tensorflow.python.client import device_lib
+        logger.info(device_lib.list_local_devices())
+
+        #self._session = K.get_session()
+        self._graph = tf.Graph()
+        self._session = tf.Session(graph=self._graph)
+        K.set_session(self._session)
+        
+        self._model = None
+        self._snapshot = None
+
+    def __del__(self):
+        self._session.close()
+   
+    def load(self, filename: str):
+        with self._graph.as_default():
+            with self._session.as_default():
+                self._vae.load_weights(filename)
+                logger.info(f'loaded autoencoder from "{filename}"')
+
+    def save(self, filename: str):
+        with self._graph.as_default():
+            with self._session.as_default():
+                self._vae.save_weights(filename)
+                logger.info(f'saved autoencoder to "{filename}"')
+
+    def snapshot(self):
+        """Make a snapshot of the current model state (weights).
+        """
+        self._snapshot = self._model.get_weights()
+
+    def reset(self):
+        """Reset the model parameters (weights) to the last snapshot.
+        """
+        if self._snapshot is not None:
+            self._keras_model.set_weights(self._snapshot)
+            self._sess.run(tf.global_variables_initializer())
+
+    @property
+    def graph(self):
+        return self._graph
+
+    @property
+    def session(self):
+        return self._session
+
+    @property
+    def model(self):
+        return self._model
+
+class KerasClassifier(KerasModel):  # FIXME[concept]: this is actually a Keras Tensorflow(!) Classifier
+
+    def __init__(self):
+        super().__init__()
+        self._input_placeholder = None
+        self._label_placeholder = None
+        self._predictions = None
+
+    @property
+    def input(self):
+        return self._input_placeholder
+
+    @property
+    def label(self):
+        return self._label_placeholder
+
+    @property
+    def predictions(self):
+        return self._predictions
+

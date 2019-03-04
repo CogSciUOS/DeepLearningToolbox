@@ -297,6 +297,10 @@ def main():
                         help='Load the autoencoder module (experimental!)',
                         action=UseAddon,
                         default=False)
+    parser.add_argument('--advexample',
+                        help='Load the adversarial example module (experimental!)',
+                        action=UseAddon,
+                        default=False)
     args = parser.parse_args()
 
     util.use_cpu = args.cpu
