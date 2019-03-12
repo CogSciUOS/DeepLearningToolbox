@@ -1,81 +1,8 @@
-from controller import DataSourceController
-from model import Model, ModelObserver
-
-from PyQt5.QtWidgets import QWidget, QGroupBox, QHBoxLayout
-
-class QInputSelector(QWidget, DataSourceController.Observer):
-    '''A Widget to select input data (probably images).  There are
-    different modes of selection: from an array, from a file, from a
-    directory or from some predefined data source.
-
-    Modes: there are currently different modes ('array' or 'dir').
-    For each mode there exist a corresponding data source. The widget
-    has a current mode and will provide data only from the
-    corresponding data source.
-
-    FIXME[attention]
-    ATTENTION: this mode concept may be changed in future versions! It
-    seems more plausible to just maintain a list of data sources.
-
-    .. warning:: This docstring must be changed once the mode concept
-    is thrown overboard
-
-    Attributes
-    ----------
-    _index  :   int
-                The index of the current data entry.
-
-    '''
-    _index: int = None
-
-    def __init__(self, parent=None):
-        '''Initialization of the QInputSelector.
-
-        Parameters
-        ---------
-        parent  :   QWidget
-                    The parent argument is sent to the QWidget constructor.
-        '''
-        super().__init__(parent)
-        self._initUI()
-
-
-    def setController(self, controller: DataSourceController) -> None:
-        """Set the controller for this QInputSelector. Will trigger
-        observation of the controller.
-
-        Parameters
-        ----------
-        controller: DataSourceController
-            Controller for mediating commands for the activations panel.
-
-        """
-        super().setController(controller)
-        self._source_selector.setController(controller)
-        self._navigator.setController(controller)
-
-
-    def _initUI(self):
-        self._source_selector = QInputSourceSelector()
-        self._navigator = QInputNavigator()
-
-        sourceBox = QGroupBox('Data sources')
-        sourceBox.setLayout(self._source_selector.layout())
-
-        navigationBox = QGroupBox('Navigation')
-        navigationBox.setLayout(self._navigator.layout())
-
-        layout = QHBoxLayout()
-        layout.addWidget(sourceBox)
-        layout.addWidget(navigationBox)
-        self.setLayout(layout)
-
-    def datasource_changed(self, datasource, change):
-        pass  # FIXME[hack]: for some reason, this gets registered as a DataSourceController.Observer, but what changes are we interestend in?
-
-
-from datasources import (DataArray, DataFile, DataDirectory, DataWebcam,
-                         DataVideo, Predefined)
+from datasources import (Datasource, DataArray, DataFile, DataDirectory,
+                         DataWebcam, DataVideo, Predefined,
+                         Controller as DatasourceController)
+from toolbox import Toolbox, ToolboxController
+from qtgui.utils import QObserver
 
 from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
                              QHBoxLayout, QVBoxLayout, QSizePolicy,
@@ -83,9 +10,9 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
                              QFileDialog, QListView, QAbstractItemView,
                              QTreeView)
 
-
-class QInputSourceSelector(QWidget, DataSourceController.Observer):
-    '''The QInputSourceSelector provides a controls to select a data
+class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
+                           Datasource.Observer):
+    """The QInputSourceSelector provides a controls to select a data
     source. It is mainly a graphical user interface to the datasource
     module, adding some additional logic.
 
@@ -96,70 +23,28 @@ class QInputSourceSelector(QWidget, DataSourceController.Observer):
     2. a file or directory, that the user can select via a file browser
     3. a camera
     4. a URL (not implemented yet)
-    '''
+    """
+
+    _toolboxController: ToolboxController=None
+
+    # FIXME[old]:
+    _controller: DatasourceController=None
     
     def __init__(self, parent=None):
-        '''Initialization of the QInputNavigator.
+        """Initialization of the :py:class:`QInputSourceSelector`.
 
         Parameters
         ---------
-        parent  :   QWidget
-                    The parent argument is sent to the QWidget constructor.
-        '''
+        parent: QWidget
+            The parent argument is sent to the QWidget constructor.
+        """
         super().__init__(parent)
         self._initUI()
-
-    def datasource_changed(self, controller, info):
-        '''The QInputSourceSelector is only affected by changes of
-        the DataSource.
-        '''
-
-        if info.datasource_changed:
-            source = controller.get_datasource()
-
-            if isinstance(source, Predefined):
-                self._radioButtons['Name'].setChecked(True)
-                id = source.get_public_id()
-                index = self._datasetDropdown.findText(id)
-                if index == -1:
-                    pass # should not happen!
-                elif index != self._datasetDropdown.currentIndex():
-                    self._datasetDropdown.setCurrentIndex(index)
-            elif isinstance(source, DataWebcam):
-                self._radioButtons['Webcam'].setChecked(True)
-            elif isinstance(source, DataVideo):
-                self._radioButtons['Video'].setChecked(True)
-            elif isinstance(source, DataFile):
-                self._radioButtons['Filesystem'].setChecked(True)
-            elif isinstance(source, DataDirectory):
-                self._radioButtons['Filesystem'].setChecked(True)
-            else:
-                self._radioButtons['Filesystem'].setChecked(True)
-
-            self._datasetDropdown.setEnabled(self._radioButtons['Name'].isChecked())
-        # FIXME[old]
-        # if isinstance(source, DataArray):
-        #     info = (source.getFile()
-        #             if isinstance(source, DataFile)
-        #             else source.getDescription())
-        #     if info is None:
-        #         info = ''
-        #     if len(info) > 40:
-        #         info = info[0:info.find('/', 10) + 1] + \
-        #             '...' + info[info.rfind('/', 0, -20):]
-        #     self._radioButtons['Name'].setText('Name: ' + info)
-        # elif isinstance(source, DataDirectory):
-        #     self._radioButtons['Filesystem'].setText('File: ' +
-        #                                     source.getDirectory())
-        #####################################################################
-        #                Disable buttons, if necessary                      #
-        #####################################################################
-
 
     def _initUI(self):
         '''Initialize the user interface.'''
 
-        # Data sources
+        # Datasources
         self._radioButtons = {
             'Name': QRadioButton('Predefined'),
             'Filesystem': QRadioButton('Filesystem'),
@@ -194,6 +79,54 @@ class QInputSourceSelector(QWidget, DataSourceController.Observer):
         sourceLayout.addLayout(buttonsLayout)
         self.setLayout(sourceLayout)
 
+    def datasource_changed(self, controller, info):
+        '''The QInputSourceSelector is only affected by changes of
+        the Datasource.
+        '''
+
+        if info.datasource_changed:
+            self._setDatasource(controller.get_datasource())
+
+    def _setDatasource(self, datasource: Datasource):
+        if isinstance(datasource, Predefined):
+            self._radioButtons['Name'].setChecked(True)
+            id = datasource.get_public_id()
+            index = self._datasetDropdown.findText(id)
+            if index == -1:
+                pass # should not happen!
+            elif index != self._datasetDropdown.currentIndex():
+                self._datasetDropdown.setCurrentIndex(index)
+        elif isinstance(datasource, DataWebcam):
+            self._radioButtons['Webcam'].setChecked(True)
+        elif isinstance(datasource, DataVideo):
+            self._radioButtons['Video'].setChecked(True)
+        elif isinstance(datasource, DataFile):
+            self._radioButtons['Filesystem'].setChecked(True)
+        elif isinstance(datasource, DataDirectory):
+            self._radioButtons['Filesystem'].setChecked(True)
+        else:
+            self._radioButtons['Filesystem'].setChecked(True)
+
+        self._datasetDropdown.setEnabled(self._radioButtons['Name'].isChecked())
+        # FIXME[old]
+        # if isinstance(datasource, DataArray):
+        #     info = (datasource.getFile()
+        #             if isinstance(datasource, DataFile)
+        #             else datasource.getDescription())
+        #     if info is None:
+        #         info = ''
+        #     if len(info) > 40:
+        #         info = info[0:info.find('/', 10) + 1] + \
+        #             '...' + info[info.rfind('/', 0, -20):]
+        #     self._radioButtons['Name'].setText('Name: ' + info)
+        # elif isinstance(datasource, DataDirectory):
+        #     self._radioButtons['Filesystem'].setText('File: ' +
+        #                                     datasource.getDirectory())
+        #####################################################################
+        #                Disable buttons, if necessary                      #
+        #####################################################################
+
+
     def _radioButtonChecked(self):
         '''Callback for clicking the radio buttons.'''
         name = self.sender().text()
@@ -218,7 +151,7 @@ class QInputSourceSelector(QWidget, DataSourceController.Observer):
             self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
             print(f"!!!{name}!!!")
-            data_source = Predefined.get_data_source(name)
+            datasource = Predefined.get_data_source(name)
         elif self._radioButtons['Filesystem'].isChecked():
             mode = 'Filesystem'
             # CAUTION: I've converted the C++ from here
@@ -240,28 +173,49 @@ class QInputSourceSelector(QWidget, DataSourceController.Observer):
             fname = dialog.selectedFiles()[0]
             import os
             if os.path.isdir(fname):
-                data_source = DataDirectory(fname)
+                datasource = DataDirectory(fname)
             else:
-                data_source = DataFile(fname)
+                datasource = DataFile(fname)
         elif self._radioButtons['Webcam'].isChecked():
             mode = 'Webcam'
-            data_source = DataWebcam()
+            datasource = DataWebcam()
         elif self._radioButtons['Video'].isChecked():
             mode = 'Video'
             # FIXME[hack]: use file browser ...
             # FIXME[problem]: the opencv embedded in anoconda does not
             # have ffmpeg support, and hence cannot read videos
-            data_source = DataVideo("/net/home/student/k/krumnack/AnacondaCON.avi")
-        self._controller.onSourceSelected(data_source)
+            datasource = DataVideo("/net/home/student/k/krumnack/AnacondaCON.avi")
+
+        # FIXME[hack]: not really implemented. what should happen is:
+        # - change the datasource for the DatasourceView/Controller
+        #    -> this should notify the observer 'observable_changed'
+        # what may happen in response is
+        # - add datasource to some list (e.g. toolbox)
+        # - emit some pyqt signal?
+        if getattr(self, '_controller', None) is not None: # FIXME[old]
+            self._controller.onSourceSelected(datasource)
+        if self._toolboxController:
+            self._toolboxController.add_datasource(datasource)
+            self._toolboxController.datasource = datasource
 
     def _predefinedSelectionChange(self,i):
         if self._radioButtons['Name'].isChecked():
             self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
-            data_source = Predefined.get_data_source(name)
-            self._controller.onSourceSelected(data_source)
+            datasource = Predefined.get_data_source(name)
 
+            if getattr(self, '_controller', None) is not None: # FIXME[old]
+                self._controller.onSourceSelected(datasource)
+            if self._toolboxController is not None:
+                self._toolboxController.datasource = datasource
 
+    def setToolboxController(self, toolbox: ToolboxController) -> None:
+        self._exchangeView('_toolboxController', toolbox,
+                           interests=Toolbox.Change('datasources_changed'))
+
+    def toolbox_changed(self, toolbox: Toolbox, change):
+        print(f"toolbox_changed({self}, {toolbox}, {change})")
+        self._setDatasource(self._toolboxController.datasource)
 
 
 from PyQt5.QtCore import Qt
@@ -270,57 +224,33 @@ from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
 
 
-class QInputNavigator(QWidget, DataSourceController.Observer):
+class QInputNavigator(QWidget, QObserver, Datasource.Observer):
+    """
+    A QInputNavigator displays widgets to navigate in the Datasource.
+    The actual set of widgets depends on the type of Datasource and
+    will be adapated when the Datasource is changed.
+    """
+    _controller: DatasourceController = None
 
-    def __init__(self, parent=None):
+    def __init__(self, datasource: DatasourceController=None, parent=None):
         '''Initialization of the QInputNavigator.
 
         Parameters
         ---------
-        parent  :   QWidget
-                    The parent argument is sent to the QWidget constructor.
+        parent: QWidget
+            The parent argument is sent to the QWidget constructor.
+        datasource: DatasourceController
+            A Controller allowing to navigate in the Datasource.
         '''
         super().__init__(parent)
         self._initUI()
-
-
-    def datasource_changed(self, controller, info) -> None:
-        datasource = controller.get_datasource()
-        n_elems = 0 if datasource is None else len(datasource)
-        valid = n_elems > 0
-
-        if info.datasource_changed:
-            if datasource is not None:
-                self.infoDataset.setText(datasource.getDescription())
-            self.infoLabel.setText('of ' + str(n_elems - 1) if valid else '*')
-            if valid:
-                self._indexField.setValidator(QIntValidator(0, n_elems))
-            # Disable buttons, if necessary
-            for elem in {self.firstButton,
-                         self.prevButton,
-                         self.nextButton,
-                         self.lastButton,
-                         self.randomButton,
-                         self._indexField}:
-                elem.setEnabled(valid)
-
-        if info.index_changed and valid:
-            inputIndex = controller.get_index()
-            self._indexField.setText(str(inputIndex))
-
-    def _newNavigationButton(self, label: str, icon: str=None):
-        button = QPushButton()
-        icon = QIcon.fromTheme(icon, QIcon())
-        if icon.isNull():
-            button.setText(label)
-        else:
-            button.setIcon(icon)
-        button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        button.clicked.connect(self._navigationButtonClicked)
-        return button
+        self._layoutUI()
+        self.setDatasourceController(datasource)
 
     def _initUI(self):
-        '''Initialize the user interface.'''
+        """Initialize the user interface.
+
+        """
 
         #
         # Navigation in indexed data source
@@ -351,20 +281,75 @@ class QInputNavigator(QWidget, DataSourceController.Observer):
             QSizePolicy.Maximum, QSizePolicy.Expanding)
 
         self.infoDataset = QLabel()
+        self._layout = None
+
+        self._buttonList = [
+            self.firstButton, self.prevButton,
+            self._indexField, self.infoLabel,
+            self.nextButton, self.lastButton, self.randomButton
+        ]
+
         
-        navigationLayout = QHBoxLayout()
-        navigationLayout.addWidget(self.firstButton)
-        navigationLayout.addWidget(self.prevButton)
-        navigationLayout.addWidget(self._indexField)
-        navigationLayout.addWidget(self.infoLabel)
-        navigationLayout.addWidget(self.nextButton)
-        navigationLayout.addWidget(self.lastButton)
-        navigationLayout.addWidget(self.randomButton)
-        navigationMainLayout = QVBoxLayout()
-        navigationMainLayout.addWidget(self.infoDataset)
-        navigationMainLayout.addLayout(navigationLayout)
-        self.setLayout(navigationMainLayout)
-        #navigationBox.setLayout(navigationMainLayout)
+    def _layoutUI(self):
+        if self._layout is None:
+            self._layout = QVBoxLayout()
+            self._layout.addWidget(self.infoDataset)
+            self._buttons = None
+            self.setLayout(self._layout)
+
+        if self._controller is None or not self._controller:
+            if self._buttons is not None:
+                for button in self._buttonList:
+                    button.setParent(None)
+                self._layout.removeItem(self._buttons)
+                self._buttons = None
+        else:
+            if self._buttons is None:
+                self._buttons = QHBoxLayout()
+                for button in self._buttonList:
+                    self._buttons.addWidget(button)
+                self._layout.addLayout(self._buttons)
+
+    def _enableUI(self):
+        enabled = bool(self._controller)
+        for button in self._buttonList:
+            button.setEnabled(enabled)
+
+    def datasource_changed(self, datasource: Datasource, info) -> None:
+        n_elems = 0 if datasource is None else len(datasource)
+        valid = n_elems > 0
+
+        if info.observable_changed:
+            self._layoutUI()
+            self._enableUI()
+            text = (datasource.getDescription() if datasource else
+                    "No datasource")
+            self.infoDataset.setText(text)
+
+            self.infoLabel.setText('of ' + str(n_elems - 1) if valid else '*')
+            if valid:
+                self._indexField.setValidator(QIntValidator(0, n_elems))
+
+        if info.index_changed:
+            index = self._controller.get_index() if self._controller else 0
+            if self._controller:
+                self._indexField.setText(str(index))
+            self.firstButton.setEnabled(index > 0)
+            self.prevButton.setEnabled(index > 0)
+            self.nextButton.setEnabled(index+1 < n_elems)
+            self.lastButton.setEnabled(index+1 < n_elems)
+            
+    def _newNavigationButton(self, label: str, icon: str=None):
+        button = QPushButton()
+        icon = QIcon.fromTheme(icon, QIcon())
+        if icon.isNull():
+            button.setText(label)
+        else:
+            button.setIcon(icon)
+        button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        button.clicked.connect(self._navigationButtonClicked)
+        return button
+
 
     # FIXME[design]: can't this be directly connected to the controller?
     def _editIndex(self, text):
@@ -373,6 +358,8 @@ class QInputNavigator(QWidget, DataSourceController.Observer):
 
     def _navigationButtonClicked(self):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
+        if self._controller is None:
+            return
         if self.sender() == self.firstButton:
             self._controller.rewind()
         elif self.sender() == self.prevButton:
@@ -384,13 +371,133 @@ class QInputNavigator(QWidget, DataSourceController.Observer):
         elif self.sender() == self.randomButton:
             self._controller.random()
 
+    def setDatasourceController(self,
+                                datasource: DatasourceController) -> None:
+        self._exchangeView('_controller', datasource,
+                           interests=Datasource.Change('observer_changed',
+                                                       'index_changed'))
+
+
+
+
+from datasources import Datasource, Controller as DatasourceController
+from model import Model, ModelObserver
+
+from PyQt5.QtWidgets import QWidget, QGroupBox, QHBoxLayout
+
+from qtgui.utils import QObserver
+from toolbox import Toolbox, ToolboxController
+
+class QInputSelector(QWidget, QObserver, Datasource.Observer):
+    """A Widget to select input data (probably images).
+
+    This Widget consists of two subwidgets:
+    1. a :py:class:`QInputNavigator` to select a :py:class:`DataSource` and
+    2. a :py:class:`QInputNavigator` to navigate in the
+    :py:class:`DataSource`.
+
+    There are different modes of selection: from an array, from a file,
+    from a directory or from some predefined data source.
+    Modes: there are currently different modes ('array' or 'dir').
+    For each mode there exist a corresponding data source. The widget
+    has a current mode and will provide data only from the
+    corresponding data source.
+
+    FIXME[attention]
+    ATTENTION: this mode concept may be changed in future versions! It
+    seems more plausible to just maintain a list of data sources.
+
+    .. warning:: This docstring must be changed once the mode concept
+    is thrown overboard
+
+    Attributes
+    ----------
+    _source_selector: QInputSourceSelector
+        A widget to change the currently selected datasource.
+    _navigator: QInputNavigator
+        A widget to navigate in the currently selected datasource.
+    _index: int
+        The index of the current data entry.
+    """
+    _source_selector: QInputSourceSelector = None
+    _navigator: QInputNavigator = None
+    _index: int = None # FIXME[old]: seems not to be used
+
+    def __init__(self, toolbox: ToolboxController=None, parent=None):
+        '''Initialization of the QInputSelector.
+
+        Parameters
+        ----------
+        parent  :   QWidget
+                    The parent argument is sent to the QWidget constructor.
+        '''
+        super().__init__(parent)
+        self._initUI()
+        self.setToolboxController(toolbox)
+
+    def _initUI(self):
+        self._source_selector = QInputSourceSelector()
+        self._navigator = QInputNavigator()
+
+        sourceBox = QGroupBox('Data sources')
+        sourceBox.setLayout(self._source_selector.layout())
+
+        navigationBox = QGroupBox('Navigation')
+        navigationBox.setLayout(self._navigator.layout())
+
+        layout = QHBoxLayout()
+        layout.addWidget(sourceBox)
+        layout.addWidget(navigationBox)
+        self.setLayout(layout)
+
+    def setController(self, controller: DatasourceController) -> None:
+        """Set the controller for this QInputSelector. Will trigger
+        observation of the controller.
+
+        Parameters
+        ----------
+        controller: DatasourceController
+            Controller for mediating commands for the activations panel.
+
+        """
+        super().setController(controller)
+        self._source_selector.setController(controller)
+        self._navigator.setController(controller)
+
+    def setToolboxController(self, toolbox: ToolboxController):
+        self._source_selector.setToolboxController(toolbox)
+        self.setDatasourceController(toolbox.datasource_controller
+                                     if toolbox else None)
+
+    def setDatasourceController(self,
+                                datasource: DatasourceController) -> None:
+        """Set the controller for this QInputSelector. Will trigger
+        observation of the controller.
+
+        Arguments
+        ---------
+        controller: DatasourceController
+            Controller for mediating commands for the activations panel.
+
+        """
+        self.setController(datasource)
+        self._navigator.setDatasourceController(datasource)
+        
+
+    def datasource_changed(self, datasource, change):
+        pass  # FIXME[hack]: for some reason, this gets registered as a Datasource.Observer, but what changes are we interestend in?
+
+
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 import numpy as np
 
 
-class QInputInfoBox(QWidget, DataSourceController.Observer, ModelObserver):
+class QInputInfoBox(QWidget, QObserver, Datasource.Observer, ModelObserver):
+    """A :py:class:`QInputInfoBox` displays information on the currently
+    selected input image.
+    """
 
     # FIXME[hack]: imageView: there should be no explicit reference
     # between widgets We need imageView._show_raw here. Think of some
@@ -428,7 +535,7 @@ class QInputInfoBox(QWidget, DataSourceController.Observer, ModelObserver):
 
     def setController(self, controller) -> None:
         # FIXME[hack]: we need a more reliable way to observe multiple observable!
-        self.observe(controller.get_observable())
+        self.observe(controller.get_observable(), interests=None)
 
     def datasource_changed(self, controller, info):
         if info.index_changed:

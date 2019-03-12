@@ -73,26 +73,31 @@ class Network(BaseNetwork):
             raise ValueError('Config is neither a dict nor a list.')
         return [layer_spec['config']['name'] for layer_spec in layer_specs]
 
+    def get_trainer(self, training):
+        return Trainer(training, self)
+        
+
 # FIXME[hack]:
 import os
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 
-from tools.train import Training as BaseTraining
+from .network import Trainer as BaseTrainer
 from keras.callbacks import Callback
-from keras.datasets import mnist
 
 import time
 
-class Training(BaseTraining, Callback):
+
+
+class Trainer(BaseTrainer, Callback):
     """
 
-    This keras Training class implements a keras Callback, allowing
+    This keras Trainer class implements a keras Callback, allowing
     to get some information on the training process.
 
     """
     
-    def __init__(self, count_mode='samples'):
-        BaseTraining.__init__(self)
+    def __init__(self, training, network, count_mode='samples'):
+        BaseTraining.__init__(self, training, network)
         Callback.__init__(self)
         if count_mode == 'samples':
             self.use_steps = False
@@ -101,53 +106,43 @@ class Training(BaseTraining, Callback):
         else:
             raise ValueError('Unknown `count_mode`: ' + str(count_mode))
 
-    def start(self):
+
+    def _train(self):
+
         # This will start the keras training loop.
         # As a result, the on_training_begin callback will be called,
         # which will also notify the observers.
-        self._model.train(self._x_train, self._x_test,
-                          epochs=self._epochs,
-                          batch_size=self._batch_size,
-                          progress=self)
+        x_train = self._training._x_train
+        x_test = self._training._x_test
+        epochs = self._training.epochs
+        batch_size = self._batch_size
+        keras_model = self._training.network
+        keras_model.train(x_train, x_test, epochs=epochs,
+                          batch_size=batch_size, progress=self)
 
     def stop(self):
         print("Stopping Training")
-        print(self.model == self._model)
         # This will cause the keras training loop to stop.
         # As a result, the on_training_end callback will be called,
         # which will also notify the observers.
-        self.model.stop_training = True
-
-    def old_disfunct_star_stop(self):
-        if self._autoencoder:
-            model = self._autoencoder._vae
-            print(f"onTrainModel-1: {type(model)}")
-            if hasattr(model, 'callback_model') and model.callback_model:
-                model = model.callback_model
-            print("onTrainModel-2: {type(model)}")
-            print("onTrainModel-3: {hasattr(model, 'stop_training')}")
-            if not hasattr(model, 'stop_training') or not model.stop_training:
-                import util # FIXME[hack]
-                print("onTrainModel-4a: start training")
-            else:
-                print("onTrainModel-4b: stop training")
-                model.stop_training = True
+        keras_model = self._training.network
+        keras_model.stop_training = True
 
     def on_train_begin(self, logs=None):
         """Called on the beginning of training.
         """
-        self._epochs = self.params['epochs']
-        self._batch_size = self.params['batch_size']
-        self._samples = self.params['samples']
-        self._batches = self._samples // self._batch_size
-        self._epoch = 0
-        self._batch = 0
+        #self._epochs = self.params['epochs']
+        #self._batch_size = self.params['batch_size']
+        #self._samples = self.params['samples']
+        #self._batches = self._samples // self._batch_size
+        self._training.epoch = 0
+        self._training.batch = 0
         self._batch_duration = 0.
         self._start = time.time()
         super().start()
 
     def on_epoch_begin(self, epoch, logs=None):
-        self._epoch = epoch
+        self._training.epoch = epoch
         self.notifyObservers('epoch_changed')
 
     def on_batch_begin(self, batch, logs=None):
@@ -155,7 +150,7 @@ class Training(BaseTraining, Callback):
         on_batch_begin: logs include `size`,
           the number of samples in the current batch.
         """
-        self._batch = batch
+        self._training.batch = batch
         self._batch_size = logs['size']
         self._batch_start = time.time()
         self.notifyObservers('batch_changed')
@@ -217,36 +212,12 @@ class Training(BaseTraining, Callback):
             info += ' - %ds' % (now - self.start)
         return info
 
-
-    def set_data(self, x_train, x_test, y_train, y_test):
+    def set_data(self, x_train, y_train, x_test, y_test):
+        self._x_train = x_train
+        self._y_train = y_train
+        self._x_test = x_test
+        self._y_test = y_test
         self.notifyObservers('data_changed')
-
-    def hack_load_mnist(self):
-
-        """Initialize the dataset.
-        This will set the self._x_train, self._y_train, self._x_test, and
-        self._y_test variables. Although the actual autoencoder only
-        requires the x values, for visualization the y values (labels)
-        may be interesting as well.
-
-        The data will be flattened (stored in 1D arrays), converted to
-        float32 and scaled to the range 0 to 1. 
-        """
-        #
-        # The dataset
-        #
-        
-        # load the MNIST dataset
-        x, y = mnist.load_data()
-        (self._x_train, self._y_train) = x
-        (self._x_test, self._y_test) = y
-
-        input_shape = self._x_train.shape[1:]
-        original_dim = input_shape[0] * input_shape[1]
-        self._x_train = np.reshape(self._x_train, [-1, original_dim])
-        self._x_test = np.reshape(self._x_test, [-1, original_dim])
-        self._x_train = self._x_train.astype('float32') / 255
-        self._x_test = self._x_test.astype('float32') / 255
 
 
 from packaging import version

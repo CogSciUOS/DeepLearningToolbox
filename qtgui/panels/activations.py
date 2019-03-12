@@ -9,7 +9,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 from qtgui.widgets import QActivationView
-from qtgui.widgets import QActivationView
 from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
 from qtgui.widgets import QNetworkBox, QNetworkView, QNetworkSelector
 

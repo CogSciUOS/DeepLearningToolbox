@@ -116,7 +116,7 @@ class LucidPanel(Panel, EngineObserver):
 
         self._controller = controller
         self._modelView.setEngine(engine)
-        self.observe(engine)
+        self.observe(engine, None)
         engine.notify(self)
 
     def initUI(self):

@@ -23,37 +23,9 @@ from keras.losses import mse, binary_crossentropy
 # plot_model requires that pydot is installed
 #from keras.utils import plot_model
 
-from toolbox import toolbox
+#from toolbox import toolbox
 
-class Autoencoder:
-
-    def __init__(self):
-        self._encoder = None
-        self._decoder =None
-
-    @property
-    def encoder(self):
-        return self._encoder
-
-    @property
-    def decoder(self):
-        return self._decoder
-
-class VariationalAutoencoder:
-
-    def sampleCode(self, n=1):
-        pass
-
-    def sampleData(self, n=1):
-        pass
-
-    def sampleCodeFor(self, input, n=1):
-        pass
-
-    def sampleDataFor(self, input, n=1):
-        pass
-
-
+from network import Autoencoder
 from network.keras import KerasModel
 
 class KerasAutoencoder(Autoencoder, KerasModel):
@@ -185,7 +157,7 @@ class KerasAutoencoder(Autoencoder, KerasModel):
         return z_mean + K.exp(0.5 * z_log_var) * epsilon
 
     def train(self, data, validation, epochs, batch_size, progress):
-        toolbox.acquire()
+        #toolbox.acquire()
         with self._graph.as_default():
             with self._session.as_default():
                 self._vae.fit(data,
@@ -194,31 +166,34 @@ class KerasAutoencoder(Autoencoder, KerasModel):
                               batch_size=batch_size,
                               validation_data=(validation, None),
                               callbacks=[progress])
-        toolbox.release()
+        #toolbox.release()
 
-    def encode(self, data, batch_size):
+    def encode(self, data, batch_size=None):
         with self._graph.as_default():
             with self._session.as_default():
-                z_mean, _, _ = self._encoder.predict(data,
-                                                     batch_size=batch_size)
+                z_mean, _, _ = \
+                    self._encoder.predict(data, batch_size=batch_size)
         return z_mean
 
-    def decode(self, data, batch_size=1):
+    def decode(self, data, batch_size=None):
         with self._graph.as_default():
             with self._session.as_default():
-                x_decoded = self._decoder.predict(data,
-                                                  batch_size=batch_size)
+                x_decoded = \
+                    self._decoder.predict(data, batch_size=batch_size)
         return x_decoded
 
 
-    def reconstruct(self, data, batch_size):
+    def reconstruct(self, data, batch_size=None):
         with self._graph.as_default():
             with self._session.as_default():
                 reconstruction = self._vae.predict(data, batch_size=batch_size)
         return reconstruction
         
 
-    def sample_code(self, input=None, params=None, n=1):
+    def sample_code(self, input=None, params=None, n=1, batch_size=None):
+        """Sample code values, either for given input values,
+        or for given parameters.
+        """
         with self._graph.as_default():
             with self._session.as_default():
                 feed_dict = {}
@@ -233,5 +208,6 @@ class KerasAutoencoder(Autoencoder, KerasModel):
                     feed_dict[self._z_mean] = z_log_var
                     z = self._z.eval(feed_dict=feed_dict)
                 elif input is not None:
-                    _, _, z= self._encoder.predict(input)
+                    _, _, z= \
+                       self._encoder.predict(input, batch_size=batch_size)
         return z

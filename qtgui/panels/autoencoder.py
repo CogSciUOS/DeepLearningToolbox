@@ -4,39 +4,36 @@ Author: Ulf Krumnack
 Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
-# FIXME[hack]: this is just using a specific keras network as proof of
-# concept. It has to be modularized and integrated into the framework
+import numpy as np
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QPushButton, QSpinBox, QLineEdit,
                              QVBoxLayout, QHBoxLayout)
 
 from .panel import Panel
+from qtgui.utils import QObserver
 from qtgui.widgets.matplotlib import QMatplotlib
 from qtgui.widgets.training import QTrainingBox
 
-import numpy as np
-import matplotlib.pyplot as plt
-import os
+from toolbox import Toolbox, ToolboxController
+from tools.train import Training, TrainingController
+from network import Network, AutoencoderController
 
-from qtgui.utils import QObserver
-
-from toolbox import toolbox
-from tools.train import Training, Trainer
-
-# FIXME[hack]
-from network.keras import Training as KerasTraining
-
-class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
+class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
     """A panel displaying autoencoders.
 
     Attributes
     ----------
-    _autoencoder: Network
-        A network trained as autoencoder.
+    _autoencoder: AutoencoderController
+        A controller for a network trained as autoencoder.
     """
+    _toolbox: ToolboxController = None
+    _autoencoder: AutoencoderController = None
 
-    def __init__(self, parent=None):
+    def __init__(self, toolboxController: ToolboxController,
+                 autoencoderController: AutoencoderController,
+                 trainingController: TrainingController,
+                 parent=None) -> None:
         """Initialization of the LoggingPael.
 
         Parameters
@@ -45,42 +42,32 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
                     The parent argument is sent to the QWidget constructor.
         """
         super().__init__(parent)
-        self._autoencoder = None
-        self._autoencoderController = None
-        self._training = KerasTraining()
-        self._trainer = Trainer(self._training)
-
         self._cache = {}
-        
-        # FIXME[hack]: we need a better data concept ...
-        self._training.hack_load_mnist()
-        self._imageShape = (28, 28)
 
         self._initUI()
         self._layoutComponents()
-        self._connectComponents()
 
-        self.autoencoderController = AutoencoderController()
+        self.setToolboxController(toolboxController)
+        self.setAutoencoderController(autoencoderController)
+        self.setTrainingController(trainingController)
 
-        # Training parameters
-        self._spinboxEpochs.setValue(4)
-
-        self.observe(toolbox)
-        self._enableComponents()
-
-        # 
-        self._trainingBox.observe(self._training)
-        self.observe(self._training)
 
     # FIXME[hack]: we need a better data concept ...
     @property
     def inputs(self):
-        return None if self._training is None else self._training._x_test
+        return (None if self._toolbox is None else
+                self._toolbox.get_inputs(flat=True, dtype=np.float,
+                                                   test=True))
 
     @property
     def labels(self):
-        return None if self._training is None else self._training._y_test
+        return (None if self._toolbox is None else
+                self._toolbox.labels)
     
+    @property
+    def imageShape(self):
+        return self._toolbox.get_data_shape()
+
     def _initUI(self):
         """Add the UI elements
 
@@ -90,24 +77,39 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
         #
         # Controls
         #
+        def slot(checked: bool):
+            self._autoencoder(self._toolbox.hack_new_model())
         self._buttonCreateModel = QPushButton("Create")
-        self._buttonTrainModel = QPushButton("Train")
+        self._buttonCreateModel.clicked.connect(slot)
 
         self._editWeightsFilename = QLineEdit('vae_mlp_mnist.h5')
 
+        def slot(checked: bool):
+            self._autoencoder.load_model(self._editWeightsFilename.text())
         self._buttonLoadModel = QPushButton("Load")
+        self._buttonLoadModel.clicked.connect(slot)
+        
+        def slot(checked: bool):
+            self._autoencoder.save_model(self._editWeightsFilename.text())
         self._buttonSaveModel = QPushButton("Save")
+        self._buttonSaveModel.clicked.connect(slot)
+       
+        def slot(checked: bool):
+            self._autoencoder.plot_model()
         self._buttonPlotModel = QPushButton("Plot Model")
+        self._buttonPlotModel.clicked.connect(slot)
+        
         self._buttonPlotCodeDistribution = QPushButton("Code Distribution")
+        self._buttonPlotCodeDistribution.clicked.\
+            connect(self._onPlotCodeDistribution)
+        
         self._buttonPlotCodeVisualization = QPushButton("Code Visualization")
+        self._buttonPlotCodeVisualization.clicked.\
+            connect(self._onPlotCodeVisualization)
+        
         self._buttonPlotReconstruction = QPushButton("Plot Reconstruction")
         self._buttonPlotReconstruction.clicked.\
             connect(self._onPlotReconstruction)
-
-        self._spinboxEpochs = QSpinBox()
-        self._spinboxEpochs.setRange(1, 50)
-
-        self._spinboxBatchSize = QSpinBox()
 
         self._spinboxGridSize = QSpinBox()
         self._spinboxGridSize.setValue(10)
@@ -122,17 +124,6 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
         self._pltIn = QMatplotlib()
         self._pltCode = QMatplotlib()
         self._pltOut = QMatplotlib()
-
-    def _connectComponents(self):
-        self._buttonCreateModel.clicked.connect(self._trainer._hackNewModel)
-        self._buttonTrainModel.clicked.connect(self._trainer.start)
-        self._spinboxEpochs.valueChanged.connect(self._trainer.set_epochs)
-        self._spinboxBatchSize.valueChanged.\
-            connect(self._trainer.set_batch_size)
-        self._buttonPlotCodeDistribution.clicked.\
-            connect(self._onPlotCodeDistribution)
-        self._buttonPlotCodeVisualization.clicked.\
-            connect(self._onPlotCodeVisualization)
 
     def _layoutComponents(self):
         """Layout the UI elements.
@@ -153,9 +144,6 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
 
         buttonBar = QHBoxLayout()
         buttonBar.addWidget(self._buttonCreateModel)
-        buttonBar.addWidget(self._spinboxEpochs)
-        buttonBar.addWidget(self._spinboxBatchSize)
-        buttonBar.addWidget(self._buttonTrainModel)
         buttonBar.addWidget(self._editWeightsFilename)
         buttonBar.addWidget(self._buttonLoadModel)
         buttonBar.addWidget(self._buttonSaveModel)
@@ -170,19 +158,16 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
         layout.addLayout(buttonBar)
         self.setLayout(layout)
 
-    def _enableComponents(self, running=False):
-        enabled = ((self._autoencoder is None) and  # or not self._autoencoder.busy
-                   (self._autoencoderController is None or
-                    not self._autoencoderController.busy))
+    def _enableComponents(self):
+        # The "Create Model" button can be run as soon as we have an
+        # Controller that is not busy
+        enabled = (self._toolbox is not None and
+                   self._autoencoder is not None)
         self._buttonCreateModel.setEnabled(enabled)
-        
-        enabled = self._autoencoder is not None  # and not self._autoencoder.busy
-        self._buttonTrainModel.setEnabled(enabled)
-        enabled = enabled and not running
-        self._spinboxEpochs.setEnabled(enabled)
-        self._spinboxBatchSize.setEnabled(enabled)
-        enabled = (self._autoencoderController is not None and
-                   not self._autoencoderController.busy)
+
+        # For all other buttons we also need a network
+        enabled = (self._autoencoder is not None and
+                   self._autoencoder.network is not None)
         for w in (self._buttonLoadModel, self._buttonSaveModel,
                   self._buttonPlotModel,
                   self._buttonPlotCodeDistribution,
@@ -190,35 +175,17 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
                   self._buttonPlotReconstruction):
             w.setEnabled(enabled)
 
-    @property
-    def autoencoder(self):
-        return self._autoencoder
+    def setToolboxController(self, toolbox: ToolboxController):
+        self._toolbox = toolbox
 
-    @autoencoder.setter
-    def autoencoderController(self, autoencoder):
-        self.autoencoder = autoencoder
+    def setAutoencoderController(self, autoencoder: AutoencoderController):
+        self._exchangeView('_autoencoder', autoencoder)
+        self._enableComponents()
+        self._trainingBox.setNetwork(autoencoder)
 
-    @property
-    def autoencoderController(self):
-        return self._autoencoderController
+    def setTrainingController(self, training: TrainingController):
+        self._trainingBox.setTraining(training)
 
-    @autoencoderController.setter
-    def autoencoderController(self, controller):
-        self._autoencoderController = controller
-        self._spinboxBatchSize.setRange(*controller.batch_size_range)
-        slot = AutoencoderController.batch_size.fset.__get__(controller)
-        self._spinboxBatchSize.valueChanged.connect(slot)
-        slot = lambda checked: \
-            controller.load_model(self._editWeightsFilename.text())
-        self._buttonLoadModel.clicked.connect(slot)
-        slot = lambda checked: \
-            controller.save_model(self._editWeightsFilename.text())
-        self._buttonSaveModel.clicked.connect(slot)
-        slot = lambda checked: controller.plot_model()
-        self._buttonPlotModel.clicked.connect(slot)
-        self.autoencoderControllerChanged(controller, controller.Change.all())
-        self.observe(controller)
-        
     def _onPlotCodeDistribution(self, codes=None):
         """Display a 2D plot of the digit classes in the latent space.
 
@@ -233,13 +200,12 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
         else:
             codes = self._cache.get('codes', None)
             
-        #z_mean = self._autoencoderController.code_means
         labels = self.labels
 
         if codes is None:
             inputs = self.inputs
             if inputs is not None:
-                self._autoencoderController.\
+                self._autoencoder.\
                     encode(inputs, async_callback=self._onPlotCodeDistribution)
 
             self._pltCode.noData()
@@ -265,7 +231,7 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
             'visualization_n' in self._cache):
             # we have computed new images: redraw the figure
             n = self._cache['visualization_n']
-            shape = self._imageShape
+            shape = self.imageShape
             figure = np.zeros((shape[0] * n, shape[1] * n))
             for i, (x, y) in enumerate(np.ndindex(n, n)):
                 figure[y * shape[0]: (y+1) * shape[0],
@@ -276,7 +242,7 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
               'visualization_n' in self._cache):
             # we have cached the figure
             n = self._cache['visualization_n']
-            shape = self._imageShape
+            shape = self.imageShape
             figure = self._cache['visualization_figure']
         else:
             # we have to (re)compute the figure:
@@ -291,10 +257,9 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
             # of digit classes in the latent space
             meshgrid = np.meshgrid(grid_x, grid_y)
             grid = np.asarray([meshgrid[0].flatten(), meshgrid[1].flatten()]).T
-            batch_size = self._spinboxBatchSize.value()
             self._cache['visualization_n'] = n
             self._cache.pop('visualization_image', None)
-            self._autoencoderController.\
+            self._autoencoder.\
                 decode(grid, async_callback=self._onPlotCodeVisualization)
             self._pltCode.noData()
         else:
@@ -330,14 +295,14 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
         index = self._cache.get('reconstruction_index', -1)
         reconstructions = self._cache.get('reconstruction_data', None)
         if reconstructions is None and inputs is not None:
-            self._autoencoderController.\
+            self._autoencoder.\
                 reconstruct(inputs, async_callback=self._onPlotReconstruction)
 
         if index == -1:
             plt.noData()
         else:
-            input_image = inputs[index].reshape(self._imageShape)
-            input_label = None if labels is None else labels[index].argmax()
+            input_image = inputs[index].reshape(self.imageShape)
+            input_label = None if labels is None else labels[index]
             with self._pltIn as ax:
                 ax.imshow(input_image, cmap='gray')
                 ax.set_title(f"input: test sample {index}" +
@@ -349,7 +314,7 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
             self._pltOut.noData()
             self._pltCode.noData()
         else:
-            output_image = outputs[index].reshape(self._imageShape) 
+            output_image = outputs[index].reshape(self.imageShape)
             with self._pltOut as ax:
                 ax.imshow(output_image, cmap='gray')
                 ax.set_title("Reconstruction")
@@ -358,150 +323,26 @@ class AutoencoderPanel(Panel, QObserver, toolbox.Observer, Training.Observer):
                 ax.imshow((input_image-output_image), cmap='seismic')
                 ax.set_title("Differences")
 
-    def toolboxChanged(self, toolbox, change):
-        self._enableComponents(toolbox.locked())
-
-    def trainingChanged(self, training, change):
-        if 'training_changed' in change and self._trainer is not None:
-            self._buttonTrainModel.clicked.disconnect()
-            if training.running:
-                self._buttonTrainModel.setText("Stop")
-                self._buttonTrainModel.clicked.connect(self._trainer.stop)
-            else:
-                self._buttonTrainModel.setText("Train")
-                self._buttonTrainModel.clicked.connect(self._trainer.start)
-
-        if 'network_changed' in change:
-            self._autoencoder = training.network
-            self._autoencoderController.set_autoencoder(training.network)
-            self._enableComponents()
-
-    def autoencoderControllerChanged(self, controller, change):
+    def network_changed(self, network, change):
+        print(f"AutoencoderPanel.network_changed({network}, {change})")
         if 'busy_changed' in change:
             self._enableComponents()
 
         if 'network_changed' in change:
             self._enableComponents()
+            self._cache = {}
+            self._pltIn.noData()
+            self._pltOut.noData()
+            self._pltCode.noData()
 
         if 'weights_changed' in change:
             self._cache = {}
 
-        if 'parameter_changed' in change:
-            self._spinboxBatchSize.setValue(controller.batch_size)
+    # FIXME[hack]:
+    def trainingChanged(self, training, change):
+        if 'training_changed' in change:
+            self._enableComponents()
+            self._cache = {}
 
-
-        
-from base.controller import Controller, run
-import util
-
-class AutoencoderController(Controller,
-                            method='autoencoderControllerChanged',
-                            changes=['network_changed', 'weights_changed',
-                                     'data_changed', 'parameter_changed']):
-    # 'network_changed': network was changed:
-    # 'weights_changed': network weights were changed
-    # 'data_changed': a new dataset is provided
-    # 'parameter_changed': hyperparmeter changed (batch_size)
-
-    def __init__(self, autoencoder=None):
-        super().__init__(util.runner)  # FIXME[hack]
-        self.set_autoencoder(autoencoder)
-
-        self.batch_size_range = 1, 256
-        self._batch_size = 128
-
-        self.epochs_range = 1, 50
-        self._epochs = 5
-
-    def set_autoencoder(self, autoencoder):
-        self._autoencoder = autoencoder
-
-    @property
-    def batch_size(self):
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, size: int):
-        if self.batch_size_min <= size <= self.batch_size_max:
-            if self._batch_size != size:
-                self._batch_size = size
-                self.change('parameter_changed')
-        else:
-            raise ValueError(f"Invalid batch size {size}:"
-                             f"allowed range is from {self.batch_size_min}"
-                             f"to {self.batch_size_max}")
-
-    @property
-    def batch_size_range(self):
-        return (self.batch_size_min, self.batch_size_max)
-
-    @batch_size_range.setter
-    def batch_size_range(self, batch_size_range):
-        self.batch_size_min, self.batch_size_max = batch_size_range
-
-    @property
-    def inputs(self):
-        return self._input_data
-
-    @property
-    def labels(self):
-        return self._input_labels
-
-    @property
-    def code_means(self):
-        return self._z_mean
-
-    @property
-    def codes(self):
-        return self._code_data
-
-    @property
-    def outputs(self):
-        return self._output_data
-
-    def set_input_data(self, data, labels=None):
-        self._input_data = data
-        self._input_labels = labels
-        self._z_mean = None
-        self.set_code_data(None)
-
-    def set_code_data(self, data, labels=None):
-        self._code_data = data
-        self._code_labels = labels
-        self.set_output_data(None)
-
-    def set_output_data(self, data, labels=None):
-        self._output_data = data
-        self._output_labels = labels
-
-
-    @run
-    def load_model(self, filename):
-        self._autoencoder.load(filename)
-        
-    @run
-    def save_model(self, checked: bool=False):
-        self._autoencoder.save(self._weights_file)
-
-    def plot_model(self):
-        pass
-
-    @run
-    def encode(self, inputs):
-        return self._autoencoder.encode(inputs, self._batch_size)
-
-    @run
-    def decode(self, codes):
-        return self._autoencoder.decode(codes, self._batch_size)
-
-    @run
-    def reconstruct(self, inputs):
-        return self._autoencoder.reconstruct(inputs, self._batch_size)
-
-    @run
-    def sample(self):
-        self._z_mean = None
-        self.change('data_changed')
-        self._output_data = self._autoencoder.reconstruct(self._input_data,
-                                                          self._batch_size)
-        self.change('data_changed')
+        # FIXME[todo]: it would be nice to inspect reconstruction change
+        # during training

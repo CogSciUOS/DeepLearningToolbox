@@ -48,14 +48,14 @@ class QNetworkView(QWidget, ModelObserver):
     def initUI(self) -> None:
         '''Initialize the user interface.'''
         info_layout = QVBoxLayout()
-        self._network_info = QNetworkBox(self)
+        self._network_info = QNetworkBox(parent=self)
         self._network_info.setMinimumWidth(300)
         info_layout.addWidget(self._network_info)
         
         self._layer_layout = QVBoxLayout()
         self._layer_buttons = []
         
-        self._classes_view = QClassesView(self)
+        self._classes_view = QClassesView(parent=self)
 
         layout = QVBoxLayout()
         layout.addLayout(self._layer_layout)
@@ -65,6 +65,7 @@ class QNetworkView(QWidget, ModelObserver):
         self.setLayout(layout)
 
     def setController(self, controller):
+        print(f"{controller}, {self._network_info}")
         super().setController(controller)
         self._network_info.setController(controller)
         self._classes_view.setController(controller)
@@ -205,42 +206,36 @@ class QNetworkView(QWidget, ModelObserver):
 
 from PyQt5.QtCore import QMetaObject, Q_ARG
 from PyQt5.QtWidgets import QLabel
-from collections import OrderedDict
-from network import Network
+from qtgui.utils import QObserver
+from network import Network, View as NetworkView
 
 
-class QNetworkBox(QLabel, ModelObserver):
+class QNetworkBox(QLabel, QObserver, ModelObserver, Network.Observer):
     '''
     .. class:: QNetworkBox
 
     A simple widget to display information on a network and a selected
     layer'''
 
-    def __init__(self, parent=None):
+    _networkView: NetworkView = None
+
+    def __init__(self, network: NetworkView=None, parent=None):
         '''Create a new :py:class:``QNetworkInfoBox``'''
         super().__init__(parent)
         self.setWordWrap(True)
+        self._network_text = ''
+        self._layer_text = ''
+        self.setNetworkView(network)
+
+    def setNetworkView(self, network: NetworkView) -> None:
+        self._exchangeView('_networkView', network,
+                           Network.Change.all())  # FIXME[hack]: check what we are really interested in ...
 
     def modelChanged(self, model: Model, info: ModelChange) -> None:
-        
-        #
-        # Set Network info text
-        #
-        network_text = ''
-        network = model._network
+        # FIXME[old]
         if info.network_changed:
-            network_text += '<b>Network info:</b> '
-            if network is not None:
-                network_name = type(network).__name__
-                network_text += 'FIXME[todo]: obtain network information ...'
-                network_text += ('<br>\n<b>class:</b> '
-                                 f'{network.__class__.__name__}')
-                network_text += f'<br>\n<b>name:</b> {network}'
-                network_text += f'<br>\n<b>input layer:</b> {network.input_layer_id()}'
-                network_text += f'<br>\n<b>output layer:</b> {network.output_layer_id()}'
-            else:
-                network_text += "No network"
-
+            self.network_changed(model._network, Network.Change.all())
+        
         #
         # Set Layer info text
         #
@@ -256,10 +251,43 @@ class QNetworkBox(QLabel, ModelObserver):
                 layer_text += layer_info
             else:
                 layer_text += "No layer selected"
+        self._layer_text = layer_text
+        self.update()
 
-        text = '<b>Network Info Box</b><br>' + network_text + layer_text
-        QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
 
+    def network_changed(self, network: Network,
+                        change: Network.Change) -> None:
+
+        #
+        # Set Network info text
+        #
+        network_text = ''
+        network_text += '<b>Network info:</b> '
+        if network is not None:
+            network_name = type(network).__name__
+            network_text += 'FIXME[todo]: obtain network information ...'
+            network_text += ('<br>\n<b>class:</b> '
+                             f'{network.__class__.__name__}')
+            network_text += f'<br>\n<b>name:</b> {network}'
+            if not network.empty():
+                network_text += ('<br>\n<b>input layer:</b> '
+                                 f'{network.input_layer_id()}')
+                network_text += ('<br>\n<b>output layer:</b> '
+                                 f'{network.output_layer_id()}')
+        else:
+            network_text += "No network"
+        self._network_text = network_text
+
+        self.update()
+        #QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
+
+
+    def paintEvent(self, event):
+        text = ('<b>Network Info Box</b><br>' +
+                self._network_text + self._layer_text)
+        self.setText(text)
+        super().paintEvent(event)
+        
 
 ###############################################################################
 ###                           QNetworkSelector                              ###
@@ -267,17 +295,46 @@ class QNetworkBox(QLabel, ModelObserver):
 
 from PyQt5.QtWidgets import QComboBox
 from typing import Dict, Iterable
+from toolbox import Toolbox, ToolboxView
+from network import View as NetworkView
+from qtgui.utils import QObserver
 
 
-class QNetworkSelector(QComboBox, ModelObserver):
-    """
+class QNetworkSelector(QComboBox, QObserver, ModelObserver, Toolbox.Observer, Network.Observer):
+    """A widget to select a :py:class:`Network` form a list of
+    :py:class:`Network`s. The selected network can be made subject
+    of an associated :py:class:`NetworkView`.
+    
     Attributes
     ----------
     _network_map : Dict[str,Network]
         A dictionary mapping the strings displayed in the network selector
         dropdown to actual network objects.
 
+    _toolboxView: ToolboxView
+        View of a :py:class:`Toolbox` providing a list of
+        :py:class:`Network`s. Can be set with :py:meth:`setToolboxView`,
+        making the :py:class:`QNetworkSelector` an observer of that
+        :py:class:`Toolbox`, reacting to 'networks_changed' signals.
+
+    _networkView: NetworkView
+        View of a :py:class:`Network`. The :py:class:`QNetworkSelector`
+        is only interested in the :py:class:`Network` being viewed,
+        not in its properties. This network will be made the current
+        network of the :py:class:`QNetworkSelector`, and selecting
+        another network will also change the viewed network accordingly.
+        A :py:class:`NetworkView` can be set with
+        :py:meth:`setNetworkView`, making the
+        :py:class:`QNetworkSelector` an observer of that
+        :py:class:`Toolbox`, reacting to 'networks_changed' signals.
+        The networkView may also restrict the selectable networks
+        (e.g. setting an AutoencoderView will only allow to select
+        autoencoders).
     """
+    _network_map = {}
+    _toolboxView: ToolboxView = None
+    _networkView: NetworkView = None
+    
     def __init__(self, parent=None) -> None:
         '''Initialization of the QNetworkView.
 
@@ -288,19 +345,30 @@ class QNetworkSelector(QComboBox, ModelObserver):
         '''
         QComboBox.__init__(self,parent)
         ModelObserver.__init__(self)
-        self._network_map = {}
+        Toolbox.Observer.__init__(self)
+        self.setToolboxView(None)
+        self.setNetworkView(None)
 
         # make sure to connect the signal in the main thread (assuming
         # the QNetworkSelector is initialized in the main thread).
         def slot(name):
             if self._controller is not None:
                 self._controller.onNetworkSelected(name)
+            if self._networkView is not None:
+                self._networkView(self.network)
         self.activated[str].connect(slot)
 
     def setController(self, controller) -> None:
         super().setController(controller)
         self.setEnabled(controller is not None)
 
+    def setToolboxView(self, toolbox: ToolboxView) -> None:
+        self._exchangeView('_toolboxView', toolbox,
+                           Toolbox.Change('networks_changed'))
+
+    def setNetworkView(self, network: NetworkView) -> None:
+        self._exchangeView('_networkView', network,
+                           Network.Change('observable_changed'))
 
     def modelChanged(self, model: Model, info: ModelChange) -> None:
         """React to changes in the model.
@@ -316,6 +384,21 @@ class QNetworkSelector(QComboBox, ModelObserver):
             if network is not None:
                 new_index = self.findText(network.get_id())
                 self.setCurrentIndex(new_index)
+
+    def toolbox_changed(self, toolbox: Toolbox,
+                        change: Toolbox.Change) -> None:
+        print(f"toolbox_changed(toolbox, {change})")
+        self._update_networks(self._toolboxView.networks)
+
+    def network_changed(self, network: Network,
+                        change: Network.Change) -> None:
+        print(f"network_changed(network, {change})")
+        if network is not None:
+            new_index = self.findText(network.get_id())
+            self.setCurrentIndex(new_index)
+        else:
+            self.setCurrentIndex(-1)
+            
 
     def _update_networks(self, networks: Iterable[Network]) -> None:
         """Update the list of networks to choose from.

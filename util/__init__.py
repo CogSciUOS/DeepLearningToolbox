@@ -6,6 +6,7 @@
 This module collects miscellaneous utilities.
 """
 
+import util.check
 
 class ArgumentError(ValueError):
     """Invalid argument exception"""
@@ -63,6 +64,8 @@ class Identifiable:
             return self._ensure_id() == other._ensure_id()
         return False
 
+    def __str__(self):
+        return str(self._id)
 
 from concurrent.futures import ThreadPoolExecutor
 

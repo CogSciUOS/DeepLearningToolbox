@@ -6,7 +6,7 @@ from tools.am import Engine
 
 # for type hints
 import PyQt5  # FIXME: no Qt here
-import qtgui  # FIXME: no Qt here
+#import qtgui  # FIXME: no Qt here
 from typing import Union
 import datasources
 

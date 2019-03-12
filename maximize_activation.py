@@ -44,7 +44,7 @@ def main():
     network._online()
 
     engine = Engine(config=Config())
-    engine.addObserver(MatplotlibObserver())
+    engine.add_observer(MatplotlibObserver())
     signal.signal(signal.SIGINT, lambda sig, frame: engine.stop())
     engine.maximize_activation(network)
 

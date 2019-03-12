@@ -580,7 +580,8 @@ class QMaximizationConfig(QWidget, ModelObserver, EngineObserver, Config.Observe
         self._config = config
 
         if self._config is not None:
-            self._config.addObserver(self, notify=True)
+            self._config.add_observer(self)
+            self._config.notify(self, self._config.Change.all()) # FIXME[hack]
             
     def setFromConfigView(self, configView: 'QMaximizationConfigView'):
         self.setConfig(configView.config)
@@ -754,7 +755,7 @@ class QMaximizationConfigView(QWidget):
         else:
             self._config = None
         if self._config is not None:
-            #self._config.addObserver(self)
+            #self._config.add_observer(self)
             string = ("Layer: <b>" + str(config.LAYER_KEY) + "</b>, " +
                       "unit: <b>" + str(config.UNIT_INDEX) + "</b>")
         else:

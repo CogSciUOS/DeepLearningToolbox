@@ -71,6 +71,15 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     _output_labels: List[str]
         The output labels for this network. Only meaningful
         if this Network is a classifier.
+
+    Changes
+    -------
+    'busy_changed':
+        the network state changed
+    'state_changed':
+        the network state changed
+    'weights_changed':
+        network weights were changed
     """
 
     
@@ -89,6 +98,13 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     
 
     # FIXME[todo]: add additional parameters, e.g. cpu / gpu
+    # FIXME[concept]: there are at least two different concepts of loading:
+    #  - load the architecture
+    #  - load the parameters
+    #  - load architecure and parameters
+    # Also: loading could be done like here (as class method) or
+    # as instance method - it should then call
+    #   self.change('weights_changed')
     @classmethod
     def load(cls, module_name, *args, **kwargs):
         logger.info(f"Loading module: {module_name}")
@@ -114,7 +130,8 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             raise NotImplementedError('Abstract base class Network '
                                       'cannot be used directly.')
 
-        super().__init__(id)
+        Identifiable.__init__(self, id)
+        BusyObservable.__init__(self)
 
         # Every loaded_network should know which data format it is using.
         # Default is channels_last.
@@ -125,7 +142,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         self.layer_dict = self._create_layer_dict()
 
         self._output_labels = None
-
 
     def __getitem__(self, item):
         """Provide access to the layers by number. Access by id is provided
@@ -238,7 +254,10 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         -------
 
         """
-        raise NotImplementedError
+        # FIXME[hack]: we need this to initialize the Network
+        # remove this once there is a proper initialization concept
+        #raise NotImplementedError
+        return {}
 
     # ---------------------- Private helper functions -------------------------
 
@@ -427,6 +446,9 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         return network_input_shape[-1] if len(network_input_shape)>2 else 0
 
     ### -------------------- methods for accessing layer attributes ---------
+
+    def empty(self):
+        return self.layer_dict is None or not bool(self.layer_dict)
 
     def input_layer_id(self):
         first_layer_id = next(iter(self.layer_dict.keys()))
@@ -827,7 +849,175 @@ class Network(Identifiable, BusyObservable, method='network_changed',
                 print("  {}: {} ({})".format(i,self._output_labels[inds[-1-i]],
                                              output[input_im_ind, inds[-1-i]]))
 
-from base.controller import Controller
+    def get_trainer(self, training):
+        return Trainer(training, self)
 
-class NetworkController(Controller):
-    pass
+class Trainer:
+    """
+
+    Attributes
+    ----------
+
+    training: Training
+        The training that is currently performed. None if no training
+        is ongoing.
+    busy: bool
+        A flag indicating if the Trainer is currently busy, i.e.
+        executing some training.
+    """
+    
+    def __init__(self, training, network):
+        self._training = training
+        self._network = network
+
+    @property
+    def training(self):
+        return self._training
+
+    @property
+    def busy(self):
+        return self._training is not None
+
+    def start(self, training: 'Training'):
+        if self.busy:
+            raise RuntimeError("Trainer is busy")
+        self._training = training
+        self._train()
+        self._training = None
+
+    def stop(self):
+        if self.busy:
+            self._training = None
+
+    def pause(self):
+        if self.busy:
+            self._training = None
+
+    def _train(self):
+        raise NotImplementedError("A Trainer has to implement a _train method")
+
+
+
+
+class Autoencoder(Network, method='network_changed'):
+
+    def __init__(self):
+        super().__init__()
+        self._encoder = None
+        self._decoder =None
+
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def decoder(self):
+        return self._decoder
+
+class VariationalAutoencoder:
+
+    def sampleCode(self, n=1):
+        pass
+
+    def sampleData(self, n=1):
+        pass
+
+    def sampleCodeFor(self, input, n=1):
+        pass
+
+    def sampleDataFor(self, input, n=1):
+        pass
+
+
+
+from base import View, Controller, run
+
+class NetworkView(View, view_type=Network):
+
+    def __init__(self, network: Network=None, **kwargs):
+        super().__init__(observable=network, **kwargs)
+
+class NetworkController(NetworkView, Controller):
+    """
+
+    Attributes
+    ----------
+    network: Network
+        The :py:class:`Network` controlled by this controller.
+
+    trainer: Trainer
+        A :py:class:`Trainer` for the network controlled by this
+        :py:class:`NetworkController`. Can be None.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.data = None
+        self.batch_size_range = 1, 256
+        self._batch_size = 128
+
+        self.epochs_range = 1, 50
+        self._epochs = 5
+
+        self._training = None
+
+    @property
+    def network(self) -> Network:
+        return self._network
+
+    @network.setter
+    def network(self, network: Network):
+        if network != self._network:
+            self._network = network
+            if self._training is not None:
+                self._training.network = network
+
+    @run
+    def load_model(self, filename):
+        self._network.load(filename)
+        
+    @run
+    def save_model(self, checked: bool=False):
+        self._network.save(self._weights_file)
+
+    def plot_model(self):
+        pass
+
+    
+    # """A Trainer is a Controller for some training."""
+
+
+    @property
+    def trainer(self):
+        return self._trainer
+
+    @trainer.setter
+    def trainer(self, trainer: Trainer):
+        self._trainer = trainer
+        self._trainer.network = self._network
+
+
+class AutoencoderController(NetworkController):
+
+    batch_size = 128 # FIXME[hack]: need some concept here!
+
+    def __init__(self, autoencoder: Autoencoder=None, **kwargs):
+        super().__init__(network=autoencoder, **kwargs)      
+
+    @run
+    def encode(self, inputs):
+        return self._network.encode(inputs, batch_size=self.batch_size)
+
+    @run
+    def decode(self, codes):
+        return self._network.decode(codes, batch_size=self.batch_size)
+
+    @run
+    def reconstruct(self, inputs):
+        return self._network.reconstruct(inputs, batch_size=self.batch_size)
+
+    @run
+    def sample(self, inputs=None, codes=None):
+        if codes is None and inputs is not None:
+            codes = self._network.encode(inputs, batch_size=self._batch_size)

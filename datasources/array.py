@@ -55,4 +55,5 @@ class DataArray(DataSource):
         return len(self._array)
 
     def __str__(self):
-        return f'<DataArray "{self._array.shape}"'
+        shape = None if self._array is None else self._array.shape
+        return f'<DataArray "{shape}">'

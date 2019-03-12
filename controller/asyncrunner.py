@@ -1,9 +1,10 @@
+
+from base import Runner
+
 from concurrent.futures import ThreadPoolExecutor, Future
 
-
-class AsyncRunner(object):
-    """Base class for runner objects which must be provided for each
-    controller/user interface.
+class AsyncRunner(Runner):
+    """Base class for asynchronous runner objects.
 
     .. note:: *Why is this necessary?*
 

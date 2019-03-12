@@ -13,15 +13,22 @@ For these datasets, it (should) know how to download the dataset, how
 to locate it (e.g., by means of environment variables or some standard
 locations), and how access it (i.e., which DataSource class to use).
 
+Datasources can have different
+* memory: the complete data is in memory
+* random_access: data in file(s) or in some database
+* sequential: data is read from some stream (movie, webcam)
+
 """
-from .source import DataSource, InputData, Predefined
+from .source import Datasource, InputData, Predefined
+from .source import Datasource as DataSource
+from .controller import View, Controller
 from .array import DataArray
 from .file import DataFile
 from .files import DataFiles
 from .directory import DataDirectory
 from .webcam import DataWebcam
 from .video import DataVideo
-from .keras import KerasDataSource
+from .keras import KerasDatasource
 from .imagenet import ImageNet
 
 import logging
@@ -30,9 +37,9 @@ del logging
 
 import sys
 
-for d in KerasDataSource.KERAS_IDS:
+for d in KerasDatasource.KERAS_IDS:
     try:
-        KerasDataSource(d)
+        KerasDatasource(d)
     except ValueError as err:
         print(f"Error instantiating keras data source '{d}': {err}",
               file=sys.stderr)

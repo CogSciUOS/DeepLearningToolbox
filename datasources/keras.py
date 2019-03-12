@@ -6,7 +6,7 @@ import importlib.util
 from datasources import DataArray, DataDirectory, Predefined
 
 
-class KerasDataSource(DataArray, Predefined):
+class KerasDatasource(DataArray, Predefined):
     """Data source for Keras builtin datasets.
 
     Keras provides some methods to access standard datasets via its
@@ -60,6 +60,6 @@ class KerasDataSource(DataArray, Predefined):
 
         Returns
         -------
-        True if the DataSource can be instantiated, False otherwise.
+        True if the Datasource can be instantiated, False otherwise.
         """
         return True

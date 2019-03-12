@@ -3,9 +3,14 @@ import numpy as np
 
 InputData = namedtuple('Data', ['data', 'name'])
 
+from base import BusyObservable
 
-class DataSource:
-    """An abstract base class for different types of data sources.
+class Datasource(BusyObservable, method='datasource_changed',
+                 changes=['state_changed', 'data_changed',
+                          'index_changed']):
+    """.. :py:class:: Datasource
+
+    An abstract base class for different types of data sources.
 
     There are different APIs for navigating in a datasource, depending
     on what that datasource supports:
@@ -23,16 +28,28 @@ class DataSource:
     _targets: np.ndarray
         T
     _labels: list
+
+
+    Changes
+    -------
+    state_changed:
+        The state of the DataSource has changed (e.g. data were downloaded,
+        loaded/unloaded, etc.)
+    data_changed:
+        The data have changed (e.g. new data from the camera).
+    index_changed:
+        For indexed datasources only: the index (current item) has changed.
     """
 
     def __init__(self, description=None):
-        """Create a new DataSource.
+        """Create a new Datasource.
 
         Parameters
         ----------
         description :   str
                         Description of the dataset
         """
+        super().__init__()
         self._description = (self.__class__.__name__ if description is None
                              else description)
         self._targets = None
@@ -92,14 +109,14 @@ class DataSource:
             return self._description + ", target=" + target
 
     def getDescription(self) -> str:
-        """Get the description for this DataSource"""
+        """Get the description for this Datasource"""
         return self._description
 
     def get_description(self, index: int=None) -> str:
         return 'Image ' + str(index) + ' from ' + self._description
 
     def prepare(self):
-        """Prepare this DataSource for use.
+        """Prepare this Datasource for use.
         """
         pass  # to be implemented by subclasses
 
@@ -132,7 +149,7 @@ class Predefined:
 
     def get_public_id(self):
         """Get the "public" ID that is used to identify this datasource.  Only
-        predefined DataSource should have such an ID, other
+        predefined Datasource should have such an ID, other
         datasources should provide None.
         """
         return self._id
@@ -142,7 +159,7 @@ class Predefined:
 
         Returns
         -------
-        True if the DataSource can be instantiated, False otherwise.
+        True if the Datasource can be instantiated, False otherwise.
         """
         return False
 

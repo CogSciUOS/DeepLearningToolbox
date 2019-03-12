@@ -33,7 +33,8 @@ class QtAsyncRunner(AsyncRunner, QObject):
 
     def __init__(self):
         """Connect a signal to :py:meth:`Observable.notifyObservers`."""
-        super().__init__()
+        AsyncRunner.__init__(self)
+        QObject.__init__(self)
         self._completion_signal.connect(self._notifyObservers)
 
     def onCompletion(self, future):
@@ -66,30 +67,48 @@ from base.observer import Observable
 import threading
 
 class QObserver:
-    """This as a base clas for all QWidgets that shall act as
+    """This as a base class for all QWidgets that shall act as
     Observers in the toolbox. It implements support for asynchronous
     message passing to Qt's main event loop.
 
     This class provides a convenience method :py:meth:`observe`, which
     should be used to observer some :py:class:`Observable` (instead
-    of calling :py:meth:`Observable.addObserver` directly). This will
+    of calling :py:meth:`Observable.add_observer` directly). This will
     set up the required magic.
-
-    This class has to inherit from QObject, as it defines an
-    pyqtSlot. We derive from 
     """
+    _qObserverHelper = None
 
-    def observe(self, observable, interest=None):
+    def __init__(self):
         # FIXME[question]: do we have to call this from the main thread
-        if not threading.current_thread() is threading.main_thread():
-            raise RuntimeError("QObserver.observe must be called from"
-                               "the main thread, not " +
-                               threading.current_thread().name + ".")
+        #if not threading.current_thread() is threading.main_thread():
+        #    raise RuntimeError("QObserver.observe must be called from"
+        #                       "the main thread, not " +
+        #                       threading.current_thread().name + ".")
+        if self._qObserverHelper is  None:
+            self._qObserverHelper = QObserver.QObserverHelper(self)
+       
 
-        helper = QObserver.QObserverHelper(self)
-        observable.addObserver(helper,
-                               notification=QObserver.QObserverHelper._qNotify,
-                               interest=interest)
+    def observe(self, observable: Observable, interests=None):
+        if self._qObserverHelper is  None:
+            raise RuntimeError("It seems QObserver's constructor was not "
+                               "called (QObserverHelper is not set)")
+
+        observable.add_observer(self._qObserverHelper,
+                                notify=self.QObserverHelper._qNotify,
+                                interests=interests)
+
+    def unobserve(self, observable):
+        observable.remove_observer(self._qObserverHelper)
+
+    def _exchangeView(self, name, new_view, interests=None):
+        old_view = getattr(self, name)
+        if new_view == old_view:
+            return  # nothing to do
+        if old_view is not None:
+            old_view.remove_observer(self)
+        setattr(self, name, new_view)
+        if new_view is not None:
+            new_view.add_observer(self, interests)
 
     class QObserverHelper(QObject):
         """A helper class for the :py:class:`QObserver`.
@@ -97,10 +116,14 @@ class QObserver:
         We define the functionality in an extra class to avoid
         problems with multiple inheritance (:py:class:`QObserver` is
         intended to be inherited from in addition to some
-        :py:class:`QWidget`). The main problem with QWidgets and
+        :py:class:`QWidget`): The main problem with QWidgets and
         multiple inheritance is, that signals and slots are only
-        inherited from the first super class, but we have to define
-        our own pyqtSlot here to make asynchronous notification work.
+        inherited from the first super class (which will usually be
+        QWidget or one of its subclasses), but we have to define our
+        own pyqtSlot here to make asynchronous notification work.
+
+        This class has to inherit from QObject, as it defines an
+        pyqtSlot.
         """
         def __init__(self, observer, parent=None):
             """Initialization of the QObserver.

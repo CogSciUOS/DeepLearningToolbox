@@ -1,35 +1,34 @@
 import logging
-logger = logging.getLogger(__name__)
 
 from random import randint
 import numpy as np
 
 # FIXME[problem]: circular import
-#   DataSource -> Model -> controller -> DataSource
+#   Datasource -> Model -> controller -> Datasource
 # from model import Model
-from controller import BaseController
-from base.observer import Observable, change
-from datasources import DataSource, DataArray, DataDirectory, DataFile
+from base import View as BaseView, Controller as BaseController, change
+from .source import Datasource
+from .array import DataArray
+from .directory import DataDirectory
+from .file import DataFile
 
-class DataSourceObservable(Observable, method='datasource_changed',
-                           changes=['datasource_changed', 'index_changed']):
-    """.. :py:class:: DataSourceChange
-
-    A class whose instances are passed to observers in
-    :py:meth:`observer.Observer.datasource_changed` in order to inform them
-    as to the exact nature of the model's change.
-
+class View(BaseView, view_type=Datasource):
+    """Base view backed by a datasource. Contains functionality for
+    viewing a :py:class:`Datasource`.
 
     Attributes
     ----------
-    datasource_changed: bool
-        Whether the underlying :py:class:`datasources.DataSource`
-        has changed
-    input_changed: bool
-        Whether the input signal changed
+    _datasource : Datasource
+        The current :py:class:`datasources.Datasource`
     """
+    _logger = logging.getLogger(__name__)
+
+
+    def __init__(self, datasource: Datasource=None, **kwargs):
+        super().__init__(observable=datasource, **kwargs)
+
     
-class DataSourceController(BaseController, DataSourceObservable):
+class Controller(View, BaseController):
     """Base controller backed by a datasource. Contains functionality for
     manipulating input data from a data source.
 
@@ -37,24 +36,20 @@ class DataSourceController(BaseController, DataSourceObservable):
     ----------
     _model: model.Model
         The model containing the network. If some data are
-        selected by this DataSourceController, they will
+        selected by this DatasourceController, they will
         provided as input to the model.
-    _datasource : DataSource
-        The current :py:class:`datasources.DataSource`
     _index : int
-        The current index in the :py:class:`datasources.DataSource`
+        The current index in the :py:class:`datasources.Datasource`
     """
 
-    def __init__(self, model: 'model.Model',
-                 datasource: DataSource = None, **kwargs) -> None:
+    def __init__(self, model: 'model.Model', **kwargs) -> None:
         super().__init__(**kwargs)
-        Observable.__init__(self)
         self._model = model
-        self._datasource = datasource
         self._index = 0
 
-    def get_observable(self) -> Observable:
-        return self
+    # FIXME[old]: should be removed
+    def get_observable(self) -> Datasource:
+        return self._datasource
 
     def __len__(self) -> int:
         """Returns the number of elements in the currently selected
@@ -67,14 +62,15 @@ class DataSourceController(BaseController, DataSourceObservable):
         """
         return 0 if self._datasource is None else len(self._datasource)
 
-    @change
-    def set_datasource(self, datasource: DataSource) -> None:
-        """Set the :py:class:`DataSource` used by this DataSourceController.
+    # FIXME[old]: reimplemented by __call__() ...
+    #@change
+    def set_datasource(self, datasource: Datasource) -> None:
+        """Set the :py:class:`Datasource` used by this DatasourceController.
 
         Parameters
         ----------
-        datasource: DataSource
-            The new DataSource.
+        datasource: Datasource
+            The new Datasource.
 
         """
         # FIXME[async]: preparation may take some time - maybe do this
@@ -84,29 +80,29 @@ class DataSourceController(BaseController, DataSourceObservable):
         self.set_index(0)
         self.change(datasource_changed=True)
 
-    def get_datasource(self) -> DataSource:
-        """Get the :py:class:`DataSource` used by this
-        :py:class:`DataSourceController`.
+    def get_datasource(self) -> Datasource:
+        """Get the :py:class:`Datasource` used by this
+        :py:class:`DatasourceController`.
 
         Result
         ------
-        datasource: DataSource
-            The :py:class:`DataSource` of this
-            :py:class:`DataSourceController`.
+        datasource: Datasource
+            The :py:class:`Datasource` of this
+            :py:class:`DatasourceController`.
         """
         return self._datasource
 
-    @change
+    #@change
     def set_index(self, index: int) -> None:
-        """Set the current index in the :py:class:`DataSource`.
+        """Set the current index in the :py:class:`Datasource`.
 
         Parameters
         ----------
         index: int
             The index to become the current index in this
-            :py:class:`DataSourceController`.
+            :py:class:`DatasourceController`.
         """
-        logger.info(f"DataSourceController.set_index(index)")
+        self._logger.info(f"DatasourceController.set_index(index)")
         if index is None:
             pass
         elif self._datasource is None or len(self._datasource) < 1:
@@ -132,22 +128,22 @@ class DataSourceController(BaseController, DataSourceObservable):
                                  data, target, description)
 
     def get_index(self) -> int:
-        """Get the current index in the :py:class:`DataSource`.
+        """Get the current index in the :py:class:`Datasource`.
 
         Result
         ------
         index: int
             The current index of this
-            :py:class:`DataSourceController`.
+            :py:class:`DatasourceController`.
         """
         return self._index
 
-    def onSourceSelected(self, source: DataSource):
-        """Set a new :py:class:`datasources.DataSource`.
+    def onSourceSelected(self, source: Datasource):
+        """Set a new :py:class:`datasources.Datasource`.
 
         Parameters
         ----------
-        source  :   datasources.DataSource
+        source  :   datasources.Datasource
         """
         self._runner.runTask(self.set_datasource, source)
 

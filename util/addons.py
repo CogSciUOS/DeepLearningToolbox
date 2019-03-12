@@ -58,3 +58,19 @@ def install(name, force=False):
     if available(name):
         return
 
+import argparse
+
+class UseAddon(argparse.Action):
+    """Auxiliary class for parsing command line options.
+    Turn on use of given addon.
+
+    """
+    
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        addons.use(self.dest, True)
+        setattr(namespace, self.dest, values)

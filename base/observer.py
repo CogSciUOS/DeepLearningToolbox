@@ -56,6 +56,11 @@ class Observable:
         to inherit from this type.
     _change_method: str
         The name of the method to invoke at the observers.
+    _changeables: dict
+        The changeable attributes of this Observable. The dictionary
+        maps attribute names to change to be signaled when notifying
+        the observers. A value of None means that no change should
+        be signaled.
 
     Attributes
     ----------
@@ -67,7 +72,8 @@ class Observable:
         accumulate changes within a task.
     """
 
-    def __init_subclass__(cls: type, method: str=None, changes: list=None):
+    def __init_subclass__(cls: type, method: str=None, changes: list=None,
+                          changeables: list=None):
         """Initialization of subclasses of :py:class:`Observable`.
         Each of this classes will provide some extra class members
         describing the observation (Change, Observer, _change_method).
@@ -81,8 +87,14 @@ class Observable:
         changes: list of str
             List of changes that can happpen. This is used to construct
             the :py:class:`Observable.Changes` type.
+        changeables: dict
+            A dictionary mapping names of changeable attributes to
+            the change that should be signaled when notifying the
+            observers. This dictionary will be merged with the
+            changeables inherited from the super class.
         """
         if changes is not None:
+            changes = cls.Change.ATTRIBUTES + changes
             cls.Change = type(cls.__name__ + ".Change", (Observable.Change,),
                               {'ATTRIBUTES': changes})
 
@@ -95,6 +107,8 @@ class Observable:
             cls.Observer = type(cls.__name__ + ".Observer",
                                 (Observable.Observer,), {method: XChanged})
 
+        if changeables is not None:
+            cls._changeables = {**cls._changeables, **changeables}
 
     class Observer(object):
         """Mixin for inheriting observer functionality. An observer registers
@@ -118,7 +132,8 @@ class Observable:
             self._model = kwargs.get('model', None)
             self._controller = None
 
-        def observe(self, observable: 'Observable') -> None:
+        def observe(self, observable: 'Observable',
+                    interests: 'Change') -> None:
             """Add self to observer list of ``observable``.
 
             Parameters
@@ -126,7 +141,17 @@ class Observable:
             observable: Observable
                 The object to be observed.
             """
-            observable.addObserver(self)
+            observable.add_observer(self, interests)
+
+        def unobserve(self, observable: 'Observable') -> None:
+            """Remove self as an observer from the list of ``observable``.
+
+            Parameters
+            ----------
+            observable: Observable
+                The object to be observed.
+            """
+            observable.remove_observer(self)
 
         # FIXME[concept]: this does not really belong here, but is a
         # different concept. Also it is problematic, as an observer may
@@ -146,11 +171,17 @@ class Observable:
                 observer object.
 
             """
-            if getattr(self, name) is not None:
-                getattr(self, name).get_observable().remove_observer(self)
+            from pydoc import locate
+            if isinstance(self, locate('qtgui.utils.QObserver')):
+                print("Trying to set Controller on QObserver!")
+                return  # FIXME[hack]
+            if getattr(self, name, None) is not None:
+                observable = getattr(self, name).get_observable()
+                if observable:
+                    observable.remove_observer(self)
             setattr(self, name, controller)
             observable = controller.get_observable()
-            self.observe(observable)
+            self.observe(observable, interests=observable.Change.all())
             observable.notify(self)
 
     class Change(set):
@@ -162,7 +193,7 @@ class Observable:
         Subclasses should redefine the list of valid ATTRIBUTES.
         """
 
-        ATTRIBUTES = []
+        ATTRIBUTES = ['observable_changed']
 
         def __init__(self, *args, **kwargs):
             """
@@ -222,11 +253,17 @@ class Observable:
             """
             return cls(*cls.ATTRIBUTES)
 
-    _change_method:str = 'changed'
+    _change_method: str = 'observable_changed'
+    _changeables: dict = {}
 
     def __init__(self):
         self._observers = dict()
         self._thread_local = threading.local()
+
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if name in type(self)._changeables:
+            self.change(type(self)._changeables[name])
 
     def _begin_change(self):
         data = self._thread_local
@@ -285,9 +322,8 @@ class Observable:
             self._thread_local.change |= {k for k,v in kwargs.items() if v}
         
 
-    def addObserver(self, observer: Observer,
-                    notify: bool=False, notification=None,
-                    interest: Change=None) -> None:
+    def add_observer(self, observer: Observer,
+                    interests: Change=None, notify=None) -> None:
         """Add an object to observe this Observable.
 
         Parameters
@@ -295,14 +331,16 @@ class Observable:
         observer: object
             Object which wants to be notified of changes. Must supply
             a suitable change method.
+        interests: Change
+            The changes the observer is interested in. Default is
+            all changes.
+        notify:
+            Method to be called to notify the observer. Default is
+            self.notify()
         """
-        if notification is None:
-            notification = Observable.notify
-        if interest is None:
-            interest = self.Change.all()
-        self._observers[observer] = (notification, interest)
-        if notify:
-            self.notify(observer, interest)
+        self._observers[observer] = \
+            (notify if notify else type(self).notify,
+             interests if interests else self.Change.all())
 
     def remove_observer(self, observer: Observer):
         """Remove an observer from this Observable.
@@ -328,11 +366,10 @@ class Observable:
         else:
             info = self.Change(*args, **kwargs)
         
-        me = threading.current_thread().name
         logger.debug(f"{self.__class__.__name__}.notifyObservers({info})")
         if info:
-            for observer, (notify, interest)  in self._observers.items():
-                if interest & info:
+            for observer, (notify, interests) in self._observers.items():
+                if interests & info:
                     notify(self, observer, info)
 
     def notify(self, observer: Observer, info: Change=None):
@@ -372,11 +409,9 @@ class BusyObservable(Observable, changes=['busy_changed']):
 
     """
 
-    def __init_subclass__(cls: type, method: str=None, changes: list=None,
-                          default: str=None):
-        if changes is not None:
-            changes += ['busy_changed'] + changes
-        Observable.__init_subclass__.__func__(cls, method, changes)
+    def __init_subclass__(cls: type, changes: list=[], **kwargs):
+        changes += ['busy_changed']
+        Observable.__init_subclass__.__func__(cls, changes=changes, **kwargs)
 
     def __init__(self):
         super().__init__()
@@ -395,3 +430,4 @@ class BusyObservable(Observable, changes=['busy_changed']):
                 raise RuntimeError("Trying to unemploy an object "
                                    "thatis already lazy.")
         self._busy = state
+        self.notifyObservers('busy_changed')

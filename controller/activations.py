@@ -6,8 +6,8 @@ from network import Network
 from model import Model
 
 # for type hints
-import PyQt5  # FIXME: no Qt here
-import qtgui  # FIXME: no Qt here
+import PyQt5.QtWidgets  # FIXME: no Qt here
+#import qtgui  # FIXME: no Qt here
 from typing import Union
 import datasources
 

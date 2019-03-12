@@ -9,11 +9,9 @@ portion of the MVC pattern.
 '''
 from util import addons
 
-from .base import BaseController
-from .asyncrunner import AsyncRunner
-from .datasource import DataSourceController
-DataSourceObserver = DataSourceController.Observer  # FIXME[hack]
-DataSourceChange = DataSourceController.Change  # FIXME[hack]
+#from .base import BaseController  # FIXME[old]: remove if not needed
+from base import Controller as BaseController
+from .asyncrunner import Runner, AsyncRunner
 from .activations import ActivationsController
 from .maximization import MaximizationController
 
