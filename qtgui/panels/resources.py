@@ -6,6 +6,7 @@ Github: https://github.com/krumnack
 """
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QResizeEvent
 from PyQt5.QtWidgets import (QListWidget, QListWidgetItem, QPushButton,
                              QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout)
 
@@ -21,11 +22,26 @@ from datasources import Datasource, Controller as DatasourceController
 class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
                      Network.Observer, Datasource.Observer):
     '''A Panel for managing resources used by the Toolbox.
+
+    _input_view: QModelImageView
+        An image view area to display the currently selected input
+        image from the Toolbox.
+    _input_info: QInputInfoBox
+        An info box displaying additional information on the currently
+        selected input image.
+    _input_selector: QInputSelector
+        A control element to select an input image. Consists of
+        two parts: a datasource selector to choose a Datasource and
+        a datasource navigator to select an image in the Datasource.
     '''
     _toolboxController: ToolboxController=None
-    _networkController : NetworkController=None
-    _datasourceController : DatasourceController=None
+    _networkController: NetworkController=None
+    _datasourceController: DatasourceController=None
 
+    _input_view: QModelImageView
+    _input_info: QInputInfoBox
+    _input_selector: QInputSelector
+    
     def __init__(self, toolbox: ToolboxController=None,
                  network1: NetworkController=None,
                  datasource1: DatasourceController=None,
@@ -87,26 +103,14 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
         #
 
         # QModelImageView: a widget to display the input data
-        self._input_view = QModelImageView(self)
-        # FIXME[layout]
-        # keep image view square (TODO: does this make sense for every input?)
-        self._input_view.heightForWidth = lambda w: w
-        self._input_view.hasHeightForWidth = lambda: True
+        self._input_view = QModelImageView()
 
-        # QInputSelector: a widget to select the input to the network
-        # (data array, image directory, webcam, ...)
-        # the 'next' button: used to load the next image
-        self._input_selector = QInputSelector()
-
-        # FIXME[hack]
-        self._input_info = QInputInfoBox(imageView=self._input_view)
-        #self._input_view.modeChange.connect(self._input_info.onModeChange)
-
-        # FIXME[layout]
-        self._input_info.setMinimumWidth(200)
-
-
+        self._input_info = QInputInfoBox()
+        self._input_view.modeChanged.connect(self._input_info.onModeChanged)
         
+        # QInputSelector: a widget to select the input
+        # (combined datasource selector and datasource navigator)
+        self._input_selector = QInputSelector()
 
     def _layoutUI(self):
 
@@ -124,8 +128,8 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
         layout2.addWidget(self._networkBox)
         layout2.addStretch()
 
-        box1 = QGroupBox('Networks')
-        box1.setLayout(layout2)
+        self._networkGroupBox = QGroupBox('Networks')
+        self._networkGroupBox.setLayout(layout2)
 
         layout = QVBoxLayout()
         layout.addWidget(self._datasourceList)
@@ -134,26 +138,34 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
         # FIXME[layout]
         #layout.setSpacing(0)
         #layout.setContentsMargins(0, 0, 0, 0)
+        self._input_info.setMinimumWidth(200)
+        # keep image view square (FIXME[question]: does this make
+        # sense for every input?)
+        self._input_view.heightForWidth = lambda w: w
+        self._input_view.hasHeightForWidth = lambda: True
+
         layout.addWidget(self._input_view)
         layout.addWidget(self._input_info)
         layout.addWidget(self._input_selector)
 
         layout.addStretch()
 
-        box2 = QGroupBox('Data sources')
-        box2.setLayout(layout)
+        self._datasourceGroupBox = QGroupBox('Data sources')
+        self._datasourceGroupBox.setLayout(layout)
 
         layout = QGridLayout()
-        box1.sizePolicy().setHorizontalStretch(1)
-        box2.sizePolicy().setHorizontalStretch(1)
-        layout.addWidget(box1, 0, 0)
-        layout.addWidget(box2, 0, 1)
+        self._networkGroupBox.sizePolicy().setHorizontalStretch(1)
+        self._datasourceGroupBox.sizePolicy().setHorizontalStretch(1)
+        layout.addWidget(self._networkGroupBox, 0, 0)
+        layout.addWidget(self._datasourceGroupBox, 0, 1)
         self.setLayout(layout)
 
     def setToolboxController(self, toolbox: ToolboxController) -> None:
         self._exchangeView('_toolboxController', toolbox)
         self._networkSelector.setToolboxView(toolbox)
         self._input_selector.setToolboxController(toolbox)
+        self._input_view.setToolboxView(toolbox)
+        self._input_info.setToolboxView(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
         self._exchangeView('_networkController', network)
@@ -202,3 +214,10 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
 
     def datasource_changed(self, datasource, change):
         print(f"datasource_changed({self}, {datasource}, {change})")
+
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        halfWidth = event.size().width() * 5 // 11
+        self._networkGroupBox.setMinimumWidth(halfWidth)
+        self._datasourceGroupBox.setMinimumWidth(halfWidth)
+        super().resizeEvent(event)

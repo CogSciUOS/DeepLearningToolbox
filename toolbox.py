@@ -119,9 +119,11 @@ def torch(cpu: bool, model_file: str, net_class: str, parameter_file: str,
 
 
 
-class Toolbox(Semaphore, Observable, method='toolbox_changed',
+class Toolbox(Semaphore, Observable, Datasource.Observer,
+              method='toolbox_changed',
               changes=['lock_changed', 'networks_changed',
-                       'datasources_changed', 'datasource_changed'],
+                       'datasources_changed', 'datasource_changed',
+                       'input_changed'],
               changeables={
                   'datasource': 'datasource_changed'
               }):
@@ -139,34 +141,34 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
         The list of datasources managed by this Toolbox was changed:
     datasource_changed:
         The currently selected datasource was changed.
+    input_changed:
+        The current input has changed. The new value can be read out
+        from the :py:meth:`input` property.
     """
-    datasource: Datasource=None
-
+    _networks: list = None
+    _datasources: list = None
+    _toolbox_controller: BaseController = None  # 'ToolboxController'
+    _datasource_controller: DatasourceController = None
     _runner: Runner = None
+    _model: 'Model' = None
+    _input_data: np.ndarray = None
+    _input_label = None
+    _input_description = None
 
     def __init__(self, args):
         Semaphore.__init__(self, 1)
         Observable.__init__(self)
         self._args = args
-        self._networks = []
-        self._datasources = []
         self._toolbox_controller = ToolboxController(self)
 
         # FIXME[old] ...
         from model import Model
         self._model = Model()
 
-        self._datasource_controller = DatasourceController(self._model)
-
-
-        # FIXME[hack]: training - we need a better concept ...
-        self.dataset = None
-        self.data = None
-        self._toolbox_controller.hack_load_mnist()
-
-        self._initialize_gui()
+        self._initialize_datasources()
+        self._initialize_networks()
+        self._initialize_gui()       
         
-
     def _initialize_gui(self):
         #
         # create the actual application
@@ -203,7 +205,7 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
         self._mainWindow.panel('maximization', create=True)
 
         # Initialise the "Resources" panel.
-        self._mainWindow.panel('resources', create=True)
+        self._mainWindow.panel('resources', create=True, show=True)
 
         # FIXME[old]
         self._mainWindow.setModel(self._model)
@@ -235,7 +237,6 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
             return self._app.exec_()
         finally:
             util.stop_timer()
-
 
     def initializeToolbox(self, args, gui):
         try:
@@ -300,6 +301,9 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
     ###                            Networks                                 ###
     ###########################################################################
 
+    def _initialize_networks(self):
+        self._networks = []
+
     def add_network(self, network: Network):
         self._networks.append(network)
         self.change('networks_changed')
@@ -307,18 +311,6 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
     def remove_network(self, network: Network):
         self._networks.remove(network)
         self.change('networks_changed')
-
-    ###########################################################################
-    ###                            Datasources                              ###
-    ###########################################################################
-
-    def add_datasource(self, datasource: Datasource):
-        self._datasources.append(datasource)
-        self.change('datasources_changed')
-
-    def remove_datasource(self, datasource: Datasource):
-        self._datasources.remove(datasource)
-        self.change('datasources_changed')
 
     def hack_load_alexnet(self):
         #
@@ -338,6 +330,49 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
         logger.debug("alexnet: Done")
         return network
 
+    ###########################################################################
+    ###                            Datasources                              ###
+    ###########################################################################
+
+    def _initialize_datasources(self):
+        self._datasources = []
+        self._datasource_controller = DatasourceController(self._model)
+        # observe the new DatasourceController and add new datasources
+        # reported by that controller to the list of known datasources
+        my_interests = Datasource.Change('observable_changed', 'data_changed')
+        self._datasource_controller.add_observer(self, interests=my_interests)
+
+        # FIXME[hack]: training - we need a better concept ...
+        self.dataset = None
+        self.data = None
+        self._toolbox_controller.hack_load_mnist()
+
+    def datasource_changed(self, datasource: Datasource,
+                           change: Datasource.Change) -> None:
+        if change.observable_changed:
+            self.add_datasource(datasource)
+        if change.data_changed:
+            if self._datasource_controller:
+                data, label = self._datasource_controller.data_and_label
+                description = self._datasource_controller.description
+                self.set_input(data=data, label=label, description=description)
+            else:
+                self.set_input(data=None, label=None, description="No input")
+
+    @property
+    def datasource(self) -> Datasource:
+        return (self._datasource_controller._datasource  # FIXME[hack]: private
+                if self._datasource_controller else None)
+
+    def add_datasource(self, datasource: Datasource):
+        if datasource is not None and datasource not in self._datasources:
+            self._datasources.append(datasource)
+            self.change('datasources_changed')
+
+    def remove_datasource(self, datasource: Datasource):
+        if datasource not in self._datasources:
+            self._datasources.remove(datasource)
+            self.change('datasources_changed')
 
     def hack_load_mnist(self):
 
@@ -385,9 +420,30 @@ class Toolbox(Semaphore, Observable, method='toolbox_changed',
     def labels(self):
         return self._data[1]
 
+    ###########################################################################
+    ###                               Input                                 ###
+    ###########################################################################
 
+    @property
+    def input_data(self) -> np.ndarray:
+        return self._input_data
 
-class ToolboxView(BaseView, view_type=Toolbox):
+    @property
+    def input_label(self) -> np.ndarray:
+        return self._input_label
+
+    @property
+    def input_description(self) -> np.ndarray:
+        return self._input_description
+
+    def set_input(self, data: np.ndarray, label=None,
+                  description: str=None):
+        self._input_data = data
+        self._input_label = label
+        self._input_description = description
+        self.change('input_changed')
+
+class View(BaseView, view_type=Toolbox):
 
     def __init__(self, toolbox=None, **kwargs):
         super().__init__(observable=toolbox, **kwargs)
@@ -412,7 +468,8 @@ def debug(func):
             raise e
     return closure
 
-class ToolboxController(ToolboxView, BaseController):
+
+class Controller(View, BaseController):
 
     def __init__(self, toolbox=None, **kwargs):
         super().__init__(toolbox=toolbox, **kwargs)
@@ -514,7 +571,7 @@ class ToolboxController(ToolboxView, BaseController):
 
     def add_datasource(self, datasource: Datasource) -> None:
         self._toolbox.add_datasource(datasource)
-        self.datasource = datasource
+        self.set_datasource(datasource)
 
     def remove_network(self, datasource: Datasource) -> None:
         self._toolbox.remove_datasource(datasource)
@@ -528,7 +585,7 @@ class ToolboxController(ToolboxView, BaseController):
 
     def get_inputs(self, dtype=np.float32, flat=True, test=False):
         inputs = self.dataset[1 if test else 0][0]
-        print(f"inputs: {inputs.shape}, {inputs.dtype}, {inputs.max()}")
+        print(f"ToolboxController.get_inputs(): inputs: {inputs.shape}, {inputs.dtype}, {inputs.max()}")
         if (np.issubdtype(inputs.dtype, np.integer) and
             np.issubdtype(dtype, np.floating)):
             # conversion from int to float will also scale to the interval
@@ -547,3 +604,7 @@ class ToolboxController(ToolboxView, BaseController):
 
     def get_data_shape(self):
         return self.dataset[0][0][0].shape
+
+# FIXME[hack]
+ToolboxView = View
+ToolboxController = Controller

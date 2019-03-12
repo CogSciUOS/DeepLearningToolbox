@@ -1,3 +1,4 @@
+
 from datasources import (Datasource, DataArray, DataFile, DataDirectory,
                          DataWebcam, DataVideo, Predefined,
                          Controller as DatasourceController)
@@ -196,7 +197,6 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
             self._controller.onSourceSelected(datasource)
         if self._toolboxController:
             self._toolboxController.add_datasource(datasource)
-            self._toolboxController.datasource = datasource
 
     def _predefinedSelectionChange(self,i):
         if self._radioButtons['Name'].isChecked():
@@ -207,14 +207,13 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
             if getattr(self, '_controller', None) is not None: # FIXME[old]
                 self._controller.onSourceSelected(datasource)
             if self._toolboxController is not None:
-                self._toolboxController.datasource = datasource
+                self._toolboxController.set_datasource(datasource)
 
     def setToolboxController(self, toolbox: ToolboxController) -> None:
         self._exchangeView('_toolboxController', toolbox,
                            interests=Toolbox.Change('datasources_changed'))
 
     def toolbox_changed(self, toolbox: Toolbox, change):
-        print(f"toolbox_changed({self}, {toolbox}, {change})")
         self._setDatasource(self._toolboxController.datasource)
 
 
@@ -331,7 +330,10 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                 self._indexField.setValidator(QIntValidator(0, n_elems))
 
         if info.index_changed:
-            index = self._controller.get_index() if self._controller else 0
+            if self._controller:
+                index = self._controller.get_index() or 0
+            else:
+                index = 0
             if self._controller:
                 self._indexField.setText(str(index))
             self.firstButton.setEnabled(index > 0)
@@ -489,20 +491,29 @@ class QInputSelector(QWidget, QObserver, Datasource.Observer):
 
 
 
+from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 import numpy as np
 
+from toolbox import Toolbox, View as ToolboxView
+from datasources import Datasource, View as DatasourceView
 
-class QInputInfoBox(QWidget, QObserver, Datasource.Observer, ModelObserver):
+
+class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer, ModelObserver):
     """A :py:class:`QInputInfoBox` displays information on the currently
     selected input image.
-    """
 
-    # FIXME[hack]: imageView: there should be no explicit reference
-    # between widgets We need imageView._show_raw here. Think of some
-    # suitable mechanism and then remove this hack ...
-    def __init__(self, parent=None, imageView=None):
+    Data can be provided in different ways:
+    (1) From a :py:class:`Toolbox`, using the input data
+    (2) From a :py:class:`Datasource`, using the current data
+    """
+    _toolbox: ToolboxView = None
+    _datasource: DatasourceView = None
+    _processed: bool = False
+
+    def __init__(self, toolbox: ToolboxView=None,
+                 datasource: DatasourceView=None, parent=None):
         '''Create a new QInputInfoBox.
 
         parent  :   QWidget
@@ -510,11 +521,10 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, ModelObserver):
         '''
         super().__init__(parent)
         self._initUI()
-        self._description = ''
-        self._description2 = ''
-        self._show_raw = False
         self._model = None
         self._showInfo()
+        self.setToolboxView(toolbox)
+        self.setDatasourceView(datasource)
 
     def _initUI(self):
         '''Initialise the UI'''
@@ -533,59 +543,73 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, ModelObserver):
         layout.addWidget(self._dataLabel)
         self.setLayout(layout)
 
+    def setToolboxView(self, toolbox: ToolboxView) -> None:
+        self._exchangeView('_toolbox', toolbox,
+                           interests=Toolbox.Change('input_changed'))
+
+    def setDatasourceView(self, datasource: Datasource) -> None:
+        self._exchangeView('_datasource', datasource,
+                           interests=Datasource.Change('data_changed'))
+
     def setController(self, controller) -> None:
         # FIXME[hack]: we need a more reliable way to observe multiple observable!
         self.observe(controller.get_observable(), interests=None)
 
-    def datasource_changed(self, controller, info):
-        if info.index_changed:
-            datasource = controller.get_datasource()
-            if datasource is not None:
-                index = controller.get_index()
-                self._description = datasource.getName(index)
+    def toolbox_changed(self, toolbox: Toolbox,
+                        change: Toolbox.Change) -> None:
+        if change.input_changed:
+            if not self._toolbox:
+                data = None
+            elif self._processed:
+                data = self._toolbox.input_data
             else:
-                self._description = ''
+                data = self._toolbox.input_data
+            label = self._toolbox.input_label
+            description = self._toolbox.input_description
+            self._showInfo(data=data, description=description)
+
+    def datasource_changed(self, datasource, change):
+        if change.data_changed:
+            if self._datasource:
+                data, label = datasource.data
+                self._showInfo(data=data, label=label)
+            else:
+                self._showInfo()
 
     def modelChanged(self, model, info):
         self._model = model
         if info.input_changed:
-            self._description2 = model.input_data_description
-            self._showInfo()
+            description = model.input_data_description
+            self._showInfo(description=description)
 
-    def onModeChange(self, showRaw: bool):
+    @pyqtSlot(bool)
+    def onModeChanged(self, processed: bool):
         """The display mode was changed.
 
         Arguments
         ---------
-        mode: bool
-            The new display mode (False=raw, True=reshaped).
+        processed: bool
+            The new display mode (False=raw, True=processed).
         """
-        self._show_raw = showRaw
-        self._showInfo()
+        self.setMode(processed)
 
-    def _showInfo(self, data: np.ndarray=None):
-        '''Show info for the given (image) data.
-
-        Parameters
-        ----------
-        data:
-            the actual data
-        description:
-            some string describing the origin of the data
-        '''
-        if self._model is not None:
-            if self._show_raw:
-                data = self._model.raw_input_data
-            else:
-                data = self._model.input_data
+    def setMode(self, processed):
+        if processed != self._processed:
+            self._processed = processed
+            self._showInfo()
         
+    def _showInfo(self, data: np.ndarray=None, label=None,
+                  description: str=''):
+        '''Show info for the given (image) data.
+        '''       
         self._meta_text = '<b>Input image:</b><br>\n'
-        self._meta_text += f'Description 1: {self._description}<br>\n'
-        self._meta_text += f'Description 2: {self._description2}<br>\n'
+        self._meta_text += f'Description: {description}<br>\n'
+        if label is not None:
+            self._meta_text += f'Label: {label}<br>\n'
 
-        self._data_text = ('<b>Raw input:</b><br>\n'
-                           if self._show_raw else
-                           '<b>Network input:</b><br>\n')
+        self._data_text = ('<b>Preprocessed input:</b><br>\n'
+                           if self._processed else
+                           '<b>Raw input:</b><br>\n')
         if data is not None:
             self._data_text += (f'Input shape: {data.shape}, '
                                 f'dtype={data.dtype}<br>\n')
@@ -599,3 +623,4 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, ModelObserver):
         self._metaLabel.setText(self._meta_text)
         self._dataLabel.setText(
             self._data_text if self._button.isChecked() else '')
+

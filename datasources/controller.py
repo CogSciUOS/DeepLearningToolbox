@@ -116,7 +116,7 @@ class Controller(View, BaseController):
             return
         
         self._index = index
-        self.change(index_changed=True)
+        self.change(index_changed=True, data_changed=True)
 
         if not self._datasource or index is None:
             pass
@@ -126,6 +126,24 @@ class Controller(View, BaseController):
             description = self._datasource.get_description(index)
             self._runner.runTask(self._model.set_input_data,
                                  data, target, description)
+    @property
+    def data(self) -> np.ndarray:
+        data, _ = self._datasource[self._index] if self else None
+        return data
+
+    @property
+    def label(self):
+        _, label = self._datasource[self._index] if self else None
+        return label
+
+    @property
+    def data_and_label(self):
+        return self._datasource[self._index] if self else (None, None)
+
+    @property
+    def description(self):
+        return (self._datasource.get_description(self._index) if self
+                else "No data")
 
     def get_index(self) -> int:
         """Get the current index in the :py:class:`Datasource`.

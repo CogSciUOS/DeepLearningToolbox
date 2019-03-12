@@ -387,12 +387,10 @@ class QNetworkSelector(QComboBox, QObserver, ModelObserver, Toolbox.Observer, Ne
 
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
-        print(f"toolbox_changed(toolbox, {change})")
         self._update_networks(self._toolboxView.networks)
 
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
-        print(f"network_changed(network, {change})")
         if network is not None:
             new_index = self.findText(network.get_id())
             self.setCurrentIndex(new_index)

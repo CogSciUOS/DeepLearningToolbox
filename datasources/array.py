@@ -41,7 +41,21 @@ class DataArray(DataSource):
         self._array = array
         self._description = description
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> InputData:
+        """
+
+        Result
+        ------
+        data: np.ndarray
+            The input data.
+        label:
+            The associated label, if known, None otherwise.
+
+        Raises
+        ------
+        IndexError:
+            The index is out of range.
+        """
         if self._array is None or index is None:
             return None, None
         data = self._array[index]

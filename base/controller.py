@@ -71,7 +71,7 @@ class View:
             self._view_type_mismatch = view_type_mismatch
         self(observable)
 
-    def __nonzero__(self):
+    def __bool__(self):
         return getattr(self, type(self)._view_attribute, None) is not None
 
     def __call__(self, new_observable: Observable):
@@ -109,10 +109,13 @@ class View:
         if name == type(self)._view_attribute:
             return None  # avoid RecursionError
         observable = getattr(self, type(self)._view_attribute, None)
+        if observable is None:
+            raise AttributeError(f"Cannot access attribute {name} in "
+                                 "observable as currently nothing is viewed.")
         if name[0] == '_':
             raise AttributeError("Trying to access private attribute "
                                  f"{type(observable).__name__}.{name}.")
-        return getattr(observable, name) if observable else None
+        return getattr(observable, name)
 
     def _get_observable(self, o) -> Observable:
         """Get the Observable matching the given observable description.

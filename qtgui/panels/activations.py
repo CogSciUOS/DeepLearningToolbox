@@ -25,10 +25,9 @@ class ActivationsPanel(Panel):
     -----------
     _activation_view
     _network_view
-    _input_view
-    _input_selector
-    _input_info
-    _network_view
+    _input_view: QModelImageView
+    _input_selector: QInputSelector
+    _input_info: QInputInfoBox
     """
 
     def __init__(self, parent=None):
