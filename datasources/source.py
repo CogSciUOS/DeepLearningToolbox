@@ -26,9 +26,11 @@ class Datasource(BusyObservable, method='datasource_changed',
         Short description of the dataset
 
     _targets: np.ndarray
-        T
-    _labels: list
-
+        The target values in a labeled (supervised) dataset.
+        
+    _labels: list[str]
+        Optional labels for the output classes. None if
+        no labels are provided.
 
     Changes
     -------
@@ -97,28 +99,68 @@ class Datasource(BusyObservable, method='datasource_changed',
         """
         return str(target) if self._labels is None else self._labels[target]
 
-    def getName(self, index=None) -> str:
+
+    def get_description(self, short: bool=False, target: bool=False,
+                        index: int=None, ) -> str:
+        """Provide a description of the Datasource or one of its
+        elements.
+
+        Attributes
+        ----------
+        index: int
+            In case of an indexed Datasource, provide a description
+            of the given element.
+        target: bool
+            If target values are available (labeled dataset),
+            also report that fact, or in case of an indiviual element
+            include its label in the description.
+        """
         if index is None:
-            return self._description
-        elif self._targets is None:
-            return self._description + "[" + str(index) + "]"
+            description = self._description
+            if target:
+                if self._targets is None:
+                    description += " (without target values)"
+                else:
+                    if self._labels is not None:
+                        description += (f" (with {len(self._labels)} target "
+                                        "values and labels)")
+                    else:
+                        description += " (with target value)"
         else:
-            target = int(self._targets[index])
-            target = (f'[{target}]' if self._labels is None
-                      else self._labels[target])
-            return self._description + ", target=" + target
+            description = 'Image ' + str(index) + ' from ' + self._description
+            d = self._description_for_index(index)
+            if d:
+                description += ': ' + d
+            if target:
+                if self._targets is None:
+                    description += " (no target value available)"
+                else:
+                    t = int(self._targets[index])
+                    description += f" with target value {t}"
+                    if self._labels is not None:
+                        description += f" ({self._labels[t]})"
+        return description
 
-    def getDescription(self) -> str:
-        """Get the description for this Datasource"""
-        return self._description
+    def _description_for_index(self, index: int) -> str:
+        return ''
 
-    def get_description(self, index: int=None) -> str:
-        return 'Image ' + str(index) + ' from ' + self._description
+    @property
+    def prepared(self) -> bool:
+        """Report if this Datasource prepared for use.
+        A Datasource has to be prepared before it can be used.
+        """
+        return True  # to be implemented by subclasses
 
     def prepare(self):
         """Prepare this Datasource for use.
         """
         pass  # to be implemented by subclasses
+
+    def unprepare(self):
+        """Unprepare this Datasource for use.
+        """
+        pass  # to be implemented by subclasses
+
 
     def get_section_ids(self):
         """Get a list of sections provided by this data source.  A data source
@@ -140,6 +182,20 @@ class Datasource(BusyObservable, method='datasource_changed',
 class Predefined:
     """An abstract base class for predefined data sources.
     """
+    #
+    # Static data and methods
+    #
+
+    datasources = {}
+
+    @staticmethod
+    def get_data_source_ids():
+        return list(Predefined.datasources.keys())
+
+    @staticmethod
+    def get_data_source(id):
+        return Predefined.datasources[id]
+
 
     _id = None
 
@@ -166,17 +222,3 @@ class Predefined:
     def download(self):
         raise NotImplementedError("Downloading this datasource is "
                                   "not implemented yet.")
-
-    #
-    # Static data and methods
-    #
-
-    datasources = {}
-
-    @staticmethod
-    def get_data_source_ids():
-        return list(Predefined.datasources.keys())
-
-    @staticmethod
-    def get_data_source(id):
-        return Predefined.datasources[id]

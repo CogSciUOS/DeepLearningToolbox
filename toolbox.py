@@ -252,6 +252,10 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
                 gui.setLucidEngine(lucid_engine)
 
             from datasources import Predefined
+            for id in Predefined.get_data_source_ids():
+                datasource = Predefined.get_data_source(id)
+                self.add_datasource(datasource)
+
             if args.data:
                 source = Predefined.get_data_source(args.data)
             elif args.dataset:

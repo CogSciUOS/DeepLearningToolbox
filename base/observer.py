@@ -260,6 +260,12 @@ class Observable:
         self._observers = dict()
         self._thread_local = threading.local()
 
+    def __bool__(self):
+        # some subclasse may add a __len__ method, which may lead to
+        # evaluating the Observable als False (if len is 0). We will
+        # avoid this by explictly setting the truth value.
+        return True
+
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
         if name in type(self)._changeables:

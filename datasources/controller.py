@@ -142,7 +142,8 @@ class Controller(View, BaseController):
 
     @property
     def description(self):
-        return (self._datasource.get_description(self._index) if self
+        return (self._datasource.get_description(index=self._index,
+                                                 target=True) if self
                 else "No data")
 
     def get_index(self) -> int:

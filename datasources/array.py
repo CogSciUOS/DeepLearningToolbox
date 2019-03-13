@@ -1,8 +1,8 @@
 import numpy as np
-from datasources import DataSource, InputData
+from datasources import Datasource, InputData
 
 
-class DataArray(DataSource):
+class DataArray(Datasource):
     """A ``DataArray`` stores all entries in an array (like the MNIST
     character data). That means that all entries will have the same sizes.
 
@@ -27,6 +27,26 @@ class DataArray(DataSource):
         super().__init__(description)
         if array is not None:
             self.setArray(array, description)
+
+    @property
+    def prepared(self) -> bool:
+        """A :py:class:`DataArray` is prepared once the array
+        has been initialized.
+        """
+        return self._array is not None
+
+    def prepare(self) -> None:
+        if not self.prepared:
+            raise NotImplementedError("prepare() should be implemented by "
+                                      "subclasses of DataArray.")
+
+    def unprepare(self) -> None:
+        """A :py:class:`DataArray` is reset in an unprepared state
+        by releasing the array.
+        """
+        self._array = None
+        self.change('state_changed')
+
 
     def setArray(self, array, description='array'):
         """Set the array of this DataSource.

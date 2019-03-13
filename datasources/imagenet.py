@@ -40,6 +40,9 @@ class ImageNet(DataDirectory, Predefined):
         Predefined.__init__(self, 'imagenet')
 
     def prepare(self):
+        if self.prepared:
+            return  # nothing to do ...
+
         self._prefix = os.path.join(self._imagenet_data, self._section)
         self._available = os.path.isdir(self._prefix)
 
@@ -77,6 +80,8 @@ class ImageNet(DataDirectory, Predefined):
                 if not os.path.isdir(dirs.user_cache_dir):
                     os.makedirs(dirs.user_cache_dir)
                 pickle.dump(self._filenames, open(imagenet_filelist, 'wb'))
+
+        self.change('state_changed')
         logger.info(f"ImageNet is now prepared: {len(self)}")
 
     def __getitem__(self, index):

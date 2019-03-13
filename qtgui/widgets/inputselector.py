@@ -26,12 +26,12 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
     4. a URL (not implemented yet)
     """
 
-    _toolboxController: ToolboxController=None
+    _toolbox: ToolboxController=None
 
     # FIXME[old]:
     _controller: DatasourceController=None
     
-    def __init__(self, parent=None):
+    def __init__(self, toolbox: ToolboxController=None, parent=None):
         """Initialization of the :py:class:`QInputSourceSelector`.
 
         Parameters
@@ -41,11 +41,15 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
         """
         super().__init__(parent)
         self._initUI()
+        self._layoutUI()
+        self.setToolboxController(toolbox)
 
     def _initUI(self):
         '''Initialize the user interface.'''
 
-        # Datasources
+        #
+        # Differnt types of Datasources
+        #
         self._radioButtons = {
             'Name': QRadioButton('Predefined'),
             'Filesystem': QRadioButton('Filesystem'),
@@ -53,38 +57,50 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
             'Video': QRadioButton('Video')
         }
         self._radioButtons['Video'].setEnabled(False)
-        radioLayout = QVBoxLayout()
         for b in self._radioButtons.values():
             b.clicked.connect(self._radioButtonChecked)
-            radioLayout.addWidget(b)
 
+        #
+        # A list of predefined datasources
+        #
+        dataset_names = Predefined.get_data_source_ids()
+        self._datasetDropdown = QComboBox()
+        self._datasetDropdown.addItems(dataset_names)
+        self._datasetDropdown.currentIndexChanged.\
+            connect(self._predefinedSelectionChange)
+        self._datasetDropdown.setEnabled(False)
+
+        #
+        # A button to select the Datasource
+        #
         self._openButton = QPushButton('Open')
         self._openButton.clicked.connect(self._openButtonClicked)
-        self._openButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self._datasetDropdown = QComboBox()
+    def _layoutUI(self):
+
         size_policy = self._datasetDropdown.sizePolicy()
         size_policy.setRetainSizeWhenHidden(True)
         self._datasetDropdown.setSizePolicy(size_policy)
-        dataset_names = Predefined.get_data_source_ids()
-        self._datasetDropdown.addItems(dataset_names)
-        self._datasetDropdown.setEnabled(False)
-        self._datasetDropdown.currentIndexChanged.connect(self._predefinedSelectionChange)
-        
+
+        self._openButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        radioLayout = QVBoxLayout()
+        for b in self._radioButtons.values():
+            radioLayout.addWidget(b)
+
         buttonsLayout = QVBoxLayout()
         buttonsLayout.addWidget(self._datasetDropdown)
         buttonsLayout.addWidget(self._openButton)
 
-        sourceLayout = QHBoxLayout()
-        sourceLayout.addLayout(radioLayout)
-        sourceLayout.addLayout(buttonsLayout)
-        self.setLayout(sourceLayout)
+        layout = QHBoxLayout()
+        layout.addLayout(radioLayout)
+        layout.addLayout(buttonsLayout)
+        self.setLayout(layout)
 
     def datasource_changed(self, controller, info):
         '''The QInputSourceSelector is only affected by changes of
         the Datasource.
         '''
-
         if info.datasource_changed:
             self._setDatasource(controller.get_datasource())
 
@@ -113,7 +129,7 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
         # if isinstance(datasource, DataArray):
         #     info = (datasource.getFile()
         #             if isinstance(datasource, DataFile)
-        #             else datasource.getDescription())
+        #             else datasource.get_description())
         #     if info is None:
         #         info = ''
         #     if len(info) > 40:
@@ -146,15 +162,23 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
         self._datasetDropdown.setEnabled(self._radioButtons['Name'].isChecked())
 
     def _openButtonClicked(self):
-        '''An event handler for the ``Open`` button.'''
-        mode = None
+        """An event handler for the ``Open`` button. Pressing this
+        button will select a datasource. How exactly this works
+        depends on the type of the Datasource, which is selected by
+        the radio buttons.
+        """
+
+        datasource = None
         if self._radioButtons['Name'].isChecked():
-            self._datasetDropdown.setVisible(True)
+            # Name: this will select a predefined Datasource based on its
+            # name which is selectend in the _datasetDropdown QComboBox.
+
+            #self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
             print(f"!!!{name}!!!")
             datasource = Predefined.get_data_source(name)
+
         elif self._radioButtons['Filesystem'].isChecked():
-            mode = 'Filesystem'
             # CAUTION: I've converted the C++ from here
             # http://www.qtcentre.org/threads/43841-QFileDialog-to-select-files-AND-folders
             # to Python. I'm pretty sure this makes use of
@@ -178,14 +202,27 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
             else:
                 datasource = DataFile(fname)
         elif self._radioButtons['Webcam'].isChecked():
-            mode = 'Webcam'
             datasource = DataWebcam()
         elif self._radioButtons['Video'].isChecked():
-            mode = 'Video'
             # FIXME[hack]: use file browser ...
             # FIXME[problem]: the opencv embedded in anoconda does not
             # have ffmpeg support, and hence cannot read videos
             datasource = DataVideo("/net/home/student/k/krumnack/AnacondaCON.avi")
+
+        print("We have selected the following Datasource:")
+        if datasource is None:
+            print("  -> no Datasource")
+        else:
+            print(f"  type: {type(datasource)}")
+            print(f"  prepared:  {datasource.prepared}")
+
+        try:
+            datasource.prepare()
+            print(f"  len:  {len(datasource)}")
+            print(f"  description:  {datasource.datasource.get_description()}")
+        except Exception as ex:
+            print(f"  preparation failed ({ex})!")
+            datasource = None
 
         # FIXME[hack]: not really implemented. what should happen is:
         # - change the datasource for the DatasourceView/Controller
@@ -193,10 +230,14 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
         # what may happen in response is
         # - add datasource to some list (e.g. toolbox)
         # - emit some pyqt signal?
-        if getattr(self, '_controller', None) is not None: # FIXME[old]
-            self._controller.onSourceSelected(datasource)
-        if self._toolboxController:
-            self._toolboxController.add_datasource(datasource)
+        #if getattr(self, '_controller', None) is not None: # FIXME[old]
+        #    self._controller.onSourceSelected(datasource)
+        if datasource is not None:
+            if self._toolbox:
+                # Set the datasource of the Toolbox.
+                # This will also insert the dataset in the Toolbox's list
+                # if datasources, if it is not already in there.
+                self._toolbox.datasource_controller(datasource)
 
     def _predefinedSelectionChange(self,i):
         if self._radioButtons['Name'].isChecked():
@@ -206,15 +247,15 @@ class QInputSourceSelector(QWidget, QObserver, Toolbox.Observer,
 
             if getattr(self, '_controller', None) is not None: # FIXME[old]
                 self._controller.onSourceSelected(datasource)
-            if self._toolboxController is not None:
-                self._toolboxController.set_datasource(datasource)
+            if self._toolbox is not None:
+                self._toolbox.set_datasource(datasource)
 
     def setToolboxController(self, toolbox: ToolboxController) -> None:
-        self._exchangeView('_toolboxController', toolbox,
+        self._exchangeView('_toolbox', toolbox,
                            interests=Toolbox.Change('datasources_changed'))
 
     def toolbox_changed(self, toolbox: Toolbox, change):
-        self._setDatasource(self._toolboxController.datasource)
+        self._setDatasource(self._toolbox.datasource)
 
 
 from PyQt5.QtCore import Qt
@@ -259,6 +300,14 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         self.nextButton = self._newNavigationButton('>>', 'go-next')
         self.lastButton = self._newNavigationButton('>|', 'go-last')
         self.randomButton = self._newNavigationButton('random')
+        self.prepareButton = self._newNavigationButton('prepare')
+        def slot(checked: bool) -> None:
+            if checked:
+                self._controller.prepare()
+            else:
+                self._controller.unprepare()
+        self.prepareButton.setCheckable(True)
+        self.prepareButton.toggled.connect(slot)
 
         # _indexField: A text field to manually enter the index of
         # desired input.
@@ -285,7 +334,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         self._buttonList = [
             self.firstButton, self.prevButton,
             self._indexField, self.infoLabel,
-            self.nextButton, self.lastButton, self.randomButton
+            self.nextButton, self.lastButton #, self.randomButton
         ]
 
         
@@ -293,16 +342,23 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         if self._layout is None:
             self._layout = QVBoxLayout()
             self._layout.addWidget(self.infoDataset)
+            buttons2 = QHBoxLayout()
+            buttons2.addWidget(self.prepareButton)
+            buttons2.addStretch()
+            buttons2.addWidget(self.randomButton)
+            self._layout.addLayout(buttons2)
             self._buttons = None
             self.setLayout(self._layout)
 
         if self._controller is None or not self._controller:
+            # no datasource controller or no datasource: remove buttons
             if self._buttons is not None:
                 for button in self._buttonList:
                     button.setParent(None)
                 self._layout.removeItem(self._buttons)
                 self._buttons = None
         else:
+            # we have a datasource: add the buttons
             if self._buttons is None:
                 self._buttons = QHBoxLayout()
                 for button in self._buttonList:
@@ -310,19 +366,26 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                 self._layout.addLayout(self._buttons)
 
     def _enableUI(self):
-        enabled = bool(self._controller)
+        enabled = bool(self._controller) and self._controller.prepared
         for button in self._buttonList:
             button.setEnabled(enabled)
+        self.prepareButton.setEnabled(bool(self._controller))
+        if self._controller:
+            self.prepareButton.setChecked(self._controller.prepared)
 
     def datasource_changed(self, datasource: Datasource, info) -> None:
         n_elems = 0 if datasource is None else len(datasource)
         valid = n_elems > 0
 
-        if info.observable_changed:
+        if info.observable_changed or info.state_changed:
             self._layoutUI()
             self._enableUI()
-            text = (datasource.getDescription() if datasource else
-                    "No datasource")
+            if datasource:
+                text = datasource.get_description()
+                if not datasource.prepared:
+                    text += " (unprepared)"
+            else:
+                text = "No datasource"
             self.infoDataset.setText(text)
 
             self.infoLabel.setText('of ' + str(n_elems - 1) if valid else '*')
@@ -336,10 +399,12 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                 index = 0
             if self._controller:
                 self._indexField.setText(str(index))
-            self.firstButton.setEnabled(index > 0)
-            self.prevButton.setEnabled(index > 0)
-            self.nextButton.setEnabled(index+1 < n_elems)
-            self.lastButton.setEnabled(index+1 < n_elems)
+            enabled = bool(self._controller) and self._controller.prepared
+            self.firstButton.setEnabled(enabled and index > 0)
+            self.prevButton.setEnabled(enabled and index > 0)
+            self.nextButton.setEnabled(enabled and index+1 < n_elems)
+            self.lastButton.setEnabled(enabled and index+1 < n_elems)
+            
             
     def _newNavigationButton(self, label: str, icon: str=None):
         button = QPushButton()
@@ -377,7 +442,8 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                                 datasource: DatasourceController) -> None:
         self._exchangeView('_controller', datasource,
                            interests=Datasource.Change('observer_changed',
-                                                       'index_changed'))
+                                                       'index_changed',
+                                                       'state_changed'))
 
 
 

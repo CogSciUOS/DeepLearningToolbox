@@ -43,12 +43,23 @@ class DataDirectory(DataSource):
             self._dirname = dirname
             self._filenames = None
 
+    @property
+    def prepared(self):
+        return self._dirname is not None and self._filenames is not None
+
     def prepare(self):
-        if self._dirname is not None and self._filenames is None:
+        if self.prepared:
+            return  # nothing to do ...
+
+        if self._dirname is None:
+            raise RuntimeError("No directory was specificed for DataDirectory")
+
+        if self._filenames is None:
             # self._filenames = [f for f in listdir(self._dirname)
             #                    if isfile(join(self._dirname, f))]
             self._filenames = glob(join(self._dirname, "**", "*.*"),
                                    recursive=True)
+            self.change('state_changed')
 
     def getDirectory(self) -> str:
         return self._dirname
@@ -68,13 +79,7 @@ class DataDirectory(DataSource):
         return len(self._filenames)
 
     def __str__(self):
-        return f'<DataDirectory "{self._dirname}"'
+        return f'<DataDirectory "{self._dirname}">'
 
-    def getName(self, index=None) -> str:
-        if index is None:
-            return self._description
-        elif self._targets is None:
-            return self._filenames[index]
-        else:
-            return (self._filenames[index] + ", target=" +
-                    str(self._targets[index]))
+    def _description_for_index(self, index: int) -> str:
+        return self._filenames[index]

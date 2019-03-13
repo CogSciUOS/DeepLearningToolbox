@@ -191,20 +191,11 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
         
         if 'networks_changed' in change:
             # Update the networks list:
-            self._networkList.clear()
-            for network in self._toolboxController.networks:
-                item = QListWidgetItem(str(network))
-                item.setData(Qt.UserRole, network)
-                self._networkList.addItem(item)
+            self._updateNetworkList()
 
         if 'datasources_changed' in change:
             # Update the datasources list:
-            self._datasourceList.clear()
-            for datasource in self._toolboxController.datasources:
-                item = QListWidgetItem(str(datasource))
-                item.setData(Qt.UserRole, datasource)
-                self._datasourceList.addItem(item)
-
+            self._updateDatasourceList()
 
     def network_changed(self, network, change):
         for i in range(self._networkList.count()):
@@ -213,11 +204,36 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
                 break
 
     def datasource_changed(self, datasource, change):
-        print(f"datasource_changed({self}, {datasource}, {change})")
-
+        if change.state_changed:
+            self._updateDatasourceList()
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         halfWidth = event.size().width() * 5 // 11
         self._networkGroupBox.setMinimumWidth(halfWidth)
         self._datasourceGroupBox.setMinimumWidth(halfWidth)
         super().resizeEvent(event)
+
+    def _updateNetworkList(self):
+        self._networkList.clear()
+        for network in self._toolboxController.networks:
+            item = QListWidgetItem(str(network))
+            item.setData(Qt.UserRole, network)
+            self._networkList.addItem(item)
+
+    def _updateDatasourceList(self):
+        # First remove all items from the list ...
+        for i in range(self._datasourceList.count()):
+            self._datasourceList.item(i).data(Qt.UserRole).\
+                remove_observer(self)
+        self._datasourceList.clear()
+
+        # ... and then rebuild the list
+        if self._toolboxController:
+            interests = Datasource.Change('state_changed')
+            for datasource in self._toolboxController.datasources:
+                item = QListWidgetItem(str(datasource))
+                item.setData(Qt.UserRole, datasource)
+                if datasource.prepared:
+                    item.setForeground(Qt.green)
+                self._datasourceList.addItem(item)
+                datasource.add_observer(self, interests=interests)

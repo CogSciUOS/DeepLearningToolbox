@@ -257,14 +257,12 @@ class DeepVisMainWindow(QMainWindow):
         ValueError:
             The given panel identifier is not known.
         """
-        print(f"!!! panel({panel_id}, create={create}, show={show})")
         meta = self._meta(panel_id)
         panel = None
         if create:
             index = 0
             label = self._tabs.tabText(index)
             for m in self._panelMetas:
-                print(f"!!! panel({panel_id}): {m}, index={index}, '{self._tabs.tabText(index)}'")
                 if label == meta.label:
                     panel = self._tabs.widget(index)
                     break
@@ -280,7 +278,6 @@ class DeepVisMainWindow(QMainWindow):
                 if self._tabs.tabText(index) == meta.label:
                     panel = self._tabs.widget(index)
                     break
-        print(f"!!! panel({panel_id}): index={index}, panel={panel}")
         if show and panel is not None:
             self._tabs.setCurrentIndex(index)
         return panel
