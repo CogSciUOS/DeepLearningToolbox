@@ -3,7 +3,7 @@ from datasources import (Datasource, DataArray, DataFile, DataDirectory,
                          DataWebcam, DataVideo, Predefined,
                          Controller as DatasourceController)
 from toolbox import Toolbox, ToolboxController
-from qtgui.utils import QObserver
+from qtgui.utils import QObserver, protect
 
 from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
                              QHBoxLayout, QVBoxLayout, QSizePolicy,
@@ -301,6 +301,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         self.lastButton = self._newNavigationButton('>|', 'go-last')
         self.randomButton = self._newNavigationButton('random')
         self.prepareButton = self._newNavigationButton('prepare')
+        @protect
         def slot(checked: bool) -> None:
             if checked:
                 self._controller.prepare()
@@ -333,20 +334,26 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
 
         self._buttonList = [
             self.firstButton, self.prevButton,
-            self._indexField, self.infoLabel,
+            #self._indexField, self.infoLabel,
             self.nextButton, self.lastButton #, self.randomButton
         ]
 
         
     def _layoutUI(self):
         if self._layout is None:
+            # We have no Layout yet: create initial Layout
             self._layout = QVBoxLayout()
             self._layout.addWidget(self.infoDataset)
             buttons2 = QHBoxLayout()
             buttons2.addWidget(self.prepareButton)
             buttons2.addStretch()
             buttons2.addWidget(self.randomButton)
+            buttons3 = QHBoxLayout()
+            buttons3.addWidget(self._indexField)
+            buttons3.addWidget(self.infoLabel)
+            buttons3.addStretch()
             self._layout.addLayout(buttons2)
+            self._layout.addLayout(buttons3)
             self._buttons = None
             self.setLayout(self._layout)
 
@@ -367,7 +374,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
 
     def _enableUI(self):
         enabled = bool(self._controller) and self._controller.prepared
-        for button in self._buttonList:
+        for button in self._buttonList + [self.randomButton, self._indexField, self.infoLabel]:
             button.setEnabled(enabled)
         self.prepareButton.setEnabled(bool(self._controller))
         if self._controller:
@@ -587,6 +594,7 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer, M
         '''
         super().__init__(parent)
         self._initUI()
+        self._layoutUI()
         self._model = None
         self._showInfo()
         self.setToolboxView(toolbox)
@@ -600,6 +608,11 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer, M
         self._button.setCheckable(True)
         self._button.toggled.connect(self.update)
         self._button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    def _layoutUI(self):
+        self._metaLabel.setWordWrap(True)
+        self._dataLabel.setWordWrap(True)
+
         layout1 = QHBoxLayout()
         layout1.addWidget(self._metaLabel)
         layout1.addWidget(self._button)
@@ -649,6 +662,7 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer, M
             self._showInfo(description=description)
 
     @pyqtSlot(bool)
+    @protect
     def onModeChanged(self, processed: bool):
         """The display mode was changed.
 

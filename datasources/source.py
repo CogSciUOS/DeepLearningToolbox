@@ -6,8 +6,8 @@ InputData = namedtuple('Data', ['data', 'name'])
 from base import BusyObservable
 
 class Datasource(BusyObservable, method='datasource_changed',
-                 changes=['state_changed', 'data_changed',
-                          'index_changed']):
+                 changes=['state_changed', 'metadata_changed',
+                          'data_changed', 'index_changed']):
     """.. :py:class:: Datasource
 
     An abstract base class for different types of data sources.

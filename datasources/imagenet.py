@@ -53,11 +53,11 @@ class ImageNet(DataDirectory, Predefined):
         self._wn_table = wn_table
         logger.info(f"Length of wn_table: {len(self._wn_table)}")
 
-        # This may take some time ...
-        self.setDirectory(self._prefix)
+        self.directory = self._prefix
+
         # FIXME[hack]: just randomly choose one subdir
         self._category = random.randint(0, len(self._categories))
-        # self.setDirectory(os.path.join(self._prefix,
+        # self.directory = os.path.join(self._prefix,
         #                               self._categories[self._category]))
 
         if AppDirs is not None:
@@ -80,18 +80,18 @@ class ImageNet(DataDirectory, Predefined):
                 if not os.path.isdir(dirs.user_cache_dir):
                     os.makedirs(dirs.user_cache_dir)
                 pickle.dump(self._filenames, open(imagenet_filelist, 'wb'))
-
-        self.change('state_changed')
+        else:
+            self.change('state_changed')
         logger.info(f"ImageNet is now prepared: {len(self)}")
 
     def __getitem__(self, index):
-        if not self._filenames:
-            return None, None
-        else:
-            filename = self._filenames[index]
-            data = imread(os.path.join(self._dirname, filename))
-            category = self._category_for_filename(filename)
-            return InputData(data, category)
+        if not self.prepared:
+            return InputData(None, None)
+
+        filename = self._filenames[index]
+        data = imread(os.path.join(self._dirname, filename))
+        category = self._category_for_filename(filename)
+        return InputData(data, category)
 
     def _category_for_filename(self, filename):
         match_object = re.search('(n[0-9]*)_', filename)

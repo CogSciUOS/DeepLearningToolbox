@@ -6,6 +6,20 @@ from base.observer import Observable
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+import traceback
+
+def protect(function):
+    """A decorator to protect a function (usually an event handler)
+    from crashing the program due to unhandled exceptions.
+    """
+    def closure(self, *args, **kwargs):
+        try:
+            function(self, *args, **kwargs)
+        except Exception as exception:
+            print(f"Unhandled exception: {exception}")
+            traceback.print_tb(exception.__traceback__)
+
+    return closure
 
 
 class QtAsyncRunner(AsyncRunner, QObject):

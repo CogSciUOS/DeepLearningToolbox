@@ -8,9 +8,29 @@ This module collects miscellaneous utilities.
 
 import util.check
 
+try:
+    from imageio import imread
+except ImportError:
+    from matplotlib.pyplot import imread
+
+
 class ArgumentError(ValueError):
     """Invalid argument exception"""
     pass
+
+
+def debug(func):
+    """A decorator to output exceptions raised in a function.
+    """
+    def closure(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            import traceback
+            print(f"DEBUG: {type(e).__name__}: {e}")
+            traceback.print_tb(e.__traceback__)
+            raise e
+    return closure
 
 
 def grayscaleNormalized(array):

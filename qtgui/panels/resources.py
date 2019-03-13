@@ -5,22 +5,24 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QResizeEvent
-from PyQt5.QtWidgets import (QListWidget, QListWidgetItem, QPushButton,
-                             QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout)
-
-from .panel import Panel
-from qtgui.utils import QObserver
-from qtgui.widgets import QNetworkView, QNetworkBox, QNetworkSelector
-from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
-
-from toolbox import Toolbox, ToolboxController, ToolboxView
+from toolbox import Toolbox, Controller as ToolboxController
 from network import Network, Controller as NetworkController
 from datasources import Datasource, Controller as DatasourceController
 
-class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
-                     Network.Observer, Datasource.Observer):
+from .panel import Panel
+from qtgui.utils import QObserver, protect
+from qtgui.widgets import QNetworkView, QNetworkBox, QNetworkSelector
+from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
+from qtgui.widgets.network import QNetworkList
+from qtgui.widgets.datasource import QDatasourceList
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QResizeEvent
+from PyQt5.QtWidgets import (QPushButton, QGroupBox,
+                             QVBoxLayout, QHBoxLayout, QGridLayout)
+
+
+class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
     '''A Panel for managing resources used by the Toolbox.
 
     _input_view: QModelImageView
@@ -34,10 +36,10 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
         two parts: a datasource selector to choose a Datasource and
         a datasource navigator to select an image in the Datasource.
     '''
-    _toolboxController: ToolboxController=None
-    _networkController: NetworkController=None
-    _datasourceController: DatasourceController=None
+    _toolboxController: ToolboxController = None
+    _networkController: NetworkController = None
 
+    _datasourceList: QDatasourceList = None
     _input_view: QModelImageView
     _input_info: QInputInfoBox
     _input_selector: QInputSelector
@@ -55,26 +57,27 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
 
     def _initUI(self):
 
-        def itemClicked(item: QListWidgetItem):
-            self._networkController(item.data(Qt.UserRole))
-        self._networkList = QListWidget()
-        self._networkList.itemClicked.connect(itemClicked)
+        self._networkList = QNetworkList()
 
+        @protect
         def clicked(checked: bool):
             network = self._toolboxController.hack_new_model()
         self._button = QPushButton("Add Network 1")
         self._button.clicked.connect(clicked)
 
+        @protect
         def clicked(checked: bool):
             network = self._toolboxController.hack_new_model2()
         self._button2 = QPushButton("Add Network 2")
         self._button2.clicked.connect(clicked)
 
+        @protect
         def clicked(checked: bool):
             network = self._toolboxController.hack_new_alexnet()
         self._button3 = QPushButton("Load Alexnet")
         self._button3.clicked.connect(clicked)
 
+        @protect
         def currentIndexChanged(index: int):
             self._networkController(self._networkSelector.currentData())
         self._networkSelector = QNetworkSelector()
@@ -88,11 +91,9 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
         # Datasources
         #
 
-        def itemClicked(item: QListWidgetItem):
-            self._datasourceController(item.data(Qt.UserRole))
-        self._datasourceList = QListWidget()
-        self._datasourceList.itemClicked.connect(itemClicked)
+        self._datasourceList = QDatasourceList()
 
+        @protect
         def clicked(checked: bool):
             datasource = self._toolboxController.hack_new_model()  # FIXME[todo]!
         self._buttonAddDatasource = QPushButton("Add datasource 1")
@@ -162,25 +163,25 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
 
     def setToolboxController(self, toolbox: ToolboxController) -> None:
         self._exchangeView('_toolboxController', toolbox)
+        self._networkList.setToolboxView(toolbox)
         self._networkSelector.setToolboxView(toolbox)
         self._input_selector.setToolboxController(toolbox)
         self._input_view.setToolboxView(toolbox)
         self._input_info.setToolboxView(toolbox)
+        self._datasourceList.setToolboxView(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
-        self._exchangeView('_networkController', network)
+        self._networkController = network
+        self._networkList.setNetworkView(network)
         self._networkSelector.setNetworkView(network)
         self._networkBox.setNetworkView(network)
 
     def setDatasourceController(self,
                                 datasource: DatasourceController) -> None:
-        self._exchangeView('_datasourceController', datasource,
-                           interests=Datasource.Change('observable_changed'))
-        # FIXME[hack]: not really interested ...
+        self._datasourceList.setDatasourceView(datasource)
 
     def setEnabled(self):
         enabled = self._toolboxController is not None
-        self._networkList.setEnabled(enabled)
         self._button.setEnabled(enabled)
 
     def toolbox_changed(self, toolbox, change):
@@ -188,52 +189,10 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer,
 
         if 'toolbox_changed' in change:
             self.setEnabled()
-        
-        if 'networks_changed' in change:
-            # Update the networks list:
-            self._updateNetworkList()
-
-        if 'datasources_changed' in change:
-            # Update the datasources list:
-            self._updateDatasourceList()
-
-    def network_changed(self, network, change):
-        for i in range(self._networkList.count()):
-            if self._networkList.item(i).data(Qt.UserRole) == network:
-                self._networkList.setCurrentRow(i)
-                break
-
-    def datasource_changed(self, datasource, change):
-        if change.state_changed:
-            self._updateDatasourceList()
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         halfWidth = event.size().width() * 5 // 11
         self._networkGroupBox.setMinimumWidth(halfWidth)
         self._datasourceGroupBox.setMinimumWidth(halfWidth)
+        self._input_view.setMaximumSize(halfWidth-20,halfWidth-20)
         super().resizeEvent(event)
-
-    def _updateNetworkList(self):
-        self._networkList.clear()
-        for network in self._toolboxController.networks:
-            item = QListWidgetItem(str(network))
-            item.setData(Qt.UserRole, network)
-            self._networkList.addItem(item)
-
-    def _updateDatasourceList(self):
-        # First remove all items from the list ...
-        for i in range(self._datasourceList.count()):
-            self._datasourceList.item(i).data(Qt.UserRole).\
-                remove_observer(self)
-        self._datasourceList.clear()
-
-        # ... and then rebuild the list
-        if self._toolboxController:
-            interests = Datasource.Change('state_changed')
-            for datasource in self._toolboxController.datasources:
-                item = QListWidgetItem(str(datasource))
-                item.setData(Qt.UserRole, datasource)
-                if datasource.prepared:
-                    item.setForeground(Qt.green)
-                self._datasourceList.addItem(item)
-                datasource.add_observer(self, interests=interests)

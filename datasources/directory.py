@@ -1,11 +1,11 @@
-from datasources import DataSource, InputData
+from datasources import Datasource, InputData
 from scipy.misc import imread
 from os.path import join, isdir, isfile
 from os import listdir
 from glob import glob
 
 
-class DataDirectory(DataSource):
+class DataDirectory(Datasource):
     """A data directory contains data entries (e.g., images), in
     individual files. Each files is only read when accessed.
 
@@ -16,6 +16,7 @@ class DataDirectory(DataSource):
     _filenames:   list
         A list of filenames in the data directory. An empty list
         indicates that no suitable files where found in the directory.
+        None means that the list has not yet been initialized.
     """
     _dirname: str = None
     _filenames: list = None
@@ -29,29 +30,38 @@ class DataDirectory(DataSource):
                     Name of the directory with files
         """
         super().__init__(dirname)
-        self.setDirectory(dirname)
+        self.directory = dirname
 
-    def setDirectory(self, dirname: str):
+    @property
+    def directory(self):
+        return self._dirname
+
+    @directory.setter
+    def directory(self, dirname: str):
         """Set the directory to load from
 
         Parameters
         ----------
-        dirname :   str
-                    Name of the directory with files
+        dirname: str
+            Name of the directory with files
         """
+        
+        if dirname and not isdir(dirname):
+            FileNotFoundError(f"No such directory: {dirname}")
         if self._dirname != dirname:
             self._dirname = dirname
             self._filenames = None
+            self.change('metadata_changed')
 
     @property
     def prepared(self):
-        return self._dirname is not None and self._filenames is not None
+        return self._filenames is not None
 
     def prepare(self):
         if self.prepared:
             return  # nothing to do ...
 
-        if self._dirname is None:
+        if not self._dirname:
             raise RuntimeError("No directory was specificed for DataDirectory")
 
         if self._filenames is None:
@@ -59,27 +69,22 @@ class DataDirectory(DataSource):
             #                    if isfile(join(self._dirname, f))]
             self._filenames = glob(join(self._dirname, "**", "*.*"),
                                    recursive=True)
-            self.change('state_changed')
-
-    def getDirectory(self) -> str:
-        return self._dirname
+        self.change('state_changed')
 
     def __getitem__(self, index):
-        if not self._filenames:
-            return None, None
-        else:
-            # TODO: This can be much improved by caching and/or prefetching
-            filename = self._filenames[index]
-            data = imread(join(self._dirname, filename))
-            return InputData(data, None)
+        if not self.prepared:
+            return InputData(None, None)
+
+        # TODO: This can be much improved by caching and/or prefetching
+        filename = self._filenames[index]
+        data = imread(join(self._dirname, filename))
+        return InputData(data, None)
 
     def __len__(self):
-        if not self._filenames:
-            return 0
-        return len(self._filenames)
+        return self.prepared and len(self._filenames) or 0
 
     def __str__(self):
         return f'<DataDirectory "{self._dirname}">'
 
     def _description_for_index(self, index: int) -> str:
-        return self._filenames[index]
+        return self.prepared and self._filenames[index] or ''

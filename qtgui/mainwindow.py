@@ -1,29 +1,39 @@
+"""
+File: mainwindow.py
+Author: Ulf Krumnack
+Email: krumnack@uni-osnabrueck.de
+Github: https://github.com/krumnack
+"""
+
+
+# Generic imports
 import time
 import logging
 import collections
 import importlib
 
-from PyQt5.QtCore import QCoreApplication
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
-                             QWidget, QLabel)
-
+# Toolbox imports
 from base import Runner
 from toolbox import ToolboxController
 
-from qtgui.utils import QtAsyncRunner
+# Toolbox GUI imports
+from qtgui.utils import QtAsyncRunner, protect
 from qtgui.panels import Panel
 
+# FIXME[old]: this should net be needed for the MainWindow
 import util
 from util import resources, addons
-
-# FIXME[old]: this should net be needed for the MainWindow
 from model import Model, ModelObserver
 from controller import ActivationsController
 from controller import MaximizationController
 from tools.am import Engine as MaximizationEngine, EngineObserver as MaximizationEngineObserver
 from datasources import Datasource, Controller as DatasourceController
 
+# Qt imports
+from PyQt5.QtCore import Qt, QCoreApplication
+from PyQt5.QtGui import QPixmap, QIcon, QDragEnterEvent, QDropEvent, QCloseEvent
+from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
+                             QWidget, QLabel)
 
 class DeepVisMainWindow(QMainWindow):
     """The main window of the Deep Visualization Toolbox. The window
@@ -34,19 +44,34 @@ class DeepVisMainWindow(QMainWindow):
     set certain aspects, like loading a network or input data,
     switching between different panels, etc.
 
+    Class Attributes
+    ----------------
+    PanelMeta: type
+        A named tuple (id, label, cls, tooltip, addons). 'id' is a unique
+        identifier for this panel and can be used to create or
+        access that panel via the :py:meth:`panel` method.
+    
+    _panelMetas: list
+        A list of PanelMeta entries supported by this MainWindow.
+
     Attributes
     ----------
-    _title : str
-        Window title
-    _activations_controller : ActivationsController
+    _toolbox: ToolboxController
+        A reference to the Toolbox operated by this MainWindow. 
+    _runner: QtAsyncRunner
+        A dedicated :py:class:`Runner` for this Window.
+    _tabs: QTabWidget
+        A tabbed container for the panels displayed by this MainWindow.
+
+    _activations_controller: ActivationsController
         An ActivationsController for this Application
-    _datasource_controller : DatasourceController
+    _datasource_controller: DatasourceController
         An ActivationsController for this Application
-    _maximization_controller : MaximizationController
+    _maximization_controller: MaximizationController
         An MaximizationController for this Application
-    _maximization_engine : MaximizationEngine
+    _maximization_engine: MaximizationEngine
         The activation maximzation Engine
-    _current_panel : Panel
+    _current_panel: Panel
         The currently selected Panel (FIXME: currently not used!)
     """
     PanelMeta = collections.namedtuple('PanelMeta',
@@ -84,144 +109,41 @@ class DeepVisMainWindow(QMainWindow):
                   'Show the logging panel', [])
     ]
 
-    def __init__(self, toolboxController: ToolboxController,
-                 title: str='QtPyVis') -> None:
+    # FIXME[problem]: currently this prints the following message
+    # (when calling MainWindow.setWindowIcon('assets/logo.png')):
+    # "libpng warning: iCCP: extra compressed data"
+    # probably due to some problem with the file 'logo.png'
+    #icon = 'assets/logo.png'
+    def __init__(self, toolbox: ToolboxController,
+                 title: str='QtPyVis', icon: str='assets/logo.png') -> None:
         """Initialize the main window.
 
         Parameters
         ----------
         title: str
+            Window title.
+        icon: str
+            (Filename of) the Window icon.
         """
         super().__init__()
-        self._toolboxController = toolboxController
-        self._title = title
+        self._toolbox = toolbox
         self._runner = QtAsyncRunner()
-        self._initUI()
-
-    ###########################################################################
-    #                           Initialization                                #
-    ###########################################################################
-
-    def _initUI(self):
-        """Initialize the graphical components of this user interface."""
-        #
-        # Initialize the Window
-        #
-        self.setWindowTitle(self._title)
-        self._createMenu()
-        self._setAppIcon()
-
-        #
-        # Initialize the Tabs
-        #
-        self._tabs = QTabWidget(self)
-        self._tabs.currentChanged.connect(self.onPanelSelected)
-        self.setCentralWidget(self._tabs)
-
-        #
-        # Initialize the status bar
-        #
-        self._statusResources = QLabel()
-        self.statusBar().addWidget(self._statusResources)
-       
-    def _setAppIcon(self):
-        # FIXME[problem]: currently this prints the following method:
-        # "libpng warning: iCCP: extra compressed data"
-        # probably due to some problem with the file 'logo.png'
-        self.setWindowIcon(QIcon('assets/logo.png'))
-
-    def _createMenu(self):
-        menubar = self.menuBar()
-
-        #
-        # Add exit menu
-        #
-        exitAction = QAction(QIcon('exit.png'), '&Exit', self)
-        exitAction.setShortcuts(['Ctrl+W', 'Ctrl+Q'])
-        exitAction.setStatusTip('Exit application')
-        exitAction.triggered.connect(self.onExitClicked)
-
-        fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction(exitAction)
-
-        #
-        # Network Menu
-        #
-        networkMenu = menubar.addMenu('&Network')
-
-        #
-        # Datasource Menu
-        #
-        datasourceMenu = menubar.addMenu('&Data')
-
-        #
-        # Tools Menu
-        #
-        toolsMenu = menubar.addMenu('&Tools')
-
-        def slot(id):
-            return lambda checked: self.panel(id, create=True, show=True)
-        for meta in self._panelMetas:
-            action = QAction(meta.label, self)
-            action.setStatusTip(meta.tooltip)
-            action.triggered.connect(slot(meta.id))
-            toolsMenu.addAction(action)
-
-    ###########################################################################
-    #                        MainWindowController                             #
-    ###########################################################################
-
-    # Original idea: Controller for the main GUI window. Will form the
-    # base handler for all events and aggregate subcontrollers for
-    # individual widgets.
-
-    def onPanelSelected(self, index: int) -> None:
-        """Callback for selecting a new panel in the main window.
-
-        Arguments
-        ---------
-        index: int
-            Index of the newly selected panel.
-        """
-        panel = self._tabs.widget(index)
-        panel.attention(False)
-
-    def _saveState(self) -> None:
-        """Callback for saving any application state inb4 quitting."""
-        pass
-
-    def onExitClicked(self) -> None:
-        """Callback for clicking the exit button. This will save state and
-        then terminate the Qt application.
-
-        """
-        self._saveState()
-        QCoreApplication.quit()
-
-    def closeEvent(self, event) -> None:
-        """Callback for x button click."""
-        self.onExitClicked()
-
-    def showStatusMessage(self, message):
-        self.statusBar().showMessage(message, 2000)
-
-    def showStatusResources(self):
-        message = f"{time.ctime()}"
-        message += (", Memory: " +
-                    "Shared={:,} kiB, ".format(resources.mem.shared) +
-                    "Unshared={:,} kiB, ".format(resources.mem.unshared) +
-                    "Peak={:,} kiB".format(resources.mem.peak))
-        if len(resources.gpus) > 0:
-            message += (f", GPU: temperature={resources.gpus[0].temperature}/"
-                        f"{resources.gpus[0].temperature_max}\u00b0C")
-            message += (", memory={:,}/{:,}MiB".
-                        format(resources.gpus[0].mem,
-                               resources.gpus[0].mem_total))
-        self._statusResources.setText(message)
+        self._initUI(title, icon)
 
     ##########################################################################
     #                          Public Interface                              #
     ##########################################################################
+
+    def setToolbox(toolbox: ToolboxController) -> None:
+        """Set the Toolbox controlled by this MainWindow.
+
+        Arguments
+        ---------
+        toolbox: ToolboxController
+            The ToolboxController.
+        """
+        self._toolbox = toolbox
+        # FIXME[todo]: also inform the Panels that the toolbox was changed.
 
     def getRunner(self) -> Runner:
         """Get the runner set up by this MainWindow. This will
@@ -292,6 +214,176 @@ class DeepVisMainWindow(QMainWindow):
             logging.addLogger(logger)
 
     ###########################################################################
+    #                           Initialization                                #
+    ###########################################################################
+
+    def _initUI(self, title: str, icon: str) -> None:
+        """Initialize the graphical components of this user interface."""
+        #
+        # Initialize the Window
+        #
+        self.setWindowTitle(title)
+        self.setWindowIcon(QIcon(icon))
+        self.setAcceptDrops(True)
+
+        #
+        # Initialize the Tabs
+        #
+        self._tabs = QTabWidget(self)
+        self._tabs.currentChanged.connect(self.onPanelSelected)
+        self.setCentralWidget(self._tabs)
+
+        #
+        # Create the menu
+        #
+        self._createMenu()
+        
+        #
+        # Initialize the status bar
+        #
+        self._statusResources = QLabel()
+        self.statusBar().addWidget(self._statusResources)
+
+    def _createMenu(self):
+        menubar = self.menuBar()
+
+        #
+        # Add exit menu
+        #
+        exitAction = QAction(QIcon('exit.png'), '&Exit', self)
+        exitAction.setShortcuts(['Ctrl+W', 'Ctrl+Q'])
+        exitAction.setStatusTip('Exit application')
+        exitAction.triggered.connect(self.onExitClicked)
+
+        fileMenu = menubar.addMenu('&File')
+        fileMenu.addAction(exitAction)
+
+        #
+        # Network Menu
+        #
+        networkMenu = menubar.addMenu('&Network')
+
+        #
+        # Datasource Menu
+        #
+        datasourceMenu = menubar.addMenu('&Data')
+
+        #
+        # Tools Menu
+        #
+        toolsMenu = menubar.addMenu('&Tools')
+
+        def slot(id):
+            return lambda checked: self.panel(id, create=True, show=True)
+        for meta in self._panelMetas:
+            action = QAction(meta.label, self)
+            action.setStatusTip(meta.tooltip)
+            action.triggered.connect(slot(meta.id))
+            toolsMenu.addAction(action)
+
+    ###########################################################################
+    #                        MainWindowController                             #
+    ###########################################################################
+
+    # Original idea: Controller for the main GUI window. Will form the
+    # base handler for all events and aggregate subcontrollers for
+    # individual widgets.
+
+    def onPanelSelected(self, index: int) -> None:
+        """Callback for selecting a new panel in the main window.
+
+        Arguments
+        ---------
+        index: int
+            Index of the newly selected panel.
+        """
+        panel = self._tabs.widget(index)
+        panel.attention(False)
+
+    def _saveState(self) -> None:
+        """Callback for saving any application state inb4 quitting."""
+        pass
+
+    def onExitClicked(self) -> None:
+        """Callback for clicking the exit button. This will save state and
+        then terminate the Qt application.
+
+        """
+        self._saveState()
+        QCoreApplication.quit()
+
+    def showStatusMessage(self, message):
+        self.statusBar().showMessage(message, 2000)
+
+    def showStatusResources(self):
+        message = f"{time.ctime()}"
+        message += (", Memory: " +
+                    "Shared={:,} kiB, ".format(resources.mem.shared) +
+                    "Unshared={:,} kiB, ".format(resources.mem.unshared) +
+                    "Peak={:,} kiB".format(resources.mem.peak))
+        if len(resources.gpus) > 0:
+            message += (f", GPU: temperature={resources.gpus[0].temperature}/"
+                        f"{resources.gpus[0].temperature_max}\u00b0C")
+            message += (", memory={:,}/{:,}MiB".
+                        format(resources.gpus[0].mem,
+                               resources.gpus[0].mem_total))
+        self._statusResources.setText(message)
+
+    ###########################################################################
+    #                       Handler for Qt Events                             #
+    ###########################################################################
+
+    @protect
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Callback for x button click."""
+        self.onExitClicked()
+
+    @protect
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """Handle Drag and Drop events. The dragEnterEvent is sent to
+        check the acceptance of a following drop operation.
+        We want to allow dragging in images.
+        
+        """
+        # Images (from the Desktop) are provided as file ULRs
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    @protect
+    def dropEvent(self, e: QDropEvent):
+        """Handle Drag and Drop events. The :py:class:`QDropEvent`
+        performs the actual drop operation.
+        
+        We support the following operations: if an Image is dropped,
+        we will use it as input image for the :py:class:`Toolbox`.
+        """
+        mimeData = e.mimeData()
+        if mimeData.hasUrls() and self._toolbox:
+            # 1. We just consider the first URL, even if multiple URLs
+            #    are provided.
+            url = mimeData.urls()[0]
+            print(url)
+
+            # 2. Convert the URL to a local filename
+            filename = url.toLocalFile()
+            description = f"Dropped in image ({filename})"
+            print(filename)
+
+            # 3. Set this file as input image for the toolbox.
+            self._toolbox.set_input_from_file(filename, description=description)
+
+            # 4. Mark the Drop action as accepted (we actually perform
+            #    a CopyAction, no matter what was proposed)
+            if e.proposedAction() == Qt.CopyAction:
+                e.acceptProposedAction()
+            else:
+                # If you set a drop action that is not one of the
+                # possible actions, the drag and drop operation will
+                # default to a copy operation.
+                e.setDropAction(Qt.CopyAction)
+                e.accept()
+
+    ###########################################################################
     #                               Panels                                    #
     ###########################################################################
 
@@ -319,16 +411,16 @@ class DeepVisMainWindow(QMainWindow):
         return panel
 
     def _newAutoencoderPanel(self, AutoencoderPanel: type) -> Panel:
-        autoencoder = self._toolboxController.autoencoder_controller
-        training = self._toolboxController.training_controller
-        return AutoencoderPanel(toolboxController=self._toolboxController,
+        autoencoder = self._toolbox.autoencoder_controller
+        training = self._toolbox.training_controller
+        return AutoencoderPanel(toolboxController=self._toolbox,
                                 autoencoderController=autoencoder,
                                 trainingController=training)
 
     def _initMaximizationPanel(self, maximization: Panel) -> None:
         """Initialise the activation maximization panel.
         """
-        engineController = self._toolboxController.maximization_engine
+        engineController = self._toolbox.maximization_engine
         maximization.setController(engineController,
                                    MaximizationEngineObserver)
 
@@ -339,9 +431,9 @@ class DeepVisMainWindow(QMainWindow):
         loggingPanel.addLogger(logging.getLogger())
 
     def _newResourcesPanel(self, ResourcesPanel: type) -> Panel:
-        autoencoder = self._toolboxController.autoencoder_controller
-        datasource = self._toolboxController.datasource_controller
-        return ResourcesPanel(toolbox=self._toolboxController,
+        autoencoder = self._toolbox.autoencoder_controller
+        datasource = self._toolbox.datasource_controller
+        return ResourcesPanel(toolbox=self._toolbox,
                               network1=autoencoder,
                               datasource1=datasource)
 
@@ -399,3 +491,4 @@ class DeepVisMainWindow(QMainWindow):
             self._tabs.addTab(self._internals, 'Internals')
         if self._logging is not None:
             self._tabs.addTab(self._logging, 'Logging')
+
