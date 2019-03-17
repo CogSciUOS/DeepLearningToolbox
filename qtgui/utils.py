@@ -1,7 +1,6 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from controller import AsyncRunner
-from base.observer import Observable
+from base import Observable, AsyncRunner
 
 import logging
 logger = logging.getLogger(__name__)
@@ -16,9 +15,9 @@ def protect(function):
         try:
             function(self, *args, **kwargs)
         except Exception as exception:
-            print(f"Unhandled exception: {exception}")
+            print(f"\nUnhandled exception: {exception}")
             traceback.print_tb(exception.__traceback__)
-
+            print("\n")
     return closure
 
 

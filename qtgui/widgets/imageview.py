@@ -1,19 +1,20 @@
+from toolbox import Toolbox, View as ToolboxView
+from tools.activation import Engine as ActivationEngine
+from ..utils import QImageView, QObserver
+
 import numpy as np
 from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QWidget
 
-from model import Model, ModelObserver, ModelChange
-from toolbox import Toolbox, View as ToolboxView
-from qtgui.utils import QImageView, QObserver
 
 # FIXME[todo]: add docstrings!
-# FIXME[todo]: remove model!
 
-class QModelImageView(QImageView, QObserver, ModelObserver, Toolbox.Observer):
-    """A :py:class:`QImageView` to display the input image of the model (FIXME[old])
-    or Toolbox.
+class QModelImageView(QImageView, QObserver, Toolbox.Observer,
+                      ActivationEngine.Observer):
+    """A :py:class:`QImageView` to display the input image of the
+    Toolbox or ActivationEngine.
 
     Attributes
     ----------
@@ -23,8 +24,8 @@ class QModelImageView(QImageView, QObserver, ModelObserver, Toolbox.Observer):
         A flag indicating if the raw or the preprocessed input
         data should be shown.
 
-    _model: Model
-        The model observed by this QModelImageView.
+    _activation: ActivationEngine
+        The activation Engine observed by this QModelImageView.
 
     Signals
     -------
@@ -57,12 +58,12 @@ class QModelImageView(QImageView, QObserver, ModelObserver, Toolbox.Observer):
         image = self._toolbox.input_data if self._toolbox else None
         self.setImage(image)
         return  # FIXME[hack]: switch between
-        if self._model is None:
+        if self._activation is None:
             image = None
         elif self._processed:
-            image = self._model.input_data
+            image = self._activation.input_data
         else:
-            image = self._model.raw_input_data
+            image = self._activation.raw_input_data
         self.setImage(image)
         
     def toolbox_changed(self, toolbox: Toolbox,
@@ -108,15 +109,16 @@ class QModelImageView(QImageView, QObserver, ModelObserver, Toolbox.Observer):
         """
         print("FIXME: QModelImageView._setImageFromModel was ignored!")
         return
-        if self._model is None:
+        if self._activation is None:
             image = None
         elif self._show_raw:
-            image = self._model.raw_input_data
+            image = self._activation.raw_input_data
         else:
-            image = self._model.input_data
+            image = self._activation.input_data
         self.setImage(image)
 
-    def modelChanged(self, model: Model, info: ModelChange):
+    def modelChanged(self, activation: ActivationEngine,
+                     info: ActivationEngine.Change) -> None:
         """
         The QModelImageView is mainly interested in 'input_changed'
         events. 
@@ -124,7 +126,7 @@ class QModelImageView(QImageView, QObserver, ModelObserver, Toolbox.Observer):
         print("FIXME: QModelImageView.modelChanged was ignored!")
         return
         # FIXME[hack]: this is not an appropriate way to set the model!
-        self._model = model
+        self._activation = activation
 
         # If the input changed, we will display the new input image
         if info.input_changed:
@@ -132,8 +134,8 @@ class QModelImageView(QImageView, QObserver, ModelObserver, Toolbox.Observer):
 
         # For convolutional layers add a activation mask on top of the
         # image, if a unit is selected
-        activation = model._current_activation
-        unit = model.unit
+        activation = activation._current_activation
+        unit = activation.unit
         if (activation is not None and unit is not None and
             activation.ndim > 1):  # exclude dens layers
             from util import grayscaleNormalized

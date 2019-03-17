@@ -22,17 +22,12 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
                  interest: str=None, parent=None) -> None:
         super().__init__(parent)
         self._toolboxInterest = interest
+        self._viewObserver = self.ViewObserver(self)
         self._initUI()
         self.setToolboxView(toolbox)
 
     @protect
     def onItemClicked(self, item: QListWidgetItem):
-        pass  # to be implemented by subclasses
-
-    def _listData(self):
-        return []  # to be implemented by subclasses
-
-    def _formatItem(self, item:QListWidgetItem) -> None:
         pass  # to be implemented by subclasses
 
     def _initUI(self):
@@ -56,22 +51,25 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
     def _updateList(self):
         # First remove all items from the list ...
         for i in range(self.count()):
-            self.item(i).data(Qt.UserRole).remove_observer(self)
+            self.item(i).data(Qt.UserRole).remove_observer(self._viewObserver)
         self.clear()
 
         # ... and then rebuild the list
         if self._toolbox:
-            interests = self._viewInterests()
-            for observable in self._listData():
+            interests = self._viewObserver.interests
+            for observable in self._viewObserver.data(self._toolbox):
                 item = QListWidgetItem(str(observable))
                 item.setData(Qt.UserRole, observable)
-                self._formatItem(item)
+                self._viewObserver.formatItem(item)
                 self.addItem(item)
-                observable.add_observer(self, interests=interests)
+                observable.add_observer(self._viewObserver,
+                                        interests=interests)
 
     def _updateItem(self, observable: Observable) -> None:
         item = self._itemForObservable(observable)
-        self._formatItem(item)                
+        self._viewObserver.formatItem(item)
+        print(f"UPDATE ITEM: {item}")
+        self.repaint()
 
     def _updateCurrent(self, observable: Observable) -> None:
         item = self._itemForObservable(observable)
@@ -84,3 +82,22 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
                 return item
         return None
 
+    class ViewObserver(QObserver):
+        """This auxiliary class is provided to avoid problems due to
+        multiple observation of an observable by an QToolboxViewList
+        object. These problems arise, as all list entry is observed,
+        and in addition the viewed object (which can be one of the
+        list entries) is observed for an `observable_change` event.
+        The observable does not count the observers, and then multiple
+        removals cause a KeyError.
+        """
+        interests = None
+
+        def __init__(self, listWidget):
+            self._listWidget = listWidget
+
+        def data(self, toolbox: ToolboxView):
+            return []  # to be implemented by subclasses
+
+        def formatItem(self, item:QListWidgetItem) -> None:
+            pass  # to be implemented by subclasses

@@ -1,14 +1,14 @@
-import math
-import numpy as np
-import controller
-from util import ArgumentError
+from controller import ActivationsController
+from tools.activation import Engine as ActivationEngine
+
+from ..utils import QObserver
 
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
 from PyQt5.QtWidgets import QWidget
 
-from model import Model, ModelObserver
-import controller
+import math
+import numpy as np
 
 # FIXME[todo]: improve the display of the activations: check that the
 # space is used not only in a good, but in an optimal way. Check that
@@ -19,7 +19,7 @@ import controller
 # two-color scheme.
 
 
-class QActivationView(QWidget, ModelObserver):
+class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
     '''A widget to diplay the activations of a given layer in a
     network. Currently there are two types of layers that are
     supported: (two-dimensional) convolutional layers and dense
@@ -85,32 +85,35 @@ class QActivationView(QWidget, ModelObserver):
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def setController(self, controller):
-        # TODO: Disconnect before reconnecting?
+    def setActivationsController(self, controller: ActivationsController):
+        print(f"QActivationView: {controller}")
+
+        # FIXME[todo]: Disconnect before reconnecting?
         super().setController(controller)
 
-    def modelChanged(self, model, info):
-        '''Get the current activations from the model and set the activations
-        to be displayed in this QActivationView.  Currently there are
-        two possible types of activations that are supported by this
-        widget: 1D, and 2D convolutional.
+    def modelChanged(self, activation: ActivationEngine,
+                     info: ActivationEngine.Change) -> None:
+        '''Get the current activations from the ActivationEngine and
+        set the activations to be displayed in this QActivationView.
+        Currently there are two possible types of activations that are
+        supported by this widget: 1D, and 2D convolutional.
 
         '''
         if info.unit_changed:
-            self._current_unit = model.unit
+            self._current_unit = activation.unit
 
         # get activation and update overlay only when
         # significant properties change
         if info & {'network_changed', 'layer_changed', 'input_changed',
                    'activation_changed'}:
-            activation = model._current_activation
-            self._current_unit = model.unit
+            activation = activation._current_activation
+            self._current_unit = activation.unit
 
             if activation is not None:
                 if activation.dtype != np.float32:
-                    raise ArgumentError('Activations must be floats.')
+                    raise ValueError('Activations must be floats.')
                 if activation.ndim not in {1, 3}:
-                    raise ArgumentError(f'Unexpected shape {activation.shape}')
+                    raise ValueError(f'Unexpected shape {activation.shape}')
 
             if activation is not None:
                 self._isConvolution = (activation.ndim == 3)

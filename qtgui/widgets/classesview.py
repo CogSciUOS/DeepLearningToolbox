@@ -1,9 +1,9 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox,
                              QGridLayout, QVBoxLayout)
-from model import Model, ModelObserver, ModelChange
+from tools.activation import Engine as ActivationEngine
 
-class QClassesView(QWidget, ModelObserver):
+class QClassesView(QWidget, ActivationEngine.Observer):
     """Visualization of classification results.
 
     Fields
@@ -52,7 +52,8 @@ class QClassesView(QWidget, ModelObserver):
         self.setLayout(layout2)
         
 
-    def modelChanged(self, model: Model, info: ModelChange) -> None:
+    def modelChanged(self, model: ActivationEngine,
+                     info: ActivationEngine.Change) -> None:
         """The QClassesView is only interested if the classification result
         changes.
         """

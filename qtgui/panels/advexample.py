@@ -5,27 +5,26 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QPushButton, QSpinBox,
-                             QVBoxLayout, QHBoxLayout)
+
+from toolbox import Toolbox
 
 from .panel import Panel
 from qtgui.widgets.matplotlib import QMatplotlib
 from qtgui.widgets.training import QTrainingBox
 from qtgui.utils import QObserver
 
-from toolbox import toolbox
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QPushButton, QSpinBox,
+                             QVBoxLayout, QHBoxLayout)
 
-class AdversarialExamplePanel(Panel, QObserver,
-                              toolbox.Observer):
+
+class AdversarialExamplePanel(Panel, QObserver, Toolbox.Observer):
     """A panel displaying adversarial examples.
 
     Attributes
     ----------
-    _network: Network
+    _network: NetworkView
         A network trained as autoencoder.
-
-
     """
 
     def __init__(self, parent=None):
@@ -165,11 +164,8 @@ print(f"keras: {keras.__version__} (backend: {keras.backend.backend()}, dim_orde
 
 assert keras.backend.image_data_format() == 'channels_last', "this tutorial requires keras to be configured to channels_last format"
 
-# FIXME[hack]
-from network.keras import Training as KerasTraining, KerasClassifier
 
-from tools.train import Training, Trainer
-
+from network.keras import KerasClassifier
 # FIXME[hack]
 from models.example_keras_advex_mnist import KerasMnistClassifier
 

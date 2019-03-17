@@ -5,15 +5,19 @@ Email: rdiederichse@uni-osnabrueck.de
 Github: https://github.com/themightyoarfish
 """
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
-
-from qtgui.widgets import QActivationView
-from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
-from qtgui.widgets import QNetworkBox, QNetworkView, QNetworkSelector
+from toolbox import Controller as ToolboxController
+from network import Controller as NetworkController
+from datasources import Controller as DatasourceController
+from controller import ActivationsController
 
 from .panel import Panel
-from controller import ActivationsController
+from ..widgets.activationview import QActivationView
+from ..widgets.inputselector import QInputNavigator, QInputInfoBox
+from ..widgets.imageview import QModelImageView
+from ..widgets.networkview import QNetworkBox, QNetworkView, QNetworkSelector
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 
 class ActivationsPanel(Panel):
@@ -23,30 +27,61 @@ class ActivationsPanel(Panel):
 
     Attributes:
     -----------
-    _activation_view
-    _network_view
-    _input_view: QModelImageView
-    _input_selector: QInputSelector
-    _input_info: QInputInfoBox
+    _activation_view: QActivationView
+    _network_view: QNetworkView
+    _inputView: QModelImageView
+    _inputInfoBox: QInputInfoBox
+    _inputNavigator: QInputNavigator
     """
+    _inputNavigator: QInputNavigator = None
 
-    def __init__(self, parent=None):
+    def __init__(self, toolbox: ToolboxController=None,
+                 network: NetworkController=None,
+                 datasource: DatasourceController=None,
+                 activations: ActivationsController=None,
+                 **kwargs) -> None:
         """Initialization of the ActivationsPael.
 
         Parameters
         ----------
-        parent  :   QWidget
-                    The parent argument is sent to the QWidget constructor.
+        toolbox: ToolboxController
+        network: NetworkController
+        parent: QWidget
+            The parent argument is sent to the QWidget constructor.
         """
-        super().__init__(parent)
+        super().__init__(**kwargs)
         _network_map = {}
-        self.initUI()
+        self._initUI()
+        self._layoutUI()
+        self.setToolboxController(toolbox)
+        self.setNetworkController(network)
+        self.setActivationsController(activations)
+        self.setDatasourceController(datasource)
 
-    def initUI(self):
+    def setActivationsController(self, controller: ActivationsController
+                                 ) -> None:
+        print(f"ActivationsPanel: {controller}")
+        self._networkView.setActivationsController(controller)
+        self._activationView.setActivationsController(controller)
+
+    def setToolboxController(self, toolbox: ToolboxController) -> None:
+        self._networkSelector.setToolboxView(toolbox)
+        self._inputView.setToolboxView(toolbox)
+        self._inputInfoBox.setToolboxView(toolbox)
+
+    def setNetworkController(self, network: NetworkController) -> None:
+        self._networkSelector.setNetworkView(network)
+        self._networkView.setNetworkView(network)
+
+    def setDatasourceController(self,
+                                datasource: DatasourceController) -> None:
+        self._inputNavigator.setDatasourceController(datasource)
+
+    def _initUI(self):
         """Initialise all UI elements. These are
             * The ``QActivationView`` showing the unit activations on the left
             * The ``QModelImageView`` showing the current input image
-            * A ``QInputSelector`` to show input controls
+            * A ``QInputNavigator`` to show input controls
             * A ``QNetworkView``, a widget to select a layer in a network
             * A ``QInputInfoBox`` to display information about the input
         """
@@ -56,77 +91,84 @@ class ActivationsPanel(Panel):
         #
 
         # QModelImageView: a widget to display the input data
-        self._input_view = QModelImageView(self)
-        # FIXME[layout]
-        # keep image view square (TODO: does this make sense for every input?)
-        self._input_view.heightForWidth = lambda w: w
-        self._input_view.hasHeightForWidth = lambda: True
+        self._inputView = QModelImageView()
 
-        # QInputSelector: a widget to select the input to the network
-        # (data array, image directory, webcam, ...)
-        # the 'next' button: used to load the next image
-        self._input_selector = QInputSelector()
+        # QInputSelector: a widget to select the input
+        # (a datasource navigator)
+        self._inputNavigator = QInputNavigator()
 
-        # FIXME[hack]
-        self._input_info = QInputInfoBox(imageView=self._input_view)
-        self._input_view.modeChange.connect(self._input_info.onModeChange)
-
-        # FIXME[layout]
-        self._input_info.setMinimumWidth(200)
-
-        input_layout = QVBoxLayout()
-        # FIXME[layout]
-        input_layout.setSpacing(0)
-        input_layout.setContentsMargins(0, 0, 0, 0)
-        input_layout.addWidget(self._input_view)
-        input_layout.addWidget(self._input_info)
-        input_layout.addWidget(self._input_selector)
-
-        input_box = QGroupBox('Input')
-        input_box.setLayout(input_layout)
-        self._input_box = input_box
+        self._inputInfoBox = QInputInfoBox()
+        self._inputView.modeChanged.connect(self._inputInfoBox.onModeChanged)
 
         #
         # Network
         #
 
         # QNetworkSelector: a widget to select a network
-        self._network_selector = QNetworkSelector()
+        self._networkSelector = QNetworkSelector()
 
-        # QNetworkView: a widget to select a network
-        self._network_view = QNetworkView()
-
-        # Now put the network stuff into one group
-        network_layout = QVBoxLayout()
-        network_layout.addWidget(self._network_selector)
-        network_layout.addWidget(self._network_view)
-
-        self._network_box = QGroupBox('Network')
-        self._network_box.setLayout(network_layout)
+        # QNetworkView: a widget to select a network layer
+        self._networkView = QNetworkView()
 
         #
         # Activations
         #
 
         # ActivationView: a canvas to display a layer activation
-        self._activation_view = QActivationView()
+        self._activationView = QActivationView()
+
+
+    def _layoutUI(self):
+        #
+        # Input data
+        #
+        inputLayout = QVBoxLayout()
+
         # FIXME[layout]
-        self._activation_view.setMinimumWidth(200)
-        self._activation_view.resize(400, self._activation_view.height())
+        # keep image view square (TODO: does this make sense for every input?)
+        self._inputView.heightForWidth = lambda w: w
+        self._inputView.hasHeightForWidth = lambda: True
 
-        activation_layout = QVBoxLayout()
-        activation_layout.addWidget(self._activation_view)
+        # FIXME[layout]
+        inputLayout.setSpacing(0)
+        inputLayout.setContentsMargins(0, 0, 0, 0)
+        inputLayout.addWidget(self._inputView)
+        inputLayout.addWidget(self._inputInfoBox)
+        # FIXME[layout]
+        self._inputInfoBox.setMinimumWidth(200)
+        inputLayout.addWidget(self._inputNavigator)
 
-        activation_box = QGroupBox('Activation')
-        activation_box.setLayout(activation_layout)
+        inputBox = QGroupBox('Input')
+        inputBox.setLayout(inputLayout)
+
+        #
+        # Network
+        #
+        networkBox = QGroupBox('Network')
+        networkLayout = QVBoxLayout()
+        networkLayout.addWidget(self._networkSelector)
+        networkLayout.addWidget(self._networkView)
+        networkBox.setLayout(networkLayout)
+
+        #
+        # Activations
+        #
+        activationLayout = QVBoxLayout()
+        activationLayout.addWidget(self._activationView)
+        # FIXME[layout]
+        self._activationView.setMinimumWidth(200)
+        self._activationView.resize(400, self._activationView.height())
+
+        activationBox = QGroupBox('Activation')
+        activationBox.setLayout(activationLayout)
 
         #
         # Attach widgets to window
         #
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(activation_box)
-        splitter.addWidget(self._input_box)
+        splitter.addWidget(activationBox)
+        splitter.addWidget(inputBox)
         layout = QHBoxLayout()
         layout.addWidget(splitter)
-        layout.addWidget(self._network_box)
+        layout.addWidget(networkBox)
         self.setLayout(layout)

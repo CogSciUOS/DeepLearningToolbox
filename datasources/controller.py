@@ -1,16 +1,15 @@
-import logging
-
-from random import randint
-import numpy as np
-
-# FIXME[problem]: circular import
-#   Datasource -> Model -> controller -> Datasource
-# from model import Model
 from base import View as BaseView, Controller as BaseController, change
 from .source import Datasource
 from .array import DataArray
 from .directory import DataDirectory
 from .file import DataFile
+
+import logging
+import threading
+from threading import Event
+from random import randint
+import numpy as np
+
 
 class View(BaseView, view_type=Datasource):
     """Base view backed by a datasource. Contains functionality for
@@ -34,18 +33,15 @@ class Controller(View, BaseController):
 
     Attributes
     ----------
-    _model: model.Model
-        The model containing the network. If some data are
-        selected by this DatasourceController, they will
-        provided as input to the model.
     _index : int
         The current index in the :py:class:`datasources.Datasource`
     """
 
-    def __init__(self, model: 'model.Model', **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._model = model
         self._index = 0
+        self._loop_running = False
+        self._loop_event = None
 
     # FIXME[old]: should be removed
     def get_observable(self) -> Datasource:
@@ -76,7 +72,7 @@ class Controller(View, BaseController):
         # FIXME[async]: preparation may take some time - maybe do this
         # asynchronously
         datasource.prepare()
-        self._datasource = datasource
+        self(datasource)
         self.set_index(0)
         self.change(datasource_changed=True)
 
@@ -104,7 +100,7 @@ class Controller(View, BaseController):
         """
         self._logger.info(f"DatasourceController.set_index(index)")
         if index is None:
-            pass
+            index = 0
         elif self._datasource is None or len(self._datasource) < 1:
             index = None
         elif index < 0:
@@ -112,20 +108,12 @@ class Controller(View, BaseController):
         elif index >= len(self._datasource):
             index = len(self._datasource) - 1
 
-        if index == self._index:
+        if index == self._index and len(self._datasource) > 0:
             return
-        
+
         self._index = index
         self.change(index_changed=True, data_changed=True)
 
-        if not self._datasource or index is None:
-            pass
-            # self._model.input_data = None  #  FIXME: Data cannot be None!
-        else:
-            data, target = self._datasource[index]
-            description = self._datasource.get_description(index)
-            self._runner.runTask(self._model.set_input_data,
-                                 data, target, description)
     @property
     def data(self) -> np.ndarray:
         data, _ = self._datasource[self._index] if self else None
@@ -171,6 +159,7 @@ class Controller(View, BaseController):
         n_elems = len(self)
         index = randint(0, n_elems)
         self._runner.runTask(self.set_index, index)
+        #self.set_index(index)
 
     def advance(self):
         """Advance data index to end."""
@@ -225,3 +214,22 @@ class Controller(View, BaseController):
     def set_data_directory(self, dirname: str=None):
         """Set the directory to be used for loading data."""
         self.set_datasource(DataDirectory(dirname))
+
+
+    def loop(self):
+        if self._loop_running:
+            self._logger.info("Stopping datasource loop")
+            self._loop_running = False
+        else:
+            self._logger.info("Starting datasource loop")
+            self._loop_event = Event()
+            self._loop_running = True
+            self._runner.runTask(self._loop)
+
+    def _loop(self):
+        self._logger.info("Running datasource loop")
+        while self._loop_running:
+            self.random()
+            #self.advance_one()
+            self._loop_event.clear()
+            self._loop_event.wait(timeout=.2)

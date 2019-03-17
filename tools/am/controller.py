@@ -1,33 +1,48 @@
+from .engine import Engine
+from base import View as BaseView, Controller as BaseController, run
+from network import Network
+
 import sys
 import numpy as np
-from controller import BaseController
-from network import Network
-from tools.am import Engine
-
-# for type hints
-import PyQt5  # FIXME: no Qt here
-#import qtgui  # FIXME: no Qt here
-from typing import Union
-import datasources
 
 
-class MaximizationController(BaseController):
-    """Controller for :py:class:`qtgui.panels.Maximization`.
+class View(BaseView, view_type=Engine):
+    """Viewer for :py:class:`Engine`.
+
+    Attributes
+    ----------
+    _engine: Engine
+        The engine controlled by this Controller
+
+    """
+
+    def __init__(self, engine=None, **kwargs):
+        super().__init__(observable=engine, **kwargs)
+
+
+class Controller(View, BaseController):
+    """Controller for :py:class:`Engine`.
     This class contains callbacks for all kinds of events which are
-    effected by the user in the ``MaximizationPanel``."""
+    effected by the user in the ``MaximizationPanel``.
+
+    Attributes
+    ----------
+    _engine: Engine
+        The engine controlled by this Controller
+    """
 
     def __init__(self, engine: Engine, **kwargs) -> None:
         """
         Parameters
         ----------
-        model: Model
+        engine: Engine
         """
-        super().__init__(**kwargs)
-        self._engine = engine
+        super().__init__(engine=engine, **kwargs)
+        self._network = None
 
     def get_engine(self) -> Engine:
         """Get the activation maximization Engine for this
-        MaximizationController.  This is that actually performs the
+        Controller.  This is that actually performs the
         maximization process and that sends out notification in
         response to commands issued by this Controller. Everyone
         interested in such notifications should register to this
@@ -36,7 +51,7 @@ class MaximizationController(BaseController):
         Result
         ------
         engine: Engine
-            The engine controlled by this MaximizationController.
+            The engine controlled by this Controller.
         """
         return self._engine
 
@@ -45,15 +60,20 @@ class MaximizationController(BaseController):
     def get_observable(self) -> Engine:
         return self._engine
 
+    def get_network(self) -> Network:
+        return self._engine.network
 
-    def onMaximize(self, reset=False):
+    def set_network(self, network: Network) -> None:
+        self._engine.network = network
+
+    @run
+    def start(self, reset: bool=False):
         """Run the activation maximization process.
 
         """
-        self._runner.runTask(self._engine.maximize_activation, reset=reset)
+        self._engine.maximize_activation(reset=reset)
 
-
-    def onStop(self):
+    def stop(self):
         """Run the activation maximization process.
 
         """

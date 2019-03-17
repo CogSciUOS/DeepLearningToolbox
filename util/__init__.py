@@ -11,12 +11,11 @@ import util.check
 try:
     from imageio import imread
 except ImportError:
-    from matplotlib.pyplot import imread
-
-
-class ArgumentError(ValueError):
-    """Invalid argument exception"""
-    pass
+    try:
+        from scipy.misc import imread
+    except ImportError:
+        from matplotlib.pyplot import imread
+# maybe also cv2, but convert the colorchannels
 
 
 def debug(func):

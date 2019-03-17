@@ -30,6 +30,7 @@ from .webcam import DataWebcam
 from .video import DataVideo
 from .keras import KerasDatasource
 from .imagenet import ImageNet
+from .noise import DataNoise
 
 import logging
 logger = logging.getLogger(__name__)
@@ -44,6 +45,10 @@ for d in KerasDatasource.KERAS_IDS:
         print(f"Error instantiating keras data source '{d}': {err}",
               file=sys.stderr)
 ImageNet(section='train')
+DataNoise((100,100,3))
+
+if DataWebcam.check_availability():
+    DataWebcam()
 
 logger.info(f"Predefined data sources: {Predefined.get_data_source_ids()}")
 

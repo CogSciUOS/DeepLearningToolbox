@@ -129,7 +129,7 @@ class ResizePolicyChannels(_ResizePolicyBase):
                 # conversion
                 img = np.mean(img, axis=2).astype(np.uint8)
             elif img.ndim != 2:
-                raise ArgumentError('Incompatible shape.')
+                raise ValueError('Incompatible shape.')
         elif img.ndim == 2:
             if self._channels == 1:
                 img = img[..., np.newaxis]

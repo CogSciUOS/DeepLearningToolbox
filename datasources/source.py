@@ -61,9 +61,9 @@ class Datasource(BusyObservable, method='datasource_changed',
         """Provide access to the records in this data source."""
         pass
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Get the number of entries in this data source."""
-        pass
+        return 0
 
     def add_target_values(self, target_values: np.ndarray):
         if len(self) != len(target_values):
@@ -160,7 +160,6 @@ class Datasource(BusyObservable, method='datasource_changed',
         """Unprepare this Datasource for use.
         """
         pass  # to be implemented by subclasses
-
 
     def get_section_ids(self):
         """Get a list of sections provided by this data source.  A data source

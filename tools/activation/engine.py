@@ -4,7 +4,6 @@ import numpy as np
 
 from network import Network, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
-from util import ArgumentError
 from base.observer import Observable, change
 from util import async
 
@@ -13,15 +12,15 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class Model(Observable, method='modelChanged',
-            changes=['network_changed',
-                     'layer_changed',
-                     'unit_changed',
-                     'input_changed',
-                     'activation_changed']):
-    """.. :py:class:: Model
+class Engine(Observable, method='modelChanged',
+             changes=['network_changed',
+                      'layer_changed',
+                      'unit_changed',
+                      'input_changed',
+                      'activation_changed']):
+    """.. :py:class:: Engine
 
-    Model class encompassing network, current activations, and the like.
+    Engine class encompassing network, current activations, and the like.
 
     An model is Observable. Changes in the model are passed to observers
     calling the :py:meth:`Observer.modelChanged` method in order
@@ -79,7 +78,7 @@ class Model(Observable, method='modelChanged',
     """
 
     def __init__(self, network: Network=None):
-        """Create a new ``Model`` instance.
+        """Create a new ``Engine`` instance.
 
         Parameters
         ----------
@@ -102,7 +101,6 @@ class Model(Observable, method='modelChanged',
         # network related
         #
         self._network = None
-        self._networks = {}
         self._layer = None
         self._unit = None
         self._classification = None
@@ -115,7 +113,7 @@ class Model(Observable, method='modelChanged',
         self._classification = True
 
         if network is not None:
-            self.add_network(network)
+            self.set_network(network)
 
     ##########################################################################
     #                          SETTING DATA                                  #
@@ -139,7 +137,6 @@ class Model(Observable, method='modelChanged',
         """
         return self._data if raw else self._input
 
-
     @change
     def set_input_data(self, data: np.ndarray, target: int=None,
                        description: str = None):
@@ -156,7 +153,7 @@ class Model(Observable, method='modelChanged',
         The input data may be adapted to match the input shape of
         the current network. Different adaptation strategies may be
         applied, which are provided by setting a
-        :py:class::ShapeAdaptor for this Model.
+        :py:class::ShapeAdaptor for this Engine.
 
         Parameters
         ----------
@@ -167,23 +164,23 @@ class Model(Observable, method='modelChanged',
         description: str
             A description of the input data.
         """
-        logger.info(f"Model.set_input_data({data.shape},{target},{description})")
+        logger.info(f"Activation: set_input_data({data.shape},{target},{description})")
         #
         # do some sanity checks and corrections
         #
         if data is None or not data.ndim:
-            raise ArgumentError('Data cannot be None.')
+            raise ValueError('Data cannot be None.')
 
         if data.ndim > 4 or data.ndim < 2:
-            raise ArgumentError(f'Data must have between 2 '
-                                'and 4 dimensions (has {data.ndim}).')
+            raise ValueError(f'Data must have between 2 '
+                             'and 4 dimensions (has {data.ndim}).')
 
         if data.ndim == 4:
             if data.shape[0] == 1:
                 # first dimension has size of 1 -> remove
                 data = data.squeeze(0)
             else:
-                raise ArgumentError('Cannot visualize batch of images')
+                raise ValueError('Cannot visualize batch of images')
 
         #
         # set the data
@@ -241,48 +238,6 @@ class Model(Observable, method='modelChanged',
     #                     SETTING THE NETWORK                                #
     ##########################################################################
 
-    # FIXME[hack]: add_network is seemingly not called via a Controller,
-    # hence we have to explicitly notify the observers
-    @change
-    def add_network(self, network: Network, select: bool=True) -> None:
-        """Add a model to visualise. This will add the network to the list of
-        choices and make it the currently selcted one.
-
-        Parameters
-        ----------
-        network : Network
-            A network.
-        select : bool
-            A flag indicating whether the new network should
-            automatically be selected as the active network in this
-            model.
-        """
-        if network is not None:
-            self._networks[network.get_id()] = network
-        if select:
-            self.network = network
-        self.change(network_changed=True)
-
-    @property
-    def networks(self) -> Iterable[Network]:
-        """Get the currently selected network.
-
-        Returns
-        -------
-        The currently selected network or None if no network
-        is selected.
-        """
-        return self._networks.values()
-
-    def network_by_id(self, network_id: str) -> Network:
-        """Get a network by an unique identifier.
-        The network has to be registered with this Model
-        (via :py:meth:`add_network`) before it can be retrieved
-        by this method.
-        """
-        return self._networks.get(network_id)
-        
-
     @change
     def set_network(self, network: Network) -> None:
         """Set the current network. Update will only be published if
@@ -293,8 +248,10 @@ class Model(Observable, method='modelChanged',
         network : str or int or network.network.Network
             Key for the network
         """
-        if isinstance(network, str):
-            network = self._networks.get(network)
+        if not isinstance(network, Network):
+            raise ValueError("Expecting a Network, "
+                             f"not {type(network)} ({network})")
+        print(f"Activation: network is now {network}")
 
         if self._network != network:
             self._network = network
@@ -454,7 +411,7 @@ class Model(Observable, method='modelChanged',
                 layers.add(self._network.output_layer_id())
             self._layers = list(layers)
 
-    @async
+    #@async
     @change
     def _update_activation(self):
         """Set the :py:attr:`_current_activation` property by loading
@@ -463,7 +420,7 @@ class Model(Observable, method='modelChanged',
         set."""
 
         self._update_layer_list()
-        logger.info(f"Model._update_activation: LAYERS={self._layers}")
+        logger.info(f"Activation: _update_activation: LAYERS={self._layers}")
         if self._layers and self._input is not None:
             layers = list(self._layers)
 
@@ -484,7 +441,7 @@ class Model(Observable, method='modelChanged',
             # FIXME[debug]: if we work we multiple Threads, we have to
             # care for synchroization!
             if layers != self._layers:
-                logger.info(f"Model.update_activation(): "
+                logger.info(f"Activation: update_activation(): "
                       "LAYERS CHANGED DURING UPDATE "
                       "{layers} vs. {self._layers}")
 
@@ -568,3 +525,50 @@ class Model(Observable, method='modelChanged',
 
         return top_n, class_scores[top_n_indices], target
 
+
+# FIXME[old]
+class OldModel:
+    def __init__(self, network: Network=None):
+        self._networks = {}
+
+    # FIXME[hack]: add_network is seemingly not called via a Controller,
+    # hence we have to explicitly notify the observers
+    @change
+    def add_network(self, network: Network, select: bool=True) -> None:
+        """Add a model to visualise. This will add the network to the list of
+        choices and make it the currently selcted one.
+
+        Parameters
+        ----------
+        network : Network
+            A network.
+        select : bool
+            A flag indicating whether the new network should
+            automatically be selected as the active network in this
+            model.
+        """
+        if network is not None:
+            self._networks[network.get_id()] = network
+        if select:
+            self.network = network
+        self.change(network_changed=True)
+
+    @property
+    def networks(self) -> Iterable[Network]:
+        """Get the currently selected network.
+
+        Returns
+        -------
+        The currently selected network or None if no network
+        is selected.
+        """
+        return self._networks.values()
+
+    def network_by_id(self, network_id: str) -> Network:
+        """Get a network by an unique identifier.
+        The network has to be registered with this Model
+        (via :py:meth:`add_network`) before it can be retrieved
+        by this method.
+        """
+        return self._networks.get(network_id)
+   

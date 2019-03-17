@@ -1,5 +1,5 @@
 '''
-File: internals.py
+File: lucid.py
 Author: Ulf Krumnack
 Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
@@ -10,18 +10,19 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QSpinBox,
                              QComboBox, QListWidget, QLineEdit,
                              QVBoxLayout, QHBoxLayout, QFormLayout)
 from .panel import Panel
-from qtgui.utils import QImageView
+from ..utils import QImageView
 
 import numpy as np
 import tensorflow as tf
 
 from network import loader
 
-from tools.lucid import Engine, EngineObserver, EngineChange
-from controller import LucidController
+from tools.lucid import (Engine as LucidEngine, EngineObserver, EngineChange,
+                         Controller as LucidController)
 
-class LucidPanel(Panel, EngineObserver):
-    '''A Panel displaying lucid visualizations.
+
+class LucidPanel(Panel, QObserver, LucidEngine.Observer):
+    """A Panel displaying lucid visualizations.
 
     https://colab.research.google.com/github/tensorflow/lucid/blob/master/notebooks/tutorial.ipynb#scrollTo=8hrCwdxhcUHn
 
@@ -81,7 +82,7 @@ class LucidPanel(Panel, EngineObserver):
          param_f = lambda: param.image(128, fft=False, decorrelate=False)
 
     2. param_f = lambda: param.image(128, fft=True, decorrelate=True)
-    '''
+    """
 
     def __init__(self, parent=None):
         """Construct a new :py:class:`LucidPanel`.
@@ -90,7 +91,7 @@ class LucidPanel(Panel, EngineObserver):
         self.initUI()
 
 
-    def setController(self, controller: LucidController) -> None:
+    def setLucidController(self, controller: LucidController) -> None:
         """Set the :py:class:`LucidController` for this
         :py:class:`LucidPanel`. The controller is required to
         interact with the underlying lucid engine.
@@ -164,12 +165,13 @@ class LucidPanel(Panel, EngineObserver):
         layout.addWidget(self._modelView)
 
 
-    def engineChanged(self, engine: Engine, info: EngineChange) -> None:
+    def engineChanged(self, engine: LucidEngine,
+                      info: LucidEngine.Change) -> None:
         """Respond to change in the activation maximization Engine.
 
         Parameters
         ----------
-        engine: Engine
+        engine: LucidEngine
             Engine which changed (since we could observe multiple ones)
         info: ConfigChange
             Object for communicating which aspect of the engine changed.

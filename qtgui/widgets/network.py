@@ -41,20 +41,23 @@ class QNetworkList(QToolboxViewList, Network.Observer):
                         change: Network.Change) -> None:
         if change.observable_changed:
             self._updateCurrent(network)
-        if change.busy_changed:
-            self._updateItem(network)
 
     @protect
     def onItemClicked(self, item: QListWidgetItem):
         self._network(item.data(Qt.UserRole))
 
-    def _listData(self):
-        return self._toolbox.networks
+    class ViewObserver(QToolboxViewList.ViewObserver, Network.Observer):
+        interests = Network.Change('busy_changed')
 
-    def _viewInterests(self):
-        return Network.Change('busy_changed')
+        def data(self, toolbox: ToolboxView):
+            return toolbox.networks
 
-    def _formatItem(self, item:QListWidgetItem) -> None:
-        if item is not None:
-            network = item.data(Qt.UserRole)
-            item.setForeground(Qt.red if network.busy else Qt.black)        
+        def formatItem(self, item:QListWidgetItem) -> None:
+            if item is not None:
+                network = item.data(Qt.UserRole)
+                item.setForeground(Qt.red if network.busy else Qt.black)
+
+        def network_changed(self, network: Network,
+                            change: Network.Change) -> None:
+            if change.busy_changed:
+                self._listWidget._updateItem(network)

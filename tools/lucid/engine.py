@@ -5,7 +5,6 @@ print(f"!!!!!!!!!! getEffectiveLevel: {logger.getEffectiveLevel()} !!!!!!!!!!!!!
 from base.observer import Observable, change
 from network import Network, loader
 from network.lucid import Network as LucidNetwork
-from model import Model
 
 # lucid.modelzoo.vision_models:
 #     A module providinge the pretrained networks by name, e.g.

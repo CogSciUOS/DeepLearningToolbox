@@ -20,18 +20,20 @@ from toolbox import ToolboxController
 from qtgui.utils import QtAsyncRunner, protect
 from qtgui.panels import Panel
 
-# FIXME[old]: this should net be needed for the MainWindow
+# FIXME[old]: this should not be needed for the MainWindow
 import util
 from util import resources, addons
-from model import Model, ModelObserver
+from tools.activation import Engine as ActivationEngine
+
 from controller import ActivationsController
-from controller import MaximizationController
-from tools.am import Engine as MaximizationEngine, EngineObserver as MaximizationEngineObserver
+from tools.am import Engine as MaximizationEngine  # FIXME[old]
+from tools.am import Controller as MaximizationController
 from datasources import Datasource, Controller as DatasourceController
 
 # Qt imports
 from PyQt5.QtCore import Qt, QCoreApplication
-from PyQt5.QtGui import QPixmap, QIcon, QDragEnterEvent, QDropEvent, QCloseEvent
+from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
+                         QCloseEvent)
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
                              QWidget, QLabel)
 
@@ -78,7 +80,7 @@ class DeepVisMainWindow(QMainWindow):
                                        'id label cls tooltip addons')
     _panelMetas = [
         PanelMeta('activations', 'Activations',
-                  '.panels.activations.ActivationPanel',
+                  '.panels.activations.ActivationsPanel',
                   'Show the activations panel', []),
         PanelMeta('autoencoder', 'Autoencoder',
                   '.panels.autoencoder.AutoencoderPanel',
@@ -126,6 +128,7 @@ class DeepVisMainWindow(QMainWindow):
             (Filename of) the Window icon.
         """
         super().__init__()
+        self._logger = logging.getLogger(__name__)
         self._toolbox = toolbox
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
@@ -274,7 +277,8 @@ class DeepVisMainWindow(QMainWindow):
         toolsMenu = menubar.addMenu('&Tools')
 
         def slot(id):
-            return lambda checked: self.panel(id, create=True, show=True)
+            panel = lambda checked: self.panel(id, create=True, show=True)
+            return protect(panel)
         for meta in self._panelMetas:
             action = QAction(meta.label, self)
             action.setStatusTip(meta.tooltip)
@@ -289,6 +293,7 @@ class DeepVisMainWindow(QMainWindow):
     # base handler for all events and aggregate subcontrollers for
     # individual widgets.
 
+    @protect
     def onPanelSelected(self, index: int) -> None:
         """Callback for selecting a new panel in the main window.
 
@@ -362,15 +367,17 @@ class DeepVisMainWindow(QMainWindow):
             # 1. We just consider the first URL, even if multiple URLs
             #    are provided.
             url = mimeData.urls()[0]
-            print(url)
+            self._logger.info(f"Drag and dropped len(mimeData.urls() URLs, "
+                              f"URL[0]: {url}")
 
             # 2. Convert the URL to a local filename
             filename = url.toLocalFile()
             description = f"Dropped in image ({filename})"
-            print(filename)
+            self._logger.info(f"Converted URL to local filename: '{filename}'")
 
             # 3. Set this file as input image for the toolbox.
-            self._toolbox.set_input_from_file(filename, description=description)
+            self._toolbox.set_input_from_file(filename,
+                                              description=description)
 
             # 4. Mark the Drop action as accepted (we actually perform
             #    a CopyAction, no matter what was proposed)
@@ -417,12 +424,27 @@ class DeepVisMainWindow(QMainWindow):
                                 autoencoderController=autoencoder,
                                 trainingController=training)
 
+    def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
+        network = self._toolbox.autoencoder_controller
+        return ActivationsPanel(toolbox=self._toolbox, network=network,
+                                activations=self._activations_controller,
+                                datasource=self._toolbox.datasource_controller)
+
     def _initMaximizationPanel(self, maximization: Panel) -> None:
         """Initialise the activation maximization panel.
         """
-        engineController = self._toolbox.maximization_engine
-        maximization.setController(engineController,
-                                   MaximizationEngineObserver)
+        networkController = self._toolbox.autoencoder_controller  # FIXME[hack]
+        maximizationController = self._toolbox.maximization_engine
+        print(f"_initMaximizationPanel: maximizationController={maximizationController}")
+        maximization.setToolboxController(self._toolbox)
+        maximization.setMaximizationController(maximizationController)
+        maximization.setNetworkController(networkController)
+        # FIXME[old]:
+        #if self._activations_controller is not None:
+        #    maximization.setController(self._activations_controller,
+        #                               ActivationEngine.Observer)
+        #maximization.setController(engineController,
+        #                           MaximizationEngine.Observer)
 
     def _initLoggingPanel(self, loggingPanel: Panel) -> None:
         """Initialise the log panel.
@@ -441,24 +463,25 @@ class DeepVisMainWindow(QMainWindow):
     #                           FIXME[old]                                   #
     ##########################################################################
 
-    def setModel(self, model: Model) -> None:
+    def setModel(self, model: ActivationEngine) -> None:
 
         self._activations_controller = \
             ActivationsController(model, runner=self._runner)
         self._datasource_controller = \
-            DatasourceController(model, runner=self._runner)
+            self._toolbox.datasource_controller
+        #    DatasourceController(model, runner=self._runner)
 
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
             activationsPanel.setController(activations_controller,
-                                           ModelObserver)
+                                           ActivationEngine.Observer)
             activationsPanel.setController(self._datasource_controller,
                                            Datasource.Observer)
 
         maximizationPanel = self.panel('maximization')
         if maximizationPanel is not None:
             maximizationPanel.setController(self._activations_controller,
-                                            ModelObserver)
+                                            ActivationEngine.Observer)
 
     def setLucidEngine(self, engine:'LucidEngine'=None) -> None:
         lucidPanel = self.panel('lucid')

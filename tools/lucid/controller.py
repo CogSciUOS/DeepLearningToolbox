@@ -1,9 +1,9 @@
-from controller import BaseController
+from base import Controller as BaseController
 from network import Network
 from tools.lucid import Engine
 
 
-class LucidController(BaseController):
+class Controller(BaseController):
     """Controller for :py:class:`tools.lucid.Engine`."""
 
     def __init__(self, engine: Engine, **kwargs) -> None:
@@ -17,8 +17,8 @@ class LucidController(BaseController):
 
     @property
     def engine(self) -> Engine:
-        """Get the activation maximization Engine for this
-        MaximizationController.  This is that actually performs the
+        """Get the lucid activation maximization Engine for this
+        Controller.  This is that actually performs the
         maximization process and that sends out notification in
         response to commands issued by this Controller. Everyone
         interested in such notifications should register to this
@@ -27,7 +27,7 @@ class LucidController(BaseController):
         Result
         ------
         engine: Engine
-            The engine controlled by this MaximizationController.
+            The lucid engine controlled by this Controller.
         """
         return self._engine
 

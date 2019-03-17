@@ -90,13 +90,14 @@ class View:
         if old_observable == new_observable:
             return  # nothing has changed ...
         
-        setattr(self, type(self)._view_attribute, new_observable)
-       
+        super().__setattr__(type(self)._view_attribute, new_observable)
+
         # transfer all observers added via this View from tho old to
         # the new observable:
         observable = new_observable or old_observable
-        self._logger.debug(f"TRANSFER ({self}): "
-                           f"old={old_observable}, new={new_observable}")
+        self._logger.debug(f"TRANSFER ({self}) of {len(self._observers)} "
+                           f"observers from old={old_observable} "
+                           f"to new={new_observable}")
         for observer, interests in self._observers.items():
             self._logger.debug(f"  -> observer={observer}")
             if old_observable is not None:
@@ -104,18 +105,26 @@ class View:
             if new_observable is not None:
                 observer.observe(new_observable, interests)
             observable.notify(observer, observable.Change.all())
+        self._logger.debug(f"TRANSFER completed.")
 
-    def __getattr__(self, name):
-        if name == type(self)._view_attribute:
+    def __getattr__(self, attr):
+        if attr == type(self)._view_attribute:
             return None  # avoid RecursionError
         observable = getattr(self, type(self)._view_attribute, None)
         if observable is None:
-            raise AttributeError(f"Cannot access attribute {name} in "
+            raise AttributeError(f"Cannot access attribute {attr} in "
                                  "observable as currently nothing is viewed.")
-        if name[0] == '_':
+        if attr[0] == '_':
             raise AttributeError("Trying to access private attribute "
-                                 f"{type(observable).__name__}.{name}.")
-        return getattr(observable, name)
+                                 f"{type(observable).__name__}.{attr}.")
+        return getattr(observable, attr)
+
+    def __setattr__(self, attr, value):
+        if attr == type(self)._view_attribute:
+            raise AttributeError("Setting the observable attribute "
+                                 f"'{type(self)._view_attribute}'"
+                                 "is forbidden.")
+        super().__setattr__(attr, value)
 
     def _get_observable(self, o) -> Observable:
         """Get the Observable matching the given observable description.
@@ -231,8 +240,7 @@ class Controller(View):
             no asynchronous operations will be performed by this
             BaseController.
         """
-        self._runner = Runner() if runner is None else runner
-
+        super().__setattr__('_runner', runner)
     
     def run(self, function, *args, **kwargs):
         """Run the given function. In synchronous mode, this simply
@@ -249,6 +257,8 @@ class Controller(View):
         out_notify: Change
             notify observers that the task was done.
         """
+        self._logger.debug(f"{self}: Runing with runner {self._runner}"
+                           f"{function}({args}, {kwargs})")
         if self._runner is None:
             return self._run(function, *args, **kwargs)
         else:

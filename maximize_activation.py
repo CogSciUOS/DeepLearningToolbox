@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
 
-from tools.am import Engine, Config, EngineObserver
+from tools.am import Engine, Config
 
 def main():
     '''Start the program.'''
@@ -53,10 +53,10 @@ import matplotlib.pyplot as plt
 plt.ion()
 plt.show()
 
-class MatplotlibObserver(EngineObserver):
+class MatplotlibObserver(Engine.Observer):
     im = None
     
-    def engineChanged(self, engine: 'Engine', info: 'EngineChange') -> None:
+    def engineChanged(self, engine: Engine, info: Engine.Change) -> None:
         """Respond to change in the activation maximization Engine.
 
         Parameters
@@ -77,8 +77,8 @@ class MatplotlibObserver(EngineObserver):
             plt.pause(0.001)
 
 import cv2
-class CvObserver(EngineObserver):
-    def engineChanged(self, engine: 'Engine', info: 'EngineChange') -> None:
+class CvObserver(Engine.Observer):
+    def engineChanged(self, engine: Engine, info: Engine.Change) -> None:
         if info.image_changed:
             cv2.imshow(f'{engine.iteration}', engine.image)
 

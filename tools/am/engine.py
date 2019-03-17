@@ -33,7 +33,6 @@ from .config import Config
 
 from base.observer import Observable, change
 from network import Network
-from model import Model
 
 from network.tensorflow import Network as TensorflowNetwork
 
@@ -55,38 +54,35 @@ class Engine(Observable, method='engineChanged',
 
     Attributes
     ----------
-    _config: Config
+    config: Config
         The engine will take all its parameters from the config object.        
-    _model: Model
-        The model that allows to get access to networks (and maybe other
-        data).
-
+    network: Network
+        The :py:class:`Network` to be used for maximization.
+    _image: np.ndarray
+        The current image (can be batch of images), used for the
+        maximization process.
+    _snapshot: np.ndarray
+        A snapshot (copy) of the current image (a singe image), can
+        be used for display, etc.
     _running: bool
         A flag indicating if the engine is currently running.
     """
+    _helper = None
+    _running = False
+    _status = "stopped"
+    _network = None
+    _iteration = None
+    _image: np.ndarray = None
+    _snapshot: np.ndarray = None
 
-    def __init__(self, model: Model=None, config: Config=None):
+    def __init__(self, config: Config=None):
         super().__init__()
         self._config = config
-        self._model = model
-        self._helper = None
-        self._running = False
-        self._status = "stopped"
-
-        self._iteration = None
-
-        # The current image (can be batch of images), used for the
-        # maximization process
-        self._image = None
-        # A snapshot (copy) of the current image (a singe image), can
-        # be used for display, etc.
-        self._snapshot = None
-
+        
         # Initialize the recorders
         self._recorder = {}
         for recorder in 'loss', 'min', 'max', 'mean', 'std':
             self._recorder[recorder] = None
-
         self._cache = {}
 
     @property
@@ -95,6 +91,7 @@ class Engine(Observable, method='engineChanged',
 
     @config.setter
     def config(self, config: Config) -> None:
+        print(f"!!! MaximizationEngine: config={config} !!!")
         self._config.assign(config)
 
     @property
@@ -130,17 +127,29 @@ class Engine(Observable, method='engineChanged',
             self._running = running
             # FIXME[hack]: we need a better notification concept!
             #self.change(engine_changed=True)
-            self.notifyObservers(EngineChange(engine_changed=True))
+            self.notifyObservers(Engine.Change(engine_changed=True))
+
+    @property
+    def network(self) -> Network:
+        return self._network
+
+    @network.setter
+    def network(self, network: Network) -> None:
+        print(f"!!! MaximizationEngine: network={network} !!!")
+        if self._network == network:
+            return  # nothing to do ...
+    
+        self._network = network
+        self._helper = None
+        if self._config is not None:
+            self._config.NETWORK_KEY = network.get_id()
 
     @change
-    def prepare(self, network: Network=None):
+    def _prepare(self):
         """Prepare a new run of the activation maximization engine.
         """
-        logger.info("-Engine.prepare() -- begin")
+        logger.info("-Engine._prepare() -- begin")
         self._set_status("preparation")
-
-        if network is None:
-            network = self._model.network_by_id(self._config.NETWORK_KEY)
 
         # FIXME[hack]: determine these values automatically!
         # The axis along which the batches are arranged
@@ -151,8 +160,8 @@ class Engine(Observable, method='engineChanged',
         self._batch_index = 0
 
         if self._helper is None:
-            HelperClass = _EngineHelper.class_for_network(network)
-            self._helper = HelperClass(self, self._config, network)
+            HelperClass = _EngineHelper.class_for_network(self._network)
+            self._helper = HelperClass(self, self._config, self._network)
 
         if self._helper is None:
             logger.warning("Engine: maximize activation: No Helper. STOP")
@@ -183,7 +192,7 @@ class Engine(Observable, method='engineChanged',
 
         self._loss_list = np.ones(self._config.LOSS_COUNT) * -100000
 
-        logger.info("-Engine.prepare() -- end")
+        logger.info("-Engine._prepare() -- end")
 
     def _update_max_steps(self):
         for recorder in self._recorder.values():
@@ -220,11 +229,17 @@ class Engine(Observable, method='engineChanged',
         """
         logger.info("Engine: maximize activation: BEGIN")
 
+        if network is not None:
+            self.network = network
+
+        if self._network is None:
+            raise RuntimeError("Cannot maximize activation without a Network.")
+
         if self._image is None or reset:
             # step counter
             self._iteration = -1
             self._set_status("initialization")
-            self.prepare(network)
+            self._prepare()
             # step counter
             self._set_status("start")
 
@@ -275,7 +290,7 @@ class Engine(Observable, method='engineChanged',
                                         axis=self._batch_axis)
             self._take_snapshot(self._iteration, image=snapshot, loss=loss)
             self._record_snapshot()
-            self.notifyObservers(EngineChange(image_changed=True))
+            self.notifyObservers(Engine.Change(image_changed=True))
 
             # increase steps
 
@@ -1096,9 +1111,3 @@ class _EngineHelper:
         mask = contribs < contrib_threshold
         image[mask] = 0
         return image
-
-
-# FIXME[old]: this is too make old code happy. New code should use
-# Engine.Change and Engine.Observer directly.
-EngineChange = Engine.Change
-EngineObserver = Engine.Observer

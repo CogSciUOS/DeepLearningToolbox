@@ -6,11 +6,6 @@
 This module contains definitions for observer functionality
 """
 
-# FIXME[design]: There are some problems with circular import.
-# However: when removing the `set_controller` method from the observer
-# (which not really belongs there!), we could get rid of imports here!
-# import controller.base
-
 import threading
 import logging
 logger = logging.getLogger(__name__)
@@ -171,6 +166,7 @@ class Observable:
                 observer object.
 
             """
+            print(f"{type(self).__name__}.setController({self}, {controller}, {name}!")
             from pydoc import locate
             if isinstance(self, locate('qtgui.utils.QObserver')):
                 print("Trying to set Controller on QObserver!")

@@ -26,9 +26,10 @@ class OcclusionPanel(Panel):
         '''
 
         super().__init__(parent)
-        self.initUI()
+        self._initUI()
+        self._layoutUI()
 
-    def initUI(self):
+    def _initUI(self):
         '''Initialise all UI elements. These are
 
             * The ``QImageView`` showing the occlusion overlay
@@ -36,8 +37,10 @@ class OcclusionPanel(Panel):
             * A ``QInputInfoBox`` to display information about the input
 
         '''
-        super().initUI()
+        #super().initUI()
         self._occlusion_view = QImageView(self)
+
+    def _layoutUI(self):
         # FIXME[layout]
         self._occlusion_view.setMinimumWidth(300)
         self._occlusion_view.resize(600, self._occlusion_view.height())
@@ -51,10 +54,10 @@ class OcclusionPanel(Panel):
         #######################################################################
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(occlusionBox)
-        splitter.addWidget(self._input_box)
+        #splitter.addWidget(self._input_box)
         layout = QHBoxLayout()
         layout.addWidget(splitter)
-        layout.addWidget(self._network_box)
+        #layout.addWidget(self._network_box)
         self.setLayout(layout)
 
     def updateOcclusion(self):

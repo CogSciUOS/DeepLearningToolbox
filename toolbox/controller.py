@@ -1,6 +1,7 @@
 from base import View as BaseView
 from .toolbox import Toolbox
 
+
 class View(BaseView, view_type=Toolbox):
 
     def __init__(self, toolbox=None, **kwargs):
@@ -16,17 +17,15 @@ class View(BaseView, view_type=Toolbox):
                 iter(self._toolbox._datasources))
 
 
-
-
-
-import numpy as np
-
-
-from base import Controller as BaseController
+import util
 from .toolbox import Toolbox
+from base import Controller as BaseController
 from network import Network, AutoencoderController
 from datasources import Datasource, Controller as DatasourceController
 from tools.train import TrainingController
+
+import numpy as np
+
 
 class Controller(View, BaseController):
 
@@ -37,7 +36,7 @@ class Controller(View, BaseController):
     def autoencoder_controller(self) -> AutoencoderController:
         controller = getattr(self._toolbox, '_autoencoder_controller', None)
         if controller is None:
-            controller = AutoencoderController(runner=self._toolbox._runner)
+            controller = AutoencoderController(runner=self._runner)
             self._toolbox._autoencoder_controller = controller
         return controller
 
@@ -45,24 +44,43 @@ class Controller(View, BaseController):
     def training_controller(self) -> TrainingController:
         controller = getattr(self._toolbox, '_training_controller', None)
         if controller is None:
-            controller = TrainingController(runner=self._toolbox._runner)
+            controller = TrainingController(runner=self._runner)
             self._toolbox._training_controller = controller
         return controller
 
     @property
+    def activation_engine(self) -> BaseController:
+        # -> tools.activation.Controller
+        """Get the Controller for the activation engine. May
+        create a new Controller (and Engine) if none exists yet.
+        """
+        controller = getattr(self._toolbox, '_activation_engine', None)
+        if engine_controller is None:
+            from tools.activation import (Engine as ActivationEngine,
+                                          Controller as ActivationController)
+            engine = ActivationEngine()
+            controller = ActivationController(engine=engine,
+                                              runner=self._runner)
+            self._toolbox._am_engine = controller
+        return controller
+
+    @property
     def maximization_engine(self) -> BaseController:  # -> tools.am.Controller
-        """Get the Controller for the action maximization engine. May
+        """Get the Controller for the activation maximization engine. May
         create a new Controller (and Engine) if none exists yet.
         """
         engine_controller = getattr(self._toolbox, '_am_engine', None)
         if engine_controller is None:
-            from tools.am import Engine as AMEngine, Config as AMConfig
-            from controller import MaximizationController
-            engine = AMEngine(self._toolbox._model, AMConfig())
+            from tools.am import (Engine as MaximizationEngine,
+                                  Config as MaximizationConfig,
+                                  Controller as MaximizationController)
+            engine = MaximizationEngine(config=MaximizationConfig())
             engine_controller = \
                 MaximizationController(engine, runner=self._runner)
             self._toolbox._am_engine = engine_controller
         return engine_controller
+
+
 
     ###########################################################################
     ###                            Networks                                 ###
@@ -121,11 +139,7 @@ class Controller(View, BaseController):
 
     @property
     def datasource_controller(self) -> DatasourceController:
-        controller = getattr(self._toolbox, '_datasource_controller', None)
-        if controller is None:
-            controller = DatasourceController(runner=self._toolbox._runner)
-            self._toolbox._datasource_controller = controller
-        return controller
+        return getattr(self._toolbox, '_datasource_controller', None)
 
     def add_datasource(self, datasource: Datasource) -> None:
         self._toolbox.add_datasource(datasource)

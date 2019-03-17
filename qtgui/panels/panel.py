@@ -1,7 +1,7 @@
+from base import Observable, Controller as BaseController
+
 from PyQt5.QtWidgets import QWidget, QTabWidget, QStackedWidget
 
-from base.observer import Observable
-from controller import BaseController
 
 class Panel(QWidget):
     '''Base class for different visualisation panels.

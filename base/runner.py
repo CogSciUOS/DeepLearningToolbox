@@ -1,5 +1,31 @@
+class Runner:
+    """Base class for runner objects which must be provided for each
+    controller/user interface.
 
-from base import Runner
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    def runTask(self, function, *args, **kwargs) -> None:
+        """Schedule the execution of a function.
+        This is equivalent to running::
+
+            fn(*args, **kwargs)
+
+        asynchronously.
+
+        Parameters
+        ----------
+        fn  :   function
+                Function to run asynchronously
+        args    :   list
+                    Non-keyword args to ``fn``
+        kwargs  :   dict
+                    keyword args to ``fn``
+        """
+        function(*args, **kwargs)
+
 
 from concurrent.futures import ThreadPoolExecutor, Future
 
@@ -30,7 +56,7 @@ class AsyncRunner(Runner):
 
     def __init__(self) -> None:
         super().__init__()
-        self._executor = ThreadPoolExecutor(max_workers=1,
+        self._executor = ThreadPoolExecutor(max_workers=4,
                                             thread_name_prefix='runner')
 
     def runTask(self, fn, *args, **kwargs) -> None:
@@ -54,6 +80,7 @@ class AsyncRunner(Runner):
         future.add_done_callback(self.onCompletion)
 
     def onCompletion(self, result):
+        # FIXME[old]: explain what is done now!
         """Callback exectuted on completion of a running task. This
         method must be implemented by subclasses and - together with
         any necessary initialisations in :py:meth:`__init__` - should
@@ -62,8 +89,9 @@ class AsyncRunner(Runner):
 
         Parameters
         ----------
-        result: object or model.ModelChange
+        result: object or Observable.Change
             Object returned by the asynchronously run method.
         """
         raise NotImplementedError('This abstract base class '
                                   'should not be used directly.')
+

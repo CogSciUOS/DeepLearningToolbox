@@ -1,5 +1,6 @@
 from datasources import Datasource, InputData
-from scipy.misc import imread
+from util import imread
+
 from os.path import join, isdir, isfile
 from os import listdir
 from glob import glob

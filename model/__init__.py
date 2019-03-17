@@ -5,7 +5,4 @@
 
 This module contains all model-related functionality.
 '''
-from .model import Model
-
-ModelObserver = Model.Observer
-ModelChange = Model.Change
+from tools.activation import Engine as Model

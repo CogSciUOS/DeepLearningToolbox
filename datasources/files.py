@@ -1,9 +1,8 @@
+from datasources import DataSource, InputData
+from util import imread
+
 from os.path import join
 import numpy as np
-from scipy.misc import imread
-
-from datasources import DataSource, InputData
-
 
 # FIXME[todo]: maybe combined with DataDirectory to profit from
 # common features, like prefetching, caching, etc.

@@ -1,11 +1,12 @@
 import numpy as np
 
+from .panel import Panel
 from PyQt5.QtWidgets import QWidget
 from qtgui.widgets import QMatrixView, QConnectionView
 
 # FIXME[todo]: add docstrings!
 
-class ExperimentsPanel(QWidget):
+class ExperimentsPanel(Panel):
     '''This Panel is intended for temporary experiments with the
     graphical components of the deep visualization toolbox.
 

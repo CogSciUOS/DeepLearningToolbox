@@ -10,15 +10,16 @@ from network import Network, Controller as NetworkController
 from datasources import Datasource, Controller as DatasourceController
 
 from .panel import Panel
-from qtgui.utils import QObserver, protect
-from qtgui.widgets import QNetworkView, QNetworkBox, QNetworkSelector
-from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
-from qtgui.widgets.network import QNetworkList
-from qtgui.widgets.datasource import QDatasourceList
+from ..utils import QObserver, protect
+from ..widgets import QNetworkView, QNetworkBox, QNetworkSelector
+from ..widgets import QInputInfoBox, QModelImageView
+from ..widgets.inputselector import QInputNavigator
+from ..widgets.network import QNetworkList
+from ..widgets.datasource import QDatasourceList, QDatasourceSelectionBox
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QResizeEvent
-from PyQt5.QtWidgets import (QPushButton, QGroupBox,
+from PyQt5.QtWidgets import (QWidget, QPushButton, QGroupBox,
                              QVBoxLayout, QHBoxLayout, QGridLayout)
 
 
@@ -31,23 +32,24 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
     _input_info: QInputInfoBox
         An info box displaying additional information on the currently
         selected input image.
-    _input_selector: QInputSelector
-        A control element to select an input image. Consists of
-        two parts: a datasource selector to choose a Datasource and
-        a datasource navigator to select an image in the Datasource.
+
+    _datasourceList: QDatasourceList
+    _datasourceSelector: QDatasourceSelectionBox
+    _datasourceNavigator: QInputNavigator
     '''
     _toolboxController: ToolboxController = None
     _networkController: NetworkController = None
 
     _datasourceList: QDatasourceList = None
-    _input_view: QModelImageView
-    _input_info: QInputInfoBox
-    _input_selector: QInputSelector
-    
+    _datasourceSelector: QDatasourceSelectionBox = None
+    _datasourceNavigator: QInputNavigator = None
+    _input_view: QModelImageView = None
+    _input_info: QInputInfoBox = None
+
     def __init__(self, toolbox: ToolboxController=None,
                  network1: NetworkController=None,
                  datasource1: DatasourceController=None,
-                 parent=None):
+                 parent: QWidget=None):
         super().__init__(parent)
         self._initUI()
         self._layoutUI()
@@ -92,6 +94,7 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         #
 
         self._datasourceList = QDatasourceList()
+        self._datasourceSelector = QDatasourceSelectionBox()
 
         @protect
         def clicked(checked: bool):
@@ -111,7 +114,8 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         
         # QInputSelector: a widget to select the input
         # (combined datasource selector and datasource navigator)
-        self._input_selector = QInputSelector()
+        self._datasourceNavigator = QInputNavigator()
+
 
     def _layoutUI(self):
 
@@ -133,8 +137,14 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         self._networkGroupBox.setLayout(layout2)
 
         layout = QVBoxLayout()
-        layout.addWidget(self._datasourceList)
-        layout.addWidget(self._buttonAddDatasource)
+        row = QHBoxLayout()
+        column = QVBoxLayout()
+        column.addWidget(self._datasourceList)
+        column.addWidget(self._buttonAddDatasource)
+        row.addLayout(column)
+        row.addWidget(self._datasourceSelector)
+        layout.addLayout(row)
+        layout.addWidget(self._datasourceNavigator)
 
         # FIXME[layout]
         #layout.setSpacing(0)
@@ -147,7 +157,6 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
 
         layout.addWidget(self._input_view)
         layout.addWidget(self._input_info)
-        layout.addWidget(self._input_selector)
 
         layout.addStretch()
 
@@ -165,10 +174,10 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         self._exchangeView('_toolboxController', toolbox)
         self._networkList.setToolboxView(toolbox)
         self._networkSelector.setToolboxView(toolbox)
-        self._input_selector.setToolboxController(toolbox)
+        self._datasourceList.setToolboxView(toolbox)
+        self._datasourceSelector.setToolboxController(toolbox)
         self._input_view.setToolboxView(toolbox)
         self._input_info.setToolboxView(toolbox)
-        self._datasourceList.setToolboxView(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
         self._networkController = network
@@ -179,6 +188,7 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
     def setDatasourceController(self,
                                 datasource: DatasourceController) -> None:
         self._datasourceList.setDatasourceView(datasource)
+        self._datasourceNavigator.setDatasourceController(datasource)
 
     def setEnabled(self):
         enabled = self._toolboxController is not None
