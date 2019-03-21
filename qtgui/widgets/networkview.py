@@ -33,8 +33,8 @@ class QNetworkBox(QLabel, QObserver, Network.Observer,
         self._exchangeView('_networkView', network,
                            Network.Change.all())  # FIXME[hack]: check what we are really interested in ...
 
-    def modelChanged(self, model: ActivationEngine,
-                     info: ActivationEngine.Change) -> None:
+    def activation_changed(self, model: ActivationEngine,
+                           info: ActivationEngine.Change) -> None:
         # FIXME[old]
         if info.network_changed:
             self.network_changed(model._network, Network.Change.all())
@@ -159,10 +159,10 @@ class QNetworkSelector(QComboBox, QObserver, Toolbox.Observer,
         # make sure to connect the signal in the main thread (assuming
         # the QNetworkSelector is initialized in the main thread).
         def slot(name):
-            if self._controller is not None:
-                self._controller.onNetworkSelected(name)
+            #if self._controller is not None:
+            #    self._controller.onNetworkSelected(name)
             if self._networkView is not None:
-                self._networkView(self.network)
+                self._networkView(self.currentData())
         self.activated[str].connect(slot)
 
     def setController(self, controller) -> None:
@@ -177,8 +177,8 @@ class QNetworkSelector(QComboBox, QObserver, Toolbox.Observer,
         self._exchangeView('_networkView', network,
                            Network.Change('observable_changed'))
 
-    def modelChanged(self, model: ActivationEngine,
-                     info: ActivationEngine.Change) -> None:
+    def activation_changed(self, model: ActivationEngine,
+                           info: ActivationEngine.Change) -> None:
         """React to changes in the model.
         """
 
@@ -213,9 +213,11 @@ class QNetworkSelector(QComboBox, QObserver, Toolbox.Observer,
         ---------
         networks: an Iterable providing available Networks.
         """
-        self.clear()
-        for network in networks:
-            self.addItem(network.get_id(), network)
+        networks = [n for n in networks]
+        if len(networks) != self.count():
+            self.clear()
+            for network in networks:
+                self.addItem(network.get_id(), network)
 
     @property
     def network(self) -> Network:
@@ -229,7 +231,8 @@ class QNetworkSelector(QComboBox, QObserver, Toolbox.Observer,
 
 
 from network import Network, View as NetworkView
-from tools.activation import Engine as ActivationEngine
+from tools.activation import (Engine as ActivationEngine,
+                              Controller as ActivationsController)
 
 from ..utils import QObserver, protect
 from .classesview import QClassesView
@@ -242,16 +245,18 @@ from PyQt5.QtWidgets import QVBoxLayout, QGridLayout
 
 class QNetworkView(QWidget, QObserver, Network.Observer,
                    ActivationEngine.Observer):
-    '''A simple widget to display information on a network and select a
+    """A simple widget to display information on a network and select a
     layer.
 
     Attributes
     ----------
-    _controller :   controller.ActivationsController
-                    Controller for this UI element
-    _current_selected   :   int
-                            Layer id of the currently selected layer
-    '''
+    _activations: controller.ActivationsController
+        Controller for this UI element
+    _current_selected: int
+        Layer id of the currently selected layer
+    """
+    _activations: ActivationsController = None
+    _network: NetworkView = None
 
     _current_selected:  int = None
 
@@ -259,6 +264,7 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
     _label_input = None
     _label_output = None
 
+    # Graphical elements
     _networkInfo: QNetworkBox = None
     _classesView: QClassesView = None
 
@@ -300,11 +306,65 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
         layout.addWidget(self._classesView)
         self.setLayout(layout)
 
-    def setActivationsController(self, controller):
-        print(f"QNetworkView: {controller}, {self._networkInfo}")
-        super().setController(controller)
-        self._networkInfo.setController(controller)
-        self._classesView.setController(controller)
+    def setActivationsController(self, activations: ActivationsController):
+        print(f"QNetworkView: setActivationsController({activations})")
+        #super().setController(activations) # FIXME[old]
+        interests = ActivationEngine.Change('layer_changed')
+        self._exchangeView('_activations', activations,
+                           interests=interests)
+        self._networkInfo.setController(activations)
+        self._classesView.setActivationView(activations)
+
+    def xobservable_changed(self, activations: ActivationEngine,
+                            change: ActivationEngine.Change) -> None:
+        pass
+
+    def activation_changed(self, activation: ActivationEngine,
+                           info: ActivationEngine.Change) -> None:
+        """The QNetworkView is interested in network related changes, i.e.
+        changes of the network itself or the current layer.
+        
+        """
+
+        # FIXME[design]: The 'network_changed' message can mean that
+        # either the current model has changed or that the list of
+        # models was altered (or both).
+        if False and info.network_changed:  # FIXME[old]: should be redundant with network.observable_changed
+            #
+            # Respond to network change
+            #
+            
+            # As we may add/remove QWidgets, we need to make sure that
+            # this method is executed in the main thread
+            event = QEvent(QNetworkView._UPDATE_NETWORK)
+            event.activation = activation
+            QCoreApplication.postEvent(self, event)
+
+        if ((info.network_changed or info.layer_changed) and
+            activation is not None):
+            #
+            # Respond to layer change
+            #
+
+            layer_id = activation.layer_id
+            try:
+                layer_index = activation.idForLayer(layer_id)
+            except ValueError as error:
+                print(f"ERROR: {self.__class__.__name__}.activation_changed(): "
+                      "{error}")
+                layer_index = None
+            if layer_index != self._current_selected:
+                
+                # unmark the previously active layer
+                if self._current_selected is not None:
+                    oldItem = self._layer_buttons[self._current_selected]
+                    self._markButton(oldItem, False)
+
+                self._current_selected = layer_index
+                if self._current_selected is not None:
+                    # and mark the new layer
+                    newItem = self._layer_buttons[self._current_selected]
+                    self._markButton(newItem, True)
 
     def setNetworkView(self, network: NetworkView):
         self._exchangeView('_network', network,
@@ -316,23 +376,13 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
         if change.observable_changed:
             self._updateButtons(network)
 
-    def _layerButtonClicked(self):
-        '''Callback for clicking one of the layer buttons.'''
-        if (self._current_selected and
-            self._layer_buttons[self._current_selected] == self.sender()):
-            layer = None
-        else:
-            layer = self.sender().text()
-        if self._controller:
-            self._controller.onLayerSelected(layer)
-
     def _updateButtons(self, network: Network):
         """Update the buttons to reflect the layers of the
         underlying network.
         
         Arguments
         ---------
-        model: the model providing the curent network.
+        network: the curent network.
         """
         #
         # Respond to network change
@@ -369,15 +419,15 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
                 self._layer_buttons.append(button)
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
-                button.clicked.connect(self._layerButtonClicked)
+                button.clicked.connect(self.onLayerButtonClicked)
 
             self._label_output = QLabel("output = " + str(network.get_output_shape(False)))
             layout.addWidget(self._label_output)
 
             # choose the active layer for the new network
             # self.setActiveLayer(0)
-            if self._controller:
-                self._controller.onLayerSelected(None)
+            if self._activations:
+                self._activations.set_layer(None)
 
 
     def _markButton(self, button, state:bool=True) -> None:
@@ -391,56 +441,26 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
             button.setStyleSheet('background-color: red' if state else '')
         
 
-    def modelChanged(self, model: ActivationEngine,
-                     info: ActivationEngine.Change) -> None:
-        """The QNetworkView is interested in network related changes, i.e.
-        changes of the network itself or the current layer.
-        
+    @protect
+    def onLayerButtonClicked(self, checked: bool):
+        """Callback for clicking one of the layer buttons.
+        If we have an ActivationsController set, we will inform it
+        that 
         """
+        if (self._current_selected and
+            self._layer_buttons[self._current_selected] == self.sender()):
+            layer = None
+        else:
+            layer = self.sender().text()
+        if self._activations:
+            self._activations.set_layer(layer)
 
-        # FIXME[design]: The 'network_changed' message can mean that
-        # either the current model has changed or that the list of
-        # models was altered (or both).
-        if info.network_changed:
-            #
-            # Respond to network change
-            #
-            
-            # As we may add/remove QWidgets, we need to make sure that
-            # this method is executed in the main thread
-            event = QEvent(QNetworkView._UPDATE_NETWORK)
-            event.model = model
-            QCoreApplication.postEvent(self, event)
-
-        if info.network_changed or info.layer_changed:
-            #
-            # Respond to layer change
-            #
-            layer_id = model.layer_id
-            try:
-                layer_index = model.idForLayer(layer_id)
-            except ValueError as error:
-                print(f"ERROR: {self.__class__.__name__}.modelChanged(): "
-                      "{error}")
-                layer_index = None
-            if layer_index != self._current_selected:
-                
-                # unmark the previously active layer
-                if self._current_selected is not None:
-                    oldItem = self._layer_buttons[self._current_selected]
-                    self._markButton(oldItem, False)
-
-                self._current_selected = layer_index
-                if self._current_selected is not None:
-                    # and mark the new layer
-                    newItem = self._layer_buttons[self._current_selected]
-                    self._markButton(newItem, True)
-
+    # FIXME[old]
     def event(self, event: QEvent) -> bool:
         """React to the UPDATE_NETWORK event. 
         """
         if event.type() == QNetworkView._UPDATE_NETWORK:
-            self._updateButtons(event.model._network)
+            self._updateButtons(event.activation._network)
             return True
         return super().event(event)
 

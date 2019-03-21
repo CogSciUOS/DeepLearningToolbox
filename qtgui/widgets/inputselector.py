@@ -1,6 +1,7 @@
 
 
-from datasources import Datasource, Controller as DatasourceController
+from datasources import (Datasource, DataArray,
+                         Controller as DatasourceController)
 
 from ..utils import QObserver, protect
 
@@ -170,8 +171,8 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
 
     def setDatasourceController(self,
                                 datasource: DatasourceController) -> None:
-        interests = Datasource.Change('observable_changed', 'index_changed',
-                                      'busy_changed', 'state_changed')
+        interests = Datasource.Change('observable_changed', 'busy_changed',
+                                      'state_changed')
         self._exchangeView('_controller', datasource, interests=interests)
 
     def datasource_changed(self, datasource: Datasource, info) -> None:
@@ -181,12 +182,9 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         (2) usability of the datasource ('state_changed', 'busy_changed'):
             we may have to disable some controls depending on the state
             (prepared, busy).
-        (3) change of selected image (index_changed): we may want to
+        (3) change of selected image (data_changed): we may want to
             reflect the selection in our controls.
         """
-        n_elems = 0 if datasource is None else len(datasource)
-        valid = n_elems > 0
-
         if info.observable_changed:
             self._layoutUI()
 
@@ -197,28 +195,27 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
             self._updateState()
             self._enableUI()
 
-        if info.index_changed:
-            if self._controller:
-                index = self._controller.get_index() or 0
-            else:
-                index = 0
-            if self._controller:
+        if info.data_changed:
+            if self._controller and self._controller.isinstance(DataArray):
+                n_elems = 0 if datasource is None else len(datasource)
+                index = self._controller.index or 0
                 self._indexField.setText(str(index))
-            enabled = bool(self._controller) and self._controller.prepared
-            self.firstButton.setEnabled(enabled and index > 0)
-            self.prevButton.setEnabled(enabled and index > 0)
-            self.nextButton.setEnabled(enabled and index+1 < n_elems)
-            self.lastButton.setEnabled(enabled and index+1 < n_elems)
+                enabled = bool(self._controller) and self._controller.prepared
+                self.firstButton.setEnabled(enabled and index > 0)
+                self.prevButton.setEnabled(enabled and index > 0)
+                self.nextButton.setEnabled(enabled and index+1 < n_elems)
+                self.lastButton.setEnabled(enabled and index+1 < n_elems)
 
 
     def _updateDescription(self, datasource):
         info = ''
         if datasource:
             text = datasource.get_description()
-            elements = len(datasource)
-            if elements:
-                self._indexField.setValidator(QIntValidator(0, elements))
-                info = 'of ' + str(elements - 1)
+            if self._controller and self._controller.isinstance(DataArray):
+                elements = len(datasource)
+                if elements:
+                    self._indexField.setValidator(QIntValidator(0, elements))
+                    info = 'of ' + str(elements - 1)
         else:
             text = "No datasource"
         self.infoDataset.setText(text)
@@ -411,14 +408,6 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
         self._exchangeView('_toolbox', toolbox,
                            interests=Toolbox.Change('input_changed'))
 
-    def setDatasourceView(self, datasource: Datasource) -> None:
-        self._exchangeView('_datasource', datasource,
-                           interests=Datasource.Change('data_changed'))
-
-    def setController(self, controller) -> None:
-        # FIXME[hack]: we need a more reliable way to observe multiple observable!
-        self.observe(controller.get_observable(), interests=None)
-
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
         if change.input_changed:
@@ -432,6 +421,10 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
             description = self._toolbox.input_description
             self._showInfo(data=data, description=description)
 
+    def setDatasourceView(self, datasource: DatasourceView) -> None:
+        self._exchangeView('_datasource', datasource,
+                           interests=Datasource.Change('data_changed'))
+
     def datasource_changed(self, datasource, change):
         if change.data_changed:
             if self._datasource:
@@ -440,7 +433,11 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
             else:
                 self._showInfo()
 
-    def modelChanged(self, model, info):
+    def setController(self, controller) -> None:
+        # FIXME[hack]: we need a more reliable way to observe multiple observable!
+        self.observe(controller.get_observable(), interests=None)
+
+    def activation_changed(self, model, info):
         self._model = model
         if info.input_changed:
             description = model.input_data_description

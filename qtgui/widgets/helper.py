@@ -68,8 +68,6 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
     def _updateItem(self, observable: Observable) -> None:
         item = self._itemForObservable(observable)
         self._viewObserver.formatItem(item)
-        print(f"UPDATE ITEM: {item}")
-        self.repaint()
 
     def _updateCurrent(self, observable: Observable) -> None:
         item = self._itemForObservable(observable)

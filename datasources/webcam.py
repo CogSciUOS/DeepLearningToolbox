@@ -1,7 +1,9 @@
-from . import Datasource, Predefined, InputData
-import importlib
+from . import Predefined, InputData
 
-class DataWebcam(Datasource, Predefined):
+import importlib
+import numpy as np
+
+class DataWebcam(Predefined):
     """A data source fetching images from the webcam.
 
     Attributes
@@ -11,6 +13,7 @@ class DataWebcam(Datasource, Predefined):
     """
     _device: int = 0
     _capture = None # cv2.Capture
+    _frame: np.ndarray = None
 
     @staticmethod
     def check_availability():
@@ -22,7 +25,8 @@ class DataWebcam(Datasource, Predefined):
         """
         return importlib.util.find_spec('cv2')
 
-    def __init__(self, device: int=0):
+    def __init__(self, id: str="Webcam", description: str="<Webcam>",
+                 device: int=0, **kwargs):
         """Create a new DataWebcam
 
         Raises
@@ -30,17 +34,7 @@ class DataWebcam(Datasource, Predefined):
         ImportError:
             The OpenCV module is not available.
         """
-        super().__init__("<Webcam>")
-        Predefined.__init__(self, "Noise")
-
-    def __getitem__(self, index):
-        if not self.prepared:
-            return InputData(None, None)
-
-        ret, frame = self._capture.read()
-        if not ret:
-            raise RuntimeError("Reading an image from video capture failed!")
-        return InputData(frame[:,:,::-1], "Webcam")
+        super().__init__(id=id, description=description, **kwargs)
 
     @property
     def prepared(self) -> bool:
@@ -49,30 +43,32 @@ class DataWebcam(Datasource, Predefined):
         """
         return self._capture is not None
 
-    def prepare(self):
+    def _prepare_data(self):
         """Prepare this Datasource for use.
         """
-        if self.prepared:
-            return  # nothing to do
-
         from cv2 import VideoCapture
         self._capture = VideoCapture(self._device)
         if not self._capture:
             raise RuntimeError("Acquiring video capture failed!")
-            
-        ret, frame = self._capture.read()
-        if not ret:
-            self._capture = None
-            raise RuntimeError("Reading an image from video capture failed!")
-        self.change('state_changed')
 
-    def unprepare(self):
+    def _unprepare_data(self):
         """Unprepare this Datasource for use.
         """
-        if not self.prepared:
-            return
         self._capture.release()
         self._capture = None
-        self.change('state_changed')
+        self._frame = None
 
+    @property
+    def fetched(self):
+        return self._frame is not None
 
+    def _fetch(self):
+        ret, self._frame = self._capture.read()
+        if not ret:
+            raise RuntimeError("Reading an image from video capture failed!")
+
+    def _get_data(self):
+        return self._frame
+
+    def __str__(self):
+        return f"Webcam"

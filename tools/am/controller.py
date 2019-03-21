@@ -16,7 +16,7 @@ class View(BaseView, view_type=Engine):
 
     """
 
-    def __init__(self, engine=None, **kwargs):
+    def __init__(self, engine: Engine=None, **kwargs):
         super().__init__(observable=engine, **kwargs)
 
 

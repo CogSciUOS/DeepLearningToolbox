@@ -3,7 +3,7 @@ from datasources import Datasource, Predefined, InputData
 import numpy as np
 
 
-class DataNoise(Datasource, Predefined):
+class DataNoise(Predefined):
     """A :py:class:`DataNoise` is a :py:class:`DataNoise` that
     provides different kinds of noise.
 
@@ -16,7 +16,8 @@ class DataNoise(Datasource, Predefined):
     """
     _shape: tuple = None
 
-    def __init__(self, shape: tuple):
+    def __init__(self, id: str="Noise", description: str=None,
+                 shape: tuple=(100,100), **kwargs):
         """Create a new :py:class:`DataNoise`
 
         Arguments
@@ -24,19 +25,24 @@ class DataNoise(Datasource, Predefined):
         shape: tuple
             Shape of the data to generate, e.g. (3,100,100) for RGB images.
         """
-        super().__init__(f"<Noise Generator {shape}>")
-        Predefined.__init__(self, "Noise")
+        description = description or f"<Noise Generator {shape}>"
+        super().__init__(id=id, description=description, **kwargs)
         self._shape = shape
 
-    def __getitem__(self, index: int) -> InputData:
+
+    @property
+    def fetched(self):
+        return True
+
+    def _fetch(self):
+        pass
+
+    def _get_data(self) -> np.ndarray:
         """
 
         Result
         ------
         data: np.ndarray
             The input data.
-        label:
-            The associated label, if known, None otherwise.
         """
-        data = np.random.rand(*self._shape)
-        return InputData(data, None)
+        return np.random.rand(*self._shape)

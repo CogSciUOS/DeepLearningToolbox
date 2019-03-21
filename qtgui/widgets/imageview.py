@@ -117,13 +117,13 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
             image = self._activation.input_data
         self.setImage(image)
 
-    def modelChanged(self, activation: ActivationEngine,
+    def activation_changed(self, activation: ActivationEngine,
                      info: ActivationEngine.Change) -> None:
         """
         The QModelImageView is mainly interested in 'input_changed'
         events. 
         """
-        print("FIXME: QModelImageView.modelChanged was ignored!")
+        print("FIXME: QModelImageView.activation_changed was ignored!")
         return
         # FIXME[hack]: this is not an appropriate way to set the model!
         self._activation = activation

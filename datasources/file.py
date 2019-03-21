@@ -36,7 +36,7 @@ class DataFile(DataArray):
         '''
         self._filename = filename
         data = np.load(filename, mmap_mode='r')
-        self.setArray(data, basename(self._filename))
+        self.set_data_array(data, basename(self._filename))
 
     def getFile(self) -> str:
         '''Get the underlying file name'''

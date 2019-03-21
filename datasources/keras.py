@@ -1,12 +1,12 @@
+from datasources import LabeledArray, Predefined
+
 import os
 import os.path
 import importlib
 import importlib.util
 
-from datasources import DataArray, DataDirectory, Predefined
 
-
-class KerasDatasource(DataArray, Predefined):
+class KerasDatasource(LabeledArray, Predefined):
     """Data source for Keras builtin datasets.
 
     Keras provides some methods to access standard datasets via its
@@ -20,16 +20,31 @@ class KerasDatasource(DataArray, Predefined):
         A list of valid names for :py:class:`KerasDatasource`s.
         For each name there has to exists a package called
         keras.datasets.{name}.
+    KERAS_DATA: dict
+        A dictionary holding all loaded keras datasets.
+        Maps the ID of the dataset to the actual data.
+        The Keras data are provided as a pair of pairs of arrays:
+           (x_train, y_train), (x_test, y_test)
+        That is: data[0][0] are the input data from the training set
+        and data[0][1] are the corresponding labels.
+        data[1][0] and data[1][1] are test data and labels.
 
+    Attributes
+    ----------
     _keras_dataset_name: str
         The name of the Keras dataset (one of those listed in
         KERAS_IDS).
+    _section_index: int
+        Index for the section of the dataset: 0 for train and 1 for test.
     """
     KERAS_IDS = ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']
 
-    _keras_dataset_name = None
+    KERAS_DATA = {}
 
-    def __init__(self, name: str):
+    _keras_dataset_name: str = None
+    _section_index: int = 0
+
+    def __init__(self, name: str, section:str = 'train', **kwargs):
         """Initialize a keras dataset.
 
         Arguments
@@ -37,7 +52,10 @@ class KerasDatasource(DataArray, Predefined):
         name: str
             Name of the Keras dataset. This can be any name listed
             in KERAS_IDS.
-            
+
+        section: str
+            The section of the dataset, either 'train' or 'test'
+
         Raises
         ------
         ValueError:
@@ -45,45 +63,43 @@ class KerasDatasource(DataArray, Predefined):
         """
         if importlib.util.find_spec(f'keras.datasets.{name}') is None:
             raise ValueError(f'Unknown Keras dataset: {name}')
+        super().__init__(id=f"{name}-{section}",
+                         description=f"Keras Datasoure '{name}-{section}'",
+                         **kwargs)
         self._keras_dataset_name = name
-        DataArray.__init__(self, description=f"Keras Datasoure '{name}'")
-        Predefined.__init__(self, name)
+        self._section_index = 0 if section == 'train' else 1
 
-    def prepare(self):
-        if self.prepared:
-            return  # nothing to do (avoid preparing twice
+    def _prepare_data(self):
 
         name = self._keras_dataset_name
         module = importlib.import_module(f'keras.datasets.{name}')
-        data = module.load_data()
+        if not name in self.KERAS_DATA:
+            self.KERAS_DATA[name] = module.load_data()
 
-        # The Keras data are provided as a pair of pairs of arrays:
-        #   (x_train, y_train), (x_test, y_test)
-        # That is: data[0][0] are the input data from the training set
-        # and data[0][1] are the corresponding labels.
-        # data[1][0] and data[1][1] are test data and labels.
-        self.setArray(data[0][0], f'keras.datasets.{name}')
-        self.add_target_values(data[0][1])
+        data = self.KERAS_DATA[name][self._section_index]
+        self.set_data_array(data[0], f'keras.datasets.{name}')
+        self.set_labels_array(data[1])
 
+    def _prepare_labels(self):
         #
         # Also load the labels if available
         #
+
+        name = self._keras_dataset_name
         from keras.utils.data_utils import get_file
         from six.moves import cPickle
         if name == 'cifar10':
             path = get_file('cifar-10-batches-py', None)
             with open(os.path.join(path, "batches.meta"), 'rb') as file:
                 d = cPickle.load(file)
-            self.add_target_labels(d['label_names'])
+            self.set_label_texts(d['label_names'])
         elif name == 'cifar100':
             path = get_file('cifar-100-python', None)
             with open(os.path.join(path, "meta"), 'rb') as file:
                 d = cPickle.load(file)
-            self.add_target_labels(d['fine_label_names'])
+            self.set_label_texts(d['fine_label_names'])
             # there is also 'coarse_label_names'
             # with 20 categories
-
-        self.change('state_changed')
 
     def check_availability():
         """Check if this Datasource is available.
@@ -96,4 +112,5 @@ class KerasDatasource(DataArray, Predefined):
 
     def __str__(self):
         # return Predefined.__str__(self) + ': ' + DataArray.__str__(self)
-        return self._keras_dataset_name + ': ' + DataArray.__str__(self)
+        # return self._keras_dataset_name + ': ' + DataArray.__str__(self)
+        return "Keras Dataset: " + self._keras_dataset_name

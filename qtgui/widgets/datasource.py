@@ -141,6 +141,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         # A list of predefined datasources
         #
         dataset_names = Predefined.get_data_source_ids()
+        print(f"dataset_names={dataset_names}")
         self._datasetDropdown = QComboBox()
         self._datasetDropdown.addItems(dataset_names)
         self._datasetDropdown.currentIndexChanged.\
@@ -174,17 +175,17 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         layout.addLayout(buttonsLayout)
         self.setLayout(layout)
 
-    def datasource_changed(self, controller, info):
+    def datasource_changed(self, datasource, info):
         '''The QDatasourceSelectionBox is only affected by changes of
         the Datasource.
         '''
         if info.datasource_changed:
-            self._setDatasource(controller.get_datasource())
+            self._setDatasource(datasource)
 
     def _setDatasource(self, datasource: Datasource):
         if isinstance(datasource, Predefined):
             self._radioButtons['Name'].setChecked(True)
-            id = datasource.get_public_id()
+            id = datasource.id
             index = self._datasetDropdown.findText(id)
             if index == -1:
                 pass # should not happen!
@@ -238,6 +239,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
             self._openButton.setText('Play')
         self._datasetDropdown.setEnabled(self._radioButtons['Name'].isChecked())
 
+    @protect
     def _openButtonClicked(self):
         """An event handler for the ``Open`` button. Pressing this
         button will select a datasource. How exactly this works
@@ -307,8 +309,6 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         # what may happen in response is
         # - add datasource to some list (e.g. toolbox)
         # - emit some pyqt signal?
-        #if getattr(self, '_datasource', None) is not None: # FIXME[old]
-        #    self._datasource.onSourceSelected(datasource)
         if datasource is not None:
             if self._toolbox:
                 # Set the datasource of the Toolbox.
@@ -316,14 +316,15 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
                 # if datasources, if it is not already in there.
                 self._toolbox.datasource_controller(datasource)
 
+    @protect
     def _predefinedSelectionChange(self,i):
         if self._radioButtons['Name'].isChecked():
             self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
             datasource = Predefined.get_data_source(name)
 
-            if getattr(self, '_datasource', None) is not None: # FIXME[old]
-                self._datasource.onSourceSelected(datasource)
+            if self._datasource is not None:
+                self._datasource(datasource)
             if self._toolbox is not None:
                 self._toolbox.set_datasource(datasource)
 

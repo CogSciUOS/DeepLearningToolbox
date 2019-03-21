@@ -33,7 +33,8 @@ from util import addons
 
 from network import Network
 from network.examples import keras, torch
-from datasources import Datasource, Controller as DatasourceController
+from datasources import (Datasource, Labeled as LabeledDatasource,
+                         Controller as DatasourceController)
 
 
 class Toolbox(Semaphore, Observable, Datasource.Observer,
@@ -67,9 +68,11 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
     _toolbox_controller: BaseController = None  # 'ToolboxController'
     _datasource_controller: DatasourceController = None
     _runner: Runner = None
-    _actviation_engine: Observable = None # 'ActivationEngine'
+    _activation_engine: Observable = None # 'ActivationEngine'
+    _activation_controller: BaseController = None # 'ActivationController'
     _input_data: np.ndarray = None
     _input_label = None
+    _input_label_text: str = ''
     _input_description = None
 
     def __init__(self, args):
@@ -79,9 +82,14 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         self._toolbox_controller = ToolboxController(self)
 
         # FIXME[old] ...
-        from tools.activation import Engine as ActivationEngine
-        self._actviation_engine = ActivationEngine()
-
+        from tools.activation import (Engine as ActivationEngine,
+                                      Controller as ActivationController)
+        self._activation_engine = ActivationEngine(toolbox=self)
+        self._activation_controller = \
+            ActivationController(activation=self._activation_engine)
+        network_controller = self._toolbox_controller.autoencoder_controller  # FIXME[hack]
+        self._activation_controller.set_network_controller(network_controller)
+        
         # we need the GUI first to get the runner ...
         self._initialize_gui1()
 
@@ -107,6 +115,7 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         # FIXME[hack]: we need a better solution here!
         self._runner = self._mainWindow.getRunner()
         self._toolbox_controller.runner = self._runner
+        self._activation_controller.runner = self._runner
         self._mainWindow.show()
 
     def _initialize_gui2(self):
@@ -132,7 +141,7 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         #self._mainWindow.panel('resources', create=True, show=True)
 
         # FIXME[old]
-        self._mainWindow.setModel(self._actviation_engine)
+        self._mainWindow.setModel(self._activation_engine)
 
 
     def acquire(self):
@@ -187,7 +196,8 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
             elif args.datadir:
                 source = DataDirectory(args.datadir)
 
-            gui.setDatasource(source)
+            self._datasource_controller(source)
+            #gui.setDatasource(source)
 
             #
             # network: dependes on the selected framework
@@ -212,8 +222,11 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
                                 parameter_file, input_shape)
             else:
                 network = None
+                
+            if False and network is not None:
+                self.add_network(network)
 
-            self._actviation_engine.set_network(network)
+            self._activation_engine.set_network(network)
 
         except Exception as e:
             # FIXME[hack]: rethink error handling in threads!
@@ -250,8 +263,10 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         logger.debug("alexnet: prepare")
         network._online()
         logger.debug("alexnet: Load Class Names")
-        from datasources.imagenet_classes import class_names2
-        network.set_output_labels(class_names2)
+        # FIXME[todo]: instead of providing labels here, we should
+        # refer the network directly to the datasource.
+        from datasources.imagenet_classes import class_names_short
+        network.set_output_labels(class_names_short)
         logger.debug("alexnet: Done")
         return network
 
@@ -274,13 +289,22 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
+        print(f"Toolbox.datasource_changed({datasource}, {change})")
         if change.observable_changed:
             if datasource is not None and datasource not in self._datasources:
                 self.add_datasource(datasource)
 
         if change.data_changed:
-            if self._datasource_controller:
-                data, label = self._datasource_controller.data_and_label
+            if (self._datasource_controller and
+                self._datasource_controller.prepared):
+                # we have a datasource that can provide data
+                data = self._datasource_controller.data
+                if (self._datasource_controller.isinstance(LabeledDatasource)
+                    and self._datasource_controller.labels_prepared):
+                    # we can also provide labels
+                    label = self._datasource_controller.label
+                else:
+                    label = None
                 description = self._datasource_controller.description
                 self.set_input(data=data, label=label, description=description)
             else:
@@ -356,8 +380,12 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         return self._input_data
 
     @property
-    def input_label(self) -> np.ndarray:
+    def input_label(self) -> int:
         return self._input_label
+
+    @property
+    def input_label_text(self) -> str:
+        return self._input_label_text
 
     @property
     def input_description(self) -> np.ndarray:
@@ -365,8 +393,17 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
 
     def set_input(self, data: np.ndarray, label=None,
                   description: str=None):
+        print(f"Toolbox.set_input({data is not None and data.shape}, {label}, {description})")
         self._input_data = data
         self._input_label = label
+        if (label is not None and self._datasource_controller and
+            self._datasource_controller.isinstance(LabeledDatasource) and
+            self._datasource_controller.has_text_for_labels()):
+            # We can provide some text for the label
+            self._input_label_text = \
+                self._datasource_controller.text_for_label(label)
+        else:
+            self._input_label_text
         self._input_description = description
         self.change('input_changed')
 

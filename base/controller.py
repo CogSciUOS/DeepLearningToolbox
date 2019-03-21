@@ -31,10 +31,10 @@ class View:
     Class attributes
     ----------------
     _view_type: type
-            The class of the objects that can be viewed by this View.
-            Should be a subclass of :py:class:`Observable`
+        The class of the objects that can be viewed by this View.
+        Should be a subclass of :py:class:`Observable`
     _view_attribute: str
-            The attribute name to store the reference to the observable.
+        The attribute name to store the reference to the observable.
     _view_type_mismatch: str
         Specifies what to do in case an Observable of inappropriate type
         is assigned. Possible values are: 'error' = raise an ValueError,
@@ -126,6 +126,20 @@ class View:
                                  "is forbidden.")
         super().__setattr__(attr, value)
 
+    def isinstance(self, cls: type) -> bool:
+        """Check if the observed object is an instance of a given class.
+
+        Arguments
+        ---------
+        cls: type
+            The type to check this object against.
+
+        Results
+        -------
+        True if the viewed object is an instance of cls, else False.
+        """
+        return isinstance(getattr(self, self._view_attribute, None), cls)
+
     def _get_observable(self, o) -> Observable:
         """Get the Observable matching the given observable description.
 
@@ -169,7 +183,14 @@ class View:
             # There is no observable yet. We still want to notify the
             # Observer, so that it may reset its display.
             change = self._view_type.Change.all()
-            getattr(observer, self._view_type._change_method)(None, change)
+            notify = getattr(observer, self._view_type._change_method, None)
+            if notify is None:
+                raise NotImplementedError(f"{observer} wants to observe "
+                                          f"{self} of type {self._view_type} "
+                                          "but does not implement "
+                                          f"'{self._view_type._change_method}'")
+            else:
+                notify(None, change)
         
     def remove_observer(self, observer, observable_class: type=None,
                         observable_name: str=None):

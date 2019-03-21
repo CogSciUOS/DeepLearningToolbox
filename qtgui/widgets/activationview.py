@@ -1,5 +1,6 @@
 from controller import ActivationsController
-from tools.activation import Engine as ActivationEngine
+from tools.activation import (Engine as ActivationEngine,
+                              Controller as ActivationsController)
 
 from ..utils import QObserver
 
@@ -63,6 +64,8 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
 
     '''
 
+    _activationController: ActivationsController = None
+
     def __init__(self, parent: QWidget=None):
         '''Initialization of the QActivationView.
 
@@ -76,7 +79,7 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         self._padding = 2
         self._isConvolution = False
         self._current_unit = None
-        self._controller = None
+        #self._controller = None
         self._unit_activations = None
         self._n_units = 0
 
@@ -85,29 +88,31 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def setActivationsController(self, controller: ActivationsController):
-        print(f"QActivationView: {controller}")
+    def setActivationController (self, activation: ActivationsController ):
+        interests = ActivationEngine.Change('activation_changed')
+        self._exchangeView('_activationController', activation,
+                           interests=interests)
 
-        # FIXME[todo]: Disconnect before reconnecting?
-        super().setController(controller)
-
-    def modelChanged(self, activation: ActivationEngine,
-                     info: ActivationEngine.Change) -> None:
+    def activation_changed(self, engine: ActivationEngine,
+                           info: ActivationEngine.Change) -> None:
         '''Get the current activations from the ActivationEngine and
         set the activations to be displayed in this QActivationView.
         Currently there are two possible types of activations that are
         supported by this widget: 1D, and 2D convolutional.
 
         '''
+        if engine is None:
+            return
+
         if info.unit_changed:
-            self._current_unit = activation.unit
+            self._current_unit = engine.unit
 
         # get activation and update overlay only when
         # significant properties change
         if info & {'network_changed', 'layer_changed', 'input_changed',
                    'activation_changed'}:
-            activation = activation._current_activation
-            self._current_unit = activation.unit
+            activation = engine._current_activation
+            self._current_unit = engine.unit
 
             if activation is not None:
                 if activation.dtype != np.float32:
@@ -343,7 +348,7 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         unit = self._unitAtPosition(event.pos())
         if unit is not None and unit == self._current_unit:
             unit = None
-        self._controller.onUnitSelected(unit, self)
+        self._activationController.onUnitSelected(unit, self)
         self._current_unit = unit
 
     def mouseReleaseEvent(self, event):
@@ -388,25 +393,25 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
             if key == Qt.Key_Left:
                 new_col = max(col-1,0)
                 new_unit =  row * self._columns + new_col
-                self._controller.onUnitSelected(new_unit, self)
+                self._activationController.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Up:
                 new_row = max(row-1,0)
                 new_unit = new_row * self._columns + col
-                self._controller.onUnitSelected(new_unit, self)
+                self._activationController.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Right:
                 new_col = min(col+1,self._columns-1)
                 new_unit = row * self._columns + new_col
                 if new_unit >= self._unit_activations.shape[0]:
                     new_unit = self._current_unit
-                self._controller.onUnitSelected(new_unit, self)
+                self._activationController.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Down:
                 new_row = min(row+1,self._rows-1)
                 new_unit = new_row * self._columns + col
                 if new_unit >= self._unit_activations.shape[0]:
                     new_unit = self._current_unit
-                self._controller.onUnitSelected(new_unit, self)
+                self._activationController.onUnitSelected(new_unit, self)
             elif key == Qt.Key_Escape:
-                self._controller.onUnitSelected(None, self)
+                self._activationController.onUnitSelected(None, self)
             else:
                 event.ignore()
         else:

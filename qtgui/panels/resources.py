@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QGroupBox,
 class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
     '''A Panel for managing resources used by the Toolbox.
 
-    _input_view: QModelImageView
+    _inputView: QModelImageView
         An image view area to display the currently selected input
         image from the Toolbox.
     _input_info: QInputInfoBox
@@ -43,7 +43,7 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
     _datasourceList: QDatasourceList = None
     _datasourceSelector: QDatasourceSelectionBox = None
     _datasourceNavigator: QInputNavigator = None
-    _input_view: QModelImageView = None
+    _inputView: QModelImageView = None
     _input_info: QInputInfoBox = None
 
     def __init__(self, toolbox: ToolboxController=None,
@@ -107,10 +107,10 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         #
 
         # QModelImageView: a widget to display the input data
-        self._input_view = QModelImageView()
+        self._inputView = QModelImageView()
 
         self._input_info = QInputInfoBox()
-        self._input_view.modeChanged.connect(self._input_info.onModeChanged)
+        self._inputView.modeChanged.connect(self._input_info.onModeChanged)
         
         # QInputSelector: a widget to select the input
         # (combined datasource selector and datasource navigator)
@@ -152,10 +152,14 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         self._input_info.setMinimumWidth(200)
         # keep image view square (FIXME[question]: does this make
         # sense for every input?)
-        self._input_view.heightForWidth = lambda w: w
-        self._input_view.hasHeightForWidth = lambda: True
+        self._inputView.heightForWidth = lambda w: w
+        self._inputView.hasHeightForWidth = lambda: True
 
-        layout.addWidget(self._input_view)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(self._inputView)
+        row.addStretch()
+        layout.addLayout(row)
         layout.addWidget(self._input_info)
 
         layout.addStretch()
@@ -176,7 +180,7 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         self._networkSelector.setToolboxView(toolbox)
         self._datasourceList.setToolboxView(toolbox)
         self._datasourceSelector.setToolboxController(toolbox)
-        self._input_view.setToolboxView(toolbox)
+        self._inputView.setToolboxView(toolbox)
         self._input_info.setToolboxView(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
@@ -204,5 +208,12 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         halfWidth = event.size().width() * 5 // 11
         self._networkGroupBox.setMinimumWidth(halfWidth)
         self._datasourceGroupBox.setMinimumWidth(halfWidth)
-        self._input_view.setMaximumSize(halfWidth-20,halfWidth-20)
+        # avoid image growing to large
+        # FIXME[todo]: we can actually use the screen size to
+        # compute the size:
+        # app = QtGui.QApplication([])
+        # screen_resolution = app.desktop().screenGeometry()
+        # width, height = screen_resolution.width(), screen_resolution.height()
+        maxsize = max(100,halfWidth-220)
+        self._inputView.setMaximumSize(maxsize,maxsize)
         super().resizeEvent(event)

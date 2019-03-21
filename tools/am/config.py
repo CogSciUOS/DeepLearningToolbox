@@ -142,6 +142,12 @@ class Config(BaseConfig,
                    'upscaling/jitter are updated via wrap-around'
         },
 
+        'LOSS_STOP': {
+            'default': True,
+            'doc': 'Stop the maximization process when the loss goal '
+                   'is reached. Turn this off if you want to ignore '
+                   'the loss goal.'
+        },
         'LOSS_GOAL': {
             'default': 0.01,
             'doc': 'convergence parameter. relative(!) difference '

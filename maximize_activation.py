@@ -56,7 +56,7 @@ plt.show()
 class MatplotlibObserver(Engine.Observer):
     im = None
     
-    def engineChanged(self, engine: Engine, info: Engine.Change) -> None:
+    def maximization_changed(self, engine: Engine, info: Engine.Change) -> None:
         """Respond to change in the activation maximization Engine.
 
         Parameters
@@ -78,7 +78,7 @@ class MatplotlibObserver(Engine.Observer):
 
 import cv2
 class CvObserver(Engine.Observer):
-    def engineChanged(self, engine: Engine, info: Engine.Change) -> None:
+    def maximization_changed(self, engine: Engine, info: Engine.Change) -> None:
         if info.image_changed:
             cv2.imshow(f'{engine.iteration}', engine.image)
 

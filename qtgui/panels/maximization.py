@@ -38,11 +38,17 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
 
     """
     _maximization_controller: MaximizationController = None
+    # graphical components:
     _maximization_controls: QMaximizationControls = None
     _maximization_display: QMaximizationDisplay = None
     _maximization_config_view: QMaximizationConfig = None
 
+    # with_display: a flag indicating if a QMaximizationDisplay should
+    # be included in this MaximizationPanel
+    with_display: bool = False
+    
     def __init__(self, toolbox: ToolboxController=None,
+                 maximization: MaximizationController=None,
                  network: NetworkController=None, **kwargs):
         """Initialization of the ActivationsPael.
 
@@ -55,6 +61,7 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
         self._initUI()
         self._layoutUI()
         self.setToolboxController(toolbox)
+        self.setMaximizationController(maximization)
         self.setNetworkController(network)
 
     def _initUI(self):
@@ -71,8 +78,9 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
         #
         # Display
         #
-        self._maximization_display = QMaximizationDisplay()
-        self._maximization_controls.display = self._maximization_display
+        if self.with_display:
+            self._maximization_display = QMaximizationDisplay()
+            self._maximization_controls.set_display(self._maximization_display)
 
         #
         # Configuration
@@ -108,7 +116,8 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
 
         layout = QVBoxLayout()
         layout.addWidget(self._maximization_controls)
-        layout.addWidget(self._maximization_display)
+        if self.with_display:
+            layout.addWidget(self._maximization_display)
         layout.addStretch(1)
         layout.addWidget(config_box)
 
@@ -116,6 +125,7 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
 
     def setToolboxController(self, toolbox: ToolboxController) -> None:
         self._maximization_config_view.setToolboxController(toolbox)
+        self._maximization_controls.setToolboxController(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
         self._maximization_config_view.setNetworkController(network)
@@ -128,11 +138,11 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
                            interests=interests)
         self._maximization_controls.setMaximizationController(maximization)
         # FIXME[hack]: we also need to disconnect ...
-        if maximization is not None:
+        if maximization is not None and self.with_display:
             self._maximization_display.\
                 connectToConfigViews(maximization.onConfigViewSelected)
 
-    def engineChanged(self, engine: MaximizationEngine,
-                      change: MaximizationEngine.Change) -> None:
+    def maximization_changed(self, engine: MaximizationEngine,
+                             change: MaximizationEngine.Change) -> None:
         if change.observable_changed:
             self._maximization_config_view.setConfig(engine.config)

@@ -41,7 +41,7 @@ from network.tensorflow import Network as TensorflowNetwork
 from tools.caffe_classes import class_names
 
 
-class Engine(Observable, method='engineChanged',
+class Engine(Observable, method='maximization_changed',
              changes=['engine_changed', 'config_changed', 'network_changed',
                       'image_changed']):
     """Activation Maximization Engine.
@@ -131,10 +131,18 @@ class Engine(Observable, method='engineChanged',
 
     @property
     def network(self) -> Network:
+        """Get the network used by this maximization engine.
+        """
         return self._network
 
     @network.setter
     def network(self, network: Network) -> None:
+        """Assign a new network to this maximization engine.
+        All future operations will be performed using this network.
+        All initializations are lost by assigning a new network.
+        :py:method:`_prepare` has to be run before the
+        optimizer can be used (again).
+        """
         print(f"!!! MaximizationEngine: network={network} !!!")
         if self._network == network:
             return  # nothing to do ...
@@ -147,6 +155,9 @@ class Engine(Observable, method='engineChanged',
     @change
     def _prepare(self):
         """Prepare a new run of the activation maximization engine.
+        This will adjust some parameters and make sure the Helper
+        object for the current network is available, prepare the
+        recorders and the loss list.
         """
         logger.info("-Engine._prepare() -- begin")
         self._set_status("preparation")
@@ -195,17 +206,29 @@ class Engine(Observable, method='engineChanged',
         logger.info("-Engine._prepare() -- end")
 
     def _update_max_steps(self):
+        """Change the maximal steps this engine is supposed to run.
+        The new value is taken from the Config object, parameter MAX_STEPS.
+        This essentially adapts the capacity of the recorders.
+        """
         for recorder in self._recorder.values():
             if recorder is not None:
                 recorder.resize((self._config.MAX_STEPS,) + recorder.shape[1:])
 
     def stop(self):
+        """Stop the current optimization process. This will change
+        the status to "stopped".
+        """
         if self._helper is not None:
             self._set_status("stopped", False)
             logger.info("!!! Engine stopped !!!")
 
     def initialize_image(self) -> np.ndarray:
         """Provide an initial image for optimization.
+        The creation takes the current network input size
+        into account. The creation is controlled by the
+        :py:class:`Config` parameter RANDOMIZE_INPUT: if True,
+        a random image with values between -128 and 127 is
+        created, otherwise the image is initialized with 0s.
 
         Returns
         -------
@@ -224,11 +247,17 @@ class Engine(Observable, method='engineChanged',
 
     @change
     def maximize_activation(self, network: Network=None, reset: bool=True):
-        """This is the actual maximization method.
+        """This is the actual optimization method: activation
+        maximization.
+        It will start an iterative optimization process performing
+        gradient ascent, until one of the stop criteria is fulfilled.
         
         """
         logger.info("Engine: maximize activation: BEGIN")
 
+        #
+        # some sanity checks
+        #
         if network is not None:
             self.network = network
 
@@ -241,14 +270,14 @@ class Engine(Observable, method='engineChanged',
             self._set_status("initialization")
             self._prepare()
             # step counter
-            self._set_status("start")
 
         #
         # main part
         #
 
         logger.debug(f"-Starting computation:")
-        t = time.time() # to meaure computation time
+        self._set_status("start")
+        t = time.time()  # to meaure computation time
         self._set_status("running")
 
         #
@@ -259,16 +288,18 @@ class Engine(Observable, method='engineChanged',
         #loss = self._helper.network_loss(image)
         #logger.debug("Loss:", loss)
         # list containing last Config.LOSS_COUNT losses
-        avg_steptime = 0 # step time counter
+        avg_steptime = 0  # step time counter
 
         # while current loss diverges from average of last losses by a
         # factor Config.LOSS_GOAL or more, continue, alternatively
         # stop if we took too many steps
         while (self._running
-               and (np.abs(1-loss/np.mean(self._loss_list))
-                    > self._config.LOSS_GOAL)
+               and (not self._config.LOSS_STOP or
+                    (np.abs(1-loss/np.mean(self._loss_list))
+                    > self._config.LOSS_GOAL))
                and self._iteration < self._config.MAX_STEPS):
 
+            # increase steps
             self._iteration += 1
 
             # start measuring time for this step
@@ -279,8 +310,8 @@ class Engine(Observable, method='engineChanged',
                                                           self._iteration)
 
             # add previous loss to list. order of the losses doesn't
-            # matter so just reassign the value that was assigned 50
-            # iterations ago
+            # matter so just reassign the value that was assigned 
+            # MAX_STEPS iterations ago
             self._loss_list[self._iteration % len(self._loss_list)] = loss
 
             # get time that was needed for this step
@@ -291,8 +322,6 @@ class Engine(Observable, method='engineChanged',
             self._take_snapshot(self._iteration, image=snapshot, loss=loss)
             self._record_snapshot()
             self.notifyObservers(Engine.Change(image_changed=True))
-
-            # increase steps
 
         self._set_status("stopped", False)
 
@@ -331,19 +360,43 @@ class Engine(Observable, method='engineChanged',
         if loss is not None:
             self._snapshot['loss'] = loss
 
-    def _get_snapshot(self, what, iteration=None):
+    def _get_snapshot(self, what: str, iteration: int=None):
+        """Get a snapshot of the activation process.
+        A snapshot is a copy of the state of the process
+        at a given iteration.
+
+        Arguments
+        ---------
+        what: str
+            A string describing which information to provide.
+            Possible values are:
+        iteration: int
+
+        Result
+        ------
+        The method will return None, is snapshots are not supported
+        by this Engine.
+        """
         if self._snapshot is None:
             return None
+
         if iteration is not None and self._snapshot['iteration'] != iteration:
+            # create a new snapshot
             self._take_snapshot(iteration)
+
         if what in self._snapshot:
+            # the snapshot already contains the desired information
             return self._snapshot[what]
+
         if (self._snapshot['iteration'] < self._iteration and
             what in self._recorder):
+            # lookup the value from the recorder
             self._snapshot[what] = self._recorder[what][iteration]
             return self._snapshot[what]
+
+        # we have to compute the requested value
         if 'image' not in self._snapshot:
-            return None
+            return None  # without image, we can not compute anything
         
         if what == 'min':
             self._snapshot[what] = self._snapshot['image'].min()

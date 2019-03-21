@@ -49,20 +49,11 @@ class Controller(View, BaseController):
         return controller
 
     @property
-    def activation_engine(self) -> BaseController:
+    def activation_controller(self) -> BaseController:
         # -> tools.activation.Controller
-        """Get the Controller for the activation engine. May
-        create a new Controller (and Engine) if none exists yet.
+        """Get the Controller for the activation engine.
         """
-        controller = getattr(self._toolbox, '_activation_engine', None)
-        if engine_controller is None:
-            from tools.activation import (Engine as ActivationEngine,
-                                          Controller as ActivationController)
-            engine = ActivationEngine()
-            controller = ActivationController(engine=engine,
-                                              runner=self._runner)
-            self._toolbox._am_engine = controller
-        return controller
+        return getattr(self._toolbox, '_activation_controller', None)
 
     @property
     def maximization_engine(self) -> BaseController:  # -> tools.am.Controller

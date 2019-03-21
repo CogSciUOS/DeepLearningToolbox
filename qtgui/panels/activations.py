@@ -4,17 +4,17 @@ Author: Petr Byvshev, Ulf Krumnack, Rasmus Diederichsen
 Email: rdiederichse@uni-osnabrueck.de
 Github: https://github.com/themightyoarfish
 """
-
 from toolbox import Controller as ToolboxController
 from network import Controller as NetworkController
 from datasources import Controller as DatasourceController
 from controller import ActivationsController
 
 from .panel import Panel
+from ..utils import QObserver
 from ..widgets.activationview import QActivationView
 from ..widgets.inputselector import QInputNavigator, QInputInfoBox
 from ..widgets.imageview import QModelImageView
-from ..widgets.networkview import QNetworkBox, QNetworkView, QNetworkSelector
+from ..widgets.networkview import QNetworkView, QNetworkSelector
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
@@ -27,13 +27,18 @@ class ActivationsPanel(Panel):
 
     Attributes:
     -----------
-    _activation_view: QActivationView
+    _activationView: QActivationView
+        A widget displaying the activations for a selected layer.
     _network_view: QNetworkView
+        A widget for different network related activities: selecting
+        a network from a list of networks, selecting a layer for a network,
+        displaying network information and network output.
     _inputView: QModelImageView
     _inputInfoBox: QInputInfoBox
     _inputNavigator: QInputNavigator
     """
     _inputNavigator: QInputNavigator = None
+    _activations: ActivationsController = None
 
     def __init__(self, toolbox: ToolboxController=None,
                  network: NetworkController=None,
@@ -60,15 +65,16 @@ class ActivationsPanel(Panel):
 
     def setActivationsController(self, controller: ActivationsController
                                  ) -> None:
+        self._activations = controller
         print(f"ActivationsPanel: {controller}")
         self._networkView.setActivationsController(controller)
-        self._activationView.setActivationsController(controller)
+        self._activationView.setActivationController(controller)
 
     def setToolboxController(self, toolbox: ToolboxController) -> None:
         self._networkSelector.setToolboxView(toolbox)
         self._inputView.setToolboxView(toolbox)
         self._inputInfoBox.setToolboxView(toolbox)
-
+            
     def setNetworkController(self, network: NetworkController) -> None:
         self._networkSelector.setNetworkView(network)
         self._networkView.setNetworkView(network)
@@ -128,7 +134,9 @@ class ActivationsPanel(Panel):
         # keep image view square (TODO: does this make sense for every input?)
         self._inputView.heightForWidth = lambda w: w
         self._inputView.hasHeightForWidth = lambda: True
-
+        # FIXME[hack]
+        self._inputView.setMaximumSize(500,500)
+        
         # FIXME[layout]
         inputLayout.setSpacing(0)
         inputLayout.setContentsMargins(0, 0, 0, 0)

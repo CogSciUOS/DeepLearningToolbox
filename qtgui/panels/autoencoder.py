@@ -4,20 +4,22 @@ Author: Ulf Krumnack
 Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
-import numpy as np
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QPushButton, QSpinBox, QLineEdit,
-                             QVBoxLayout, QHBoxLayout)
+from toolbox import Toolbox, ToolboxController
+from tools.train import Training, TrainingController
+from network import Network, AutoencoderController
 
 from .panel import Panel
 from qtgui.utils import QObserver
 from qtgui.widgets.matplotlib import QMatplotlib
 from qtgui.widgets.training import QTrainingBox
 
-from toolbox import Toolbox, ToolboxController
-from tools.train import Training, TrainingController
-from network import Network, AutoencoderController
+import numpy as np
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QPushButton, QSpinBox, QLineEdit,
+                             QVBoxLayout, QHBoxLayout)
+
 
 class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
     """A panel displaying autoencoders.

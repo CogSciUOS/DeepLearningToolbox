@@ -25,7 +25,6 @@ import util
 from util import resources, addons
 from tools.activation import Engine as ActivationEngine
 
-from controller import ActivationsController
 from tools.am import Engine as MaximizationEngine  # FIXME[old]
 from tools.am import Controller as MaximizationController
 from datasources import Datasource, Controller as DatasourceController
@@ -65,10 +64,6 @@ class DeepVisMainWindow(QMainWindow):
     _tabs: QTabWidget
         A tabbed container for the panels displayed by this MainWindow.
 
-    _activations_controller: ActivationsController
-        An ActivationsController for this Application
-    _datasource_controller: DatasourceController
-        An ActivationsController for this Application
     _maximization_controller: MaximizationController
         An MaximizationController for this Application
     _maximization_engine: MaximizationEngine
@@ -427,7 +422,7 @@ class DeepVisMainWindow(QMainWindow):
     def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
         network = self._toolbox.autoencoder_controller
         return ActivationsPanel(toolbox=self._toolbox, network=network,
-                                activations=self._activations_controller,
+                                activations=self._toolbox.activation_controller,
                                 datasource=self._toolbox.datasource_controller)
 
     def _initMaximizationPanel(self, maximization: Panel) -> None:
@@ -439,12 +434,6 @@ class DeepVisMainWindow(QMainWindow):
         maximization.setToolboxController(self._toolbox)
         maximization.setMaximizationController(maximizationController)
         maximization.setNetworkController(networkController)
-        # FIXME[old]:
-        #if self._activations_controller is not None:
-        #    maximization.setController(self._activations_controller,
-        #                               ActivationEngine.Observer)
-        #maximization.setController(engineController,
-        #                           MaximizationEngine.Observer)
 
     def _initLoggingPanel(self, loggingPanel: Panel) -> None:
         """Initialise the log panel.
@@ -465,22 +454,16 @@ class DeepVisMainWindow(QMainWindow):
 
     def setModel(self, model: ActivationEngine) -> None:
 
-        self._activations_controller = \
-            ActivationsController(model, runner=self._runner)
-        self._datasource_controller = \
-            self._toolbox.datasource_controller
-        #    DatasourceController(model, runner=self._runner)
-
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
-            activationsPanel.setController(activations_controller,
+            activationsPanel.setController(self._toolbox.activation_controller,
                                            ActivationEngine.Observer)
-            activationsPanel.setController(self._datasource_controller,
+            activationsPanel.setController(self._toolbox.datasource_controller,
                                            Datasource.Observer)
 
         maximizationPanel = self.panel('maximization')
         if maximizationPanel is not None:
-            maximizationPanel.setController(self._activations_controller,
+            maximizationPanel.setController(self._toolbox.activation_controller,
                                             ActivationEngine.Observer)
 
     def setLucidEngine(self, engine:'LucidEngine'=None) -> None:
@@ -493,11 +476,11 @@ class DeepVisMainWindow(QMainWindow):
     def setDatasource(self, datasource: Datasource) -> None:
         """Set the datasource.
         """
-        self._datasource_controller.set_datasource(datasource)
+        self._toolbox.datasource_controller(datasource)
 
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
-            activationsPanel.setController(self._datasource_controller,
+            activationsPanel.setController(self._toolbox.datasource_controller,
                                            Datasource.Observer)
 
 

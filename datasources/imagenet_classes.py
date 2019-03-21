@@ -1,3 +1,18 @@
+"""This module provides textual class names for the 1000 ImageNet
+ classes.
+
+The list class_names.class_names maps the numeric class label (in the
+range 0-999) the textual class name, i.e. the word(s) of the
+corresponding synset.  The list class_names.class_names_short does
+the same mapping to a short version fo the class name.
+
+The dictionary class_names.wn_table maps synset names, i.e. strings of
+the form "n{offset}", with {offset} being the offset of the synset in
+the WordNet 3.0 database, to (short) textual class names.
+
+"""
+
+
 class_names = '''tench, Tinca tinca
 goldfish, Carassius auratus
 great white shark, white shark, man-eater, man-eating shark, Carcharodon carcharias
@@ -997,7 +1012,9 @@ earthstar
 hen-of-the-woods, hen of the woods, Polyporus frondosus, Grifola frondosa
 bolete
 ear, spike, capitulum
-toilet tissue, toilet paper, bathroom tissue'''.split("\n")
+toilet tissue, toilet paper, bathroom tissue
+
+'''.split("\n")
 
 import json
 class_index = json.loads('''{"0": ["n01440764", "tench"],
@@ -2002,6 +2019,6 @@ class_index = json.loads('''{"0": ["n01440764", "tench"],
 "999": ["n15075141", "toilet_tissue"]}''')
 
 wn_table = { v[0]: int(i) for i,v in class_index.items() }
-class_names2 = []
+class_names_short = []
 for i in range(1000):
-    class_names2.append(class_index[str(i)][1])
+    class_names_short.append(class_index[str(i)][1])

@@ -36,7 +36,7 @@ from .matplotlib import QMatplotlib
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFontMetrics, QIntValidator, QDoubleValidator
 from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox, QLineEdit,
-                             QComboBox, QPushButton, QTabWidget,
+                             QComboBox, QPushButton, QTabWidget, QSpinBox,
                              QGridLayout, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QSizePolicy)
 
@@ -107,6 +107,7 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
 
     _checkWrapAround: QCheckBox
 
+    _checkLossStop: QCheckBox
     _lossGoal: QLineEdit
     _lossCount: QLineEdit
     _maxSteps: QLineEdit
@@ -194,17 +195,19 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
 
         # _unitIndex: A text field to manually enter the index of
         # desired input (UNIT_INDEX).
-        self._unitIndex = QLineEdit()
-        self._unitIndex.setMaxLength(5)
-        self._unitIndex.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self._unitIndex.setMinimumWidth(
-            QFontMetrics(self.font()).width('5') * 4)
+        #self._unitIndex = QLineEdit()
+        #self._unitIndex.setMaxLength(5)
+        #self._unitIndex.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        #self._unitIndex.setMinimumWidth(
+        #    QFontMetrics(self.font()).width('5') * 4)
+        self._unitIndex = QSpinBox()
         self._connect_to_config(self._unitIndex, 'UNIT_INDEX')
 
         self._unitMax = QLabel()
         self._unitMax.setMinimumWidth(
             QFontMetrics(self.font()).width('8') * 4)
         self._unitMax.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Expanding)
+        self._unitLabel = QLabel()
 
         #
         # Maximization parameters
@@ -351,6 +354,9 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
         # convergence parameters
         # relative(!) difference between loss and last 50 losses to converge to
         # LOSS_GOAL = 0.01
+        self._checkLossStop = QCheckBox("Stop on loss")
+        self._connect_to_config(self._checkLossStop, 'LOSS_STOP')
+
         self._lossGoal = QLineEdit()
         self._lossGoal.setMaxLength(5)
         self._connect_to_config(self._lossGoal, 'LOSS_GOAL')
@@ -406,6 +412,7 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
         l.addWidget(QLabel("/"))
         l.addWidget(self._unitMax)
         unitLayout.addLayout(l)
+        unitLayout.addWidget(self._unitLabel)
         unitLayout.addWidget(self._buttonRandomUnit)
         etaBox = QHBoxLayout()
         etaBox.addWidget(QLabel("Eta"))
@@ -548,6 +555,7 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
         box5Param1 = QHBoxLayout()
         box5Param1.addWidget(QLabel("Loss goal: "))
         box5Param1.addWidget(self._lossGoal)
+        box5Param1.addWidget(self._checkLossStop)
         box5layout.addLayout(box5Param1)
 
         l = QHBoxLayout()
@@ -645,7 +653,13 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
                 widget.setChecked(getattr(config, name))
             elif isinstance(widget, QCheckBox):
                 widget.setChecked(getattr(config, name))
+            elif isinstance(widget, QSpinBox):
+                widget.setValue(getattr(config, name))
 
+        if self._network:
+            label = self._network.get_label_for_class(config.UNIT_INDEX)
+            self._unitLabel.setText(label)
+                
         if info.layer_changed:
             if self._layerSelector.findText(config.LAYER_KEY) != -1:
                 self._layerSelector.setCurrentText(config.LAYER_KEY)
@@ -654,6 +668,7 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
                     self._unitMax.setText("*")
                 else:
                     self._unitMax.setText(str(maxUnit))
+                    self._unitIndex.setRange(0,maxUnit-1)
             else:
                 self._unitMax.setText("*")
 
@@ -680,6 +695,11 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
                         except ValueError: value = 0
                         setattr(self._config, attr, value)
             widget.textEdited.connect(slot)
+        elif isinstance(widget, QSpinBox):
+            def slot(value):
+                if self._config is not None:
+                    setattr(self._config, attr, value)
+            widget.valueChanged.connect(slot)
         elif isinstance(widget, tuple):
             def slot(text):
                 if self._config is not None:
@@ -715,7 +735,6 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
             return None
         value = network.get_layer_output_units(layer_id)
         return value
-
 
 from tools.am import Config as MaximizationConfig
 
@@ -820,6 +839,7 @@ class QMaximizationConfigView(QWidget):
 
 
 from util import async
+from toolbox import Controller as ToolboxController
 from tools.am import (Engine as MaximizationEngine,
                       Controller as MaximizationController)
 
@@ -836,27 +856,48 @@ from PyQt5.QtWidgets import QWidget, QSlider
 class QMaximizationControls(QWidget, QObserver,
                             MaximizationEngine.Observer,
                             Network.Observer):
-    """
+    """The :py:class:`QMaximizationControls` groups widgets to control
+    a :py:class:`MaximizationEngine`. This includes buttons to start,
+    pause, stop, and reset the engine, and some display to show the
+    current image as well as some graph to depict the development
+    of the loss function.
+
     Attributes
     ----------
+    _maximization: MaximizationController
+    _config: MaximizationConfig
+        Shortcut to the :py:class:`MaximizationConfig`-object
+        of _maximization.
+    _toolbox: ToolboxController
+        A :py:class:`ToolboxController`. Used to set a new
+        input for the toolbox.
+
+    Graphical components:
+    
     _imageView: QImageView
-
-    _engine: MaximizationEngine
-
-    _maximization_controller: MaximizationController
-
-    display: QMaximizationDisplay
+        A widget for displaying the current image.
+    
+    _display: QMaximizationDisplay
+        Reference to an external component (of type
+        :py:class:`QMaximizationDisplay`) that can store and display the
+        current state of the engine. Can be None
     """
     _network: NetworkController = None
-    _maximization_controller: MaximizationController = None
+    _maximization: MaximizationController = None
+    _toolbox: ToolboxController = None
+    _config: MaximizationConfig = None
+    # graphical components
+    _display = None  # QMaximizationDisplay
     
-    def __init__(self, network: NetworkController=None, **kwargs):
+    def __init__(self, network: NetworkController=None,
+                 toolbox: ToolboxController=None,
+                 maximization: MaximizationController=None, **kwargs):
         super().__init__(**kwargs)
-        self._maximization_controller = None
         self._initUI()
         self._layoutUI()
-        self.display = None
+        self.setToolboxController(toolbox)
         self.setNetworkController(network)
+        self.setMaximizationController(maximization)
 
         # FIXME[hack]: if we want to keep this, we should make it official!
         # FIXME[problem]: it seems not to be possible to log from another
@@ -866,14 +907,14 @@ class QMaximizationControls(QWidget, QObserver,
 
     def _initUI(self):
         
-        self._button_run = QPushButton("run")
+        self._button_run = QPushButton("Run")
         self._button_run.clicked.connect(self.onMaximize)
 
-        self._button_stop = QPushButton("stop")
+        self._button_stop = QPushButton("Stop")
         self._button_stop.clicked.connect(self.onStop)
         self._button_stop.setEnabled(False)
 
-        self._button_show = QPushButton("show")
+        self._button_show = QPushButton("Show")
         self._button_show.clicked.connect(self.onShow)
 
         self._button_reset = QPushButton("reset")
@@ -909,7 +950,6 @@ class QMaximizationControls(QWidget, QObserver,
         logger.addHandler(self._logWindow)
 
         self._plt = QMatplotlib()
-        
 
     def _layoutUI(self):
         info = QVBoxLayout()
@@ -977,35 +1017,20 @@ class QMaximizationControls(QWidget, QObserver,
     def onStop(self, checked: bool):
         """Stop a running computation.
         """
-        if self._maximization_controller is not None:
-            self._maximization_controller.stop()
+        if self._maximization is not None:
+            self._maximization.stop()
 
     def setMaximizationController(self, maximization: MaximizationController
                                   ) -> None:
         print(f"QMaximizationControls.setMaximizationController: maximization={maximization}")
-        self._exchangeView('_maximization_controller', maximization)
+        self._exchangeView('_maximization', maximization)
         # FIXME[todo]: what are we interested in?
         # interests=Network.Change('observable_changed'))
-        self._engine = maximization
-        #self.engine = maximization.get_engine()
-        self._config = self._engine.config
+        self._config = self._maximization and self._maximization.config
+        self._enableComponents()
 
-    # FIXME[todo]: this should get another name, e.g. 'maximization_changed'
-    def observable_changed(self, maximization: MaximizationEngine, change):
-        pass
-
-    def setNetworkController(self, network: NetworkController) -> None:
-        self._exchangeView('_network', network,
-                           interests=Network.Change('observable_changed'))
-
-    def network_changed(self, network: Network,
-                        change: Network.Change) -> None:
-        if change.observable_changed:
-            if self._maximization_controller:
-                self._maximization_controller.set_network(network)
-
-    def engineChanged(self, engine: MaximizationEngine,
-                      info: MaximizationEngine.Change) -> None:
+    def maximization_changed(self, engine: MaximizationEngine,
+                             info: MaximizationEngine.Change) -> None:
 
         if info.network_changed:
             logger.info("!!! QMaximizationControls: network changed")
@@ -1017,21 +1042,13 @@ class QMaximizationControls(QWidget, QObserver,
             logger.info("!!! QMaximizationControls: engine changed")
             self._info.setText(engine.status)
             self._info.setText(engine.status)
-            self._button_run.setEnabled(not engine.running)
-            self._button_stop.setEnabled(engine.running)
-            self._button_show.setEnabled(not engine.running)
-            self._button_reset.setEnabled(not engine.running)
-            self._button_record_save.setEnabled(not engine.running and
-                                                engine.has_video())
-            self._checkbox_record.setEnabled(not engine.running)
-            self._slider.setEnabled(not engine.running)
-
+            self._enableComponents()
             if (engine.iteration is not None and
                 not engine.running and engine.iteration > 0):
                 image_normalized = engine.get_snapshot(normalize=True)
                 self._imageView.setImage(image_normalized)
-                if self.display is not None:
-                    self.display.showImage(image_normalized, engine)
+                if self._display is not None:
+                    self._display.showImage(image_normalized, engine)
 
         if info.image_changed:
             logger.info("!!! QMaximizationControls: image changed")
@@ -1051,12 +1068,49 @@ class QMaximizationControls(QWidget, QObserver,
                 # i.e. it will call selectIteration
                 self._slider.setSliderPosition(iteration)
 
+    def setNetworkController(self, network: NetworkController) -> None:
+        self._exchangeView('_network', network,
+                           interests=Network.Change('observable_changed'))
+
+    def network_changed(self, network: Network,
+                        change: Network.Change) -> None:
+        if change.observable_changed:
+            if self._maximization:
+                self._maximization.set_network(network)
+            self._enableComponents()
+
+    def setToolboxController(self, toolbox: ToolboxController) -> None:
+        """Set a :py:class:`ToolboxController` for this
+        :py:class:`QMaximizationControls`. This is not required,
+        but it allows to use the results of the maximization
+        engine as input for the Toolbox.
+        """
+        self._toolbox = toolbox
+        self._enableComponents()
+
+    # FIXME[typehint]: display: QMaximizationDisplay
+    def setDisplay(self, display) -> None:
+        self._display = display
+        
+    def _enableComponents(self):
+        available = bool(self._maximization is not None and self._network)
+        running = self._maximization is not None and self._maximization.running
+        self._button_run.setEnabled(available and not running)
+        self._button_stop.setEnabled(available and running)
+        self._button_show.setEnabled(available and not running and
+                                     self._toolbox is not None)
+        self._button_reset.setEnabled(available and not running)
+        self._button_record_save.setEnabled(available and not running and
+                                            self._maximization.has_video())
+        self._checkbox_record.setEnabled(available and not running)
+        self._slider.setEnabled(available and not running)
+
     @protect
     def onMaximize(self, checked: bool):
         """
         """
-        logger.info("QMaximizationControls.onMaximize() -- begin: {self._maximization_controller.network}")
-        self._maximization_controller.start()
+        logger.info("QMaximizationControls.onMaximize() -- begin: {self._maximization.network}")
+        self._maximization.start()
         logger.info("QMaximizationControls.onMaximize() -- end")
 
     @protect
@@ -1066,13 +1120,27 @@ class QMaximizationControls(QWidget, QObserver,
         (and the classification result) to be displayed in the
         'Activations' panel.
         """
-        #self._imageView.getImage(),
-        image = self._engine.get_snapshot()
-        a,b = self._engine.get_min(), self._engine.get_max()
-        image2 = (image-a)*255/(b-a)
-        self._controller.onNewInput(image2,
-                                    self._config.UNIT_INDEX,
-                                    self._engine.description)
+        if not self._toolbox:
+            return
+
+        #image = self._maximization.get_snapshot()
+        image = self._imageView.getImage()
+
+        if image is None:
+            return
+
+        #a,b = self._maximization.get_min(), self._maximization.get_max()
+        #image2 = (image-a)*255/(b-a)
+        description = ("Artificial input generated to maximize "
+                       f"activation of unit {self._config.UNIT_INDEX} "
+                       f"in layer {self._config.LAYER_KEY} "
+                       f"of network {self._config.NETWORK_KEY}")
+        # FIXME[check]: could we use self._maximization.description here?
+        # FIXME[hack]: label is only self._config.UNIT_INDEX, if the
+        # network is a classifier an we have selected the last
+        # (i.e. output) layer.
+        self._toolbox.set_input(data=image, description=description,
+                                label=self._config.UNIT_INDEX)
 
     @protect
     def onReset(self, checked: bool):
@@ -1093,22 +1161,22 @@ class QMaximizationControls(QWidget, QObserver,
         self._info_minmax.setText("")
         self._info_mean.setText("")
         self._info_record.setText("")
-        self._slider.setEnabled(self._engine.iteration > 0)
+        self._slider.setEnabled(self._maximization.iteration > 0)
         logger.info("QMaximizationControls.onMaximize(True) -- begin")
-        self._maximization_controller.start(True)
+        self._maximization.start(True)
         logger.info("QMaximizationControls.onMaximize() -- end")
 
     @protect
     def onRecordClicked(self, state):
-        self._engine.record_video(bool(state))
+        self._maximization.record_video(bool(state))
         self._button_record_save.setEnabled(bool(state))
 
     @protect
     def onSaveMovie(self, checked: bool):
-        self._engine.save_video('activation_maximization')
+        self._maximization.save_video('activation_maximization')
      
     def selectIteration(self, iteration: int) -> None:
-        self._showSnapshot(self._engine, iteration)
+        self._showSnapshot(self._maximization, iteration)
 
     def _showSnapshot(self, engine: MaximizationEngine,
                       iteration: int=None) -> None:
@@ -1131,7 +1199,7 @@ class QMaximizationControls(QWidget, QObserver,
         #
         # the loss
         #
-        loss = self._engine.get_loss(iteration)
+        loss = self._maximization.get_loss(iteration)
         loss_text = "" if loss is None else f"{loss:.2f}"
         self._info_loss.setText(loss_text)
 
@@ -1176,7 +1244,7 @@ class QMaximizationDisplay(QWidget):
     ----------
     """
 
-    def __init__(self, parent=None, rows:int=2, columns:int=5):
+    def __init__(self, parent=None, rows: int=1, columns: int=5):
         super().__init__(parent)
         self._index = None
         self._boxes = []

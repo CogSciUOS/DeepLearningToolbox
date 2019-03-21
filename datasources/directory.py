@@ -12,9 +12,9 @@ class DataDirectory(Datasource):
 
     Attributes
     ----------
-    _dirname:   str
+    _dirname: str
         A directory containing input data files. Can be None.
-    _filenames:   list
+    _filenames: list
         A list of filenames in the data directory. An empty list
         indicates that no suitable files where found in the directory.
         None means that the list has not yet been initialized.
@@ -22,7 +22,7 @@ class DataDirectory(Datasource):
     _dirname: str = None
     _filenames: list = None
 
-    def __init__(self, dirname: str = None):
+    def __init__(self, dirname: str = None, description: str=None, **kwargs):
         """Create a new DataDirectory
 
         Parameters
@@ -30,7 +30,8 @@ class DataDirectory(Datasource):
         dirname :   str
                     Name of the directory with files
         """
-        super().__init__(dirname)
+        description = description or f"directory {dirname}"
+        super().__init__(description=description, **kwargs)
         self.directory = dirname
 
     @property
@@ -86,6 +87,3 @@ class DataDirectory(Datasource):
 
     def __str__(self):
         return f'<DataDirectory "{self._dirname}">'
-
-    def _description_for_index(self, index: int) -> str:
-        return self.prepared and self._filenames[index] or ''

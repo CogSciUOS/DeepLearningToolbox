@@ -20,9 +20,9 @@ Datasources can have different
 
 """
 from .source import Datasource, InputData, Predefined
-from .source import Datasource as DataSource
+from .source import Datasource as DataSource, Labeled
 from .controller import View, Controller
-from .array import DataArray
+from .array import DataArray, LabeledArray
 from .file import DataFile
 from .files import DataFiles
 from .directory import DataDirectory
@@ -44,8 +44,9 @@ for d in KerasDatasource.KERAS_IDS:
     except ValueError as err:
         print(f"Error instantiating keras data source '{d}': {err}",
               file=sys.stderr)
-ImageNet(section='train')
-DataNoise((100,100,3))
+#ImageNet(section='train')
+ImageNet(section='val')
+DataNoise(shape=(100,100,3))
 
 if DataWebcam.check_availability():
     DataWebcam()

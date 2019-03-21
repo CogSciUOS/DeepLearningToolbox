@@ -1,3 +1,5 @@
+from toolbox import Toolbox
+
 from typing import Dict, Iterable
 
 import numpy as np
@@ -11,8 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-
-class Engine(Observable, method='modelChanged',
+class Engine(Observable, Toolbox.Observer, method='activation_changed',
              changes=['network_changed',
                       'layer_changed',
                       'unit_changed',
@@ -23,7 +24,7 @@ class Engine(Observable, method='modelChanged',
     Engine class encompassing network, current activations, and the like.
 
     An model is Observable. Changes in the model are passed to observers
-    calling the :py:meth:`Observer.modelChanged` method in order
+    calling the :py:meth:`Observer.activation_changed` method in order
     to inform them as to the exact nature of the model's change.
 
     Changes
@@ -58,8 +59,6 @@ class Engine(Observable, method='modelChanged',
         Currently selected unit in the layer
     _network: Network
         Currently active network
-    _networks: Dict[str, Network]
-        All available networks. FIXME[todo]: Move this out of the model
     _data: np.ndarray
         Current data provided by the data source
     _data_target: int
@@ -77,7 +76,10 @@ class Engine(Observable, method='modelChanged',
         mapping layer_ids to activations
     """
 
-    def __init__(self, network: Network=None):
+    _toolbox: Toolbox = None
+    _network: Network = None
+    
+    def __init__(self, network: Network=None, toolbox: Toolbox=None):
         """Create a new ``Engine`` instance.
 
         Parameters
@@ -112,9 +114,23 @@ class Engine(Observable, method='modelChanged',
         # whether there is someone using the classification information!
         self._classification = True
 
+        self.set_toolbox(toolbox)
         if network is not None:
             self.set_network(network)
 
+    def set_toolbox(self, toolbox: Toolbox) -> None:
+        if toolbox:
+            interests = Toolbox.Change('input_changed')
+            self.observe(toolbox, interests=interests)
+
+    def toolbox_changed(self, toolbox: Toolbox,
+                        change: Toolbox.Change) -> None:
+        if change.input_changed:
+            self._data_target_text = toolbox.input_label_text
+            self.set_input_data(data=toolbox.input_data,
+                                target=toolbox.input_label,
+                                description=toolbox.input_description)
+            
     ##########################################################################
     #                          SETTING DATA                                  #
     ##########################################################################
@@ -137,7 +153,7 @@ class Engine(Observable, method='modelChanged',
         """
         return self._data if raw else self._input
 
-    @change
+    #@change
     def set_input_data(self, data: np.ndarray, target: int=None,
                        description: str = None):
         """Provide one data vector as input for the network.
@@ -164,12 +180,13 @@ class Engine(Observable, method='modelChanged',
         description: str
             A description of the input data.
         """
-        logger.info(f"Activation: set_input_data({data.shape},{target},{description})")
+        logger.info(f"Activation: set_input_data({data is not None and data.shape},{target},{description})")
         #
         # do some sanity checks and corrections
         #
         if data is None or not data.ndim:
-            raise ValueError('Data cannot be None.')
+            return
+            #raise ValueError('Data cannot be None.')
 
         if data.ndim > 4 or data.ndim < 2:
             raise ValueError(f'Data must have between 2 '
@@ -222,6 +239,14 @@ class Engine(Observable, method='modelChanged',
         return self._data
 
     @property
+    def input_target(self):
+        return self._data_target
+
+    @property
+    def input_target_text(self):
+        return self._data_target_text
+
+    @property
     def input_data_description(self):
         return self._data_description
 
@@ -248,10 +273,10 @@ class Engine(Observable, method='modelChanged',
         network : str or int or network.network.Network
             Key for the network
         """
-        if not isinstance(network, Network):
+        if network is not None and not isinstance(network, Network):
             raise ValueError("Expecting a Network, "
                              f"not {type(network)} ({network})")
-        print(f"Activation: network is now {network}")
+        #print(f"Activation: network is now {network}")
 
         if self._network != network:
             self._network = network
@@ -412,13 +437,14 @@ class Engine(Observable, method='modelChanged',
             self._layers = list(layers)
 
     #@async
-    @change
+    #@change
     def _update_activation(self):
         """Set the :py:attr:`_current_activation` property by loading
         activations for :py:attr:`_layer` and :py:attr:`_data`.
         This is a noop if no layers are selected or no data is
         set."""
-
+        if not self._network or self._network.busy:
+            return  # FIXME[hack]
         self._update_layer_list()
         logger.info(f"Activation: _update_activation: LAYERS={self._layers}")
         if self._layers and self._input is not None:
@@ -484,7 +510,8 @@ class Engine(Observable, method='modelChanged',
         target = self._data_target
         if labels and target is not None:
             if self._network is not None:
-                target = self._network.get_label_for_class(target)
+                #target = self._network.get_label_for_class(target)
+                target = self._data_target_text
             else:
                 target = str(target)
 
@@ -528,6 +555,11 @@ class Engine(Observable, method='modelChanged',
 
 # FIXME[old]
 class OldModel:
+    """
+    _networks: Dict[str, Network]
+        All available networks. FIXME[todo]: Move this out of the model
+
+    """
     def __init__(self, network: Network=None):
         self._networks = {}
 
@@ -571,4 +603,3 @@ class OldModel:
         by this method.
         """
         return self._networks.get(network_id)
-   
