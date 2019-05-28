@@ -20,7 +20,7 @@ Datasources can have different
 
 """
 from .source import Datasource, InputData, Predefined
-from .source import Datasource as DataSource, Labeled
+from .source import Datasource as DataSource, Labeled, Random
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
@@ -30,6 +30,8 @@ from .webcam import DataWebcam
 from .video import DataVideo
 from .keras import KerasDatasource
 from .imagenet import ImageNet
+from .dogsandcats import DogsAndCats
+from .widerface import WiderFace
 from .noise import DataNoise
 
 import logging
@@ -47,6 +49,8 @@ for d in KerasDatasource.KERAS_IDS:
 #ImageNet(section='train')
 ImageNet(section='val')
 DataNoise(shape=(100,100,3))
+DogsAndCats()
+WiderFace()
 
 if DataWebcam.check_availability():
     DataWebcam()

@@ -180,6 +180,6 @@ class Controller(View, BaseController):
     def _loop(self):
         self._logger.info("Running datasource loop")
         while self._loop_running:
-            self.random()
+            self._datasource.fetch(random=True)
             self._loop_event.clear()
             self._loop_event.wait(timeout=.2)

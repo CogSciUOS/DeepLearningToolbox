@@ -17,7 +17,7 @@ class DataDirectory(Datasource):
     _filenames: list
         A list of filenames in the data directory. An empty list
         indicates that no suitable files where found in the directory.
-        None means that the list has not yet been initialized.
+        None means that the list has not yet been prepared.
     """
     _dirname: str = None
     _filenames: list = None
@@ -57,12 +57,13 @@ class DataDirectory(Datasource):
 
     @property
     def prepared(self):
+        """Check if this Directory has been prepared.
+        """
         return self._filenames is not None
 
-    def prepare(self):
-        if self.prepared:
-            return  # nothing to do ...
-
+    def _prepare_data(self):
+        """
+        """
         if not self._dirname:
             raise RuntimeError("No directory was specificed for DataDirectory")
 
@@ -71,7 +72,6 @@ class DataDirectory(Datasource):
             #                    if isfile(join(self._dirname, f))]
             self._filenames = glob(join(self._dirname, "**", "*.*"),
                                    recursive=True)
-        self.change('state_changed')
 
     def __getitem__(self, index):
         if not self.prepared:

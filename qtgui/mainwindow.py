@@ -95,6 +95,9 @@ class DeepVisMainWindow(QMainWindow):
         PanelMeta('resources', 'Resources',
                   '.panels.resources.ResourcesPanel',
                   'Show the resources panel', []),
+        PanelMeta('face', 'Face detection',
+                  '.panels.face.FacePanel',
+                  'Show the Experiments panel', []),
         PanelMeta('experiments', 'Experiments',
                   '.panels.experiments.ExperimentsPanel',
                   'Show the Experiments panel', []),
@@ -447,6 +450,9 @@ class DeepVisMainWindow(QMainWindow):
         return ResourcesPanel(toolbox=self._toolbox,
                               network1=autoencoder,
                               datasource1=datasource)
+
+    def _newFacePanel(self, FacePanel: type) -> Panel:
+        return FacePanel(toolbox=self._toolbox)
 
     ##########################################################################
     #                           FIXME[old]                                   #

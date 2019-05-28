@@ -91,6 +91,9 @@ class QObserver:
     """
     _qObserverHelper = None
 
+    # FIXME[bug]: if we are observing more than one object, we will
+    # need more than one helper (as each helper stores its own changes)
+
     def __init__(self):
         # FIXME[question]: do we have to call this from the main thread
         #if not threading.current_thread() is threading.main_thread():
@@ -99,7 +102,6 @@ class QObserver:
         #                       threading.current_thread().name + ".")
         if self._qObserverHelper is  None:
             self._qObserverHelper = QObserver.QObserverHelper(self)
-       
 
     def observe(self, observable: Observable, interests=None):
         if self._qObserverHelper is  None:
@@ -170,6 +172,9 @@ class QObserver:
             if change is not None:
                 self._change = None
                 observable.notify(self._observer, change)
+
+        def __str__(self) -> str:
+            return f"QObserver({self._observer}, {self._change})"
 
 
 import numpy as np

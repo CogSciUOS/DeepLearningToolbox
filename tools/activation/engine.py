@@ -1,4 +1,5 @@
 from toolbox import Toolbox
+from datasources import Datasource
 
 from typing import Dict, Iterable
 
@@ -47,8 +48,6 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
     _input: np.ndarray
         Current input data, suitable for the current network
         (this is an adapted version of _data)
-    _current_activation: np.ndarray
-        The last computed activations
     _layer: Layer
         Currently selected layer
     _classification: bool
@@ -61,19 +60,13 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         Currently active network
     _data: np.ndarray
         Current data provided by the data source
-    _data_target: int
-        A target value (i.e., label) for the current _data as provided by
-        the data source, None if no such information is provided.
-        If set, this integer value will indicate the index of the
-        correct target unit in the classification layer (usually the
-        last layer of the network).
     _data_description: str
 
     New:
     _layers: List[layer_ids]
         the layers of interest
-    _activations: Dict[]
-        mapping layer_ids to activations
+    _activations: Dict[layer_ids, np.ndarray]
+        Mapping layer_ids to the current activation values.
     """
 
     _toolbox: Toolbox = None
@@ -94,8 +87,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         #
         self._data = None
         self._input = None
-        self._data_target = None
+        self._data_label = None
         self._data_description = None
+        self._datasource = None
         self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
         self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
 
@@ -106,7 +100,6 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         self._layer = None
         self._unit = None
         self._classification = None
-        self._current_activation = None
         self._layers = []
         self._activations = {}
 
@@ -126,9 +119,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
         if change.input_changed:
-            self._data_target_text = toolbox.input_label_text
             self.set_input_data(data=toolbox.input_data,
-                                target=toolbox.input_label,
+                                label=toolbox.input_label,
+                                datasource=toolbox.input_datasource,
                                 description=toolbox.input_description)
             
     ##########################################################################
@@ -154,8 +147,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         return self._data if raw else self._input
 
     #@change
-    def set_input_data(self, data: np.ndarray, target: int=None,
-                       description: str = None):
+    def set_input_data(self, data: np.ndarray, label: int=None,
+                       datasource: Datasource=None,
+                       description: str=None) -> None:
         """Provide one data vector as input for the network.
         The input data must have 2, 3, or 4 dimensions.
 
@@ -175,12 +169,12 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         ----------
         data: np.ndarray
             The data array
-        target: int
+        label: int
             The data label. None if no label is available.
         description: str
             A description of the input data.
         """
-        logger.info(f"Activation: set_input_data({data is not None and data.shape},{target},{description})")
+        logger.info(f"Activation: set_input_data({data is not None and data.shape},{label},{description})")
         #
         # do some sanity checks and corrections
         #
@@ -203,7 +197,8 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         # set the data
         #
         self._data = data
-        self._data_target = target
+        self._data_label = label
+        self._datasource = datasource
         self._data_description = description
 
         #
@@ -223,7 +218,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
     @input_data.setter
     def input_data(self, data):
-        target = None
+        label = None
         description = None
         if isinstance(data, tuple):
             for d in data[1:]:
@@ -232,19 +227,23 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
                 elif isinstance(d, str):
                     description = d
             data = data[0]
-        self.set_input_data(data, target, description)
+        self.set_input_data(data, label, description)
 
     @property
     def raw_input_data(self):
         return self._data
 
     @property
-    def input_target(self):
-        return self._data_target
+    def input_label(self):
+        return self._data_label
 
     @property
-    def input_target_text(self):
-        return self._data_target_text
+    def input_datasource(self):
+        return self._datasource
+
+    @property
+    def input_data_description(self):
+        return self._data_description
 
     @property
     def input_data_description(self):
@@ -276,7 +275,6 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         if network is not None and not isinstance(network, Network):
             raise ValueError("Expecting a Network, "
                              f"not {type(network)} ({network})")
-        #print(f"Activation: network is now {network}")
 
         if self._network != network:
             self._network = network
@@ -420,9 +418,8 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         is a classifier and the results are provided in the last
         layer.
         """
-        old_classification = self._classification
-        self._classification = classication
-        if old_classification != self._classification:
+        if classification != self._classification:
+            self._classification = classication
             self._update_activation()
 
     def _update_layer_list(self):
@@ -439,10 +436,10 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
     #@async
     #@change
     def _update_activation(self):
-        """Set the :py:attr:`_current_activation` property by loading
+        """Set the :py:attr:`_activations` property by loading
         activations for :py:attr:`_layer` and :py:attr:`_data`.
-        This is a noop if no layers are selected or no data is
-        set."""
+        This is a noop if no layers are selected or no data is set.
+        """
         if not self._network or self._network.busy:
             return  # FIXME[hack]
         self._update_layer_list()
@@ -471,66 +468,62 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
                       "LAYERS CHANGED DURING UPDATE "
                       "{layers} vs. {self._layers}")
 
-            # FIXME[old]
-            self._current_activation = self._activations.get(self._layer, None)
         else:
             self._activations = {}
         self.change(activation_changed=True)
+
+    def get_activation(self, layer_id=None, batch_index: int=0) -> np.ndarray:
+        if self._activations is None:
+            return None
+        if layer_id is None:
+            layer_id = self._layer
+        if layer_id is None:
+            return None
+        if not layer_id in self._activations:
+            raise ValueError(f"Invalid layer ID '{layer_id}'. Valid IDs are: "
+                             f"{', '.join(self._activations.keys())}")
+        return self._activations[layer_id]
+
 
     ##########################################################################
     #                             UTILITIES                                  #
     ##########################################################################
 
     # FIXME[design]: some redundancy with Network.classify_top_n()
-    def top_n_classifications(self, n=5, labels: bool=True):
+    def top_n_classifications(self, n=5) -> (np.ndarray, np.ndarray):
         """Get the network's top n classification results for the
         current input. The results will be sorted with highest ranked
         class first.
 
         Parameters
         ----------
-        n:
+        n: int
             The number of results to report.
-        labels:
-            If True, return class labels (str) instead of class indices.
 
         Returns
         -------
         classes:
-            The classes, either indices (int) or labels (str).
+            The class indices.
         scores:
             The corresponding class scores, i.e., the output value
             of the network for that class.
-        target:
-            The target class, i.e. the "correct" answer. None if unknown.
         """
-        #
-        # determine target class
-        #
-        target = self._data_target
-        if labels and target is not None:
-            if self._network is not None:
-                #target = self._network.get_label_for_class(target)
-                target = self._data_target_text
-            else:
-                target = str(target)
 
         #
         # some sanity checks
         #
-        no_result = (None, None, target)
+        no_result = (None, None)
         if not self._network:
             return no_result  # no network available
 
-        if not self._classification:
-            return no_result  # computation of classification is turned off
-
         if not self._network.is_classifier():
-            return no_result  # network is not a classifier
+            return no_result  # no network available
+            # FIXME[toddo]: raise RuntimeError("Network is not a classifier.")
 
         classification_layer_id = self._network.output_layer_id()
         if classification_layer_id not in self._activations:
             return no_result  # no classifiction values available
+            # FIXME[toddo]: raise RuntimeError("No activation values have been computed.")
 
         #
         # compute the top n class scores
@@ -544,62 +537,27 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         top_n_indices_unsorted = np.argpartition(-class_scores, n)[:n]
         order = np.argsort((-class_scores)[top_n_indices_unsorted])
         top_n_indices = top_n_indices_unsorted[order]
-        if labels:
-            top_n = [self._network.get_label_for_class(i)
-                     for i in top_n_indices]
-        else:
-            top_n = top_n_indices
 
-        return top_n, class_scores[top_n_indices], target
+        return top_n_indices, class_scores[top_n_indices]
 
+    def classification_rank(self, label: int) -> (int, float):
+        #
+        # some sanity checks
+        #
+        no_result = (None, None)
+        if not self._network:
+            return no_result  # no network available
 
-# FIXME[old]
-class OldModel:
-    """
-    _networks: Dict[str, Network]
-        All available networks. FIXME[todo]: Move this out of the model
+        if not self._network.is_classifier():
+            return no_result  # no network available
+            # FIXME[toddo]: raise RuntimeError("Network is not a classifier.")
 
-    """
-    def __init__(self, network: Network=None):
-        self._networks = {}
+        classification_layer_id = self._network.output_layer_id()
+        if classification_layer_id not in self._activations:
+            return no_result  # no classifiction values available
+            # FIXME[toddo]: raise RuntimeError("No activation values have been computed.")
+        class_scores = self._activations[classification_layer_id]
+        score = class_scores[label]
+        rank = (class_scores > score).sum()
 
-    # FIXME[hack]: add_network is seemingly not called via a Controller,
-    # hence we have to explicitly notify the observers
-    @change
-    def add_network(self, network: Network, select: bool=True) -> None:
-        """Add a model to visualise. This will add the network to the list of
-        choices and make it the currently selcted one.
-
-        Parameters
-        ----------
-        network : Network
-            A network.
-        select : bool
-            A flag indicating whether the new network should
-            automatically be selected as the active network in this
-            model.
-        """
-        if network is not None:
-            self._networks[network.get_id()] = network
-        if select:
-            self.network = network
-        self.change(network_changed=True)
-
-    @property
-    def networks(self) -> Iterable[Network]:
-        """Get the currently selected network.
-
-        Returns
-        -------
-        The currently selected network or None if no network
-        is selected.
-        """
-        return self._networks.values()
-
-    def network_by_id(self, network_id: str) -> Network:
-        """Get a network by an unique identifier.
-        The network has to be registered with this Model
-        (via :py:meth:`add_network`) before it can be retrieved
-        by this method.
-        """
-        return self._networks.get(network_id)
+        return rank, score

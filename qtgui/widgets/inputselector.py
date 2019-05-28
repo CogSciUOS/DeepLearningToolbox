@@ -1,6 +1,6 @@
 
 
-from datasources import (Datasource, DataArray,
+from datasources import (Datasource, DataArray, Random,
                          Controller as DatasourceController)
 
 from ..utils import QObserver, protect
@@ -118,11 +118,14 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                 self._layout.addLayout(self._buttons)
 
     def _enableUI(self):
-        enabled = bool(self._controller) and self._controller.prepared
+        enabled = bool(self._controller)
+        self.prepareButton.setEnabled(bool(self._controller))
+        enabled = enabled and self._controller.prepared
         for button in self._buttonList + [self.randomButton, self.loopButton,
                                           self._indexField, self.infoLabel]:
             button.setEnabled(enabled)
-        self.prepareButton.setEnabled(bool(self._controller))
+        enabled = enabled and self._controller.isinstance(Random)
+        self.randomButton.setEnabled(enabled)
         if self._controller:
             self.prepareButton.setChecked(self._controller.prepared)
 

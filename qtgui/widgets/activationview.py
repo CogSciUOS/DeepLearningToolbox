@@ -111,7 +111,8 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         # significant properties change
         if info & {'network_changed', 'layer_changed', 'input_changed',
                    'activation_changed'}:
-            activation = engine._current_activation
+            
+            activation = engine.get_activation()
             self._current_unit = engine.unit
 
             if activation is not None:

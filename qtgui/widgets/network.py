@@ -1,3 +1,9 @@
+"""
+QNetworkList: a list of networks
+
+QNetworkInternals: details of a network
+"""
+
 from toolbox import View as ToolboxView
 from network import Network, View as NetworkView
 from qtgui.utils import QObserver, protect
@@ -61,3 +67,51 @@ class QNetworkList(QToolboxViewList, Network.Observer):
                             change: Network.Change) -> None:
             if change.busy_changed:
                 self._listWidget._updateItem(network)
+
+
+from .tensorflow import QTensorflowInternals
+from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
+
+
+class QNetworkInternals(QWidget, QObserver, Network.Observer):
+    """A Widget to inspect the internals of a :py:class:`Network`.
+    """
+    _network: NetworkView = None
+    
+    def __init__(self, network: NetworkView=None, **kwargs) -> None:
+        """
+        Arguments
+        ---------
+        toolbox: ToolboxView
+        network: NetworkView
+        parent: QWidget
+        """
+        super().__init__(**kwargs)
+        self._initUI()
+        self._layoutUI()
+        self.setNetworkView(network)
+
+    def setNetworkView(self, network: NetworkView) -> None:
+        interests = Network.Change('observable_changed')
+        self._exchangeView('_network', network, interests)
+
+    def network_changed(self, network: Network,
+                        change: Network.Change) -> None:
+        self._labelNetworkType.setText(f"{network} ({type(network)})"
+                                       if network else "")
+
+        # FIXME[hack]:
+        if network and hasattr(network, '_graph'):
+            self._ternsorflowInternals.setGraph(network._graph)
+
+    def _initUI(self) -> None:
+        '''Initialize the user interface.'''
+        self._labelNetworkType = QLabel()
+        self._ternsorflowInternals = QTensorflowInternals()
+
+    def _layoutUI(self) -> None:
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        
+        layout.addWidget(self._labelNetworkType)
+        layout.addWidget(self._ternsorflowInternals)

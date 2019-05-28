@@ -25,7 +25,8 @@ import numpy as np
 #from asyncio import Semaphore
 from threading import Semaphore
 
-from base import Observable, change, Runner, Controller as BaseController
+from base import (Observable, BusyObservable, busy, change,
+                  Runner, Controller as BaseController)
 from util import addons
 
 # FIXME[todo]: speed up initialization by only loading frameworks
@@ -37,7 +38,7 @@ from datasources import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
 
 
-class Toolbox(Semaphore, Observable, Datasource.Observer,
+class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
               method='toolbox_changed',
               changes=['lock_changed', 'networks_changed',
                        'datasources_changed', 'datasource_changed',
@@ -72,12 +73,12 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
     _activation_controller: BaseController = None # 'ActivationController'
     _input_data: np.ndarray = None
     _input_label = None
-    _input_label_text: str = ''
+    _input_datasource = None
     _input_description = None
 
     def __init__(self, args):
         Semaphore.__init__(self, 1)
-        Observable.__init__(self)
+        BusyObservable.__init__(self)
         self._args = args
         self._toolbox_controller = ToolboxController(self)
 
@@ -207,7 +208,7 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
                 network = hack_load_alexnet(self)
 
             elif args.framework.startswith('keras'):
-                # "keras-tensorflow" or "keras-theaono""
+                # "keras-tensorflow" or "keras-theano"
                 dash_idx = args.framework.find('-')
                 backend = args.framework[dash_idx + 1:]
                 network = keras(backend, args.cpu, model_file=args.model)
@@ -223,7 +224,7 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
             else:
                 network = None
                 
-            if False and network is not None:
+            if network is not None:
                 self.add_network(network)
 
             self._activation_engine.set_network(network)
@@ -250,6 +251,13 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         self._networks.remove(network)
         self.change('networks_changed')
 
+    def network_loaded(self, name: str) -> bool:
+        for network in self._networks:
+            if str(network) == name:
+                return True
+        return False
+
+    @busy
     def hack_load_alexnet(self):
         #
         # AlexNet trained on ImageNet data (TensorFlow)
@@ -263,10 +271,11 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         logger.debug("alexnet: prepare")
         network._online()
         logger.debug("alexnet: Load Class Names")
-        # FIXME[todo]: instead of providing labels here, we should
-        # refer the network directly to the datasource.
-        from datasources.imagenet_classes import class_names_short
-        network.set_output_labels(class_names_short)
+        
+        # FIXME[hack]: we need a better mechanism to refer to Datasources
+        from datasources.imagenet import Predefined
+        imagenet = Predefined.get_data_source('imagenet-val')
+        network.set_labels(imagenet, format='caffe')
         logger.debug("alexnet: Done")
         return network
 
@@ -289,7 +298,6 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
-        print(f"Toolbox.datasource_changed({datasource}, {change})")
         if change.observable_changed:
             if datasource is not None and datasource not in self._datasources:
                 self.add_datasource(datasource)
@@ -306,7 +314,8 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
                 else:
                     label = None
                 description = self._datasource_controller.description
-                self.set_input(data=data, label=label, description=description)
+                self.set_input(data=data, label=label, datasource=datasource,
+                               description=description)
             else:
                 self.set_input(data=None, label=None, description="No input")
 
@@ -384,28 +393,19 @@ class Toolbox(Semaphore, Observable, Datasource.Observer,
         return self._input_label
 
     @property
-    def input_label_text(self) -> str:
-        return self._input_label_text
+    def input_datasource(self) -> Datasource:
+        return self._input_datasource
 
     @property
     def input_description(self) -> np.ndarray:
         return self._input_description
 
     def set_input(self, data: np.ndarray, label=None,
-                  description: str=None):
-        print(f"Toolbox.set_input({data is not None and data.shape}, {label}, {description})")
+                  datasource: Datasource=None, description: str=None):
         self._input_data = data
         self._input_label = label
-        if (label is not None and self._datasource_controller and
-            self._datasource_controller.isinstance(LabeledDatasource) and
-            self._datasource_controller.has_text_for_labels()):
-            # We can provide some text for the label
-            self._input_label_text = \
-                self._datasource_controller.text_for_label(label)
-        else:
-            self._input_label_text
+        self._input_datasource = datasource
         self._input_description = description
         self.change('input_changed')
-
 
 from .controller import Controller as ToolboxController

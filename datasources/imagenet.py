@@ -1,4 +1,4 @@
-from . import (DataSource, Labeled, DataDirectory, InputData, Predefined)
+from . import DataSource, Labeled, Random, DataDirectory, InputData, Predefined
 
 # FIXME[todo]: this module datasources.imagenet_classes provides textual
 # class names for the 1000 ImageNet classes. The same information is
@@ -10,13 +10,14 @@ from datasources.imagenet_classes import class_names
 
 import os
 import re
+import numpy as np
 
 import logging
 logger = logging.getLogger(__name__)
 
 import random
 import pickle
-from scipy.misc import imread, imresize
+from scipy.misc import imread
 
 
 
@@ -26,24 +27,10 @@ from scipy.misc import imread, imresize
 #  - allow for all "sections" (train/valid/test)
 #  - automatically provide teh ImageNet class labels
 
-# FIXME[hack]
-try:
-    from appdirs import AppDirs
-    appname = "deepvis"  # FIXME: not the right place to define here!
-    appauthor = "krumnack"
-    appdirs = AppDirs(appname, appauthor)
-except ImportError:
-    appdirs = None
-    logger.warning(
-        "---------------------------------------------------------------\n"
-        "info: module 'appdirs' is not installed. We can live without it,\n"
-        "but having it around will provide additional features.\n"
-        "See: https://github.com/ActiveState/appdirs\n"
-        "---------------------------------------------------------------\n")
 
 
-class ImageNet(DataDirectory, Labeled, Predefined):
-    """
+class ImageNet(DataDirectory, Random, Labeled, Predefined):
+    """An interface to the ILSVRC2012 dataset.
 
     Labels
     ------
@@ -63,9 +50,40 @@ class ImageNet(DataDirectory, Labeled, Predefined):
     the attribute :py:attr:`_val_labels` in a slightly modified form:
     image identifiers and labels are both shifted to be 0-based, i.e.,
     this list contains at index i the information for image id=i+1,
-    and the value obtained is the 0-based numerical label (0-999) 
+    and the value obtained is the 0-based numerical label (0-999)
+
+    Attributes
+    ----------
+
+    _section_ids: list
+        The available sections of the ILSVRC2012 dataset: 'train',
+        'val', and 'test'. Notice that 'test' will provide no labels.
+
+    _section_id: str
+        The actual section of the Datasource.
+
+
+    Labels
+    ------
+    There are different convention on how to label the ILSVRC2012 dataset.
+    The natural convention is to use Synsets, either in form of the
+    Synset ID (format='synset', e.g., "n01440764"), a long textual form
+    listing all wordforms of the synset (format='text_long',
+    e.g. "tench, Tinca tinca"), a short textual form containing just
+    the first wordform (format='text', e.g. "tench",
+    possibly containing spaces for multiword expressions like "bell pepper").
+    However, for neural networks some numerical form is needed.
+    Here different forms are in used. The ILSVRC2012 dataset comes with
+    a 1-based indexing (format="ilsvrc", e.g. ).
+    Caffe simply sorts the synset IDs and indexes them starting from 0
+    (format='caffe', maps 0 to n01440764 "tench, Tinca tincan").
+
+
+    See
+    * http://caffe.berkeleyvision.org/gathered/examples/imagenet.html
+    * https://github.com/pytorch/vision/issues/484
     """
-    _section_ids = ['train', 'test', 'val']
+    _section_ids = ['train', 'val', 'test']
 
     _section = None
 
@@ -77,32 +95,49 @@ class ImageNet(DataDirectory, Labeled, Predefined):
     # list of val_labels: (number_from_filename - 1) -> (class_number - 1)
     _val_labels: list = None
 
-    # _appsdir: an Appdirs object
-    _appsdir = None
+    _image: np.ndarray = None
+    _label: int = None
+
+    # FIXME[hack]
+    try:
+        from appdirs import AppDirs
+        appname = "deepvis"  # FIXME: not the right place to define here!
+        appauthor = "krumnack"
+        _appdirs = AppDirs(appname, appauthor)
+    except ImportError:
+        _appdirs = None
+        logger.warning(
+            "--------------------------------------------------------------\n"
+            "info: module 'appdirs' is not installed.\n"
+            "We can live without it, but having it around will provide\n"
+            "additional features.\n"
+            "See: https://github.com/ActiveState/appdirs\n"
+            "--------------------------------------------------------------\n")
 
     def __init__(self, prefix=None, section='val', **kwargs):
         super().__init__(id=f"imagenet-{section}",
                          description=f"ImageNet {section}", **kwargs)
         self._imagenet_data = os.getenv('IMAGENET_DATA', '.')
         self._section = section
-        self._prefix = os.path.join(self._imagenet_data, self._section)
-        self._available = os.path.isdir(self._prefix)
+        self.directory = os.path.join(self._imagenet_data, self._section)
+        self._available = os.path.isdir(self.directory)
         self._image = None
 
+    @property
+    def number_of_labels(self) -> int:
+        """The ImageNet dataset has 1000 classes.
+        """
+        return 1000
+
     def _prepare_data(self):
-        logger.info(f"PREPARING ImageNet : {self._prefix}: {self._available}")
+        logger.info(f"PREPARING ImageNet: {self.directory}: {self._available}")
         if self._section == 'train':
             # get the list of directory names, i.e.
             # the WordNet 3.0 synsets ('n0......')
-            self._synsets = os.listdir(self._prefix)
-
-            # FIXME[hack]: just randomly choose one subdir
-            # self._category = random.randint(0, len(self._synsets))
-            # self.directory = os.path.join(self._prefix,
-            #                               self._synsets[self._category]))
+            self._synsets = os.listdir(self.directory)
 
         #
-        # get a list of filenames
+        # get a list of filenames (possibly stored in a cache file)
         #
         if self._appdirs is not None:
             filename = f"imagenet_{self._section}_filelist.p"
@@ -115,44 +150,117 @@ class ImageNet(DataDirectory, Labeled, Predefined):
         else:
             imagenet_filelist = None
 
-        # No filist available yet - read it in
+        #
+        # No filelist available yet - read it in (and possible store in cache)
+        #
         if self._filenames is None:
-            super()._prepare()
+            super()._prepare_data()
             if self._appdirs is not None:
                 logger.info(f"Writing filenames to {imagenet_filelist}")
                 if not os.path.isdir(self._appdirs.user_cache_dir):
                     os.makedirs(self._appdirs.user_cache_dir)
                 pickle.dump(self._filenames, open(imagenet_filelist, 'wb'))
 
-        self.directory = self._prefix
+    @property
+    def labels_prepared(self) -> bool:
+        """Check if labels for this dataset have been prepared.
+        """
+        return ((self._section == 'train' and self._wn_table is not None) or
+                (self._section == 'val' and self._val_labels is not None))
 
     def _prepare_labels(self):
+        imagenet_labels_filename = \
+            os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         'imagenet_labels.txt')
+        ids = []
+        caffe_ids = []
+        torch_ids = []
+        synsets = []
+        wordforms = []
+        wordforms_long = []
+
+        try:
+            with open(imagenet_labels_filename) as f:
+                for line in f.readlines():
+                    id, torch_id, caffe_id, synset, wordform, wordform_long = \
+                        line.strip().split(':')
+                    ids.append(int(id))
+                    torch_ids.append(int(torch_id))
+                    caffe_ids.append(int(caffe_id))
+                    synsets.append(synset)
+                    wordforms.append(wordform)
+                    wordforms_long.append(wordform_long)
+            
+            self.add_label_format('imagenet', np.asarray(ids))
+            self.add_label_format('caffe', np.asarray(caffe_ids))
+            self.add_label_format('torch', np.asarray(torch_ids))
+            self.add_label_format('synset', synsets)
+            self.add_label_format('text', wordforms)
+            self.add_label_format('text_long', wordforms_long)
+
+        except FileNotFoundError:
+            logger.warning("ImageNet labels files not found. "
+                           f"Make sure that {imagenet_labels_filename} "
+                           "is available.")
+
+        # FIXME[old]
+        # load the labels file (classes.txt). 
+        # The file contains mapping of labels to synset names
+        # and text representation for labels,
+        # e.g. "1000:n03255030:dumbbell"
+        #try:
+        #    classes_filename = os.path.join(self._imagenet_data,
+        #                                    'classes.txt')
+        #    with open(classes_filename) as f:
+        #        classes = f.readlines()
+        #    texts = [c.strip().split(':')[2] for c in classes]
+        #    self.add_label_format('text', texts)
+        #except FileNotFoundError:
+        #    logger.warning("ImageNet class names not found. "
+        #                   f"Make sure that {classes_filename} "
+        #                   "is available.")
+        
         if self._section == 'train':
-            # get a mapping of synsets to labels
-            from .imagenet_classes import wn_table
-            self._wn_table = wn_table
-            logger.info(f"Length of wn_table: {len(self._wn_table)}")
+            self._prepare_labels_train()
 
         elif self._section == 'val':
-            #
-            # load the image to label mapping
-            #
-            val_labels_filename = os.path.join(self._imagenet_data,
-                                               'val_labels.txt')
-            with open(val_labels_filename) as f:
-                val_labels = f.readlines()
-            self._val_labels = [int(l.strip())-1 for l in val_labels] 
-
-            # load the labels file (classes.txt). 
-            # The file contains mapping of labels to synset names
-            # and text representation for labels,
-            # e.g. "1000:n03255030:dumbbell"
-            classes_filename = os.path.join(self._imagenet_data, 'classes.txt')
-            with open(classes_filename) as f:
-                classes = f.readlines()
-            self.set_label_texts([c.strip().split(':')[2] for c in classes])
-
+            self._prepare_labels_val()
+        
+        
         logger.info(f"ImageNet is now prepared: {len(self)}")
+
+    def _prepare_labels_train(self):
+        """Prepare the image to label mapping for the ILSVRC2012
+        training set. This mapping can be achieved as the training
+        files are grouped in directories named by the respective
+        synset.
+        """
+        # FIXME[old]
+        # get a mapping of synsets to labels
+        #from .imagenet_classes import wn_table
+        # self._wn_table = wn_table
+        self._wn_table = { synset: index for index, synset
+                           in enumerate(self._label_formats['synset']) }
+        logger.info(f"Length of wn_table: {len(self._wn_table)}")
+
+    def _prepare_labels_val(self):
+        """Load the image to label mapping for the ILSVRC2012
+        validation set. This mapping is provided as part of the
+        'ILSVRC2012_devkit_t12'.
+        """
+
+        #val_labels_filename = os.path.join(self._imagenet_data,
+        #                                   'val_labels.txt')
+        val_labels_filename = \
+            os.path.join(self._imagenet_data, 'ILSVRC2012_devkit_t12',
+                         'data', 'ILSVRC2012_validation_ground_truth.txt')
+        try:
+            with open(val_labels_filename) as f:
+                self._val_labels = [int(l.strip())-1 for l in f.readlines()] 
+        except FileNotFoundError:
+            logger.warning("ImageNet validation labels not found. "
+                           f"Make sure that {val_labels_filename} "
+                           "is available.")
 
     def _label_for_filename(self, filename):
         label = None
@@ -160,7 +268,7 @@ class ImageNet(DataDirectory, Labeled, Predefined):
             match_object = re.search('(n[0-9]*)_', filename)
             if match_object is not None:
                 synset = self._wn_table.get(match_object.group(1))
-        elif (self._section == 'val' and self._val_labels is not None):
+        elif self._section == 'val' and self._val_labels is not None:
             match_object = re.search('ILSVRC2012_val_([0-9]*).JPEG', filename)
             if match_object is not None:
                 label = self._val_labels[int(match_object.group(1))-1]
@@ -171,21 +279,25 @@ class ImageNet(DataDirectory, Labeled, Predefined):
             return InputData(None, None)
 
         filename = self._filenames[index]
-        data = imread(os.path.join(self._dirname, filename))
+        data = imread(os.path.join(self.directory, filename))
         category = self._category_for_filename(filename)
         return InputData(data, category)
 
-    def _fetch(self):
+    def _fetch(self, **kwargs):
+        self._fetch_random(**kwargs)
+
+    def _fetch_random(self, **kwargs):
         if self._section == 'train':
             category = random.randint(0, len(self._synsets)-1)
-            img_dir = os.path.join(self._prefix, self._synsets[category])
+            img_dir = os.path.join(self.directory, self._synsets[category])
             filename = random.choice(os.listdir(img_dir))
             img_file = os.path.join(img_dir, filename)
         elif self._section == 'val':
             filename = random.choice(self._filenames)
-            img_file = os.path.join(self._prefix, filename)
+            img_file = os.path.join(self.directory, filename)
 
         self._image = imread(img_file)
+        self._label = self._label_for_filename(filename)
 
     @property
     def fetched(self):
@@ -200,9 +312,13 @@ class ImageNet(DataDirectory, Labeled, Predefined):
         """
         return self._image
 
+    def _get_label(self):
+        return self._label
+
+
     def oldrandom(self):  # FIXME[old]
         category = random.randint(0, len(self._synsets)-1)
-        img_dir = os.path.join(self._prefix, self._synsets[category])
+        img_dir = os.path.join(self.directory, self._synsets[category])
         self._image = random.choice(os.listdir(img_dir))
         img_file = os.path.join(img_dir, self._image)
         im = imread(img_file)
@@ -219,7 +335,7 @@ class ImageNet(DataDirectory, Labeled, Predefined):
                 return self._classes[label]
         return ''
 
-    def get_label(self, target: int) -> str:
+    def get_label_old(self, target: int) -> str:
         label = self._val_labels[target]
         return self._classes[target]
 
@@ -230,7 +346,7 @@ class ImageNet(DataDirectory, Labeled, Predefined):
         -------
         True if the DataSource can be instantiated, False otherwise.
         '''
-        return self._prefix
+        return self.directory
 
     def download():
         raise NotImplementedError("Downloading ImageNet is "

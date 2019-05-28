@@ -34,7 +34,7 @@ class DataNoise(Predefined):
     def fetched(self):
         return True
 
-    def _fetch(self):
+    def _fetch(self, **kwargs):
         pass
 
     def _get_data(self) -> np.ndarray:
@@ -46,3 +46,6 @@ class DataNoise(Predefined):
             The input data.
         """
         return np.random.rand(*self._shape)
+
+    def __str__(self):
+        return "Noise"

@@ -16,6 +16,19 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
     """A :py:class:`QImageView` to display the input image of the
     Toolbox or ActivationEngine.
 
+
+    Toolbox.Observer
+    ----------------
+    The QModelImageView can observe a Toolbox to always display the
+    current input image. If a 'input_changed' is reported, the
+    QModelImageView is updated to display the new input image.
+
+
+    ActivationEngine.Observer
+    -------------------------
+    FIXME[todo]: Currently not implemented!
+    
+
     Attributes
     ----------
     _toolbox: ToolboxView
@@ -134,7 +147,7 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
 
         # For convolutional layers add a activation mask on top of the
         # image, if a unit is selected
-        activation = activation._current_activation
+        activation = activation.get_activation()
         unit = activation.unit
         if (activation is not None and unit is not None and
             activation.ndim > 1):  # exclude dens layers

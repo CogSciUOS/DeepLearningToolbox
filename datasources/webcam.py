@@ -62,13 +62,14 @@ class DataWebcam(Predefined):
     def fetched(self):
         return self._frame is not None
 
-    def _fetch(self):
-        ret, self._frame = self._capture.read()
+    def _fetch(self, **kwargs):
+        ret, frame = self._capture.read()
         if not ret:
             raise RuntimeError("Reading an image from video capture failed!")
+        self._frame = frame[:,:,::-1]
 
     def _get_data(self):
         return self._frame
 
     def __str__(self):
-        return f"Webcam"
+        return "Webcam"

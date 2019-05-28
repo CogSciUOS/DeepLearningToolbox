@@ -81,7 +81,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     'weights_changed':
         network weights were changed
     """
-
     
     @classmethod
     def framework_available(cls):
@@ -142,6 +141,7 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         self.layer_dict = self._create_layer_dict()
 
         self._output_labels = None
+        self._labels = (None, None)
 
     def __getitem__(self, item):
         """Provide access to the layers by number. Access by id is provided
@@ -793,6 +793,9 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
 
 
+    # FIXME[concept]: the following methods are only relevant for classifiers.
+    # redesign the API to introduce a special Classifier Network class.
+
     def set_output_labels(self, labels: List[str]) -> None:
         """Provide labels for the output layer. This is useful for 
         networks that are used as classifier. It allows to report
@@ -832,7 +835,7 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         return (str(index) if self._output_labels is None
                 else self._output_labels[index])
 
-    def classify_top_n(self, input_samples: np.ndarray, n = 5):
+    def classify_top_n(self, input_samples: np.ndarray, n: int=5):
         """Output the top-n classes for given input.
         """
 
@@ -848,6 +851,25 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             for i in range(n):
                 print("  {}: {} ({})".format(i,self._output_labels[inds[-1-i]],
                                              output[input_im_ind, inds[-1-i]]))
+
+    def top_n(self, output: np.ndarray, n: int=5):
+        inds = np.argsort(output)[input_im_ind,:]
+        print("Image", input_im_ind)
+
+    def set_labels(self, datasource, format=None) -> None:
+        self._labels = (datasource, format)
+        if datasource is not None:
+            datasource.prepare_labels()
+
+    @property
+    def datasource(self):
+        return self._labels[0]
+
+    @property
+    def label_format(self):
+        return self._labels[1]
+
+    # FIXME[concept]: we need some training concept ...
 
     def get_trainer(self, training):
         return Trainer(training, self)

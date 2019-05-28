@@ -177,16 +177,14 @@ class QNetworkSelector(QComboBox, QObserver, Toolbox.Observer,
         self._exchangeView('_networkView', network,
                            Network.Change('observable_changed'))
 
-    def activation_changed(self, model: ActivationEngine,
+    def activation_changed(self, activation: ActivationEngine,
                            info: ActivationEngine.Change) -> None:
         """React to changes in the model.
         """
-
-        # FIXME[design]: The 'network_changed' message can mean that
-        # either the current model has changed or that the list of
-        # models was altered (or both).
+        
+        # The 'network_changed' message can mean that the network has
+        # changed.
         if info.network_changed:
-            self._update_networks(model.networks)
 
             network = model.network
             if network is not None:
@@ -195,16 +193,25 @@ class QNetworkSelector(QComboBox, QObserver, Toolbox.Observer,
 
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
+        """React to changes in the Toolbox. We are only interested
+        when the list of networks has changed, in which case we will
+        update the content of the QComboBox to reflect the available
+        Networks.
+        """
         self._update_networks(self._toolboxView.networks)
 
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
+        """React to changes in the Network. We are only interested
+        when the observable, i.e. the selected network has changed. In
+        that case we will update the current item in the QComboBox to
+        reflect display the selected Network.
+        """
         if network is not None:
             new_index = self.findText(network.get_id())
             self.setCurrentIndex(new_index)
         else:
-            self.setCurrentIndex(-1)
-            
+            self.setCurrentIndex(-1)           
 
     def _update_networks(self, networks: Iterable[Network]) -> None:
         """Update the list of networks to choose from.
@@ -235,7 +242,6 @@ from tools.activation import (Engine as ActivationEngine,
                               Controller as ActivationsController)
 
 from ..utils import QObserver, protect
-from .classesview import QClassesView
 
 from PyQt5.QtCore import QCoreApplication, QEvent
 from PyQt5.QtCore import pyqtSignal
@@ -266,7 +272,6 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
 
     # Graphical elements
     _networkInfo: QNetworkBox = None
-    _classesView: QClassesView = None
 
     _UPDATE_NETWORK = QEvent.registerEventType()
 
@@ -291,7 +296,6 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
         self._networkInfo = QNetworkBox(parent=self)
         self._networkInfo.setMinimumWidth(300)
         self._layer_buttons = []       
-        self._classesView = QClassesView(parent=self)
 
     def layoutUI(self) -> None:
         self._layer_layout = QVBoxLayout()
@@ -303,21 +307,14 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
         layout.addLayout(self._layer_layout)
         layout.addLayout(info_layout)
         layout.addStretch(1)
-        layout.addWidget(self._classesView)
         self.setLayout(layout)
 
     def setActivationsController(self, activations: ActivationsController):
         print(f"QNetworkView: setActivationsController({activations})")
-        #super().setController(activations) # FIXME[old]
         interests = ActivationEngine.Change('layer_changed')
         self._exchangeView('_activations', activations,
                            interests=interests)
         self._networkInfo.setController(activations)
-        self._classesView.setActivationView(activations)
-
-    def xobservable_changed(self, activations: ActivationEngine,
-                            change: ActivationEngine.Change) -> None:
-        pass
 
     def activation_changed(self, activation: ActivationEngine,
                            info: ActivationEngine.Change) -> None:

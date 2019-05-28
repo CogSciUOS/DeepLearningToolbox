@@ -11,12 +11,25 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox,
 class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
     """Visualization of classification results.
 
-    Fields
-    ------
+    Attributes
+    ----------
     _top_n: int
+        The number of top classifications to be shown.
+    _target: int
+        The index of the target class if known, None otherwise
+    _datasource: Datasource
+        Datasource used to look up labels.
+    _label_format: str
+        The format in which the labels are provided by the network.
+    _output_format: str
+        The output format in which the labels are presented.
+
+    Graphical Components
+    --------------------
     _classes: List[QLabel]
     _scores: List[QLabel]
-    _target: QLabel
+    
+    _targetLabel: QLabel
     """
 
     _activation: ActivationView = None
@@ -31,36 +44,50 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
         """
         super().__init__(parent)
         self._top_n = top_n
+        self._target = None
+
+        self._datasource = None
+        self._label_format = None
+        self._output_format = None
+        
         self._classes = []
         self._scores = []
         self._initUI()
+        self._layoutUI()
 
     def _initUI(self):
-        layout = QGridLayout()
-        layout.addWidget(QLabel(f"<b>Class</b>", self), 0,0)
-        layout.addWidget(QLabel(f"<b>Score</b>", self), 0,1)
         for i in range(self._top_n):
             self._classes.append(QLabel(f"None", self))
             self._classes[i].setMaximumWidth(self._classes[i].width())
             self._classes[i].setTextInteractionFlags(Qt.TextSelectableByMouse)
-            layout.addWidget(self._classes[i], i+1, 0)
             self._scores.append(QLabel("0", self))
-            layout.addWidget(self._scores[i], i+1, 1)
-        layout.addWidget(QLabel("<b>Correct</b>", self), self._top_n+1, 0)
-        self._target = QLabel(f"?", self)
-        self._target.setMaximumWidth(self._target.width())
-        layout.addWidget(self._target, self._top_n+1, 1)
-        
-        layout2 = QVBoxLayout()
-        self._checkbox_active = QCheckBox("Classification")
-        # FIXME[stub]: this checkbox currently does not do anything
-        layout2.addLayout(layout)
-        layout2.addWidget(self._checkbox_active)
-        self.setLayout(layout2)
-        
+        self._targetLabel = QLabel(f"?", self)
+        self._targetLabel.setMaximumWidth(self._targetLabel.width())
+
+    def _layoutUI(self):
+        gridLayout = QGridLayout()
+        self.setLayout(gridLayout)
+
+        gridLayout.addWidget(QLabel(f"<b>Class</b>", self), 0, 0, Qt.AlignLeft)
+        gridLayout.addWidget(QLabel(f"<b>Score</b>", self), 0, 1, Qt.AlignLeft)
+        for i in range(self._top_n):
+            gridLayout.addWidget(self._classes[i], i+1, 0)
+            gridLayout.addWidget(self._scores[i], i+1, 1)
+        gridLayout.addWidget(QLabel("<b>Correct</b>", self), self._top_n+1, 0)
+        gridLayout.addWidget(self._targetLabel, self._top_n+2, 0)
+
+    def setEnabled(self, enabled: bool):
+        print(f"QClassesView: setEnabled({enabled})")
+        super().setEnabled(enabled)
+
+    def changeEvent(self, event):
+        print(f"QClassesView: changeEvent({event.type()}/{event.EnabledChange}): enabled={self.isEnabled()}")
+        super().changeEvent(event)
+        print(f"QClassesView: after changeEvent: enabled={self.isEnabled()}")
+
     def setActivationView(self, activation: ActivationView) -> None:
-        interests = ActivationEngine.Change('input_changed',
-                                            'activation_changed')
+        interests = ActivationEngine.\
+            Change('network_changed', 'input_changed', 'activation_changed')
         self._exchangeView('_activation', activation, interests=interests)
 
     def activation_changed(self, activation: ActivationEngine,
@@ -70,33 +97,65 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
         """
         if activation is None:
             return
-        
+
+        if info.network_changed:
+            network = activation.network
+            self._datasource = network.datasource if network else None
+            self._label_format = network.label_format if network else None
+            self._output_format = 'text' if self._datasource and \
+                'text' in self._datasource.label_formats else None
+
         if info.input_changed:
-            #print("CLASSIFICATION: "
-            #      f"{activation.input_target} "
-            #      f"({activation.input_target_text})")
-            #self._target.setText(f"{activation.input_target} "
-            #                     f"({activation.input_target_text})")
-            self._target.setText(f"{activation.input_target_text}")
-
-        if info.activation_changed:
-            classes, scores, target = activation.top_n_classifications(self._top_n)
-            target = activation.input_target_text.replace(' ', '_')  # FIXME[hack]
-            if classes is not None:
-                for i in range(self._top_n):
-                    self._classes[i].setText(str(classes[i]))
-                    self._classes[i].setToolTip(str(classes[i]))
-                    #print(f"{i}: {target} vs. {classes[i]}")
-                    if target is None:
-                        self._classes[i].setStyleSheet('')
-                    elif target == classes[i]:
-                        self._classes[i].setStyleSheet(f'color: green')
-                    else:
-                        self._classes[i].setStyleSheet(f'color: red')
-                        self._scores[i].setText(str(scores[i]))
+            if self._datasource is None:
+                self._target = activation.input_label
+                label_text = f'"{self._target}"'
+            elif self._datasource == activation.input_datasource:
+                self._target = self._datasource.\
+                    format_labels(activation.input_label,
+                                  format=self._label_format)
+                label_text = self._datasource.\
+                    format_labels(activation.input_label,
+                                  format=self._output_format)
             else:
-                for i in range(self._top_n):
-                    self._classes[i].setText("None")
-                    self._scores[i].setText("0")
+                self._target = None
+                label_text = "?"
+            self._targetLabel.setText(label_text)
+            self._targetLabel.setToolTip(None if self._target is None else
+                                         f"network unit: {self._target}")
 
+        if info.activation_changed or info.input_changed:
+            self._update_scores()
 
+    def _update_scores(self):
+        if self._activation is None:
+            return
+
+        classes, scores = self._activation.top_n_classifications(self._top_n)
+        labels = classes
+        target = self._target
+
+        #
+        # Getting labels from the datasource
+        #
+        if classes is not None and self._datasource is not None:
+            labels = self._datasource.\
+                format_labels(classes, format=self._output_format,
+                              origin=self._label_format)
+
+        for i in range(self._top_n):
+            if classes is None:
+                self._classes[i].setText('')
+                self._classes[i].setStyleSheet('')
+                self._classes[i].setToolTip('')
+                self._scores[i].setText('')
+            else:
+                self._classes[i].setText(str(labels[i]))
+                if self._datasource is not None:
+                    self._classes[i].setToolTip(f"network unit: {classes[i]}")
+                if target is None:
+                    self._classes[i].setStyleSheet('')
+                elif target == classes[i]:
+                    self._classes[i].setStyleSheet(f'color: green')
+                else:
+                    self._classes[i].setStyleSheet(f'color: red')
+                self._scores[i].setText(str(scores[i]))

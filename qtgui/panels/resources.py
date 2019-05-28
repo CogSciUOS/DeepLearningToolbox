@@ -14,7 +14,7 @@ from ..utils import QObserver, protect
 from ..widgets import QNetworkView, QNetworkBox, QNetworkSelector
 from ..widgets import QInputInfoBox, QModelImageView
 from ..widgets.inputselector import QInputNavigator
-from ..widgets.network import QNetworkList
+from ..widgets.network import QNetworkList, QNetworkInternals
 from ..widgets.datasource import QDatasourceList, QDatasourceSelectionBox
 
 from PyQt5.QtCore import Qt
@@ -40,6 +40,15 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
     _toolboxController: ToolboxController = None
     _networkController: NetworkController = None
 
+    _networkList: QNetworkList = None
+    _button: QPushButton = None
+    _button2: QPushButton = None
+    _button3: QPushButton = None
+    _networkSelector: QNetworkSelector = None
+    _networkView: QNetworkView = None
+    _networkBox: QNetworkBox = None
+    _networkInternals: QNetworkInternals = None
+
     _datasourceList: QDatasourceList = None
     _datasourceSelector: QDatasourceSelectionBox = None
     _datasourceNavigator: QInputNavigator = None
@@ -59,6 +68,9 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
 
     def _initUI(self):
 
+        #
+        # Networks
+        #
         self._networkList = QNetworkList()
 
         @protect
@@ -81,13 +93,14 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
 
         @protect
         def currentIndexChanged(index: int):
-            self._networkController(self._networkSelector.currentData())
+            if self._networkController is not None:
+                self._networkController(self._networkSelector.currentData())
         self._networkSelector = QNetworkSelector()
         self._networkSelector.currentIndexChanged.connect(currentIndexChanged)
 
         self._networkView = QNetworkView()
         self._networkBox = QNetworkBox()
-
+        self._networkInternals = QNetworkInternals()
 
         #
         # Datasources
@@ -133,8 +146,13 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         layout2.addWidget(self._networkBox)
         layout2.addStretch()
 
+        layout3 = QVBoxLayout()
+        layout3.addLayout(layout2)
+        layout3.addWidget(self._networkInternals)
+        layout3.addStretch()
+
         self._networkGroupBox = QGroupBox('Networks')
-        self._networkGroupBox.setLayout(layout2)
+        self._networkGroupBox.setLayout(layout3)
 
         layout = QVBoxLayout()
         row = QHBoxLayout()
@@ -188,6 +206,7 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         self._networkList.setNetworkView(network)
         self._networkSelector.setNetworkView(network)
         self._networkBox.setNetworkView(network)
+        self._networkInternals.setNetworkView(network)
 
     def setDatasourceController(self,
                                 datasource: DatasourceController) -> None:
@@ -195,13 +214,23 @@ class ResourcesPanel(Panel, QObserver, Toolbox.Observer):
         self._datasourceNavigator.setDatasourceController(datasource)
 
     def setEnabled(self):
-        enabled = self._toolboxController is not None
+        enabled = self._toolboxController is not None and \
+            not self._toolboxController.busy
         self._button.setEnabled(enabled)
+        self._button2.setEnabled(enabled)
+        have_alexnet = self._toolboxController.network_loaded('AlexNet')
+        self._button3.setEnabled(enabled and not have_alexnet)
 
     def toolbox_changed(self, toolbox, change):
         self._toolboxController(toolbox)
 
         if 'toolbox_changed' in change:
+            self.setEnabled()
+
+        if 'networks_changed' in change:
+            self.setEnabled()
+            
+        if 'busy_changed' in change:
             self.setEnabled()
 
     def resizeEvent(self, event: QResizeEvent) -> None:

@@ -1,10 +1,10 @@
-from . import Datasource, Labeled, InputData
+from . import Datasource, Random, Labeled, InputData
 
 from random import randint
 import numpy as np
 
 
-class DataArray(Datasource):
+class DataArray(Random):
     """A ``DataArray`` stores all entries in an array (like the MNIST
     character data). That means that all entries will have the same sizes.
 
@@ -75,14 +75,15 @@ class DataArray(Datasource):
         self._index = (self._index + batch_size) % len(self)
         self.change('batch_changed')
 
-    def _fetch(self, random: bool=False, index: int=None) -> None:
+    def _fetch(self, index: int=None) -> None:
         if index is not None:
             self._index = index 
-        elif random:
-            self._index = randint(0, len(self))
         elif self._index is None:
             self._index = 0
         print(f"Array:fetch({self._index})")
+
+    def _fetch_random(self, **kwargs):
+        self._index = randint(0, len(self))
 
     @property
     def fetched(self):
@@ -136,10 +137,31 @@ class DataArray(Datasource):
 
 
 class LabeledArray(DataArray, Labeled):
+    """An array with labels for its entries.
+
+    Attributes
+    ----------
+    _labels: np.ndarray
+        An array mapping indices (of the data array) to (numeric) labels.
+    """
 
     _labels: np.ndarray = None
+    _number_of_labels: int = None
 
-    def set_labels_array(self, labels: np.ndarray) -> None:
+    @property
+    def number_of_labels(self) -> int:
+        """The number of different labels for this dataset.
+        """
+        return self._number_of_labels
+
+    @property
+    def labels_prepared(self) -> bool:
+        """Check if labels for this dataset have been prepared.
+        """
+        return self._labels is not None
+
+
+    def _prepare_labels(self, labels: np.ndarray=None) -> None:
         """Set the labels for for this labeled Array datasource.
 
         Arguments
@@ -148,10 +170,14 @@ class LabeledArray(DataArray, Labeled):
             An array containing the labels for this datasource. Should
             have the same length as the data array.
         """
+        if labels is None:
+            raise ValueError("You have to provide a labels array when "
+                             "preparing a LabeledArray.")
         if len(self) != len(labels):
-            raise ValueError('Wrong number of target values. expect={}, got={}'
-                             .format(len(self), len(labels)))
+            raise ValueError("Wrong number of target values: "
+                             f"expect={len(self)}, got={len(labels)}")
         self._labels = labels
+        self._number_of_labels = 1 + labels.max()
 
     def _get_label(self) -> int:
         """Get the (numeric) label for the current data point.
@@ -203,7 +229,7 @@ class LabeledArray(DataArray, Labeled):
                 description += " with label "
                 label = self._labels[index]
                 if self.has_text_for_labels():
-                    text = self._get_text_for_label(label)
+                    text = self.get_text_for_label(label)
                     description += f"'{text}' "
                 description += f"({label})"
             else:
