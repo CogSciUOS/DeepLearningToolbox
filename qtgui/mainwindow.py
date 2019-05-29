@@ -16,6 +16,7 @@ import importlib
 from base import Runner
 from toolbox import ToolboxController
 
+
 # Toolbox GUI imports
 from qtgui.utils import QtAsyncRunner, protect
 from qtgui.panels import Panel
@@ -30,11 +31,11 @@ from tools.am import Controller as MaximizationController
 from datasources import Datasource, Controller as DatasourceController
 
 # Qt imports
-from PyQt5.QtCore import Qt, QCoreApplication
+from PyQt5.QtCore import Qt, QTimer, QCoreApplication
 from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
                          QCloseEvent)
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
-                             QWidget, QLabel)
+                             QWidget, QLabel, QApplication)
 
 class DeepVisMainWindow(QMainWindow):
     """The main window of the Deep Visualization Toolbox. The window
@@ -57,6 +58,8 @@ class DeepVisMainWindow(QMainWindow):
 
     Attributes
     ----------
+    _application: QApplication
+        The Qt application to which this window belongs
     _toolbox: ToolboxController
         A reference to the Toolbox operated by this MainWindow. 
     _runner: QtAsyncRunner
@@ -97,7 +100,10 @@ class DeepVisMainWindow(QMainWindow):
                   'Show the resources panel', []),
         PanelMeta('face', 'Face detection',
                   '.panels.face.FacePanel',
-                  'Show the Experiments panel', []),
+                  'Show the Experiments panel', ['dlib', 'imutils']),
+        PanelMeta('ikkuna', 'Ikkuna',
+                  '.panels.ikkuna.IkkunaPanel',
+                  'Show the Ikkuna panel', ['ikkuna']),
         PanelMeta('experiments', 'Experiments',
                   '.panels.experiments.ExperimentsPanel',
                   'Show the Experiments panel', []),
@@ -114,7 +120,7 @@ class DeepVisMainWindow(QMainWindow):
     # "libpng warning: iCCP: extra compressed data"
     # probably due to some problem with the file 'logo.png'
     #icon = 'assets/logo.png'
-    def __init__(self, toolbox: ToolboxController,
+    def __init__(self, application: QApplication, toolbox: ToolboxController,
                  title: str='QtPyVis', icon: str='assets/logo.png') -> None:
         """Initialize the main window.
 
@@ -126,11 +132,47 @@ class DeepVisMainWindow(QMainWindow):
             (Filename of) the Window icon.
         """
         super().__init__()
+        self._app = application
+        
         self._logger = logging.getLogger(__name__)
         self._toolbox = toolbox
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
 
+    def run(self):
+        return self._app.exec_()
+
+    def stop(self):
+        """Quit the application.
+        """
+        self._saveState()
+
+        # Stop the Qt main event loop of this application
+        # QCoreApplication.quit()
+        self._app.quit()
+
+    def safe_timer(self, timeout, func, *args, **kwargs):
+        """
+        Create a timer that is safe against garbage collection and overlapping
+        calls. See: http://ralsina.me/weblog/posts/BB974.html
+        """
+        def timer_event():
+            if self._timerIsRunning:
+                try:
+                    func(*args, **kwargs)
+                finally:
+                    QTimer.singleShot(timeout, timer_event)
+            else:
+                print("GUI: QTimer was stopped.")
+        self._timerIsRunning = True
+        QTimer.singleShot(timeout, timer_event)
+
+    def stop_timer(self):
+        """
+        """
+        print("GUI: Stopping the QTimer ...")
+        self._timerIsRunning = False
+        
     ##########################################################################
     #                          Public Interface                              #
     ##########################################################################
@@ -307,19 +349,13 @@ class DeepVisMainWindow(QMainWindow):
         """Callback for saving any application state inb4 quitting."""
         pass
 
-    def onExitClicked(self) -> None:
-        """Callback for clicking the exit button. This will save state and
-        then terminate the Qt application.
-
-        """
-        self._saveState()
-        QCoreApplication.quit()
-
     def showStatusMessage(self, message):
         self.statusBar().showMessage(message, 2000)
 
     def showStatusResources(self):
         message = f"{time.ctime()}"
+        # message += (f", {self._runner.active_workers}/"
+        #             f"{self._runner.max_workers} threads")
         message += (", Memory: " +
                     "Shared={:,} kiB, ".format(resources.mem.shared) +
                     "Unshared={:,} kiB, ".format(resources.mem.unshared) +
@@ -330,6 +366,7 @@ class DeepVisMainWindow(QMainWindow):
             message += (", memory={:,}/{:,}MiB".
                         format(resources.gpus[0].mem,
                                resources.gpus[0].mem_total))
+
         self._statusResources.setText(message)
 
     ###########################################################################
@@ -338,8 +375,20 @@ class DeepVisMainWindow(QMainWindow):
 
     @protect
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Callback for x button click."""
-        self.onExitClicked()
+        """Callback for [x] button click."""
+        print("MainWindow: Window button -> exiting the main window now ...")
+        self._toolbox.quit()
+        print("MainWindow: toolbox.quit() returned ...")
+
+    @protect
+    def onExitClicked(self, checked: bool) -> None:
+        """Callback for clicking the exit button. This will save state and
+        then terminate the Qt application.
+
+        """
+        print("MainWindow: Menu/exit -> exiting the main window now ...")
+        self._toolbox.quit()
+        print("MainWindow: toolbox.quit() returned ...")
 
     @protect
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -452,7 +501,8 @@ class DeepVisMainWindow(QMainWindow):
                               datasource1=datasource)
 
     def _newFacePanel(self, FacePanel: type) -> Panel:
-        return FacePanel(toolbox=self._toolbox)
+        datasource = self._toolbox.datasource_controller
+        return FacePanel(toolbox=self._toolbox, datasource=datasource)
 
     ##########################################################################
     #                           FIXME[old]                                   #

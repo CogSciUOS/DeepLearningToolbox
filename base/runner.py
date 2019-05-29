@@ -95,3 +95,19 @@ class AsyncRunner(Runner):
         raise NotImplementedError('This abstract base class '
                                   'should not be used directly.')
 
+    @property
+    def active_workers(self):
+        """Determine how many threads are currently running.
+        """
+        # FIXME[bug]: this does not work!
+        # self._executor._threads is a set of Threads that have been
+        # created. This number will grow up to max_workers.
+        # Threads will not be terminated on completion. They rather
+        # stay alive and wait for new functions to be executed.
+        return len(self._executor._threads)
+
+    @property
+    def max_workers(self):
+        """Determine the maximal number of threads that can run.
+        """
+        return self._executor._max_workers

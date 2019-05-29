@@ -42,7 +42,7 @@ class Controller(View, BaseController):
 
     def get_engine(self) -> Engine:
         """Get the activation maximization Engine for this
-        Controller.  This is that actually performs the
+        Controller.  This is the object that actually performs the
         maximization process and that sends out notification in
         response to commands issued by this Controller. Everyone
         interested in such notifications should register to this

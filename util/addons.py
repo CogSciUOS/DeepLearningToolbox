@@ -6,6 +6,12 @@ not part of the toolbox.
 
 import importlib
 
+# type: the type of resource
+#   module: a python module (with the same name)
+#   tool: a tool of the toolbox
+#   data: a dataset
+#   model: a (pretrained) model
+# info: a human readable description of the resource
 _infos = {
     'lucid': {
         'type': 'module',
@@ -21,6 +27,34 @@ _infos = {
         'type': 'tool',
         'info': 'A tool for inspecting adversarial examples',
         'use': False
+    },
+    'imutils': {
+        'type': 'module',
+        'info': 'A series of convenience functions to make '
+                'basic image processing functions such as translation, '
+                'rotation, resizing, skeletonization, displaying '
+                'Matplotlib images, sorting contours, detecting edges, '
+                'and much more easier with OpenCV and both '
+                'Python 2.7 and Python 3.'
+    },
+    'dlib': {
+        'type': 'module',
+        'info': 'Dlib is a modern C++ toolkit containing '
+                'machine learning algorithms and tools '
+                'for creating complex software to solve real world problems.'
+    },
+    'imagenet': {
+        'type': 'data',
+        'info': 'The ILSVRC2012 dataset. A image classification dataset '
+                'with 1K classes and more than 1M labeled training images.'
+    },
+    'alexnet': {
+        'type': 'model',
+        'info': 'A classical deep network model for image classification.'
+    },
+    'ikkuna': {
+        'type': 'module',
+        'info': 'A tool for monitoring neural network training.'
     }
 }
 

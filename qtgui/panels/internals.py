@@ -29,7 +29,11 @@ class InternalsPanel(Panel):
     '''A Panel displaying system internals.
     May be of interest during development.
     '''
+    modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe", "PyQt5", "pycuda", "lucid", "dlib", "imutils"]
 
+    _grid: QGridLayout = None
+    _moduleGrid: QGridLayout = None
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self._modules = {}
@@ -52,6 +56,10 @@ class InternalsPanel(Panel):
         name = self.sender().text()
         self.showInfo(self._moduleInfo(name))
 
+    @QtCore.pyqtSlot()
+    def _onUpdateModules(self):
+        self._updateModules()
+
     def showInfo(self, info: QWidget):
         if self._layout.replaceWidget(self._info, info) is not None:
             self._info.deleteLater()
@@ -61,16 +69,31 @@ class InternalsPanel(Panel):
         box = QGroupBox('Modules')
         box.setMinimumWidth(300)
         
-        grid = QGridLayout()
-        grid.addWidget(QLabel("<b>Package</b>", self), 0,0)
-        grid.addWidget(QLabel("<b>Version</b>", self), 0,1)
+        self._moduleGrid = QGridLayout()
+        self._moduleGrid.addWidget(QLabel("<b>Package</b>", self), 0,0)
+        self._moduleGrid.addWidget(QLabel("<b>Version</b>", self), 0,1)
 
-        modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe", "PyQt5", "pycuda", "lucid"]
-        for i,m in enumerate(modules):
+        for i,m in enumerate(self.modules):
             button = QPushButton(m, self)
             button.setFlat(True)
             button.clicked.connect(self._onInfo)
-            grid.addWidget(button, 1+i, 0)
+            self._moduleGrid.addWidget(button, 1+i, 0)
+            self._moduleGrid.addWidget(QLabel('', self), 1+i, 1)
+        self._updateModules()
+
+        boxLayout = QVBoxLayout()
+        boxLayout.addLayout(self._moduleGrid)
+
+        updateButton = QPushButton("Update")
+        updateButton.clicked.connect(self._onUpdateModules)
+        boxLayout.addWidget(updateButton)
+        boxLayout.addStretch()
+        box.setLayout(boxLayout)
+        
+        return box
+
+    def _updateModules(self):
+        for i, m in enumerate(self.modules):
             if m in sys.modules:
                 module = sys.modules[m]
                 if hasattr(module, '__version__'):
@@ -89,15 +112,7 @@ class InternalsPanel(Panel):
                     # spec.origin -> file
                     info = "not loaded"
                 self._modules[m] = info
-
-            grid.addWidget(QLabel(info, self), 1+i, 1)
-
-        boxLayout = QVBoxLayout()
-        boxLayout.addLayout(grid)
-        boxLayout.addStretch()
-        box.setLayout(boxLayout)
-        
-        return box
+            self._moduleGrid.itemAtPosition(1+i, 1).widget().setText(info)
 
     def systemInfo(self):
 
@@ -237,7 +252,7 @@ class InternalsPanel(Panel):
                 boxLayout = QVBoxLayout()
                 if hasattr(module, '__version__'):
                     version = str(module.__version__)
-                elif m == "PyQt5":
+                elif name == "PyQt5":
                     version = QtCore.QT_VERSION_STR
                 else:
                     version = "no version info"

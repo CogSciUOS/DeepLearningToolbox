@@ -38,7 +38,7 @@ class QtAsyncRunner(AsyncRunner, QObject):
     _completion_signal: pyqtSignal
         Signal emitted once the computation is done.
         The signal is connected to :py:meth:`onCompletion` which will be run
-        on the main thread by the Qt magic.
+        in the main thread by the Qt magic.
     """
 
     # signals must be declared outside the constructor, for some weird reason
@@ -68,7 +68,7 @@ class QtAsyncRunner(AsyncRunner, QObject):
                 self._completion_signal.emit(observable, info)
 
     def _notifyObservers(self, observable, info):
-        """The method is intended as a receiver of th pyqtSignal.
+        """The method is intended as a receiver of the pyqtSignal.
         It will be run in the main Thread and hence can notify
         the Qt GUI.
         """
@@ -89,22 +89,27 @@ class QObserver:
     of calling :py:meth:`Observable.add_observer` directly). This will
     set up the required magic.
     """
-    _qObserverHelper = None
 
-    # FIXME[bug]: if we are observing more than one object, we will
-    # need more than one helper (as each helper stores its own changes)
+    # FIXME[old]: we actually need multiple helpers, one for each Observable
+    _qObserverHelper = None  # : QObserverHelper
+    _qObserverHelpers: dict = None
 
     def __init__(self):
+        self._qObserverHelper = QObserver.QObserverHelper(self)
+        self._qObserverHelpers = {}
+
+    def _registerView(self, name, interests=None):
         # FIXME[question]: do we have to call this from the main thread
         #if not threading.current_thread() is threading.main_thread():
-        #    raise RuntimeError("QObserver.observe must be called from"
+        #    raise RuntimeError("QObserver._registerView must be called from"
         #                       "the main thread, not " +
         #                       threading.current_thread().name + ".")
-        if self._qObserverHelper is  None:
-            self._qObserverHelper = QObserver.QObserverHelper(self)
+        self._qObserverHelpers[name] = \
+            QObserver.QObserverHelper(self, interests)
+        
 
     def observe(self, observable: Observable, interests=None):
-        if self._qObserverHelper is  None:
+        if self._qObserverHelper is None:
             raise RuntimeError("It seems QObserver's constructor was not "
                                "called (QObserverHelper is not set)")
 
@@ -115,7 +120,22 @@ class QObserver:
     def unobserve(self, observable):
         observable.remove_observer(self._qObserverHelper)
 
-    def _exchangeView(self, name, new_view, interests=None):
+    def _exchangeView(self, name: str, new_view, interests=None):
+        """Exchange the object (View or Controller) being observed.
+        This will store the object as an attribute of this QObserver
+        and add this QObserver as an oberver to our object of interest.
+        If we have observed another object before, we will stop
+        observing that object.
+
+        name: str
+            The name of the attribute of this object that holds the
+            reference.
+        new_view: View
+            The object to be observed. None means to not observe
+            anything.
+        interests:
+            The changes that we are interested in.
+        """
         old_view = getattr(self, name)
         if new_view == old_view:
             return  # nothing to do
@@ -124,6 +144,16 @@ class QObserver:
         setattr(self, name, new_view)
         if new_view is not None:
             new_view.add_observer(self, interests)
+
+    def _activateView(self, name: str, interests: None) -> None:
+        view = getattr(self, name)
+        if view is not None:
+            view.add_observer(self, interests)
+
+    def _deactivateView(self, name: str) -> None:
+        view = getattr(self, name)
+        if view is not None:
+            view.remove_observer(self)
 
     class QObserverHelper(QObject):
         """A helper class for the :py:class:`QObserver`.
@@ -139,15 +169,43 @@ class QObserver:
 
         This class has to inherit from QObject, as it defines an
         pyqtSlot.
+
+        This class has the following attributes:
+
+        _observer: Observer
+            The actuall Observer the finally should receive the
+            notifications.
+        _interests: Change
+            The changes, the Observer is interested in.
+        _change: Change
+            The unprocessed changes accumulated so far.
         """
-        def __init__(self, observer, parent=None):
-            """Initialization of the QObserver.
+
+        def __init__(self, observer, interests=None, parent=None):
+            """Initialization of the QObserverHelper.
             """
             super().__init__(parent)
             self._observer = observer
+            self._interests = interests
             self._change = None
-            
+
         def _qNotify(observable, self, change):
+            """Notify tha observer about some change. This will
+            initiate an asynchronous notification by queueing an
+            invocation of :py:meth:_qAsyncNotify in the Qt main event
+            loop. If there are already pending notifications, instead
+            of adding more notifications, the changes are simply
+            accumulated.
+
+            Arguments
+            ---------
+            observable: Observable
+                The observable that triggered the notification.
+            self: QObserverHelper
+                This QObserverHelper.
+            change:
+                The change that caused this notification.
+            """
             if self._change is None:
                 # Currently, there is no change event pending for this
                 # object. So we will queue a new one and remember the
@@ -168,6 +226,14 @@ class QObserver:
 
         @pyqtSlot(object)
         def _qAsyncNotify(self, observable):
+            """Process the actual notification. This method is to be invoked in
+            the Qt main event loop, where it can trigger changes to
+            the graphical user interface.
+
+            This method will simply call the :py:meth:`notify` method
+            of the :py:class:`Observable` to notify the actual
+            observer.
+            """
             change = self._change
             if change is not None:
                 self._change = None

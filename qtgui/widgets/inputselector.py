@@ -4,6 +4,7 @@ from datasources import (Datasource, DataArray, Random,
                          Controller as DatasourceController)
 
 from ..utils import QObserver, protect
+from .datasource import QLoopButton
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
@@ -49,8 +50,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         self.prepareButton = self._newNavigationButton('prepare')
         self.prepareButton.setCheckable(True)
         self.randomButton = self._newNavigationButton('random')
-        self.loopButton = self._newNavigationButton('loop')
-        self.loopButton.setCheckable(True)
+        self.loopButton = QLoopButton('loop')
 
         # _indexField: A text field to manually enter the index of
         # desired input.
@@ -121,7 +121,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         enabled = bool(self._controller)
         self.prepareButton.setEnabled(bool(self._controller))
         enabled = enabled and self._controller.prepared
-        for button in self._buttonList + [self.randomButton, self.loopButton,
+        for button in self._buttonList + [self.randomButton,
                                           self._indexField, self.infoLabel]:
             button.setEnabled(enabled)
         enabled = enabled and self._controller.isinstance(Random)
@@ -169,14 +169,13 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                 self._controller.prepare()
             else:
                 self._controller.unprepare()
-        elif self.sender() == self.loopButton:
-            self._controller.loop()
 
     def setDatasourceController(self,
                                 datasource: DatasourceController) -> None:
         interests = Datasource.Change('observable_changed', 'busy_changed',
                                       'state_changed')
         self._exchangeView('_controller', datasource, interests=interests)
+        self.loopButton.setDatasourceController(datasource)
 
     def datasource_changed(self, datasource: Datasource, info) -> None:
         """React to chanes in the datasource. Changes of interest are:

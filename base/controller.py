@@ -167,7 +167,7 @@ class View:
         if interests is None:
             interests = self._view_type.Change.all()
         if observer in self._observers:
-            raise RuntimeError(f"Adding observer {observer} twice to {view}.")
+            raise RuntimeError(f"Adding observer {observer} twice to {self}.")
         self._observers[observer] = interests
         observable = getattr(self, self._view_attribute, None)
         self._logger.debug(f"ADD: {self}.add_observer({observer}) "
@@ -279,7 +279,7 @@ class Controller(View):
             notify observers that the task was done.
         """
         self._logger.debug(f"{self}: Runing with runner {self._runner}"
-                           f"{function}({args}, {kwargs})")
+                           f"{function}")  # "({args}, {kwargs})")
         if self._runner is None:
             return self._run(function, *args, **kwargs)
         else:

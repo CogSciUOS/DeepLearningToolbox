@@ -1,9 +1,9 @@
-from datasources import Datasource, Predefined, InputData
+from datasources import Datasource, Loop, Predefined, InputData
 
 import numpy as np
 
 
-class DataNoise(Predefined):
+class DataNoise(Predefined, Loop):
     """A :py:class:`DataNoise` is a :py:class:`DataNoise` that
     provides different kinds of noise.
 

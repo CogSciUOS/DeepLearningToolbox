@@ -137,9 +137,10 @@ def add_timer_callback(callback):
     global _timer_callbacks
     _timer_callbacks.append(callback)
 
-
 # Should we use CPU (even if GPU is available)?
 use_cpu = True
+
+
 
 
 

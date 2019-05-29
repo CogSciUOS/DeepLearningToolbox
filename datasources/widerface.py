@@ -41,7 +41,7 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
     def __init__(self, prefix=None, section='train', **kwargs):
         super().__init__(id=f"wider-faces-{section}",
                          description=f"WIDER Faces", **kwargs)
-        self._widerface_data = '/space/data/widerface'
+        self._widerface_data = os.getenv('WIDERFACE_DATA', '.')
         self._section = section
         self.directory = os.path.join(self._widerface_data,
                                       'WIDER_' + self._section, 'images')

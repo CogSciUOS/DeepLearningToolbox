@@ -32,7 +32,7 @@ class Datasource(BusyObservable, method='datasource_changed',
     -------
     state_changed:
         The state of the DataSource has changed (e.g. data were downloaded,
-        loaded/unloaded, etc.)
+        loaded/unloaded, unprepared/prepared, etc.)
     data_changed:
         The data have changed (e.g. by invoking some fetch ... method).
     batch_changed:
@@ -582,3 +582,44 @@ class Predefined(Datasource):
     def download(self):
         raise NotImplementedError("Downloading this datasource is "
                                   "not implemented yet.")
+
+from threading import Event
+
+
+class Loop:
+
+    # An event manages a flag that can be set to true with the set()
+    # method and reset to false with the clear() method. The wait()
+    # method blocks until the flag is true.
+    _loop_event: Event = None
+    _loop_running: bool = False
+    
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._loop_running = False
+        self._loop_event = None
+
+    @property
+    def looping(self):
+        """Check if this datasource is currently looping.
+        """
+        return self._loop_running   
+
+    def start_loop(self):
+        if not self._loop_running:
+            self._loop_running = True
+            self._loop_event = Event()
+            self.change('state_changed')
+
+    def stop_loop(self):
+        if self._loop_running:
+            self._loop_running = False
+            self.change('state_changed')
+
+    def run_loop(self):
+        # self._logger.info("Running datasource loop")
+        while self._loop_running:
+            self.fetch(random=True)
+            self._loop_event.clear()
+            self._loop_event.wait(timeout=.2)
+        self._loopEvent = None

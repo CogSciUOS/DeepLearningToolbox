@@ -1,4 +1,32 @@
 
+"""
+
+FIXME[concept]: we need some concept to run the Toolbox
+
+* The Toolbox can run in a single thread or multi-threaded
+* The Toolbay can run with or without graphical user interface
+
+In all cases, we want some consistent behavior:
+* it should be possible to stop the Toolbox by typing Ctrl+C
+* it should be possible to stop the Toolbox from the GUI
+* we want to exit gracefully (no errors)
+
+Concepts:
+* initialize the toolbox by calling its constructor
+* start the toolbox by calling toolbox.run()
+   -> start background threads
+   -> if running with GUI, start the main event loop
+* stop the toolbox by calling toolbox.stop()
+   -> if running with GUI, stop the main event loop
+   -> stop all background threads (FIXME[todo])
+* quit the toolbox by calling toolbox.quit()
+   -> stop the toolbox (call toolbox.stop())
+   -> close the main window
+"""
+
+# FIXME[hack]: There should be no direct access to the mainWindow.
+#  All interaction should be initiated via events
+
 #
 # Changing global logging Handler
 #
@@ -105,19 +133,14 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         #
 
         # FIXME[hack]: do not use local imports
-        # FIXME[hack]: do not import Qt here!
-        from PyQt5.QtWidgets import QApplication
-        self._app = QApplication(sys.argv)
-
-        # FIXME[hack]: this needs to be local to avoid circular imports
+        # We use the local import here to avoid circular imports
         # (qtgui.mainwindow imports toolbox.ToolboxController)
-        from qtgui.mainwindow import DeepVisMainWindow
-        self._mainWindow = DeepVisMainWindow(self._toolbox_controller)
+        from qtgui import create_gui
+        self._mainWindow = create_gui(sys.argv, self._toolbox_controller)
         # FIXME[hack]: we need a better solution here!
         self._runner = self._mainWindow.getRunner()
         self._toolbox_controller.runner = self._runner
         self._activation_controller.runner = self._runner
-        self._mainWindow.show()
 
     def _initialize_gui2(self):
         #
@@ -158,21 +181,80 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         return (self._value == 0)
 
     def run(self):
+        #
+        # Setup handling of KeyboardInterrupt (Ctrl-C)
+        #
+        import signal
+        signal.signal(signal.SIGINT, self._interrupt_handler)
+        # There may be a problem when this is done in the context of
+        # PyQT: the main event loop is run in C++ core of Qt and is
+        # not aware of the Python interpreter. The interrupt handler
+        # will only be called after a (Python) event is emitted by the
+        # GUI that is handled by the (Python) interpreter.
+        # An ad hoc solutino is to use a QTimer to periodically run some
+        # (dummy) Python code to make sure the signal handler gets a
+        # chance to be executed:
+        # safe_timer(50, lambda: None)
+
         return self._run_gui()
 
+    def quit(self):
+        """Quit this toolbox.
+        """
+        if self._mainWindow is not None:
+            # This will stop the main event loop.
+            print("Toolbox: Now stopping GUI main event loop.")
+            self._mainWindow.stop()
+            # Once the GUI main event loop was stopped, also the finally
+            # block of the run method is executed ...
+            print("Toolbox: Quitting now ...")
+        else:
+            print("Toolbox: Quitting the toolbox.")
+            sys.exit(0)
+    
+    # FIXME[concept]: It may be better to define the interrupt handler as
+    # a global function (not a method) to make sure it is not garbage
+    # collected when going out of scope ...
+    def _interrupt_handler(self, signum, frame):
+        """Handle KeyboardInterrupt: quit application."""
+        print(f"Toolbox: Keyboard interrupt: signum={signum}, frame={frame}")
+        self.quit()
+
     def _run_gui(self):
-        # FIXME[hack]
-        self._runner.runTask(self.initializeToolbox,
+        # Initialize the toolbox in the background, while
+        # the (event loop of the) GUI is already started
+        # in the foreground. 
+        # FIXME[hack]:
+        self._runner.runTask(self.initialize_toolbox,
                              self._args, self._mainWindow)
-        #initializeToolbox(args, mainWindow)
+        # self.initialize_toolbox(self._args, self._mainWindow)
 
-        util.start_timer(self._mainWindow.showStatusResources)
+        # we start a background timer to periodically updated the user
+        # interface.
+        # util.start_timer(self._mainWindow.showStatusResources)
+        self._mainWindow.safe_timer(1000, self._mainWindow.showStatusResources)
+
         try:
-            return self._app.exec_()
+            # This will enter the main event loop.
+            # It will only return once the main event loop exits.
+            return self._mainWindow.run()
         finally:
-            util.stop_timer()
+            print("Toolbox: finally stopping the timer ...")
+            self._mainWindow.stop_timer()
 
-    def initializeToolbox(self, args, gui):
+    def initialize_toolbox(self, args, gui):
+        """Initialize the Toolbox, by importing required classes,
+        tools, datasets and models.
+
+        The initialization process may take some while and may be
+        executed in some background thread.
+
+        FIXME[todo]: There may be some conceptual improvements like:
+        * incremental initialization: only load stuff that is currently
+          needed. This may reduce the memory footprint and speed up
+          initialization.
+        * provide some feedback on the progress of initialization
+        """
         try:
             from datasources import DataDirectory
 
@@ -183,7 +265,8 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
                 # FIXME[hack]
                 lucid_engine.load_model('InceptionV1')
                 lucid_engine.set_layer('mixed4a', 476)
-                gui.setLucidEngine(lucid_engine)
+                if self._mainWindow is not None:
+                    self._mainWindow.setLucidEngine(lucid_engine)
 
             from datasources import Predefined
             for id in Predefined.get_data_source_ids():
@@ -198,7 +281,8 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
                 source = DataDirectory(args.datadir)
 
             self._datasource_controller(source)
-            #gui.setDatasource(source)
+            # if self._mainWindow is not None:
+            #     self._mainWindow.setDatasource(source)
 
             #
             # network: dependes on the selected framework

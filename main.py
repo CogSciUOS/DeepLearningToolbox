@@ -57,6 +57,7 @@ def main():
 
     toolbox = Toolbox(args)
     rc = toolbox.run()
+    print(f"Main: exiting gracefully (rc={rc}).")
     sys.exit(rc)
 
 

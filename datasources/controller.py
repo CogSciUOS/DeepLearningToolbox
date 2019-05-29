@@ -1,12 +1,10 @@
 from base import View as BaseView, Controller as BaseController, change, run
-from .source import Datasource, Labeled
+from .source import Datasource, Labeled, Loop
 from .array import DataArray
 from .directory import DataDirectory
 from .file import DataFile
 
 import logging
-import threading
-from threading import Event
 import numpy as np
 
 
@@ -36,8 +34,6 @@ class Controller(View, BaseController):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._loop_running = False
-        self._loop_event = None
 
     def __len__(self) -> int:
         """Returns the number of elements in the currently selected
@@ -162,24 +158,21 @@ class Controller(View, BaseController):
         """Set the directory to be used for loading data."""
         self(DataDirectory(dirname))
 
-    def loop(self):
+    def loop(self, looping: bool=None):
         """Start or stop looping through the Datasource.
         This will fetch one data point after another.
         This is mainly intended to display live input like
         movies or webcam, but it can also be used for other Datasources 
         """
-        if self._loop_running:
+        if not isinstance(self._datasource, Loop):
+            return
+        if looping is not None and (looping == self.looping):
+            return
+        
+        if self.looping:
             self._logger.info("Stopping datasource loop")
-            self._loop_running = False
+            self.stop_loop()
         else:
             self._logger.info("Starting datasource loop")
-            self._loop_event = Event()
-            self._loop_running = True
-            self._runner.runTask(self._loop)
-
-    def _loop(self):
-        self._logger.info("Running datasource loop")
-        while self._loop_running:
-            self._datasource.fetch(random=True)
-            self._loop_event.clear()
-            self._loop_event.wait(timeout=.2)
+            self.start_loop()
+            self._runner.runTask(self._datasource.run_loop)

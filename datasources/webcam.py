@@ -1,9 +1,9 @@
-from . import Predefined, InputData
+from . import Predefined, InputData, Loop
 
 import importlib
 import numpy as np
 
-class DataWebcam(Predefined):
+class DataWebcam(Predefined, Loop):
     """A data source fetching images from the webcam.
 
     Attributes

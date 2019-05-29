@@ -339,3 +339,62 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
                                 datasource: DatasourceController) -> None:
         self._exchangeView('_datasource', datasource)
         # FIXME[todo]: interests?
+
+
+from PyQt5.QtWidgets import QWidget, QPushButton
+
+from datasources import (Datasource, Loop,
+                         Controller as DatasourceController)
+
+class QLoopButton(QPushButton, QObserver, Datasource.Observer):
+    """A Button to control a :py:class:`Datasource` of type
+    :py:class:`Loop`. Such datasources can be in a loop mode, meaning
+    that they continously produce new data (e.g., webcam, movies,
+    etc.).
+
+    The :py:class:`QLoopButton` can observe a :py:class:`Datasource`
+    and adapt its appearance and function based on the state of the
+    datasource.
+
+    Attributes
+    ----------
+    _datasourceController: DatasourceController
+        A datasource controller used by this Button to control the
+        (loop mode) of the Datasource.
+    """
+
+    _datasourceController: DatasourceController = None
+
+    def __init__(self, text: str='Loop', datasource: DatasourceController=None,
+                 parent: QWidget=None) -> None:
+        super().__init__(text, parent)
+        self.setCheckable(True)
+        self.setDatasourceController(datasource)
+        self.toggled.connect(self.onToggled)
+
+    def setDatasourceController(self, datasource: DatasourceController) -> None:
+        interests = Datasource.Change('observable_changed', 'state_changed')
+        self._exchangeView('_datasourceController', datasource,
+                           interests=interests)
+
+    def datasource_changed(self, datasource: Datasource,
+                           change: Datasource.Change) -> None:
+        self.update()
+
+    def onToggled(self):
+        if (self._datasourceController is not None and
+            self._datasourceController.isinstance(Loop)):
+            #
+            checked = self.isChecked()
+            self._datasourceController.loop(checked)
+
+    def update(self) -> None:
+        """Update this QLoopButton based on the state of the
+        :py:class:`Datasource`.
+        """
+        enabled = (self._datasourceController and
+                   self._datasourceController.isinstance(Loop) and
+                   self._datasourceController.prepared)
+        self.setEnabled(enabled)
+        checked = enabled and self._datasourceController.looping
+        self.setChecked(checked)
