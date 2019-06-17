@@ -191,6 +191,10 @@ class AdversarialExampleController(Observable,
     _testing                    = False
     _label_smoothing            = 0.1
 
+
+    # FIXME[todo]: this needs to be initialized ...
+    _runner: Runner = None
+
     def __init__(self):
         super().__init__()
 
@@ -284,7 +288,9 @@ class AdversarialExampleController(Observable,
         """Train the model using the current training data.
         """
         logging.info("Training Cleverhans model from scratch.")
-        util.runner.runTask(self._train_model)
+        # FIXME[todo]: self._runner is not initialized yet!
+        #self._runner.runTask(self._train_model)
+        self._train_model()  # FIXME[hack]
 
     def _train_model(self):
         self._busy = True

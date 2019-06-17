@@ -79,6 +79,7 @@ class ActivationsPanel(Panel, QObserver, ActivationEngine.Observer):
         interests = ActivationEngine.Change('network_changed')
         self._exchangeView('_activation', activations, interests=interests)
         self._networkView.setActivationsController(activations)
+        self._inputView.setActivationView(activations)
         self._activationView.setActivationController(activations)
         self._classesView.setActivationView(activations)
 
@@ -216,5 +217,5 @@ class ActivationsPanel(Panel, QObserver, ActivationEngine.Observer):
         """
         if info.network_changed:
             network = activation.network
-            enabled = network and network.is_classifier()
+            enabled = network is not None and network.is_classifier()
             self._classesViewBox.setEnabled(enabled)

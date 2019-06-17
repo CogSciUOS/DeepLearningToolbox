@@ -1,5 +1,6 @@
 from toolbox import Toolbox, View as ToolboxView
-from tools.activation import Engine as ActivationEngine
+from tools.activation import (Engine as ActivationEngine,
+                              View as ActivationView)
 from ..utils import QImageView, QObserver
 
 import numpy as np
@@ -46,9 +47,12 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
     modeChanged = pyqtSignal(bool)
 
     _toolbox: ToolboxView = None
+    _activation: ActivationView = None
     _processed: bool = False
     
-    def __init__(self, toolbox: ToolboxView=None, parent: QWidget=None):
+    def __init__(self, toolbox: ToolboxView=None,
+                 activations: ActivationView=None,
+                 parent: QWidget=None):
         """Initialize this QModelImageView.
 
         Arguments
@@ -58,6 +62,7 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         super().__init__(parent)
         self.modeChanged.connect(self.onModeChanged)
         self.setToolboxView(toolbox)
+        self.setActivationView(toolbox)
 
     def setToolboxView(self, toolbox: ToolboxView) -> None:
         self._exchangeView('_toolbox', toolbox,
@@ -82,6 +87,37 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
         self._setImageFromToolbox()
+
+    #
+    # ActivationEngine.Observer
+    #
+
+    def setActivationView(self, toolbox: ActivationView) -> None:
+        interests = ActivationEngine.Change('activation_changed',
+                                            'unit_changed')
+        self._exchangeView('_activation', toolbox, interests=interests)
+
+    def activation_changed(self, engine: ActivationEngine,
+                           info: ActivationEngine.Change) -> None:
+        """The :py:class:`QModelImageView` is only interested in the
+        activations.
+        """
+        try:
+            activation = engine.get_activation()
+            unit = engine.unit
+        except ValueError:
+            activation = None
+        print(f"QModelImageView.activation_changed({activation is not None})")
+
+        # For convolutional layers add a activation mask on top of the
+        # image, if a unit is selected
+        if (activation is not None and unit is not None and
+            activation.ndim > 1):  # exclude dens layers
+            from util import grayscaleNormalized
+            activation_mask = grayscaleNormalized(activation[..., unit])
+            self.setMask(activation_mask)
+        else:
+            self.setMask(None)
 
     @pyqtSlot(bool)
     def onModeChanged(self, processed: bool) -> None:
@@ -129,32 +165,3 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         else:
             image = self._activation.input_data
         self.setImage(image)
-
-    def activation_changed(self, activation: ActivationEngine,
-                     info: ActivationEngine.Change) -> None:
-        """
-        The QModelImageView is mainly interested in 'input_changed'
-        events. 
-        """
-        print("FIXME: QModelImageView.activation_changed was ignored!")
-        return
-        # FIXME[hack]: this is not an appropriate way to set the model!
-        self._activation = activation
-
-        # If the input changed, we will display the new input image
-        if info.input_changed:
-            self._setImageFromModel()
-
-        # For convolutional layers add a activation mask on top of the
-        # image, if a unit is selected
-        activation = activation.get_activation()
-        unit = activation.unit
-        if (activation is not None and unit is not None and
-            activation.ndim > 1):  # exclude dens layers
-            from util import grayscaleNormalized
-            activation_mask = grayscaleNormalized(activation[..., unit])
-            self.setMask(activation_mask)
-        else:
-            self.setMask(None)
-
-            

@@ -173,7 +173,7 @@ class View:
         self._logger.debug(f"ADD: {self}.add_observer({observer}) "
                            f"observable={observable}")
         if observable is not None:
-            observer.observe(observable)
+            observer.observe(observable, interests)
             self._logger.debug(f"  =>{observable}.notify({observer}, "
                                f"{observable.Change.all()})")
             # Send a Change.all() notification to the new Observer, to

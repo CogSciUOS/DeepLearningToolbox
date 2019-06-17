@@ -139,7 +139,15 @@ class DeepVisMainWindow(QMainWindow):
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
 
-    def run(self):
+    def run(self, **kwargs):
+        self.start_timer()
+
+        # Initialize the Toolbox in the background, while the (event
+        # loop of the) GUI is already started in the foreground.
+        self._runner.runTask(self._toolbox.setup, **kwargs)
+
+        # This function will only return once the main event loop is
+        # finished.
         return self._app.exec_()
 
     def stop(self):
@@ -151,19 +159,26 @@ class DeepVisMainWindow(QMainWindow):
         # QCoreApplication.quit()
         self._app.quit()
 
-    def safe_timer(self, timeout, func, *args, **kwargs):
+    def start_timer(self, timeout: int=1000) -> None:
         """
-        Create a timer that is safe against garbage collection and overlapping
-        calls. See: http://ralsina.me/weblog/posts/BB974.html
+        Create a Qtimer that is safe against garbage collection
+        and overlapping calls.
+        See: http://ralsina.me/weblog/posts/BB974.html
+
+        Parameter
+        ---------
+        timeout: int
+            Time interval in millisecond between timer invocations.
         """
         def timer_event():
             if self._timerIsRunning:
                 try:
-                    func(*args, **kwargs)
+                    self.showStatusResources()
                 finally:
                     QTimer.singleShot(timeout, timer_event)
             else:
                 print("GUI: QTimer was stopped.")
+
         self._timerIsRunning = True
         QTimer.singleShot(timeout, timer_event)
 
@@ -472,9 +487,10 @@ class DeepVisMainWindow(QMainWindow):
                                 trainingController=training)
 
     def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
+        activation_tool = self._toolbox.add_tool('activation')
         network = self._toolbox.autoencoder_controller
         return ActivationsPanel(toolbox=self._toolbox, network=network,
-                                activations=self._toolbox.activation_controller,
+                                activations=activation_tool,
                                 datasource=self._toolbox.datasource_controller)
 
     def _initMaximizationPanel(self, maximization: Panel) -> None:
@@ -508,11 +524,11 @@ class DeepVisMainWindow(QMainWindow):
     #                           FIXME[old]                                   #
     ##########################################################################
 
-    def setModel(self, model: ActivationEngine) -> None:
-
+    def setActivationEngine(self) -> None:
+        print("FIXME[old]: MainWindow.setActivationEngine() was called!")
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
-            activationsPanel.setController(self._toolbox.activation_controller,
+            activationsPanel.setController(self._toolbox.get_tool('activation'),
                                            ActivationEngine.Observer)
             activationsPanel.setController(self._toolbox.datasource_controller,
                                            Datasource.Observer)
@@ -523,6 +539,7 @@ class DeepVisMainWindow(QMainWindow):
                                             ActivationEngine.Observer)
 
     def setLucidEngine(self, engine:'LucidEngine'=None) -> None:
+        print("FIXME[old]: MainWindow.setLucidEngine() was called!")
         lucidPanel = self.panel('lucid')
         if lucidPanel is not None:
             from controller import LucidController
@@ -532,25 +549,10 @@ class DeepVisMainWindow(QMainWindow):
     def setDatasource(self, datasource: Datasource) -> None:
         """Set the datasource.
         """
+        print("FIXME[old]: MainWindow.setDatasource() was called!")
         self._toolbox.datasource_controller(datasource)
 
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
             activationsPanel.setController(self._toolbox.datasource_controller,
                                            Datasource.Observer)
-
-
-    def _oldCreateTabWidget(self):
-        if self._activations is not None:
-            self._tabs.addTab(self._activations, 'Activations')
-        if self._maximization is not None:
-            self._tabs.addTab(self._maximization, 'Maximization')
-        if self._lucid is not None:
-            self._tabs.addTab(self._lucid, 'Lucid')
-        if self._adversarial_example is not None:
-            self._tabs.addTab(self._adversarial_example, 'Adv. Examples')
-        if self._internals is not None:
-            self._tabs.addTab(self._internals, 'Internals')
-        if self._logging is not None:
-            self._tabs.addTab(self._logging, 'Logging')
-

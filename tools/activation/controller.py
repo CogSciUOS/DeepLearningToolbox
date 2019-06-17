@@ -24,6 +24,17 @@ class View(BaseView, view_type=Engine):
     def __init__(self, activation: Engine=None, **kwargs):
         super().__init__(observable=activation, **kwargs)
 
+    def __str__(self) -> str:
+        self = self._engine  # FIXME[hack]
+        result = f"Network = {self._network}"
+        result += "\nLayers:"
+        if self._layers is None:
+            result += " None"
+        else:
+            for layer in self._layers:
+                result += f" - {layer}"
+
+        return result
 
 class Controller(View, BaseController, Network.Observer):
     """Controller for :py:class:`qtgui.panels.ActivationsPanel`.

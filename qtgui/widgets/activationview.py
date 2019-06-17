@@ -21,7 +21,7 @@ import numpy as np
 
 
 class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
-    '''A widget to diplay the activations of a given layer in a
+    '''A widget to display the activations of a given layer in a
     network. Currently there are two types of layers that are
     supported: (two-dimensional) convolutional layers and dense
     (=fully connected) layers.
@@ -89,7 +89,8 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         self.setFocusPolicy(Qt.StrongFocus)
 
     def setActivationController (self, activation: ActivationsController ):
-        interests = ActivationEngine.Change('activation_changed')
+        interests = ActivationEngine.Change('activation_changed',
+                                            'unit_changed')
         self._exchangeView('_activationController', activation,
                            interests=interests)
 
@@ -112,7 +113,10 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         if info & {'network_changed', 'layer_changed', 'input_changed',
                    'activation_changed'}:
             
-            activation = engine.get_activation()
+            try:
+                activation = engine.get_activation()
+            except ValueError:
+                activation = None
             self._current_unit = engine.unit
 
             if activation is not None:

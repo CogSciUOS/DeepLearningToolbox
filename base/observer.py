@@ -388,6 +388,13 @@ class Observable:
         getattr(observer, self._change_method)(self, info)
 
 
+    def print_observers(self):
+        """Output the observers. Intended for debugging.
+        """
+        print(f"{len(self._observers)} Observers:")
+        for observer, (notify, interest) in self._observers.items():
+            print(f"  {observer}: {notify} ({interest})") 
+
 
 def busy(function):
     """A decorator that marks a methods affecting the business of an

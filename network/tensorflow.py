@@ -74,7 +74,7 @@ class Network(BaseNetwork):
         'evaluation': {'TopKV2'},
         'losses': {'L2Loss'},
         'morphological_filtering': set(),
-        'normalization': {'LRN'},
+        'normalization': {'LRN'},  # local response normalization
         'pooling': {'AvgPool',
                     'MaxPool',
                     'MaxPoolWithArgmax',
@@ -283,9 +283,41 @@ class Network(BaseNetwork):
 
 
         ops = self._graph.get_operations()
+
+        depth = {}
+        indent = ""
+        for op_idx, op in enumerate(ops):
+            # The first placeholder we find will be our input layer:
+            if not depth:
+                if op.type == 'Placeholder':
+                    depth[op.name] = 1
+                    #print(f"{op_idx}: {op.name} is input layer! (depth={depth[op.name]})")
+            else:
+                #print(f"Parsing at opeartor index {op_idx} ({ops[op_idx].type})")
+                for input_name in [t.op.name for t in op.inputs]:
+                    if input_name in depth:
+                        info = ""
+                        depth[op.name] = depth[input_name]+1
+                        if op.type == 'ConcatV2':
+                            indent = ""
+                            info = f"{op.inputs[0].shape} + {op.inputs[1].shape} -> {op.outputs[0].shape}"
+                        if op.type == 'Split':
+                            info = f"{op.inputs[1].shape} -> {op.outputs[0].shape} x {op.outputs[1].shape}"
+                        if op.type == 'Conv2D':
+                            info = f"{op.inputs[0].shape} * {op.inputs[1].shape} -> {op.outputs[0].shape}; strides: {op.get_attr('strides')}, padding: {op.get_attr('padding')}, data_format: {op.get_attr('data_format')}"
+                        if op.type == 'MaxPool':
+                            info = f"{op.inputs[0].shape} -> {op.outputs[0].shape}; strides: {op.get_attr('strides')}, padding: {op.get_attr('padding')}, data_format: {op.get_attr('data_format')}"
+                        if op.type == 'Reshape':
+                            info = f"{op.inputs[0].shape} -> {op.outputs[0].shape}"
+                        #print(f"{op_idx}: {indent}{op.name} ({op.type}) is successor of {input_name} (depth={depth[op.name]}) [{info}]")
+                        if op.type == 'ConcatV2':
+                            break
+                        if op.type == 'Split':
+                            indent = "  "
+            op_idx += 1
+
         op_idx = 0
         self._input_placeholder = None
-
 
         while op_idx < len(ops):
             logger.debug(f"debug:  op-{op_idx}: "
@@ -293,10 +325,15 @@ class Network(BaseNetwork):
                          # always <class 'tensorflow.python.framework.ops.Operation'>
                          f"{ops[op_idx].type} with name '{ops[op_idx].name}', "
                          f"{ops[op_idx].values()}")
-                
+
+            op = ops[op_idx]
+
+            # The first placeholder we find will be our input layer:
             if self._input_placeholder is None:
-                if ops[op_idx].type == 'Placeholder':
-                    self._input_placeholder = ops[op_idx]
+                if op.type == 'Placeholder':
+                    self._input_placeholder = op
+                    depth[op.name] = 1
+                    #print(f"   {op.name} is input layer! (depth={depth[op.name]})")
                 op_idx += 1
                 continue
 
@@ -309,12 +346,14 @@ class Network(BaseNetwork):
                     layer_dict[layer_name] = self._LAYER_TYPES_TO_CLASSES[layer_type](self, matching_ops)
                     logger.debug(f"debug:   ** {layer_name}"
                                  f" => {type(layer_dict[layer_name])}")
+
                     # If the layer definition was successfully
                     # matched, advance the number of ops that were
                     # matched. Don't try to match another layer
                     # definition at the same op by breaking the for
                     # loop.
                     op_idx += len(layer_def) - 1
+                    #print(f"  -> found layer {matching_ops}  -> {op_idx}")
                     break
                 except NonMatchingLayerDefinition:
                     continue

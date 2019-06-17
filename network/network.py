@@ -792,7 +792,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
 
-
     # FIXME[concept]: the following methods are only relevant for classifiers.
     # redesign the API to introduce a special Classifier Network class.
 

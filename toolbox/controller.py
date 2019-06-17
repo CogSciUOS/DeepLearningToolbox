@@ -16,6 +16,31 @@ class View(BaseView, view_type=Toolbox):
         return (() if self._toolbox is None else
                 iter(self._toolbox._datasources))
 
+    def __str__(self):
+        self = self._toolbox # FIXME[hack]
+        result = f"GUI: {self._gui is not None}"
+        result += "\nTools:"
+        if self._tools is None:
+            result += " None"
+        else:
+            for tool in self._tools:
+                result += f"\n  - {tool}"
+
+        result += "\nNetworks:"
+        if self._networks is None:
+            result += " None"
+        else:
+            for network in self._networks:
+                result += f"\n  - {network}"
+
+        result += "\nDatasources:"
+        if self._datasources is None:
+            result += " None"
+        else:
+            for datasource in self._datasources:
+                result += f"\n  - {datasource}"
+
+        return result + "\n"
 
 import util
 from .toolbox import Toolbox
@@ -53,7 +78,7 @@ class Controller(View, BaseController):
         # -> tools.activation.Controller
         """Get the Controller for the activation engine.
         """
-        return getattr(self._toolbox, '_activation_controller', None)
+        return self.get_tool('activation')
 
     @property
     def maximization_engine(self) -> BaseController:  # -> tools.am.Controller

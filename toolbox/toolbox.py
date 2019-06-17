@@ -4,11 +4,11 @@
 FIXME[concept]: we need some concept to run the Toolbox
 
 * The Toolbox can run in a single thread or multi-threaded
-* The Toolbay can run with or without graphical user interface
+* The Toolbox can run with or without graphical user interface
 
 In all cases, we want some consistent behavior:
-* it should be possible to stop the Toolbox by typing Ctrl+C
-* it should be possible to stop the Toolbox from the GUI
+* it should be possible to stop the Toolbox by typing Ctrl+C [ok]
+* it should be possible to stop the Toolbox from the GUI [ok]
 * we want to exit gracefully (no errors)
 
 Concepts:
@@ -24,9 +24,22 @@ Concepts:
    -> close the main window
 """
 
-# FIXME[hack]: There should be no direct access to the mainWindow.
-#  All interaction should be initiated via events
 
+#
+# FIXME[hack]: There should be no direct access to the GUI (MainWindow).
+#  All interaction should be initiated via events
+#
+# Current methods we access in the GUI:
+#   - self._gui.getRunner()
+#   - self._gui.activateLogging
+#   - self._gui.showStatusResources
+#   - self._gui.safe_timer
+#   - self._gui.stop_timer()
+#   - self._gui.run()
+#   - self._gui.stop()
+#   - self._gui.panel()
+#   - self._gui.setLucidEngine()
+#   - self._gui.setActivationEngine()
 #
 # Changing global logging Handler
 #
@@ -38,7 +51,12 @@ print("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+# silencing the matplotlib logger
+logger = logging.getLogger('matplotlib')
+logger.setLevel(logging.WARNING)
+
 import util
+
 root_logger = logging.getLogger()
 root_logger.handlers = []
 logRecorder = util.RecorderHandler()
@@ -48,10 +66,8 @@ root_logger.addHandler(logRecorder)
 logger = logging.getLogger(__name__)
 logger.debug(f"Effective debug level: {logger.getEffectiveLevel()}")
 
-import numpy as np
 
-#from asyncio import Semaphore
-from threading import Semaphore
+import numpy as np
 
 from base import (Observable, BusyObservable, busy, change,
                   Runner, Controller as BaseController)
@@ -61,25 +77,53 @@ from util import addons
 # that actually needed
 
 from network import Network
-from network.examples import keras, torch
+#from network.examples import keras, torch
 from datasources import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
 
 
-class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
+class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
-              changes=['lock_changed', 'networks_changed',
+              changes=['networks_changed',
+                       'tools_changed',
                        'datasources_changed', 'datasource_changed',
                        'input_changed'],
               changeables={
                   'datasource': 'datasource_changed'
               }):
-    """
+    """The :py:class:`Toolbox` is the central instance for
+    coordinating :py:class:`Datasource`s, :py:class:`Network`s and
+    different tools. It also allows for attaching different kinds of
+    user interfaces.
+
+    Datasources
+    -----------
+    
+    The :py:class:`Toolbox` maintains a list of :py:class:`Datasource`s.
+
+    The :py:class:`Toolbox` also has a current :py:class:`Datasource`
+    which will be the default :py:class:`Datasource` for all
+    components that support such a functionality. Changing the
+    :py:class:`Toolbox`es :py:class:`Datasource` will also change the
+    :py:class:`Datasource` for these components.
+
+
+    Input
+    -----
+
+    The :py:class:`Toolbox` provides input data for components
+    interested in such data. These compoenent will be informed when
+    the input data changed via an "input_changed" message.
+
+
+    Networks
+    --------
+    
+
+    The :py:class:`Toolbox` is an 
 
     Changes
     -------
-    lock_changed:
-
     networks_changed:
         The networks managed by this Toolbox were changed: this can
         mean that a network was added or removed from the Toolbox,
@@ -91,43 +135,120 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
     input_changed:
         The current input has changed. The new value can be read out
         from the :py:meth:`input` property.
+
+    Usage
+    -----
+
+    Upon construction, a :py:class:`Toolbox` will be basically empty.
+    No resources are loaded, not tools are prepared and no user
+    interface is attachted to the new :py:class:`Toolbox`. Those can
+    be added by calling specific methods.
+
+
+    Attributes
+    ----------
+    _toolbox_controller:
+        A :py:class:`ToolboxController` controlling this
+        :py:class:`Toolbox`.
+    _runner:
+        A :py:class:`Runner` that is used to run tools in the background.
+        If None, all tasks will be run in the main :py:class:`Thread`.
+    _networks:
+        A list of :py:class:`Network`s managed by this :py:class:`Toolbox`.
+    _tools:
+        A list of tools provided by this :py:class:`Toolbox`.
+    _gui:
+        The GUI associated with the :py:class:`Toolbox` or None
+        if no GUI is used.
     """
+    _toolbox_controller: BaseController = None  # 'ToolboxController'
+    _runner: Runner = None
     _networks: list = None
     _datasources: list = None
-    _toolbox_controller: BaseController = None  # 'ToolboxController'
     _datasource_controller: DatasourceController = None
-    _runner: Runner = None
-    _activation_engine: Observable = None # 'ActivationEngine'
-    _activation_controller: BaseController = None # 'ActivationController'
+
+    _tools: dict = None
+
     _input_data: np.ndarray = None
     _input_label = None
     _input_datasource = None
     _input_description = None
 
-    def __init__(self, args):
-        Semaphore.__init__(self, 1)
-        BusyObservable.__init__(self)
-        self._args = args
+    _gui = None
+
+
+    def __init__(self):
+        """Initialize the toolbox.
+
+    
+        When running with a GUI, certain concurrency issues arise: The
+        GUI should be started quick, showing the user that something
+        is happening. It may display some progress indicator, allowing
+        to see what is done in the background.  As the GUI should be
+        responsive in that situation, this means that the actual
+        initialization should be run in a background thread.
+
+        Hence the actual initialization is split into several parts:
+        The constructor checks just checks if a GUI should be used.
+        The actual initialization is done in the method
+        _initialize_toolbox().
+        """
+        super().__init__()
+
+        # provide access to this Toolbox via a ToolboxController
         self._toolbox_controller = ToolboxController(self)
 
-        # FIXME[old] ...
-        from tools.activation import (Engine as ActivationEngine,
-                                      Controller as ActivationController)
-        self._activation_engine = ActivationEngine(toolbox=self)
-        self._activation_controller = \
-            ActivationController(activation=self._activation_engine)
-        network_controller = self._toolbox_controller.autoencoder_controller  # FIXME[hack]
-        self._activation_controller.set_network_controller(network_controller)
-        
-        # we need the GUI first to get the runner ...
-        self._initialize_gui1()
-
+        self._initialize_tools()
         self._initialize_datasources()
         self._initialize_networks()
 
-        self._initialize_gui2()
+    def set_runner(self, runner: Runner) -> None:
+        """Set the :py:class:`Runner` to be used by this
+        :py:class:`Toolbox`.
 
-    def _initialize_gui1(self):
+        Parameter
+        ---------
+
+        runner: Runner
+            The :py:class:`Runner` to be used. None means that no
+            :py:class:`Runner` should be used.
+        """
+        # FIXME[concept]: either store it in Toolbox or in the Controller,
+        # but not in both. Probably the more accurate way is to store
+        # it in the Controller, as that is the object that should
+        # actually run threads ...
+        self._runner = runner
+        self._toolbox_controller.runner = self._runner
+        if self._tools is not None:
+            for tool in self._tools.values():
+                tool.runner = runner
+
+    # FIXME[concept]: It may be better to define the interrupt handler as
+    # a global function (not a method) to make sure it is not garbage
+    # collected when going out of scope ...
+    def _interrupt_handler(self, signum, frame):
+        """Handle KeyboardInterrupt: quit application."""
+        print(f"Toolbox: Keyboard interrupt: signum={signum}, frame={frame}")
+        self.quit()
+
+    def quit(self):
+        """Quit this toolbox.
+        """
+        if self._gui is not None:
+            # This will stop the main event loop.
+            print("Toolbox: Now stopping GUI main event loop.")
+            self._gui.stop()
+            # Once the GUI main event loop was stopped, also the finally
+            # block of the run method is executed ...
+            print("Toolbox: Quitting now ...")
+        else:
+            print("Toolbox: Quitting the toolbox.")
+            sys.exit(0)
+    
+    def _run_gui(self, gui="qt", panels=[], **kwargs):
+        """Create a graphical user interface for this :py:class:`Toolbox`
+        and run the main event loop.
+        """
         #
         # create the actual application
         #
@@ -136,51 +257,27 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         # We use the local import here to avoid circular imports
         # (qtgui.mainwindow imports toolbox.ToolboxController)
         from qtgui import create_gui
-        self._mainWindow = create_gui(sys.argv, self._toolbox_controller)
+        self._gui = create_gui(sys.argv, self._toolbox_controller)
+
         # FIXME[hack]: we need a better solution here!
-        self._runner = self._mainWindow.getRunner()
-        self._toolbox_controller.runner = self._runner
-        self._activation_controller.runner = self._runner
+        self.set_runner(self._gui.getRunner())
 
-    def _initialize_gui2(self):
-        #
-        # redirect logging
-        #
-        self._mainWindow.activateLogging(root_logger, logRecorder, True)      
-
-        import util
-        util.runner = self._runner  # FIXME[hack]: util.runner seems only be used by qtgui/panels/advexample.py
 
         #
         # Initialise the panels.
         #
-        if addons.use('autoencoder'):
-            self._mainWindow.panel('autoencoder', create=True)
-
-        # Initialise the "Activation Maximization" panel.
-        #if addons.use('maximization'):
-        #self._mainWindow.panel('maximization', create=True)
-
-        # Initialise the "Resources" panel.
-        #self._mainWindow.panel('resources', create=True, show=True)
+        for panel in panels:
+            self._gui.panel(panel, create=True)
 
         # FIXME[old]
-        self._mainWindow.setModel(self._activation_engine)
+        if self.contains_tool('activation'):
+            self._gui.setActivationEngine()
 
+        #
+        # redirect logging
+        #
+        self._gui.activateLogging(root_logger, logRecorder, True)      
 
-    def acquire(self):
-        result = super().acquire()
-        self.change('lock_changed')
-        return result
-
-    def release(self):
-        super().release()
-        self.change('lock_changed')
-
-    def locked(self):
-        return (self._value == 0)
-
-    def run(self):
         #
         # Setup handling of KeyboardInterrupt (Ctrl-C)
         #
@@ -191,58 +288,23 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         # not aware of the Python interpreter. The interrupt handler
         # will only be called after a (Python) event is emitted by the
         # GUI that is handled by the (Python) interpreter.
-        # An ad hoc solutino is to use a QTimer to periodically run some
+        # An ad hoc solution is to use a QTimer to periodically run some
         # (dummy) Python code to make sure the signal handler gets a
-        # chance to be executed:
-        # safe_timer(50, lambda: None)
-
-        return self._run_gui()
-
-    def quit(self):
-        """Quit this toolbox.
-        """
-        if self._mainWindow is not None:
-            # This will stop the main event loop.
-            print("Toolbox: Now stopping GUI main event loop.")
-            self._mainWindow.stop()
-            # Once the GUI main event loop was stopped, also the finally
-            # block of the run method is executed ...
-            print("Toolbox: Quitting now ...")
-        else:
-            print("Toolbox: Quitting the toolbox.")
-            sys.exit(0)
-    
-    # FIXME[concept]: It may be better to define the interrupt handler as
-    # a global function (not a method) to make sure it is not garbage
-    # collected when going out of scope ...
-    def _interrupt_handler(self, signum, frame):
-        """Handle KeyboardInterrupt: quit application."""
-        print(f"Toolbox: Keyboard interrupt: signum={signum}, frame={frame}")
-        self.quit()
-
-    def _run_gui(self):
-        # Initialize the toolbox in the background, while
-        # the (event loop of the) GUI is already started
-        # in the foreground. 
-        # FIXME[hack]:
-        self._runner.runTask(self.initialize_toolbox,
-                             self._args, self._mainWindow)
-        # self.initialize_toolbox(self._args, self._mainWindow)
-
-        # we start a background timer to periodically updated the user
-        # interface.
-        # util.start_timer(self._mainWindow.showStatusResources)
-        self._mainWindow.safe_timer(1000, self._mainWindow.showStatusResources)
+        # chance to be executed. 
+        #
+        # This should not be a problem for us, as the GUI should start a
+        # background timer to periodically update the user interface.
 
         try:
             # This will enter the main event loop.
             # It will only return once the main event loop exits.
-            return self._mainWindow.run()
+            print("Toolbox: runing the GUI main event loop")
+            return self._gui.run(**kwargs)
         finally:
             print("Toolbox: finally stopping the timer ...")
-            self._mainWindow.stop_timer()
+            self._gui.stop_timer()
 
-    def initialize_toolbox(self, args, gui):
+    def setup(self, tools=[], networks=[], datasources=[]):
         """Initialize the Toolbox, by importing required classes,
         tools, datasets and models.
 
@@ -256,69 +318,23 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         * provide some feedback on the progress of initialization
         """
         try:
-            from datasources import DataDirectory
+            for tool in tools:
+                self.add_tool(tool)
 
-            if addons.use('lucid') and False:  # FIXME[todo]
-                from tools.lucid import Engine as LucidEngine
+            self._toolbox_controller.hack_load_mnist()
+            for datasource in datasources:
+                datasource.prepare()
+            if len(datasources) > 0:
+                self._datasource_controller(datasources[-1])
 
-                lucid_engine = LucidEngine()
-                # FIXME[hack]
-                lucid_engine.load_model('InceptionV1')
-                lucid_engine.set_layer('mixed4a', 476)
-                if self._mainWindow is not None:
-                    self._mainWindow.setLucidEngine(lucid_engine)
-
-            from datasources import Predefined
-            for id in Predefined.get_data_source_ids():
-                datasource = Predefined.get_data_source(id)
-                self.add_datasource(datasource)
-
-            if args.data:
-                source = Predefined.get_data_source(args.data)
-            elif args.dataset:
-                source = Predefined.get_data_source(args.dataset)
-            elif args.datadir:
-                source = DataDirectory(args.datadir)
-
-            self._datasource_controller(source)
-            # if self._mainWindow is not None:
-            #     self._mainWindow.setDatasource(source)
-
-            #
-            # network: dependes on the selected framework
-            #
-            # FIXME[hack]: two networks/models seem to cause problems!
-            if args.alexnet:
-                network = hack_load_alexnet(self)
-
-            elif args.framework.startswith('keras'):
-                # "keras-tensorflow" or "keras-theano"
-                dash_idx = args.framework.find('-')
-                backend = args.framework[dash_idx + 1:]
-                network = keras(backend, args.cpu, model_file=args.model)
-
-            elif args.framework == 'torch':
-                # FIXME[hack]: provide these parameters on the command line ...
-                net_file = 'models/example_torch_mnist_net.py'
-                net_class = 'Net'
-                parameter_file = 'models/example_torch_mnist_model.pth'
-                input_shape = (28, 28)
-                network = torch(args.cpu, net_file, net_class,
-                                parameter_file, input_shape)
-            else:
-                network = None
-                
-            if network is not None:
+            for network in networks:
                 self.add_network(network)
-
-            self._activation_engine.set_network(network)
 
         except Exception as e:
             # FIXME[hack]: rethink error handling in threads!
             import traceback
             print(e)
             traceback.print_tb(e.__traceback__)
-
 
     ###########################################################################
     ###                            Networks                                 ###
@@ -328,8 +344,36 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         self._networks = []
 
     def add_network(self, network: Network):
+        if isinstance(network, str):
+            name = network
+            if name == 'alexnet':
+                network = self.hack_load_alexnet()
+            elif name == 'keras-network':
+                # FIXME[concept]: here we really need the command line arguments!
+                #dash_idx = args.framework.find('-')
+                #backend = args.framework[dash_idx + 1:]
+                #network = keras(backend, args.cpu, model_file=args.model)
+                network = None
+            elif name == 'torch-network':
+                # FIXME[hack]: provide these parameters on the command line ...
+                #net_file = 'models/example_torch_mnist_net.py'
+                #net_class = 'Net'
+                #parameter_file = 'models/example_torch_mnist_model.pth'
+                #input_shape = (28, 28)
+                #network = torch(args.cpu, net_file, net_class,
+                #                parameter_file, input_shape)
+                network = None
+            else:
+                raise ValueError(f"Unknown network: '{name}'")
+
+        if network is None:
+            return
+        if not isinstance(network, Network):
+            raise TypeError(f"Invalid type for Network {network}: "
+                            f"{type(network)}")
         self._networks.append(network)
         self.change('networks_changed')
+        return network
 
     def remove_network(self, network: Network):
         self._networks.remove(network)
@@ -361,6 +405,10 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         imagenet = Predefined.get_data_source('imagenet-val')
         network.set_labels(imagenet, format='caffe')
         logger.debug("alexnet: Done")
+
+        if self.contains_tool('activation'):
+            self.get_tool('activation').set_network(network)
+        
         return network
 
     ###########################################################################
@@ -378,7 +426,6 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         # FIXME[hack]: training - we need a better concept ...
         self.dataset = None
         self.data = None
-        self._toolbox_controller.hack_load_mnist()
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
@@ -448,6 +495,12 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         #             self.get_inputs(dtype=np.float32, flat=True, test=True),
         #             self.get_labels(dtype=np.float32, test=True))
 
+    def hack_load_imagenet(self):
+        from datasources import Predefined
+        imagenet = Predefined.get_data_source('imagenet-val')
+        imagenet.prepare()
+        return imagenet
+
     @property
     def data(self):
         return self._data
@@ -491,5 +544,224 @@ class Toolbox(Semaphore, BusyObservable, Datasource.Observer,
         self._input_datasource = datasource
         self._input_description = description
         self.change('input_changed')
+
+
+    ###########################################################################
+    ###                               Tools                                 ###
+    ###########################################################################
+
+    def _initialize_tools(self) -> None:
+        """Initialize the tools of this :py:class:`Toolbox`.
+        """
+        self._tools = {}
+
+    def add_tool(self, tool) -> None:
+        """Add a tool to this :py:class:`Toolbox`. Adding a tool to
+        the :py:class:`Toolbox` will have the following effects:
+        (1) The tool will use the :py:class:`Runner` of the
+            :py:class:`Toolbox` to execute its tasks.
+        (2) The tool will become an observer of the Toolbox, that is,
+            it will be informed when new data, networks, etc.
+            are available in the Toolbox.
+        (3) Toolbox observers will be informed that a new tools is
+            available (via the "tools_changed" message).
+
+        Parameter
+        ---------
+        tool:
+            The new tool. Eeither an object or a string naming the
+            tool. Valid tool names are "activation".
+
+        Result
+        ------
+        contains: bool
+            True, if the tool is in this :py:class:`Toolbox`,
+            False otherwise.
+        """
+
+        if isinstance(tool, str):
+            name = tool
+            if name == 'activation':
+                # FIXME[hack] ...
+                from tools.activation import (Engine as ActivationEngine,
+                                              Controller as ActivationController)
+                engine = ActivationEngine(toolbox=self)
+                tool = ActivationController(activation=engine)
+                network_controller = \
+                    self._toolbox_controller.autoencoder_controller  # FIXME[hack]
+                tool.set_network_controller(network_controller)
+
+            elif name == 'lucid':
+                if addons.use('lucid') and False:  # FIXME[todo]
+                    from tools.lucid import Engine as LucidEngine
+
+                    lucid_engine = LucidEngine()
+                    # FIXME[hack]
+                    lucid_engine.load_model('InceptionV1')
+                    lucid_engine.set_layer('mixed4a', 476)
+                    if self._gui is not None:
+                        self._gui.setLucidEngine(lucid_engine)  # FIXME[hack]
+                    tool = lucid_engine
+            else:
+                raise ValueError(f"Unknown tool: '{name}'")
+        else:
+            name = tool.name
+        if isinstance(tool, str):
+            print(f"FIXME[error]: Tool '{tool}' is a string!")
+        elif tool is not None:
+            self._tools[name] = tool
+            tool.runner = self._runner
+            self.change('tools_changed')
+        return tool
+
+    def contains_tool(self, tool) -> bool:
+        """Check whether this :py:class:`Toolbox` contains the given
+        tool.
+
+        Parameter
+        ---------
+        tool
+            The tool to check for.
+
+        Result
+        ------
+        contains: bool
+            True, if the tool is in this :py:class:`Toolbox`,
+            False otherwise.
+        """
+        name = tool if isinstance(tool, str) else tool.name
+        return self._tools is not None and name in self._tools
+
+    def get_tool(self, name: str):
+        """Get a tool with the given name from this :py:class:`Toolbox`.
+        tool.
+
+        Parameter
+        ---------
+        name: str
+            The name of the tool to fetch.
+
+        Result
+        ------
+        tool: 
+            The tool or None, if no tool with this name is contained in
+            this :py:class:`Toolbox`.
+        """
+        return self._tools[name] if self.contains_tool(name) else None
+
+
+    ###########################################################################
+    ###                       Command line options                          ###
+    ###########################################################################
+
+
+    def add_command_line_arguments(self, parser):
+        parser.add_argument('--model', help='Filename of model to use',
+                            default='models/example_keras_mnist_model.h5')
+        parser.add_argument('--data', help='filename of dataset to visualize')
+        parser.add_argument('--datadir', help='directory containing input images')
+
+        #
+        # Datasources
+        #
+        logging.debug("importing datasources")
+        from datasources import Predefined
+        datasets = Predefined.get_data_source_ids()
+        logging.debug(f"got datesets: {datasets}")
+
+        if (len(datasets) > 0):
+            parser.add_argument('--dataset', help='name of a dataset',
+                                choices=datasets, default=datasets[0])
+        parser.add_argument('--imagenet', help='Load the ImageNet dataset',
+                            action='store_true', default=False)
+
+        parser.add_argument('--framework', help='The framework to use.',
+                            choices=['keras-tensorflow', 'keras-theano',
+                                     'torch'],
+                            default='keras-tensorflow')
+        parser.add_argument('--cpu', help='Do not attempt to use GPUs',
+                            action='store_true', default=False)
+        parser.add_argument('--alexnet', help='Load the AlexNet model',
+                            action='store_true', default=False)
+        parser.add_argument('--autoencoder',
+                            help='Load the autoencoder module (experimental!)',
+                            action=addons.UseAddon, default=False)
+        parser.add_argument('--advexample',
+                            help='Load the adversarial example module'
+                            ' (experimental!)',
+                            action=addons.UseAddon, default=False)
+
+    def process_command_line_arguments(self, args):
+        util.use_cpu = args.cpu
+
+
+        #
+        # Tools
+        #
+        tools = []
+        tools.append('activation')
+        tools.append('lucid')
+
+        #
+        # Datasources
+        #
+        datasources = []
+
+        from datasources import DataDirectory, Predefined
+        for id in Predefined.get_data_source_ids():
+            datasource = Predefined.get_data_source(id)
+            self.add_datasource(datasource)
+
+        if args is not None:
+            datasource = None
+            if args.data:
+                datasource = Predefined.get_data_source(args.data)
+            elif args.dataset:
+                datasource = Predefined.get_data_source(args.dataset)
+            elif args.datadir:
+                datasource = DataDirectory(args.datadir)
+            if datasource is not None:
+                self.add_datasource(datasource)
+                datasources.append(datasource)
+
+            if args.imagenet:
+                datasources.append(Predefined.get_data_source('imagenet-val'))
+
+        #
+        # Networks
+        #
+        networks = []
+        
+        if args is not None:
+            if args.alexnet:
+                networks.append('alexnet')
+            if args.framework.startswith('keras'):
+                # "keras-tensorflow" or "keras-theano"
+                networks.append('keras-network')
+            elif args.framework == 'torch':
+                networks.append('torch-network')
+
+        # we need the GUI first to get the runner ...
+        gui = 'qt'
+        if gui is not None:
+            panels = []
+            if addons.use('autoencoder'):
+                panels.append('autoencoder')
+
+            # Initialise the "Activation Maximization" panel.
+            #if addons.use('maximization'):
+            #    panels.append('maximization')
+
+            #panels.append('resources')
+            #panels.append('activations')
+
+            rc = self._run_gui(gui=gui, panels=panels, tools=tools,
+                               networks=networks, datasources=datasources)
+        else:
+            self._initialize_toolbox(tools=tools, networks=networks,
+                                     datasources=datasources)
+            rc = 0
+        return rc
+
 
 from .controller import Controller as ToolboxController

@@ -15,19 +15,27 @@ import numpy as np
 from base.observer import Observable, change
 
 class FaceDetector(Observable, method='face_changed',
-                   changes=['hog_changed', 'cnn_changed', 'predict_changed',
-                            'image_changed']):
+                   changes=['hog_changed', 'cnn_changed', 'haar_changed',
+                            'predict_changed', 'image_changed']):
 
     _hog_detector = None
     _cnn_detector = None
+    _haar_detector = None
+    _ssd_detector = None
     _predictor = None
 
     _canvas_detect_cnn = None
     _canvas_detect_hog = None
+    _canvas_detect_haar = None
     _canvas_predict = None
+
+    _hog_duration = 0
+    _cnn_duration = 0
+    _haar_duration = 0
 
     _hog_rects = None
     _cnn_rects = None
+    _haar_rects = None
     _shapes = None
 
     _detectors: dict = None
@@ -43,16 +51,16 @@ class FaceDetector(Observable, method='face_changed',
         super().__init__()
 
         self._detectors = {}
-        self.add_detector('hog')
-        self.add_detector('cnn')
-        
         self._predictors = {}
-        self.add_predictor('predict')
-
-        self._hog_detector = dlib.get_frontal_face_detector()
 
         #
-        # The dlib CNN CNN detector
+        # The dlib HOG detector
+        #      
+        self._hog_detector = dlib.get_frontal_face_detector()
+        self.add_detector('hog')
+
+        #
+        # The dlib CNN detector
         #
         cnn_detector_name = 'mmod_human_face_detector.dat'
         detector_model = os.path.join(os.environ.get('DLIB_MODELS', '.'),
@@ -60,7 +68,35 @@ class FaceDetector(Observable, method='face_changed',
         if os.path.exists(detector_model):
             self._cnn_detector = \
                 dlib.cnn_face_detection_model_v1(detector_model)
-        
+            self.add_detector('cnn')
+        else:
+            print(f"FIXME: not found '{detector_model}'")
+
+        #
+        # The OpenCV Haar cascade face detector
+        #
+        # FIXME[hack]: make this more flexible ...
+        faceCascadePath = '/space/home/ulf/distro/bionic/software/opencv4/share/opencv4/haarcascades/haarcascade_frontalface_default.xml'
+        if os.path.exists(faceCascadePath):
+            self._haar_detector = cv2.CascadeClassifier(faceCascadePath)
+            print(self._haar_detector.empty())
+            if self._haar_detector.empty():
+                self._haar_detector = None
+            else:
+                self.add_detector('haar')
+
+
+        #
+        # The OpenCV Single Shot MultiBox Detector (SSD)
+        DNN = "TF"
+        if DNN == "CAFFE":
+            modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
+            configFile = "deploy.prototxt"
+            self._ssd_detector = cv2.dnn.readNetFromCaffe(configFile, modelFile)
+        else:
+            modelFile = "opencv_face_detector_uint8.pb"
+            configFile = "opencv_face_detector.pbtxt"
+            self._ssd_detector = cv2.dnn.readNetFromTensorflow(modelFile, configFile)
 
         #
         # The dlib facial landmark detector
@@ -70,6 +106,10 @@ class FaceDetector(Observable, method='face_changed',
                                           predictor_name)
         if os.path.exists(predictor_name):
             self._predictor = dlib.shape_predictor(predictor_name)
+            self.add_predictor('predict')
+        else:
+            print(f"FIXME: not found '{predictor_name}'")
+
 
     def add_detector(self, name):
         if name in self._detectors:
@@ -97,7 +137,17 @@ class FaceDetector(Observable, method='face_changed',
             else:
                 del self._predictors[name]
 
+    def detect_haar(self, image):
+        if self._haar_detector is None:
+            return None
+        
+        rects = self._haar_detector.detectMultiScale(image)
+        return rects
+
     def detect_hog(self, image):
+        """Apply the dlib historgram of gradients detector (HOG) to
+        detect faces in the given image.
+        """
         if self._hog_detector is None:
             return None
 
@@ -124,6 +174,41 @@ class FaceDetector(Observable, method='face_changed',
         rects = [d.rect for d in dets]
         confs = [d.confidence for d in dets]
         return rects
+
+    def detect_ssd(self, image):
+        """Use the OpenCV
+        """
+        # the image is converted to a blob
+        blob = cv2.dnn.blobFromImage(frameOpencvDnn, 1.0, (300, 300),
+                                     [104, 117, 123], False, False)
+
+        # the blob passed through the network using the forward() function.
+        self._ssd_detector.setInput(blob)
+        detections = self._ssd_detector.forward()
+
+        # The output detections is a 4-D matrix, where
+        #  * the 3rd dimension iterates over the detected faces.
+        #    (i is the iterator over the number of faces)
+        #  * the fourth dimension contains information about the
+        #    bounding box and score for each face.
+        #    - detections[0,0,i,2] gives the confidence score
+        #    - detections[0,0,i,3:6] give the bounding box
+        #
+        # The output coordinates of the bounding box are normalized
+        # between [0,1]. Thus the coordinates should be multiplied by
+        # the height and width of the original image to get the
+        # correct bounding box on the image.
+        bboxes = []
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > conf_threshold:
+                x1 = int(detections[0, 0, i, 3] * frameWidth)
+                y1 = int(detections[0, 0, i, 4] * frameHeight)
+                x2 = int(detections[0, 0, i, 5] * frameWidth)
+                y2 = int(detections[0, 0, i, 6] * frameHeight)
+        
+
+
 
     def predict(self, image, rects):
         if self._predictor is None:
@@ -180,15 +265,30 @@ class FaceDetector(Observable, method='face_changed',
             detectors = list(self._detectors.keys())
             for detector in detectors:
                 if detector == 'hog':
+                    start = time.time()
                     self._hog_rects = self.detect_hog(gray)
+                    end = time.time()
+                    self._hog_duration = end - start
                     self._canvas_detect_hog = image.copy()
                     self.paint_detect(self._canvas_detect_hog, self._hog_rects)
                     self.change(hog_changed=True)
                 elif detector == 'cnn':
+                    start = time.time()
                     self._cnn_rects = self.detect_cnn(gray)
+                    end = time.time()
+                    self._cnn_duration = end - start
                     self._canvas_detect_cnn = image.copy()
                     self.paint_detect(self._canvas_detect_cnn, self._cnn_rects)
                     self.change(cnn_changed=True)
+                elif detector == 'haar':
+                    start = time.time()
+                    self._haar_rects = self.detect_haar(gray)
+                    end = time.time()
+                    self._haar_duration = end - start
+                    self._canvas_detect_haar = image.copy()
+                    self.paint_detect(self._canvas_detect_haar,
+                                      self._haar_rects, color=(0, 255, 0))
+                    self.change(haar_changed=True)
 
             # Predictors require detectors to be run first ...
             predictors = list(self._predictors.keys())
@@ -201,12 +301,9 @@ class FaceDetector(Observable, method='face_changed',
             self._image = self._next_image
             self._next_image = None
 
-    def paint_detect(self, canvas, rects):
+    def paint_detect(self, canvas, rects, color=(255, 0, 0)):
         if rects is None:
             return
-
-        # detect faces in the grayscale image
-        color = (255, 0, 0)
  
         # check to see if a face was detected, and if so, draw the total
         # number of faces on the image
@@ -218,12 +315,14 @@ class FaceDetector(Observable, method='face_changed',
                             0.5, color, 2)
         # loop over the face detections
         if canvas is not None:
-            for rect in rects:
-                # rect is of type <class 'dlib.rectangle'>
-        
+            for rect in rects:      
                 # compute the bounding box of the face and draw it on the
                 # image
-                (bX, bY, bW, bH) = imutils.face_utils.rect_to_bb(rect)
+                if isinstance(rect, dlib.rectangle):
+                    (bX, bY, bW, bH) = imutils.face_utils.rect_to_bb(rect)
+                    # rect is of type <class 'dlib.rectangle'>
+                else:
+                    (bX, bY, bW, bH) = rect
                 cv2.rectangle(canvas, (bX, bY), (bX + bW, bY + bH), color, 1)
 
 from base import View as BaseView, Controller as BaseController, run
@@ -360,6 +459,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer, FaceDetector.Observer):
 
         self._detectorView1 = QImageView()
         self._detectorView2 = QImageView()
+        self._detectorView3 = QImageView()
         self._predictorView = QImageView()
 
     def _layoutUI(self):
@@ -383,6 +483,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer, FaceDetector.Observer):
         row.addWidget(self._detectorView2)
         layout2.addLayout(row)
         row = QHBoxLayout()
+        row.addWidget(self._detectorView3)
         row.addWidget(self._predictorView)
         row.addStretch()
         layout2.addLayout(row)
@@ -403,7 +504,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer, FaceDetector.Observer):
 
     def setFaceController(self, face: FaceController) -> None:
         interests = Toolbox.Change('hog_changed', 'cnn_changed',
-                                   'predict_changed')
+                                   'haar_changed', 'predict_changed')
         self._exchangeView('_faceController', face, interests=interests)
 
     def toolbox_changed(self, toolbox: Toolbox,
@@ -426,6 +527,9 @@ class FacePanel(Panel, QObserver, Toolbox.Observer, FaceDetector.Observer):
         if change.cnn_changed:
             # FIXME[hack]: private variables!
             self._detectorView2.setImage(detector._canvas_detect_cnn)
+        if change.haar_changed:
+            # FIXME[hack]: private variables!
+            self._detectorView3.setImage(detector._canvas_detect_haar)
         if change.predict_changed:
             # FIXME[hack]: private variables!
             self._predictorView.setImage(detector._canvas_predict)

@@ -56,6 +56,10 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
         return 62
 
     def _prepare_data(self):
+        """Prepare the WIDER Face dataset. This will provide in a list of
+        all images provided by the dataset, either by reading in a
+        prepared file, or by traversing the directory.
+        """
         logger.info(f"PREPARING WIDER Face: {self.directory}: {self._available}")
 
         #

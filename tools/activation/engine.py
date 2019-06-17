@@ -69,7 +69,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         Mapping layer_ids to the current activation values.
     """
 
-    _toolbox: Toolbox = None
+    _toolbox: Toolbox = None  # FIXME[question]: is this really needed?
     _network: Network = None
     
     def __init__(self, network: Network=None, toolbox: Toolbox=None):
@@ -158,7 +158,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
           be repeated thrice to form a three-dimensional input
         - 4 dimensions are only supported insofar as the shape must be
           ``(1, A, B, C)``, meaning the fist dimension is singular and can be
-          dropped. Actual batches are not supported.
+          dropped. Actual batches are not supported (yet).
 
         The input data may be adapted to match the input shape of
         the current network. Different adaptation strategies may be
@@ -357,13 +357,20 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         if self._layer != layer:
             self._unit = None
             self._layer = layer
-            self.change(layer_changed=True, unit_changed=True)
+            print(f"Engine.set_layer(): layer changed: {self._layer} / {self._unit}")
+            # FIXME[problem]: why does change does not work here?
+            #self.change(layer_changed=True, unit_changed=True)
+            self.notifyObservers(layer_changed=True, unit_changed=True)
+            print(f"Engine.set_layer(): observers were notified ... {self._input is not None}, {layer}")
+
 
             # FIXME[concept]: reconsider the update logic!
             #  should updating the layer_list automatically update the
             #  activation? or may there be another update to the layer list?
             if self._input is not None and layer is not None:
+                print(f"Engine.set_layer(): now updating activations ...")
                 self._update_activation()
+                print(f"Engine.set_layer(): ... updating activations finished")
 
     @property
     def layer_id(self):
@@ -396,7 +403,11 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
                 unit = None
         if unit != self._unit:
             self._unit = unit
-            self.change(unit_changed=True)
+            # FIXME[problem]: why does change does not work here?
+            #self.change(unit_changed=True)
+            print(f"activation.Engine.set_unit({unit}) - notifyObservers")
+            self.print_observers()
+            self.notifyObservers(unit_changed=True)
 
     @property
     def unit(self) -> int:
@@ -423,6 +434,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
             self._update_activation()
 
     def _update_layer_list(self):
+        """Update the (internal) list of layers for which activations
+        should be computed.
+        """
         if self._network is None:
             self._layers = []
         else:
@@ -470,15 +484,18 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
         else:
             self._activations = {}
-        self.change(activation_changed=True)
+
+        # FIXME[problem]: why does change does not work here?
+        #self.change(activation_changed=True)
+        self.notifyObservers(activation_changed=True)
 
     def get_activation(self, layer_id=None, batch_index: int=0) -> np.ndarray:
-        if self._activations is None:
+        if self._activations is None or not self._activations:
             return None
         if layer_id is None:
             layer_id = self._layer
-        if layer_id is None:
-            return None
+            if layer_id is None:
+                return None
         if not layer_id in self._activations:
             raise ValueError(f"Invalid layer ID '{layer_id}'. Valid IDs are: "
                              f"{', '.join(self._activations.keys())}")
@@ -561,3 +578,112 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         rank = (class_scores > score).sum()
 
         return rank, score
+
+
+
+from network.layers import StridingLayer
+
+class MaximalActivations:
+    """Collect input images that maximally activate given units.
+    """
+
+    def __init__(self, network):
+        self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
+        self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
+
+        self._network = network
+
+        self._layer_ids = []
+        for layer_id, layer in self._network.layer_dict.items():
+            print(layer_id, layer.get_id())
+            self._layer_ids.append(layer_id)      
+
+            self._network.get_receptive_field(layer_id, (2,2))
+
+        self._shape_adaptor.setNetwork(network)
+        self._channel_adaptor.setNetwork(network)
+
+        self._initialize(self._layer_ids)
+
+    def _initialize(self, layers, top_n=3):
+        self._top_n = top_n
+        self._max_activations = {}
+        self._min_index = {}
+        self._max_coordinates = {}
+        
+        for layer_id in layers:
+            layer = self._network.layer_dict[layer_id]
+            if isinstance(layer, StridingLayer):
+                dims = 3
+                #features = layer.filters
+                features = layer.output_shape[-1]
+            else:
+                dims = 1
+                features = layer.output_shape[-1]
+
+            print(f"Layer {layer} ({layer.__class__.__name__}) has {dims} dimensions and {features} features.")
+
+            self._max_activations[layer_id] = np.zeros((features, top_n))
+            self._min_index[layer_id] = \
+                self._max_activations[layer_id].argmin(axis=1)
+            self._max_coordinates[layer_id] = np.zeros((features, top_n, dims),
+                                                       dtype=np.uint32)
+
+    def compute_activations(self, input, input_id):
+        if not self._network or self._network.busy:
+            return  # FIXME[hack]
+
+        if input is None:
+            return  # FIXME[hack]
+
+        old_shape = input.shape
+        input = self._shape_adaptor(input)
+        input = self._channel_adaptor(input)
+        print(f"Input {input_id}: shape {old_shape} -> {input.shape}")
+
+
+        # compute the activations for the layers of interest
+        activations = self._network.get_activations(self._layer_ids, input)
+
+        # FIXME[hack]: should be done in network!
+        for i in range(len(activations)):
+            if activations[i].ndim in {2, 4}:
+                if activations[i].shape[0] != 1:
+                    raise RuntimeError('Attempting to visualise batch.')
+                activations[i] = np.squeeze(activations[i], axis=0)
+
+        self._activations = {id: activations[i]
+                             for i, id in enumerate(self._layer_ids)}
+
+        for layer_id in self._layer_ids:
+            self.process_activations(self._activations[layer_id], layer_id, input_id)
+
+    def process_activations(self, activations, layer_id, input_id):
+        if isinstance(self._network.layer_dict[layer_id], StridingLayer):
+            # FIXME[hack]: just consider the highest activation
+            # (there may be more high activations in the activation
+            # map, but they will be ignored for the sake of simplicity)
+            channels = activations.shape[-1]
+            a = activations.reshape(-1, channels)
+            max_idx = a.argmax(0)
+            coords = np.column_stack(np.unravel_index(max_idx,
+                                                      activations.shape[:-1]))
+            activations = a[max_idx, np.arange(a.shape[1])]
+
+        features = activations.shape[0]
+        min_values = self._max_activations[layer_id][np.arange(features),
+                                                     self._min_index[layer_id]]
+        units, = np.where(activations > min_values)
+        print(f"{input_id}: {layer_id}: {len(units)}/{features}")
+        for unit in units:
+            self.update_max_activations(activations[unit], layer_id,
+                                        unit, input_id)
+
+
+    def update_max_activations(self, activation, layer_id, unit,
+                               input_id, coordinate=None) -> None:
+        min_index = self._min_index[layer_id][unit]
+        self._max_activations[layer_id][unit, min_index] = activation
+        self._min_index[layer_id][unit] = \
+            self._max_activations[layer_id][unit].argmin()
+

@@ -110,7 +110,14 @@ class ResizePolicyPad(_ResizePolicyBase):
 
 
 class ResizePolicyChannels(_ResizePolicyBase):
-    '''Resize policy which adapts the number of channels.'''
+    """Resize policy which adapts the number of channels.
+
+
+    Attributes
+    ----------
+    _channels: int
+        The number of (color) cannels.
+    """
 
     _channels = None
 
@@ -122,11 +129,14 @@ class ResizePolicyChannels(_ResizePolicyBase):
 
     def resize(self, img):
         if self._channels is None:
-            if img.ndim == 3 and img.shape[3] == 1:
+            if img.ndim == 3 and img.shape[2] == 1:
                 img = np.squeeze(img, axis=2)
             elif img.ndim == 3:
                 # FIXME[hack]: find better way to do RGB <-> grayscale
                 # conversion
+                # FIXME[question]: what are we trying to achieve here?
+                # We have self._channels is None, so why do we want
+                # to reduce the number of channels?
                 img = np.mean(img, axis=2).astype(np.uint8)
             elif img.ndim != 2:
                 raise ValueError('Incompatible shape.')
