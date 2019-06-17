@@ -47,24 +47,24 @@ Concepts:
 import os
 import sys
 
-print("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+# local loggger
+logger = logging.getLogger(__name__)
+logger.info(f"Effective debug level: {logger.getEffectiveLevel()}")
+
 # silencing the matplotlib logger
-logger = logging.getLogger('matplotlib')
-logger.setLevel(logging.WARNING)
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)
 
 import util
 
+logger.info("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
 root_logger = logging.getLogger()
 root_logger.handlers = []
 logRecorder = util.RecorderHandler()
 root_logger.addHandler(logRecorder)
-
-# local loggger
-logger = logging.getLogger(__name__)
-logger.debug(f"Effective debug level: {logger.getEffectiveLevel()}")
 
 
 import numpy as np
@@ -76,11 +76,12 @@ from util import addons
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
 
+# FIXME[todo]: this will load tensorflow!
 from network import Network
 #from network.examples import keras, torch
+
 from datasources import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
-
 
 class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
@@ -298,7 +299,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         try:
             # This will enter the main event loop.
             # It will only return once the main event loop exits.
-            print("Toolbox: runing the GUI main event loop")
+            logger.info("Toolbox: running the GUI main event loop")
             return self._gui.run(**kwargs)
         finally:
             print("Toolbox: finally stopping the timer ...")
@@ -407,8 +408,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
         logger.debug("alexnet: Done")
 
         if self.contains_tool('activation'):
-            self.get_tool('activation').set_network(network)
-        
+            tool = self.get_tool('activation')
+            #tool.set_toolbox(self)
+            tool.set_network(network)
+
         return network
 
     ###########################################################################

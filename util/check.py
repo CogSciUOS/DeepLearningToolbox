@@ -45,7 +45,3 @@ except ModuleNotFoundError as e:
     sys.exit(1)
 
 # End checking for modules
-
-
-# FIXME[hack]: avoid a lot of debug output from matplotlib ...
-import matplotlib

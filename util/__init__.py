@@ -5,7 +5,6 @@
 
 This module collects miscellaneous utilities.
 """
-
 import util.check
 
 try:
@@ -142,8 +141,6 @@ use_cpu = True
 
 
 
-
-
 #
 # Logging
 #
@@ -171,3 +168,4 @@ class RecorderHandler(logging.Handler, list):
         """
         for record in self:
             handler.handle(record)
+

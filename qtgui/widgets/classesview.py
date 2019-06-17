@@ -110,12 +110,18 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
                 self._target = activation.input_label
                 label_text = f'"{self._target}"'
             elif self._datasource == activation.input_datasource:
-                self._target = self._datasource.\
-                    format_labels(activation.input_label,
-                                  format=self._label_format)
-                label_text = self._datasource.\
-                    format_labels(activation.input_label,
-                                  format=self._output_format)
+                try:
+                    self._target = self._datasource.\
+                        format_labels(activation.input_label,
+                                      format=self._label_format)
+                except ValueError:  # Format is not supported by datasource
+                    self._target = '?' + str(activation.input_label)
+                try:
+                    label_text = str(self._datasource.
+                                     format_labels(activation.input_label,
+                                                   format=self._output_format))
+                except ValueError:  # Format is not supported by datasource
+                    label_text = '?' + str(activation.input_label)
             else:
                 self._target = None
                 label_text = "?"

@@ -112,12 +112,30 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
             self.set_network(network)
 
     def set_toolbox(self, toolbox: Toolbox) -> None:
+        """Set the toolbox for this activation Engine. The Engine will observe
+        the Toolbox for 'input_changed' message and automatically
+        compute new activation values whenever the Toolbox' input data
+        changes.
+
+        Parameter
+        ---------
+        toolbox: Toolbox
+            The toolbox to use. If None, no toolbox will be used.
+        """
         if toolbox:
             interests = Toolbox.Change('input_changed')
             self.observe(toolbox, interests=interests)
+            # FIXME[bug?]: why is the following necessary?
+            # Shouldn't there be an automatic notification when
+            # calling observe() ...?
+            self.set_input_data(data=toolbox.input_data,
+                                label=toolbox.input_label,
+                                datasource=toolbox.input_datasource,
+                                description=toolbox.input_description)
 
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
+        print(f"ActivationEngine.toolbox_changed({toolbox}): {change}")
         if change.input_changed:
             self.set_input_data(data=toolbox.input_data,
                                 label=toolbox.input_label,
@@ -150,7 +168,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
     def set_input_data(self, data: np.ndarray, label: int=None,
                        datasource: Datasource=None,
                        description: str=None) -> None:
-        """Provide one data vector as input for the network.
+        """Provide one data vector as input for this Engine.  The new data
+        will be fed to the network to compute activation values.
+        
         The input data must have 2, 3, or 4 dimensions.
 
         - 2 dimensions means a single gray value image
@@ -168,30 +188,29 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         Parameters
         ----------
         data: np.ndarray
-            The data array
+            The data array. None means that this Engine will unset all
+            activation values.
         label: int
             The data label. None if no label is available.
         description: str
             A description of the input data.
+
         """
         logger.info(f"Activation: set_input_data({data is not None and data.shape},{label},{description})")
         #
         # do some sanity checks and corrections
         #
-        if data is None or not data.ndim:
-            return
-            #raise ValueError('Data cannot be None.')
+        if data is not None and data.ndim:
+            if data.ndim > 4 or data.ndim < 2:
+                raise ValueError(f'Data must have between 2 '
+                                 'and 4 dimensions (has {data.ndim}).')
 
-        if data.ndim > 4 or data.ndim < 2:
-            raise ValueError(f'Data must have between 2 '
-                             'and 4 dimensions (has {data.ndim}).')
-
-        if data.ndim == 4:
-            if data.shape[0] == 1:
-                # first dimension has size of 1 -> remove
-                data = data.squeeze(0)
-            else:
-                raise ValueError('Cannot visualize batch of images')
+            if data.ndim == 4:
+                if data.shape[0] == 1:
+                    # first dimension has size of 1 -> remove
+                    data = data.squeeze(0)
+                else:
+                    raise ValueError('Cannot visualize batch of images')
 
         #
         # set the data
@@ -206,7 +225,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         #
         self._update_input()
         self.change(input_changed=True)
-
+            
         #
         # recompute the network activations
         #
@@ -214,10 +233,20 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
     @property
     def input_data(self):
+        """The preprocessed input data, that is the data in the form fed to
+        the Network. None means that there are no input data.
+        """
         return self._input
 
     @input_data.setter
     def input_data(self, data):
+        """Set the current input data. This is roughly equivalent to calling
+        :py:meth:set_input_data().
+
+        The assigned data can be either some raw data array (in which
+        case label and description are set to None), or a tuple
+        containing the data array, followed by label and description.
+        """
         label = None
         description = None
         if isinstance(data, tuple):
@@ -231,6 +260,10 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
     @property
     def raw_input_data(self):
+        """The raw (unprocessed) input data as assigned to this Engine by
+        :py:meth:set_input_data(). None means that there are no input
+        data.
+        """
         return self._data
 
     @property
@@ -455,7 +488,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         This is a noop if no layers are selected or no data is set.
         """
         if not self._network or self._network.busy:
-            return  # FIXME[hack]
+            return  # FIXME[hack]: probably it would be better to wait ...
+
+
         self._update_layer_list()
         logger.info(f"Activation: _update_activation: LAYERS={self._layers}")
         if self._layers and self._input is not None:

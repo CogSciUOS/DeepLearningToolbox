@@ -52,17 +52,6 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
     this list contains at index i the information for image id=i+1,
     and the value obtained is the 0-based numerical label (0-999)
 
-    Attributes
-    ----------
-
-    _section_ids: list
-        The available sections of the ILSVRC2012 dataset: 'train',
-        'val', and 'test'. Notice that 'test' will provide no labels.
-
-    _section_id: str
-        The actual section of the Datasource.
-
-
     Labels
     ------
     There are different convention on how to label the ILSVRC2012 dataset.
@@ -80,15 +69,59 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
 
 
     See
+    ---
     * http://caffe.berkeleyvision.org/gathered/examples/imagenet.html
     * https://github.com/pytorch/vision/issues/484
+
+    Attributes
+    ----------
+
+    _section_ids: list
+        The available sections of the ILSVRC2012 dataset: 'train',
+        'val', and 'test'. Notice that 'test' will provide no labels.
+
+    _section: str
+        The actual section ('train', 'val', 'test') of this instance of
+        the dataset.
+    
+    _imagenet_data: str
+        The path to the ImageNet root directory. This is the directory
+        that contains 'train/', 'val/', and 'test/' subdirectories.
+        It may also contain the ILSVRC2012_devkit_t12 which provides
+        some metadata, allowing to map the (numeric) validation labels
+        from 'val_labels.txt' to synsets.
+
+    _classes: List[str]
+        List of class labels.
+
+    _wn_table: dict
+        A dictionary mapping synset ids (of the form "n01440764") to
+        internal labels. This is only initialized for the 'test' section
+        to map filenames to classes.
+
+    _val_labels: list
+        A list assigning labels to the images from the validation set.
+        This is only initialized for the 'val' section.  It is read
+        in from the file ''ILSVRC2012_validation_ground_truth.txt'
+        in the 'imagenet_data/ILSVRC2012_devkit_t12/data/' directory.
+
+    _image: np.ndarray
+        The currently selected image. None if no image is selected.
+
+    _label: int
+        The label for the currently selected image. None if no image
+        is selected or the label is not known.
     """
     _section_ids = ['train', 'val', 'test']
 
     _section = None
 
+    _imagenet_data: str = None
+    
     # list of class labels (class_number -1 ) -> str
+    # FIXME[bug?]: used but never initializes?
     _classes: list = None
+    
     # FIXME[design]: there is also an array _target[], mapping
     # indices to labels. Make this more coherent!
     
@@ -114,14 +147,28 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
             "See: https://github.com/ActiveState/appdirs\n"
             "--------------------------------------------------------------\n")
 
-    def __init__(self, prefix=None, section='val', **kwargs):
+    def __init__(self, imagenet_data: str=None, section: str='val', **kwargs):
+        """Initialize the ImageNet dataset.
+
+        Parameters
+        ----------
+        imagenet_data: str
+            The path to the imagenet root directory. This directory
+            should contain the 'train', 'val', and 'test' subdirectories.
+            If no value is provided, the 'IMAGENET_DATA' environment
+            variable will be checked.
+        section: str
+            The section of ImageNet to provide by this Datasource object.
+            One of 'train', 'val', 'test'.
+        """
         super().__init__(id=f"imagenet-{section}",
                          description=f"ImageNet {section}", **kwargs)
-        self._imagenet_data = os.getenv('IMAGENET_DATA', '.')
+        self._imagenet_data = imagenet_data or os.getenv('IMAGENET_DATA', '.')
         self._section = section
         self.directory = os.path.join(self._imagenet_data, self._section)
         self._available = os.path.isdir(self.directory)
         self._image = None
+        self._label = None
 
     @property
     def number_of_labels(self) -> int:
@@ -130,6 +177,8 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
         return 1000
 
     def _prepare_data(self):
+        """Prepare the ImageNet data. 
+        """
         logger.info(f"PREPARING ImageNet: {self.directory}: {self._available}")
         if self._section == 'train':
             # get the list of directory names, i.e.
@@ -169,6 +218,10 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
                 (self._section == 'val' and self._val_labels is not None))
 
     def _prepare_labels(self):
+        """Prepare the labels for the ImageNet dataset.
+        The labels will be read in from the file 'imagenet_labels.txt'
+        contained in the same directory as the 'imagenet.py' source file.
+        """
         imagenet_labels_filename = \
             os.path.join(os.path.dirname(os.path.realpath(__file__)),
                          'imagenet_labels.txt')
@@ -203,31 +256,31 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
                            f"Make sure that {imagenet_labels_filename} "
                            "is available.")
 
-        # FIXME[old]
-        # load the labels file (classes.txt). 
-        # The file contains mapping of labels to synset names
-        # and text representation for labels,
-        # e.g. "1000:n03255030:dumbbell"
-        #try:
-        #    classes_filename = os.path.join(self._imagenet_data,
-        #                                    'classes.txt')
-        #    with open(classes_filename) as f:
-        #        classes = f.readlines()
-        #    texts = [c.strip().split(':')[2] for c in classes]
-        #    self.add_label_format('text', texts)
-        #except FileNotFoundError:
-        #    logger.warning("ImageNet class names not found. "
-        #                   f"Make sure that {classes_filename} "
-        #                   "is available.")
-        
         if self._section == 'train':
             self._prepare_labels_train()
 
         elif self._section == 'val':
             self._prepare_labels_val()
         
-        
         logger.info(f"ImageNet is now prepared: {len(self)}")
+
+    def _prepare_labels_old(self):
+        """Prepare the labels for the ImageNet Datasource. This will
+        read in the file "classes.txt" from the imagenet_data directory. 
+        The file is expected to contain mapping of labels to synset names
+        and text representation for labels, '1000:n03255030:dumbbell'
+        """
+        try:
+            classes_filename = os.path.join(self._imagenet_data,
+                                            'classes.txt')
+            with open(classes_filename) as f:
+                classes = f.readlines()
+            texts = [c.strip().split(':')[2] for c in classes]
+            self.add_label_format('text', texts)
+        except FileNotFoundError:
+            logger.warning("ImageNet class names not found. "
+                           f"Make sure that {classes_filename} "
+                           "is available.")
 
     def _prepare_labels_train(self):
         """Prepare the image to label mapping for the ILSVRC2012
@@ -235,25 +288,29 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
         files are grouped in directories named by the respective
         synset.
         """
-        # FIXME[old]
-        # get a mapping of synsets to labels
-        #from .imagenet_classes import wn_table
-        # self._wn_table = wn_table
         self._wn_table = { synset: index for index, synset
                            in enumerate(self._label_formats['synset']) }
         logger.info(f"Length of wn_table: {len(self._wn_table)}")
 
+    def _prepare_labels_train_old(self):
+        """Get a mapping of synsets to internal labels.  This mapping is
+        imported from the module 'imagenet_classes.py', located in the
+        same directoy as the 'imagenet.py' implenting the ImageNet class.
+        """
+        from .imagenet_classes import wn_table
+        self._wn_table = wn_table
+        
     def _prepare_labels_val(self):
         """Load the image to label mapping for the ILSVRC2012
         validation set. This mapping is provided as part of the
         'ILSVRC2012_devkit_t12'.
         """
-
-        #val_labels_filename = os.path.join(self._imagenet_data,
-        #                                   'val_labels.txt')
         val_labels_filename = \
             os.path.join(self._imagenet_data, 'ILSVRC2012_devkit_t12',
                          'data', 'ILSVRC2012_validation_ground_truth.txt')
+        # val_labels_filename = \
+        #    os.path.join(self._imagenet_data, 'val_labels.txt')
+
         try:
             with open(val_labels_filename) as f:
                 self._val_labels = [int(l.strip())-1 for l in f.readlines()] 
@@ -262,7 +319,27 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
                            f"Make sure that {val_labels_filename} "
                            "is available.")
 
-    def _label_for_filename(self, filename):
+    def _label_for_filename(self, filename: str):
+        """Get the (internal) label for a given filename from the ImageNet
+        dataset.  The way to determine the label depends on what section
+        of the dataset ('train', 'val', or 'test') we are working on and
+        requires additional data.  If this data is not available,
+        the method will simply return None.
+
+        Parameter
+        ---------
+        filename: str
+            The filename of the image, relative to the base directory
+            imagenet_data/{train,val,test}/. That is for example
+            'n01440764/n01440764_3421.JPEG' in case of 'train' and
+            'ILSVRC2012_val_00031438.JPEG' in case of 'val' images.
+
+        Result
+        ------
+        label: int
+            A number from 0-999 indicating the class to which the image
+            belongs or None if no class could be determined.
+        """
         label = None
         if self._section == 'train':
             match_object = re.search('(n[0-9]*)_', filename)
@@ -283,10 +360,19 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
         category = self._category_for_filename(filename)
         return InputData(data, category)
 
-    def _fetch(self, **kwargs):
+    def _fetch(self, **kwargs) -> None:
+        """Fetch an image from this ImageNet datasource. After fetching,
+        the image can be obtained by calling :py:meth:get_data() and the
+        the label by calling :py:meth:get_label().
+        """
         self._fetch_random(**kwargs)
 
-    def _fetch_random(self, **kwargs):
+    def _fetch_random(self, **kwargs) -> None:
+        """Randomly fetch an image from this ImageNet datasource.  After
+        fetching, the image can be obtained by calling
+        :py:meth:get_data() and the the label by calling
+        :py:meth:get_label().
+        """
         if self._section == 'train':
             category = random.randint(0, len(self._synsets)-1)
             img_dir = os.path.join(self.directory, self._synsets[category])
@@ -301,20 +387,23 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
 
     @property
     def fetched(self):
+        """Check if an image has been fetched.
+        """
         return self._image is not None
 
     def _get_data(self):
-        """The actual implementation of the :py:meth:`data` property
-        to be overwritten by subclasses.
-
-        It can be assumed that a data point has been fetched when this
-        method is invoked.
+        """The actual implementation of the :py:meth:`data` property for the
+        ImageNet datasource.  It can be assumed that a data point has
+        been fetched when this method is invoked.
         """
         return self._image
 
     def _get_label(self):
+        """The actual implementation of the :py:meth:`get_label` method for
+        the ImageNet datasource.  It can be assumed that a data point
+        has been fetched when this method is invoked.
+        """
         return self._label
-
 
     def oldrandom(self):  # FIXME[old]
         category = random.randint(0, len(self._synsets)-1)
@@ -339,14 +428,15 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
         label = self._val_labels[target]
         return self._classes[target]
 
-    def check_availability():
-        '''Check if this Datasource is available.
+    def check_availability() -> bool:
+        """Check if this Datasource is available.
 
         Returns
         -------
-        True if the DataSource can be instantiated, False otherwise.
-        '''
-        return self.directory
+        available: bool
+            True if the DataSource can be instantiated, False otherwise.
+        """
+        return self.directory is not None
 
     def download():
         raise NotImplementedError("Downloading ImageNet is "

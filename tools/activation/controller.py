@@ -3,6 +3,8 @@ from base import View as BaseView, Controller as BaseController, run
 from network import Network, Controller as NetworkController
 from .engine import Engine
 
+from . import logger
+
 import sys
 import numpy as np
 
@@ -59,12 +61,20 @@ class Controller(View, BaseController, Network.Observer):
             interests = Network.Change('observable_changed')
             self._network_controller.add_observer(self, interests=interests)
 
-    def set_network(self, network: Network):
+    def set_network(self, network: Network) -> None:
+        """Set the network to be used by this activation Controller. The
+        activation Engine will use that network to compute activation
+        values.
+        """
         return self._network_controller(network)
 
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
-        print(f"ActivationController: network is now {network} ({change})")
+        """Implementation of the Network.Observer interface. Whenever
+        the network was changed, the new network will be assigned to
+        the underlying activation Engine.
+        """
+        logger.debug(f"ActivationController: network is now {network} ({change})")
         if change.observable_changed:
             self._engine.set_network(network)
 
