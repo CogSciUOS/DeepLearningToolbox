@@ -80,6 +80,7 @@ class ActivationsPanel(Panel, QObserver, ActivationEngine.Observer):
         self._exchangeView('_activation', activations, interests=interests)
         self._networkView.setActivationsController(activations)
         self._inputView.setActivationView(activations)
+        self._inputInfoBox.setActivationView(activations)
         self._activationView.setActivationController(activations)
         self._classesView.setActivationView(activations)
 

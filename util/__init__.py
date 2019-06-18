@@ -5,7 +5,7 @@
 
 This module collects miscellaneous utilities.
 """
-import util.check
+from . import check, error
 
 try:
     from imageio import imread
@@ -23,11 +23,9 @@ def debug(func):
     def closure(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception as e:
-            import traceback
-            print(f"DEBUG: {type(e).__name__}: {e}")
-            traceback.print_tb(e.__traceback__)
-            raise e
+        except BaseException as exception:
+            error.handle_exception(exception)
+            raise exception
     return closure
 
 

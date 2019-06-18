@@ -1,11 +1,11 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from base import Observable, AsyncRunner
+import util
 
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-import traceback
 
 def protect(function):
     """A decorator to protect a function (usually an event handler)
@@ -14,10 +14,8 @@ def protect(function):
     def closure(self, *args, **kwargs):
         try:
             function(self, *args, **kwargs)
-        except Exception as exception:
-            print(f"\nUnhandled exception: {exception}")
-            traceback.print_tb(exception.__traceback__)
-            print("\n")
+        except BaseException as exception:
+            util.error.handle_exception(exception)
     return closure
 
 
@@ -90,12 +88,10 @@ class QObserver:
     set up the required magic.
     """
 
-    # FIXME[old]: we actually need multiple helpers, one for each Observable
-    _qObserverHelper = None  # : QObserverHelper
+    # FIXME[concept]: we need some concept to assign observables to helpers
     _qObserverHelpers: dict = None
 
     def __init__(self):
-        self._qObserverHelper = QObserver.QObserverHelper(self)
         self._qObserverHelpers = {}
 
     def _registerView(self, name, interests=None):
@@ -104,21 +100,34 @@ class QObserver:
         #    raise RuntimeError("QObserver._registerView must be called from"
         #                       "the main thread, not " +
         #                       threading.current_thread().name + ".")
-        self._qObserverHelpers[name] = \
-            QObserver.QObserverHelper(self, interests)
-        
+        if interests is not None:
+            key = interests.__class__
+            if not key in self._qObserverHelpers:
+                print(f"INFO: creating a new QObserverHelper for {interests}: {interests.__class__}!")
+                self._qObserverHelpers[key] = \
+                    QObserver.QObserverHelper(self, interests)
+        else:
+            print(f"WARNING: no interest during registration of {name} for {self} - ignoring registration!")
 
     def observe(self, observable: Observable, interests=None):
-        if self._qObserverHelper is None:
+        if self._qObserverHelpers is None:
             raise RuntimeError("It seems QObserver's constructor was not "
-                               "called (QObserverHelper is not set)")
-
-        observable.add_observer(self._qObserverHelper,
+                               "called (QObserverHelpers is not set)")
+        key = observable.Change
+        if not key in self._qObserverHelpers:
+            print(f"INFO: no QObserverHelper for observing {observable} in {self} yet - creating a new one ({key}: {key.__name__})!")
+            self._qObserverHelpers[key] = \
+                QObserver.QObserverHelper(self, interests)
+        observable.add_observer(self._qObserverHelpers[key],
                                 notify=self.QObserverHelper._qNotify,
                                 interests=interests)
 
     def unobserve(self, observable):
-        observable.remove_observer(self._qObserverHelper)
+        key = observable.Change
+        if key in self._qObserverHelpers:
+            observable.remove_observer(self._qObserverHelpers[key])
+        else:
+            print(f"WARNING: no QObserverHelper for unobserving {observable} in {self}. Ignoring unobserver ...")
 
     def _exchangeView(self, name: str, new_view, interests=None):
         """Exchange the object (View or Controller) being observed.
@@ -137,7 +146,7 @@ class QObserver:
             The changes that we are interested in.
         """
         old_view = getattr(self, name)
-        if new_view == old_view:
+        if new_view is old_view:
             return  # nothing to do
         if old_view is not None:
             old_view.remove_observer(self)
@@ -236,8 +245,11 @@ class QObserver:
             """
             change = self._change
             if change is not None:
-                self._change = None
-                observable.notify(self._observer, change)
+                try:
+                    self._change = None
+                    observable.notify(self._observer, change)
+                except BaseException as ex:
+                    util.error.handle_exception(ex)
 
         def __str__(self) -> str:
             return f"QObserver({self._observer}, {self._change})"

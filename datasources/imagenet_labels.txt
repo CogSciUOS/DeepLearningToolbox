@@ -1,0 +1,1000 @@
+1:278:278:n02119789:kit fox:kit fox, Vulpes macrotis
+2:212:212:n02100735:English setter:English setter
+3:250:250:n02110185:Siberian husky:Siberian husky
+4:193:193:n02096294:Australian terrier:Australian terrier
+5:217:217:n02102040:English springer:English springer, English springer spaniel
+6:147:147:n02066245:grey whale:grey whale, gray whale, devilfish, Eschrichtius gibbosus, Eschrichtius robustus
+7:387:387:n02509815:lesser panda:lesser panda, red panda, panda, bear cat, cat bear, Ailurus fulgens
+8:285:285:n02124075:Egyptian cat:Egyptian cat
+9:350:350:n02417914:ibex:ibex, Capra ibex
+10:283:283:n02123394:Persian cat:Persian cat
+11:286:286:n02125311:cougar:cougar, puma, catamount, mountain lion, painter, panther, Felis concolor
+12:353:353:n02423022:gazelle:gazelle
+13:334:334:n02346627:porcupine:porcupine, hedgehog
+14:150:150:n02077923:sea lion:sea lion
+15:249:249:n02110063:malamute:malamute, malemute, Alaskan malamute
+16:362:362:n02447366:badger:badger
+17:246:246:n02109047:Great Dane:Great Dane
+18:166:166:n02089867:Walker hound:Walker hound, Walker foxhound
+19:218:218:n02102177:Welsh springer spaniel:Welsh springer spaniel
+20:172:172:n02091134:whippet:whippet
+21:177:177:n02092002:Scottish deerhound:Scottish deerhound, deerhound
+22:148:148:n02071294:killer whale:killer whale, killer, orca, grampus, sea wolf, Orcinus orca
+23:357:357:n02442845:mink:mink
+24:386:386:n02504458:African elephant:African elephant, Loxodonta africana
+25:178:178:n02092339:Weimaraner:Weimaraner
+26:202:202:n02098105:soft-coated wheaten terrier:soft-coated wheaten terrier
+27:194:194:n02096437:Dandie Dinmont:Dandie Dinmont, Dandie Dinmont terrier
+28:271:271:n02114712:red wolf:red wolf, maned wolf, Canis rufus, Canis niger
+29:229:229:n02105641:Old English sheepdog:Old English sheepdog, bobtail
+30:290:290:n02128925:jaguar:jaguar, panther, Panthera onca, Felis onca
+31:175:175:n02091635:otterhound:otterhound, otter hound
+32:163:163:n02088466:bloodhound:bloodhound, sleuthhound
+33:191:191:n02096051:Airedale:Airedale, Airedale terrier
+34:276:276:n02117135:hyena:hyena, hyaena
+35:299:299:n02138441:meerkat:meerkat, mierkat
+36:197:197:n02097130:giant schnauzer:giant schnauzer
+37:380:380:n02493509:titi:titi, titi monkey
+38:364:364:n02457408:three-toed sloth:three-toed sloth, ai, Bradypus tridactylus
+39:339:339:n02389026:sorrel:sorrel
+40:359:359:n02443484:black-footed ferret:black-footed ferret, ferret, Mustela nigripes
+41:251:251:n02110341:dalmatian:dalmatian, coach dog, carriage dog
+42:165:165:n02089078:black-and-tan coonhound:black-and-tan coonhound
+43:157:157:n02086910:papillon:papillon
+44:361:361:n02445715:skunk:skunk, polecat, wood pussy
+45:179:179:n02093256:Staffordshire bullterrier:Staffordshire bullterrier, Staffordshire bull terrier
+46:268:268:n02113978:Mexican hairless:Mexican hairless
+47:233:233:n02106382:Bouvier des Flandres:Bouvier des Flandres, Bouviers des Flandres
+48:356:356:n02441942:weasel:weasel
+49:266:266:n02113712:miniature poodle:miniature poodle
+50:264:264:n02113186:Cardigan:Cardigan, Cardigan Welsh corgi
+51:225:225:n02105162:malinois:malinois
+52:349:349:n02415577:bighorn:bighorn, bighorn sheep, cimarron, Rocky Mountain bighorn, Rocky Mountain sheep, Ovis canadensis
+53:335:335:n02356798:fox squirrel:fox squirrel, eastern fox squirrel, Sciurus niger
+54:375:375:n02488702:colobus:colobus, colobus monkey
+55:282:282:n02123159:tiger cat:tiger cat
+56:204:204:n02098413:Lhasa:Lhasa, Lhasa apso
+57:352:352:n02422699:impala:impala, Aepyceros melampus
+58:272:272:n02114855:coyote:coyote, prairie wolf, brush wolf, Canis latrans
+59:187:187:n02094433:Yorkshire terrier:Yorkshire terrier
+60:256:256:n02111277:Newfoundland:Newfoundland, Newfoundland dog
+61:294:294:n02132136:brown bear:brown bear, bruin, Ursus arctos
+62:277:277:n02119022:red fox:red fox, Vulpes vulpes
+63:174:174:n02091467:Norwegian elkhound:Norwegian elkhound, elkhound
+64:234:234:n02106550:Rottweiler:Rottweiler
+65:351:351:n02422106:hartebeest:hartebeest
+66:176:176:n02091831:Saluki:Saluki, gazelle hound
+67:280:280:n02120505:grey fox:grey fox, gray fox, Urocyon cinereoargenteus
+68:223:223:n02104365:schipperke:schipperke
+69:154:154:n02086079:Pekinese:Pekinese, Pekingese, Peke
+70:262:262:n02112706:Brabancon griffon:Brabancon griffon
+71:203:203:n02098286:West Highland white terrier:West Highland white terrier
+72:190:190:n02095889:Sealyham terrier:Sealyham terrier, Sealyham
+73:370:370:n02484975:guenon:guenon, guenon monkey
+74:298:298:n02137549:mongoose:mongoose
+75:384:384:n02500267:indri:indri, indris, Indri indri, Indri brevicaudatus
+76:292:292:n02129604:tiger:tiger, Panthera tigris
+77:170:170:n02090721:Irish wolfhound:Irish wolfhound
+78:342:342:n02396427:wild boar:wild boar, boar, Sus scrofa
+79:241:241:n02108000:EntleBucher:EntleBucher
+80:340:340:n02391049:zebra:zebra
+81:348:348:n02412080:ram:ram, tup
+82:245:245:n02108915:French bulldog:French bulldog
+83:365:365:n02480495:orangutan:orangutan, orang, orangutang, Pongo pygmaeus
+84:253:253:n02110806:basenji:basenji
+85:288:288:n02128385:leopard:leopard, Panthera pardus
+86:239:239:n02107683:Bernese mountain dog:Bernese mountain dog
+87:153:153:n02085936:Maltese dog:Maltese dog, Maltese terrier, Maltese
+88:185:185:n02094114:Norfolk terrier:Norfolk terrier
+89:158:158:n02087046:toy terrier:toy terrier
+90:211:211:n02100583:vizsla:vizsla, Hungarian pointer
+91:192:192:n02096177:cairn:cairn, cairn terrier
+92:382:382:n02494079:squirrel monkey:squirrel monkey, Saimiri sciureus
+93:224:224:n02105056:groenendael:groenendael
+94:216:216:n02101556:clumber:clumber, clumber spaniel
+95:284:284:n02123597:Siamese cat:Siamese cat, Siamese
+96:367:367:n02481823:chimpanzee:chimpanzee, chimp, Pan troglodytes
+97:228:228:n02105505:komondor:komondor
+98:160:160:n02088094:Afghan hound:Afghan hound, Afghan
+99:152:152:n02085782:Japanese spaniel:Japanese spaniel
+100:376:376:n02489166:proboscis monkey:proboscis monkey, Nasalis larvatus
+101:338:338:n02364673:guinea pig:guinea pig, Cavia cobaya
+102:270:270:n02114548:white wolf:white wolf, Arctic wolf, Canis lupus tundrarum
+103:296:296:n02134084:ice bear:ice bear, polar bear, Ursus Maritimus, Thalarctos maritimus
+104:366:366:n02480855:gorilla:gorilla, Gorilla gorilla
+105:169:169:n02090622:borzoi:borzoi, Russian wolfhound
+106:265:265:n02113624:toy poodle:toy poodle
+107:183:183:n02093859:Kerry blue terrier:Kerry blue terrier
+108:345:345:n02403003:ox:ox
+109:199:199:n02097298:Scotch terrier:Scotch terrier, Scottish terrier, Scottie
+110:244:244:n02108551:Tibetan mastiff:Tibetan mastiff
+111:381:381:n02493793:spider monkey:spider monkey, Ateles geoffroyi
+112:236:236:n02107142:Doberman:Doberman, Doberman pinscher
+113:195:195:n02096585:Boston bull:Boston bull, Boston terrier
+114:238:238:n02107574:Greater Swiss Mountain dog:Greater Swiss Mountain dog
+115:240:240:n02107908:Appenzeller:Appenzeller
+116:155:155:n02086240:Shih-Tzu:Shih-Tzu
+117:221:221:n02102973:Irish water spaniel:Irish water spaniel
+118:259:259:n02112018:Pomeranian:Pomeranian
+119:181:181:n02093647:Bedlington terrier:Bedlington terrier
+120:343:343:n02397096:warthog:warthog
+121:354:354:n02437312:Arabian camel:Arabian camel, dromedary, Camelus dromedarius
+122:369:369:n02483708:siamang:siamang, Hylobates syndactylus, Symphalangus syndactylus
+123:196:196:n02097047:miniature schnauzer:miniature schnauzer
+124:231:231:n02106030:collie:collie
+125:207:207:n02099601:golden retriever:golden retriever
+126:184:184:n02093991:Irish terrier:Irish terrier
+127:252:252:n02110627:affenpinscher:affenpinscher, monkey pinscher, monkey dog
+128:232:232:n02106166:Border collie:Border collie
+129:331:331:n02326432:hare:hare
+130:242:242:n02108089:boxer:boxer
+131:201:201:n02097658:silky terrier:silky terrier, Sydney silky
+132:162:162:n02088364:beagle:beagle
+133:255:255:n02111129:Leonberg:Leonberg
+134:210:210:n02100236:German short-haired pointer:German short-haired pointer
+135:371:371:n02486261:patas:patas, hussar monkey, Erythrocebus patas
+136:274:274:n02115913:dhole:dhole, Cuon alpinus
+137:372:372:n02486410:baboon:baboon
+138:373:373:n02487347:macaque:macaque
+139:209:209:n02099849:Chesapeake Bay retriever:Chesapeake Bay retriever
+140:243:243:n02108422:bull mastiff:bull mastiff
+141:222:222:n02104029:kuvasz:kuvasz
+142:378:378:n02492035:capuchin:capuchin, ringtail, Cebus capucinus
+143:254:254:n02110958:pug:pug, pug-dog
+144:206:206:n02099429:curly-coated retriever:curly-coated retriever
+145:186:186:n02094258:Norwich terrier:Norwich terrier
+146:205:205:n02099267:flat-coated retriever:flat-coated retriever
+147:341:341:n02395406:hog:hog, pig, grunter, squealer, Sus scrofa
+148:261:261:n02112350:keeshond:keeshond
+149:248:248:n02109961:Eskimo dog:Eskimo dog, husky
+150:215:215:n02101388:Brittany spaniel:Brittany spaniel
+151:267:267:n02113799:standard poodle:standard poodle
+152:189:189:n02095570:Lakeland terrier:Lakeland terrier
+153:289:289:n02128757:snow leopard:snow leopard, ounce, Panthera uncia
+154:214:214:n02101006:Gordon setter:Gordon setter
+155:273:273:n02115641:dingo:dingo, warrigal, warragal, Canis dingo
+156:198:198:n02097209:standard schnauzer:standard schnauzer
+157:333:333:n02342885:hamster:hamster
+158:200:200:n02097474:Tibetan terrier:Tibetan terrier, chrysanthemum dog
+159:279:279:n02120079:Arctic fox:Arctic fox, white fox, Alopex lagopus
+160:188:188:n02095314:wire-haired fox terrier:wire-haired fox terrier
+161:161:161:n02088238:basset:basset, basset hound
+162:346:346:n02408429:water buffalo:water buffalo, water ox, Asiatic buffalo, Bubalus bubalis
+163:295:295:n02133161:American black bear:American black bear, black bear, Ursus americanus, Euarctos americanus
+164:332:332:n02328150:Angora:Angora, Angora rabbit
+165:347:347:n02410509:bison:bison
+166:379:379:n02492660:howler monkey:howler monkey, howler
+167:344:344:n02398521:hippopotamus:hippopotamus, hippo, river horse, Hippopotamus amphibius
+168:260:260:n02112137:chow:chow, chow chow
+169:388:388:n02510455:giant panda:giant panda, panda, panda bear, coon bear, Ailuropoda melanoleuca
+170:180:180:n02093428:American Staffordshire terrier:American Staffordshire terrier, Staffordshire terrier, American pit bull terrier, pit bull terrier
+171:230:230:n02105855:Shetland sheepdog:Shetland sheepdog, Shetland sheep dog, Shetland
+172:257:257:n02111500:Great Pyrenees:Great Pyrenees
+173:151:151:n02085620:Chihuahua:Chihuahua
+174:281:281:n02123045:tabby:tabby, tabby cat
+175:377:377:n02490219:marmoset:marmoset
+176:208:208:n02099712:Labrador retriever:Labrador retriever
+177:247:247:n02109525:Saint Bernard:Saint Bernard, St Bernard
+178:363:363:n02454379:armadillo:armadillo
+179:258:258:n02111889:Samoyed:Samoyed, Samoyede
+180:164:164:n02088632:bluetick:bluetick
+181:168:168:n02090379:redbone:redbone
+182:358:358:n02443114:polecat:polecat, fitch, foulmart, foumart, Mustela putorius
+183:336:336:n02361337:marmot:marmot
+184:227:227:n02105412:kelpie:kelpie
+185:368:368:n02483362:gibbon:gibbon, Hylobates lar
+186:355:355:n02437616:llama:llama
+187:237:237:n02107312:miniature pinscher:miniature pinscher
+188:330:330:n02325366:wood rabbit:wood rabbit, cottontail, cottontail rabbit
+189:171:171:n02091032:Italian greyhound:Italian greyhound
+190:291:291:n02129165:lion:lion, king of beasts, Panthera leo
+191:219:219:n02102318:cocker spaniel:cocker spaniel, English cocker spaniel, cocker
+192:213:213:n02100877:Irish setter:Irish setter, red setter
+193:149:149:n02074367:dugong:dugong, Dugong dugon
+194:385:385:n02504013:Indian elephant:Indian elephant, Elephas maximus
+195:337:337:n02363005:beaver:beaver
+196:220:220:n02102480:Sussex spaniel:Sussex spaniel
+197:263:263:n02113023:Pembroke:Pembroke, Pembroke Welsh corgi
+198:156:156:n02086646:Blenheim spaniel:Blenheim spaniel
+199:383:383:n02497673:Madagascar cat:Madagascar cat, ring-tailed lemur, Lemur catta
+200:159:159:n02087394:Rhodesian ridgeback:Rhodesian ridgeback
+201:287:287:n02127052:lynx:lynx, catamount
+202:275:275:n02116738:African hunting dog:African hunting dog, hyena dog, Cape hunting dog, Lycaon pictus
+203:374:374:n02488291:langur:langur
+204:173:173:n02091244:Ibizan hound:Ibizan hound, Ibizan Podenco
+205:269:269:n02114367:timber wolf:timber wolf, grey wolf, gray wolf, Canis lupus
+206:293:293:n02130308:cheetah:cheetah, chetah, Acinonyx jubatus
+207:167:167:n02089973:English foxhound:English foxhound
+208:226:226:n02105251:briard:briard
+209:297:297:n02134418:sloth bear:sloth bear, Melursus ursinus, Ursus ursinus
+210:182:182:n02093754:Border terrier:Border terrier
+211:235:235:n02106662:German shepherd:German shepherd, German shepherd dog, German police dog, alsatian
+212:360:360:n02444819:otter:otter
+213:105:105:n01882714:koala:koala, koala bear, kangaroo bear, native bear, Phascolarctos cinereus
+214:101:101:n01871265:tusker:tusker
+215:102:102:n01872401:echidna:echidna, spiny anteater, anteater
+216:104:104:n01877812:wallaby:wallaby, brush kangaroo
+217:103:103:n01873310:platypus:platypus, duckbill, duckbilled platypus, duck-billed platypus, Ornithorhynchus anatinus
+218:106:106:n01883070:wombat:wombat
+219:763:763:n04086273:revolver:revolver, six-gun, six-shooter
+220:879:879:n04507155:umbrella:umbrella
+221:780:780:n04147183:schooner:schooner
+222:805:805:n04254680:soccer ball:soccer ball
+223:401:401:n02672831:accordion:accordion, piano accordion, squeeze box
+224:310:310:n02219486:ant:ant, emmet, pismire
+225:327:327:n02317335:starfish:starfish, sea star
+226:117:117:n01968897:chambered nautilus:chambered nautilus, pearly nautilus, nautilus
+227:579:579:n03452741:grand piano:grand piano, grand
+228:620:620:n03642806:laptop:laptop, laptop computer
+229:949:949:n07745940:strawberry:strawberry
+230:404:404:n02690373:airliner:airliner
+231:895:895:n04552348:warplane:warplane, military plane
+232:405:405:n02692877:airship:airship, dirigible
+233:417:417:n02782093:balloon:balloon
+234:812:812:n04266014:space shuttle:space shuttle
+235:554:554:n03344393:fireboat:fireboat
+236:576:576:n03447447:gondola:gondola
+237:814:814:n04273569:speedboat:speedboat
+238:625:625:n03662601:lifeboat:lifeboat
+239:472:472:n02951358:canoe:canoe
+240:914:914:n04612504:yawl:yawl
+241:484:484:n02981792:catamaran:catamaran
+242:871:871:n04483307:trimaran:trimaran
+243:510:510:n03095699:container ship:container ship, containership, container vessel
+244:628:628:n03673027:liner:liner, ocean liner
+245:724:724:n03947888:pirate:pirate, pirate ship
+246:403:403:n02687172:aircraft carrier:aircraft carrier, carrier, flattop, attack aircraft carrier
+247:833:833:n04347754:submarine:submarine, pigboat, sub, U-boat
+248:913:913:n04606251:wreck:wreck
+249:586:586:n03478589:half track:half track
+250:847:847:n04389033:tank:tank, army tank, armored combat vehicle, armoured combat vehicle
+251:657:657:n03773504:missile:missile
+252:450:450:n02860847:bobsled:bobsled, bobsleigh, bob
+253:537:537:n03218198:dogsled:dogsled, dog sled, dog sleigh
+254:444:444:n02835271:bicycle-built-for-two:bicycle-built-for-two, tandem bicycle, tandem
+255:671:671:n03792782:mountain bike:mountain bike, all-terrain bike, off-roader
+256:565:565:n03393912:freight car:freight car
+257:705:705:n03895866:passenger car:passenger car, coach, carriage
+258:428:428:n02797295:barrow:barrow, garden cart, lawn cart, wheelbarrow
+259:791:791:n04204347:shopping cart:shopping cart
+260:670:670:n03791053:motor scooter:motor scooter, scooter
+261:561:561:n03384352:forklift:forklift
+262:547:547:n03272562:electric locomotive:electric locomotive
+263:820:820:n04310018:steam locomotive:steam locomotive
+264:408:408:n02704792:amphibian:amphibian, amphibious vehicle
+265:407:407:n02701002:ambulance:ambulance
+266:436:436:n02814533:beach wagon:beach wagon, station wagon, wagon, estate car, beach waggon, station waggon, waggon
+267:468:468:n02930766:cab:cab, hack, taxi, taxicab
+268:511:511:n03100240:convertible:convertible
+269:609:609:n03594945:jeep:jeep, landrover
+270:627:627:n03670208:limousine:limousine, limo
+271:656:656:n03770679:minivan:minivan
+272:661:661:n03777568:Model T:Model T
+273:751:751:n04037443:racer:racer, race car, racing car
+274:817:817:n04285008:sports car:sports car, sport car
+275:573:573:n03444034:go-kart:go-kart
+276:575:575:n03445924:golfcart:golfcart, golf cart
+277:665:665:n03785016:moped:moped
+278:803:803:n04252225:snowplow:snowplow, snowplough
+279:555:555:n03345487:fire engine:fire engine, fire truck
+280:569:569:n03417042:garbage truck:garbage truck, dustcart
+281:717:717:n03930630:pickup:pickup, pickup truck
+282:864:864:n04461696:tow truck:tow truck, tow car, wrecker
+283:867:867:n04467665:trailer truck:trailer truck, tractor trailer, trucking rig, rig, articulated lorry, semi
+284:675:675:n03796401:moving van:moving van
+285:734:734:n03977966:police van:police van, police wagon, paddy wagon, patrol wagon, wagon, black Maria
+286:757:757:n04065272:recreational vehicle:recreational vehicle, RV, R.V.
+287:829:829:n04335435:streetcar:streetcar, tram, tramcar, trolley, trolley car
+288:802:802:n04252077:snowmobile:snowmobile
+289:866:866:n04465501:tractor:tractor
+290:660:660:n03776460:mobile home:mobile home, manufactured home
+291:870:870:n04482393:tricycle:tricycle, trike, velocipede
+292:880:880:n04509417:unicycle:unicycle, monocycle
+293:603:603:n03538406:horse cart:horse cart, horse-cart
+294:612:612:n03599486:jinrikisha:jinrikisha, ricksha, rickshaw
+295:690:690:n03868242:oxcart:oxcart
+296:431:431:n02804414:bassinet:bassinet
+297:516:516:n03125729:cradle:cradle
+298:520:520:n03131574:crib:crib, cot
+299:564:564:n03388549:four-poster:four-poster
+300:453:453:n02870880:bookcase:bookcase
+301:495:495:n03018349:china cabinet:china cabinet, china closet
+302:648:648:n03742115:medicine chest:medicine chest, medicine cabinet
+303:493:493:n03016953:chiffonier:chiffonier, commode
+304:846:846:n04380533:table lamp:table lamp
+305:553:553:n03337140:file:file, file cabinet, filing cabinet
+306:703:703:n03891251:park bench:park bench
+307:423:423:n02791124:barber chair:barber chair
+308:857:857:n04429376:throne:throne
+309:559:559:n03376595:folding chair:folding chair
+310:765:765:n04099969:rocking chair:rocking chair, rocker
+311:831:831:n04344873:studio couch:studio couch, day bed
+312:861:861:n04447861:toilet seat:toilet seat
+313:526:526:n03179701:desk:desk
+314:736:736:n03982430:pool table:pool table, billiard table, snooker table
+315:532:532:n03201208:dining table:dining table, board
+316:548:548:n03290653:entertainment center:entertainment center
+317:894:894:n04550184:wardrobe:wardrobe, closet, press
+318:948:948:n07742313:Granny Smith:Granny Smith
+319:950:950:n07747607:orange:orange
+320:951:951:n07749582:lemon:lemon
+321:952:952:n07753113:fig:fig
+322:953:953:n07753275:pineapple:pineapple, ananas
+323:954:954:n07753592:banana:banana
+324:955:955:n07754684:jackfruit:jackfruit, jak, jack
+325:956:956:n07760859:custard apple:custard apple
+326:957:957:n07768694:pomegranate:pomegranate
+327:988:988:n12267677:acorn:acorn
+328:989:989:n12620546:hip:hip, rose hip, rosehip
+329:998:998:n13133613:ear:ear, spike, capitulum
+330:984:984:n11879895:rapeseed:rapeseed
+331:987:987:n12144580:corn:corn
+332:990:990:n12768682:buckeye:buckeye, horse chestnut, conker
+333:687:687:n03854065:organ:organ, pipe organ
+334:881:881:n04515003:upright:upright, upright piano
+335:494:494:n03017168:chime:chime, bell, gong
+336:541:541:n03249569:drum:drum, membranophone, tympan
+337:577:577:n03447721:gong:gong, tam-tam
+338:641:641:n03720891:maraca:maraca
+339:642:642:n03721384:marimba:marimba, xylophone
+340:822:822:n04311174:steel drum:steel drum
+341:420:420:n02787622:banjo:banjo
+342:486:486:n02992211:cello:cello, violoncello
+343:889:889:n04536866:violin:violin, fiddle
+344:594:594:n03495258:harp:harp
+345:402:402:n02676566:acoustic guitar:acoustic guitar
+346:546:546:n03272010:electric guitar:electric guitar
+347:513:513:n03110669:cornet:cornet, horn, trumpet, trump
+348:566:566:n03394916:French horn:French horn, horn
+349:875:875:n04487394:trombone:trombone
+350:593:593:n03494278:harmonica:harmonica, mouth organ, harp, mouth harp
+351:684:684:n03840681:ocarina:ocarina, sweet potato
+352:699:699:n03884397:panpipe:panpipe, pandean pipe, syrinx
+353:432:432:n02804610:bassoon:bassoon
+354:683:683:n03838899:oboe:oboe, hautboy, hautbois
+355:776:776:n04141076:sax:sax, saxophone
+356:558:558:n03372029:flute:flute, transverse flute
+357:985:985:n11939491:daisy:daisy
+358:986:986:n12057211:yellow lady's slipper:yellow lady's slipper, yellow lady-slipper, Cypripedium calceolus, Cypripedium parviflorum
+359:972:972:n09246464:cliff:cliff, drop, drop-off
+360:979:979:n09468604:valley:valley, vale
+361:970:970:n09193705:alp:alp
+362:980:980:n09472597:volcano:volcano
+363:976:976:n09399592:promontory:promontory, headland, head, foreland
+364:977:977:n09421951:sandbar:sandbar, sand bar
+365:973:973:n09256479:coral reef:coral reef
+366:975:975:n09332890:lakeside:lakeside, lakeshore
+367:978:978:n09428293:seashore:seashore, coast, seacoast, sea-coast
+368:974:974:n09288635:geyser:geyser
+369:596:596:n03498962:hatchet:hatchet
+370:499:499:n03041632:cleaver:cleaver, meat cleaver, chopper
+371:623:623:n03658185:letter opener:letter opener, paper knife, paperknife
+372:726:726:n03954731:plane:plane, carpenter's plane, woodworking plane
+373:740:740:n03995372:power drill:power drill
+374:621:621:n03649909:lawn mower:lawn mower, mower
+375:587:587:n03481172:hammer:hammer
+376:512:512:n03109150:corkscrew:corkscrew, bottle screw
+377:473:473:n02951585:can opener:can opener, tin opener
+378:731:731:n03970156:plunger:plunger, plumber's helper
+379:784:784:n04154565:screwdriver:screwdriver
+380:792:792:n04208210:shovel:shovel
+381:730:730:n03967562:plow:plow, plough
+382:491:491:n03000684:chain saw:chain saw, chainsaw
+383:7:7:n01514668:cock:cock
+384:8:8:n01514859:hen:hen
+385:9:9:n01518878:ostrich:ostrich, Struthio camelus
+386:10:10:n01530575:brambling:brambling, Fringilla montifringilla
+387:11:11:n01531178:goldfinch:goldfinch, Carduelis carduelis
+388:12:12:n01532829:house finch:house finch, linnet, Carpodacus mexicanus
+389:13:13:n01534433:junco:junco, snowbird
+390:14:14:n01537544:indigo bunting:indigo bunting, indigo finch, indigo bird, Passerina cyanea
+391:15:15:n01558993:robin:robin, American robin, Turdus migratorius
+392:16:16:n01560419:bulbul:bulbul
+393:17:17:n01580077:jay:jay
+394:18:18:n01582220:magpie:magpie
+395:19:19:n01592084:chickadee:chickadee
+396:20:20:n01601694:water ouzel:water ouzel, dipper
+397:21:21:n01608432:kite:kite
+398:22:22:n01614925:bald eagle:bald eagle, American eagle, Haliaeetus leucocephalus
+399:23:23:n01616318:vulture:vulture
+400:24:24:n01622779:great grey owl:great grey owl, great gray owl, Strix nebulosa
+401:80:80:n01795545:black grouse:black grouse
+402:81:81:n01796340:ptarmigan:ptarmigan
+403:82:82:n01797886:ruffed grouse:ruffed grouse, partridge, Bonasa umbellus
+404:83:83:n01798484:prairie chicken:prairie chicken, prairie grouse, prairie fowl
+405:84:84:n01806143:peacock:peacock
+406:85:85:n01806567:quail:quail
+407:86:86:n01807496:partridge:partridge
+408:87:87:n01817953:African grey:African grey, African gray, Psittacus erithacus
+409:88:88:n01818515:macaw:macaw
+410:89:89:n01819313:sulphur-crested cockatoo:sulphur-crested cockatoo, Kakatoe galerita, Cacatua galerita
+411:90:90:n01820546:lorikeet:lorikeet
+412:91:91:n01824575:coucal:coucal
+413:92:92:n01828970:bee eater:bee eater
+414:93:93:n01829413:hornbill:hornbill
+415:94:94:n01833805:hummingbird:hummingbird
+416:95:95:n01843065:jacamar:jacamar
+417:96:96:n01843383:toucan:toucan
+418:97:97:n01847000:drake:drake
+419:98:98:n01855032:red-breasted merganser:red-breasted merganser, Mergus serrator
+420:99:99:n01855672:goose:goose
+421:100:100:n01860187:black swan:black swan, Cygnus atratus
+422:127:127:n02002556:white stork:white stork, Ciconia ciconia
+423:128:128:n02002724:black stork:black stork, Ciconia nigra
+424:129:129:n02006656:spoonbill:spoonbill
+425:130:130:n02007558:flamingo:flamingo
+426:132:132:n02009912:American egret:American egret, great white heron, Egretta albus
+427:131:131:n02009229:little blue heron:little blue heron, Egretta caerulea
+428:133:133:n02011460:bittern:bittern
+429:134:134:n02012849:crane:crane
+430:135:135:n02013706:limpkin:limpkin, Aramus pictus
+431:137:137:n02018207:American coot:American coot, marsh hen, mud hen, water hen, Fulica americana
+432:138:138:n02018795:bustard:bustard
+433:139:139:n02025239:ruddy turnstone:ruddy turnstone, Arenaria interpres
+434:140:140:n02027492:red-backed sandpiper:red-backed sandpiper, dunlin, Erolia alpina
+435:141:141:n02028035:redshank:redshank, Tringa totanus
+436:142:142:n02033041:dowitcher:dowitcher
+437:143:143:n02037110:oystercatcher:oystercatcher, oyster catcher
+438:136:136:n02017213:European gallinule:European gallinule, Porphyrio porphyrio
+439:144:144:n02051845:pelican:pelican
+440:145:145:n02056570:king penguin:king penguin, Aptenodytes patagonica
+441:146:146:n02058221:albatross:albatross, mollymawk
+442:2:2:n01484850:great white shark:great white shark, white shark, man-eater, man-eating shark, Carcharodon carcharias
+443:3:3:n01491361:tiger shark:tiger shark, Galeocerdo cuvieri
+444:4:4:n01494475:hammerhead:hammerhead, hammerhead shark
+445:5:5:n01496331:electric ray:electric ray, crampfish, numbfish, torpedo
+446:6:6:n01498041:stingray:stingray
+447:389:389:n02514041:barracouta:barracouta, snoek
+448:391:391:n02536864:coho:coho, cohoe, coho salmon, blue jack, silver salmon, Oncorhynchus kisutch
+449:0:0:n01440764:tench:tench, Tinca tinca
+450:1:1:n01443537:goldfish:goldfish, Carassius auratus
+451:390:390:n02526121:eel:eel
+452:392:392:n02606052:rock beauty:rock beauty, Holocanthus tricolor
+453:393:393:n02607072:anemone fish:anemone fish
+454:396:396:n02643566:lionfish:lionfish
+455:397:397:n02655020:puffer:puffer, pufferfish, blowfish, globefish
+456:394:394:n02640242:sturgeon:sturgeon
+457:395:395:n02641379:gar:gar, garfish, garpike, billfish, Lepisosteus osseus
+458:33:33:n01664065:loggerhead:loggerhead, loggerhead turtle, Caretta caretta
+459:34:34:n01665541:leatherback turtle:leatherback turtle, leatherback, leathery turtle, Dermochelys coriacea
+460:35:35:n01667114:mud turtle:mud turtle
+461:36:36:n01667778:terrapin:terrapin
+462:37:37:n01669191:box turtle:box turtle, box tortoise
+463:38:38:n01675722:banded gecko:banded gecko
+464:39:39:n01677366:common iguana:common iguana, iguana, Iguana iguana
+465:40:40:n01682714:American chameleon:American chameleon, anole, Anolis carolinensis
+466:41:41:n01685808:whiptail:whiptail, whiptail lizard
+467:42:42:n01687978:agama:agama
+468:43:43:n01688243:frilled lizard:frilled lizard, Chlamydosaurus kingi
+469:44:44:n01689811:alligator lizard:alligator lizard
+470:45:45:n01692333:Gila monster:Gila monster, Heloderma suspectum
+471:46:46:n01693334:green lizard:green lizard, Lacerta viridis
+472:47:47:n01694178:African chameleon:African chameleon, Chamaeleo chamaeleon
+473:48:48:n01695060:Komodo dragon:Komodo dragon, Komodo lizard, dragon lizard, giant lizard, Varanus komodoensis
+474:51:51:n01704323:triceratops:triceratops
+475:49:49:n01697457:African crocodile:African crocodile, Nile crocodile, Crocodylus niloticus
+476:50:50:n01698640:American alligator:American alligator, Alligator mississipiensis
+477:52:52:n01728572:thunder snake:thunder snake, worm snake, Carphophis amoenus
+478:53:53:n01728920:ringneck snake:ringneck snake, ring-necked snake, ring snake
+479:54:54:n01729322:hognose snake:hognose snake, puff adder, sand viper
+480:55:55:n01729977:green snake:green snake, grass snake
+481:56:56:n01734418:king snake:king snake, kingsnake
+482:57:57:n01735189:garter snake:garter snake, grass snake
+483:58:58:n01737021:water snake:water snake
+484:59:59:n01739381:vine snake:vine snake
+485:60:60:n01740131:night snake:night snake, Hypsiglena torquata
+486:61:61:n01742172:boa constrictor:boa constrictor, Constrictor constrictor
+487:62:62:n01744401:rock python:rock python, rock snake, Python sebae
+488:63:63:n01748264:Indian cobra:Indian cobra, Naja naja
+489:64:64:n01749939:green mamba:green mamba
+490:65:65:n01751748:sea snake:sea snake
+491:66:66:n01753488:horned viper:horned viper, cerastes, sand viper, horned asp, Cerastes cornutus
+492:67:67:n01755581:diamondback:diamondback, diamondback rattlesnake, Crotalus adamanteus
+493:68:68:n01756291:sidewinder:sidewinder, horned rattlesnake, Crotalus cerastes
+494:25:25:n01629819:European fire salamander:European fire salamander, Salamandra salamandra
+495:26:26:n01630670:common newt:common newt, Triturus vulgaris
+496:27:27:n01631663:eft:eft
+497:28:28:n01632458:spotted salamander:spotted salamander, Ambystoma maculatum
+498:29:29:n01632777:axolotl:axolotl, mud puppy, Ambystoma mexicanum
+499:30:30:n01641577:bullfrog:bullfrog, Rana catesbeiana
+500:31:31:n01644373:tree frog:tree frog, tree-frog
+501:32:32:n01644900:tailed frog:tailed frog, bell toad, ribbed toad, tailed toad, Ascaphus trui
+502:902:902:n04579432:whistle:whistle
+503:908:908:n04592741:wing:wing
+504:696:696:n03876231:paintbrush:paintbrush
+505:589:589:n03483316:hand blower:hand blower, blow dryer, blow drier, hair dryer, hair drier
+506:691:691:n03868863:oxygen mask:oxygen mask
+507:801:801:n04251144:snorkel:snorkel
+508:632:632:n03691459:loudspeaker:loudspeaker, speaker, speaker unit, loudspeaker system, speaker system
+509:650:650:n03759954:microphone:microphone, mike
+510:782:782:n04152593:screen:screen, CRT screen
+511:673:673:n03793489:mouse:mouse, computer mouse
+512:545:545:n03271574:electric fan:electric fan, blower
+513:686:686:n03843555:oil filter:oil filter
+514:828:828:n04332243:strainer:strainer
+515:811:811:n04265275:space heater:space heater
+516:827:827:n04330267:stove:stove
+517:583:583:n03467068:guillotine:guillotine
+518:426:426:n02794156:barometer:barometer
+519:769:769:n04118776:rule:rule, ruler
+520:685:685:n03841143:odometer:odometer, hodometer, mileometer, milometer
+521:778:778:n04141975:scale:scale, weighing machine
+522:409:409:n02708093:analog clock:analog clock
+523:530:530:n03196217:digital clock:digital clock
+524:892:892:n04548280:wall clock:wall clock
+525:604:604:n03544143:hourglass:hourglass
+526:835:835:n04355338:sundial:sundial
+527:704:704:n03891332:parking meter:parking meter
+528:826:826:n04328186:stopwatch:stopwatch, stop watch
+529:531:531:n03197337:digital watch:digital watch
+530:823:823:n04317175:stethoscope:stethoscope
+531:845:845:n04376876:syringe:syringe
+532:635:635:n03706229:magnetic compass:magnetic compass
+533:447:447:n02841315:binoculars:binoculars, field glasses, opera glasses
+534:745:745:n04009552:projector:projector
+535:837:837:n04356056:sunglasses:sunglasses, dark glasses, shades
+536:633:633:n03692522:loupe:loupe, jeweler's loupe
+537:755:755:n04044716:radio telescope:radio telescope, radio reflector
+538:456:456:n02879718:bow:bow
+539:471:471:n02950826:cannon:cannon
+540:413:413:n02749479:assault rifle:assault rifle, assault gun
+541:764:764:n04090263:rifle:rifle
+542:744:744:n04008634:projectile:projectile, missile
+543:508:508:n03085013:computer keyboard:computer keyboard, keypad
+544:878:878:n04505470:typewriter keyboard:typewriter keyboard
+545:517:517:n03126707:crane:crane
+546:626:626:n03666591:lighter:lighter, light, igniter, ignitor
+547:398:398:n02666196:abacus:abacus
+548:480:480:n02977058:cash machine:cash machine, cash dispenser, automated teller machine, automatic teller machine, automated teller, automatic teller, ATM
+549:798:798:n04238763:slide rule:slide rule, slipstick
+550:527:527:n03180011:desktop computer:desktop computer
+551:590:590:n03485407:hand-held computer:hand-held computer, hand-held microcomputer
+552:681:681:n03832673:notebook:notebook, notebook computer
+553:916:916:n06359193:web site:web site, website, internet site, site
+554:595:595:n03496892:harvester:harvester, reaper
+555:856:856:n04428191:thresher:thresher, thrasher, threshing machine
+556:742:742:n04004767:printer:printer
+557:800:800:n04243546:slot:slot, one-armed bandit
+558:886:886:n04525305:vending machine:vending machine
+559:786:786:n04179913:sewing machine:sewing machine
+560:613:613:n03602883:joystick:joystick
+561:844:844:n04372370:switch:switch, electric switch, electrical switch
+562:600:600:n03532672:hook:hook, claw
+563:479:479:n02974003:car wheel:car wheel
+564:694:694:n03874293:paddlewheel:paddlewheel, paddle wheel
+565:723:723:n03944341:pinwheel:pinwheel
+566:739:739:n03992509:potter's wheel:potter's wheel
+567:571:571:n03425413:gas pump:gas pump, gasoline pump, petrol pump, island dispenser
+568:476:476:n02966193:carousel:carousel, carrousel, merry-go-round, roundabout, whirligig
+569:843:843:n04371774:swing:swing
+570:758:758:n04067472:reel:reel
+571:753:753:n04040759:radiator:radiator
+572:746:746:n04019541:puck:puck, hockey puck
+573:592:592:n03492542:hard disc:hard disc, hard disk, fixed disk
+574:836:836:n04355933:sunglass:sunglass
+575:714:714:n03929660:pick:pick, plectrum, plectron
+576:475:475:n02965783:car mirror:car mirror
+577:807:807:n04258138:solar dish:solar dish, solar collector, solar furnace
+578:761:761:n04074963:remote control:remote control, remote
+579:535:535:n03208938:disk brake:disk brake, disc brake
+580:464:464:n02910353:buckle:buckle
+581:584:584:n03476684:hair slide:hair slide
+582:616:616:n03627232:knot:knot
+583:507:507:n03075370:combination lock:combination lock
+584:695:695:n03874599:padlock:padlock
+585:677:677:n03804744:nail:nail
+586:772:772:n04127249:safety pin:safety pin
+587:783:783:n04153751:screw:screw
+588:676:676:n03803284:muzzle:muzzle
+589:785:785:n04162706:seat belt:seat belt, seatbelt
+590:795:795:n04228054:ski:ski
+591:470:470:n02948072:candle:candle, taper, wax light
+592:607:607:n03590841:jack-o'-lantern:jack-o'-lantern
+593:818:818:n04286575:spotlight:spotlight, spot
+594:862:862:n04456115:torch:torch
+595:678:678:n03814639:neck brace:neck brace
+596:718:718:n03933933:pier:pier
+597:872:872:n04485082:tripod:tripod
+598:645:645:n03733131:maypole:maypole
+599:674:674:n03794056:mousetrap:mousetrap
+600:815:815:n04275548:spider web:spider web, spider's web
+601:69:69:n01768244:trilobite:trilobite
+602:70:70:n01770081:harvestman:harvestman, daddy longlegs, Phalangium opilio
+603:71:71:n01770393:scorpion:scorpion
+604:72:72:n01773157:black and gold garden spider:black and gold garden spider, Argiope aurantia
+605:73:73:n01773549:barn spider:barn spider, Araneus cavaticus
+606:74:74:n01773797:garden spider:garden spider, Aranea diademata
+607:75:75:n01774384:black widow:black widow, Latrodectus mactans
+608:76:76:n01774750:tarantula:tarantula
+609:77:77:n01775062:wolf spider:wolf spider, hunting spider
+610:78:78:n01776313:tick:tick
+611:79:79:n01784675:centipede:centipede
+612:126:126:n01990800:isopod:isopod
+613:118:118:n01978287:Dungeness crab:Dungeness crab, Cancer magister
+614:119:119:n01978455:rock crab:rock crab, Cancer irroratus
+615:120:120:n01980166:fiddler crab:fiddler crab
+616:121:121:n01981276:king crab:king crab, Alaska crab, Alaskan king crab, Alaska king crab, Paralithodes camtschatica
+617:122:122:n01983481:American lobster:American lobster, Northern lobster, Maine lobster, Homarus americanus
+618:123:123:n01984695:spiny lobster:spiny lobster, langouste, rock lobster, crawfish, crayfish, sea crawfish
+619:124:124:n01985128:crayfish:crayfish, crawfish, crawdad, crawdaddy
+620:125:125:n01986214:hermit crab:hermit crab
+621:300:300:n02165105:tiger beetle:tiger beetle
+622:301:301:n02165456:ladybug:ladybug, ladybeetle, lady beetle, ladybird, ladybird beetle
+623:302:302:n02167151:ground beetle:ground beetle, carabid beetle
+624:303:303:n02168699:long-horned beetle:long-horned beetle, longicorn, longicorn beetle
+625:304:304:n02169497:leaf beetle:leaf beetle, chrysomelid
+626:305:305:n02172182:dung beetle:dung beetle
+627:306:306:n02174001:rhinoceros beetle:rhinoceros beetle
+628:307:307:n02177972:weevil:weevil
+629:308:308:n02190166:fly:fly
+630:309:309:n02206856:bee:bee
+631:311:311:n02226429:grasshopper:grasshopper, hopper
+632:312:312:n02229544:cricket:cricket
+633:313:313:n02231487:walking stick:walking stick, walkingstick, stick insect
+634:314:314:n02233338:cockroach:cockroach, roach
+635:315:315:n02236044:mantis:mantis, mantid
+636:316:316:n02256656:cicada:cicada, cicala
+637:317:317:n02259212:leafhopper:leafhopper
+638:318:318:n02264363:lacewing:lacewing, lacewing fly
+639:319:319:n02268443:dragonfly:dragonfly, darning needle, devil's darning needle, sewing needle, snake feeder, snake doctor, mosquito hawk, skeeter hawk
+640:320:320:n02268853:damselfly:damselfly
+641:321:321:n02276258:admiral:admiral
+642:322:322:n02277742:ringlet:ringlet, ringlet butterfly
+643:323:323:n02279972:monarch:monarch, monarch butterfly, milkweed butterfly, Danaus plexippus
+644:324:324:n02280649:cabbage butterfly:cabbage butterfly
+645:325:325:n02281406:sulphur butterfly:sulphur butterfly, sulfur butterfly
+646:326:326:n02281787:lycaenid:lycaenid, lycaenid butterfly
+647:107:107:n01910747:jellyfish:jellyfish
+648:108:108:n01914609:sea anemone:sea anemone, anemone
+649:109:109:n01917289:brain coral:brain coral
+650:110:110:n01924916:flatworm:flatworm, platyhelminth
+651:111:111:n01930112:nematode:nematode, nematode worm, roundworm
+652:112:112:n01943899:conch:conch
+653:113:113:n01944390:snail:snail
+654:114:114:n01945685:slug:slug
+655:115:115:n01950731:sea slug:sea slug, nudibranch
+656:116:116:n01955084:chiton:chiton, coat-of-mail shell, sea cradle, polyplacophore
+657:328:328:n02319095:sea urchin:sea urchin
+658:329:329:n02321529:sea cucumber:sea cucumber, holothurian
+659:606:606:n03584829:iron:iron, smoothing iron
+660:550:550:n03297495:espresso maker:espresso maker
+661:651:651:n03761084:microwave:microwave, microwave oven
+662:544:544:n03259280:Dutch oven:Dutch oven
+663:766:766:n04111531:rotisserie:rotisserie
+664:859:859:n04442312:toaster:toaster
+665:891:891:n04542943:waffle iron:waffle iron
+666:882:882:n04517823:vacuum:vacuum, vacuum cleaner
+667:534:534:n03207941:dishwasher:dishwasher, dish washer, dishwashing machine
+668:760:760:n04070727:refrigerator:refrigerator, icebox
+669:897:897:n04554684:washer:washer, automatic washer, washing machine
+670:521:521:n03133878:Crock Pot:Crock Pot
+671:567:567:n03400231:frying pan:frying pan, frypan, skillet
+672:909:909:n04596742:wok:wok
+673:469:469:n02939185:caldron:caldron, cauldron
+674:505:505:n03063689:coffeepot:coffeepot
+675:849:849:n04398044:teapot:teapot
+676:813:813:n04270147:spatula:spatula
+677:406:406:n02699494:altar:altar
+678:873:873:n04486054:triumphal arch:triumphal arch
+679:706:706:n03899768:patio:patio, terrace
+680:821:821:n04311004:steel arch bridge:steel arch bridge
+681:839:839:n04366367:suspension bridge:suspension bridge
+682:888:888:n04532670:viaduct:viaduct
+683:425:425:n02793495:barn:barn
+684:580:580:n03457902:greenhouse:greenhouse, nursery, glasshouse
+685:698:698:n03877845:palace:palace
+686:663:663:n03781244:monastery:monastery
+687:624:624:n03661043:library:library
+688:410:410:n02727426:apiary:apiary, bee house
+689:449:449:n02859443:boathouse:boathouse
+690:497:497:n03028079:church:church, church building
+691:668:668:n03788195:mosque:mosque
+692:832:832:n04346328:stupa:stupa, tope
+693:727:727:n03956157:planetarium:planetarium
+694:762:762:n04081281:restaurant:restaurant, eating house, eating place, eatery
+695:498:498:n03032252:cinema:cinema, movie theater, movie theatre, movie house, picture palace
+696:598:598:n03529860:home theater:home theater, home theatre
+697:634:634:n03697007:lumbermill:lumbermill, sawmill
+698:506:506:n03065424:coil:coil, spiral, volute, whorl, helix
+699:682:682:n03837869:obelisk:obelisk
+700:863:863:n04458633:totem pole:totem pole
+701:483:483:n02980441:castle:castle
+702:743:743:n04005630:prison:prison, prison house
+703:582:582:n03461385:grocery store:grocery store, grocery, food market, market
+704:415:415:n02776631:bakery:bakery, bakeshop, bakehouse
+705:424:424:n02791270:barbershop:barbershop
+706:454:454:n02871525:bookshop:bookshop, bookstore, bookstall
+707:467:467:n02927161:butcher shop:butcher shop, meat market
+708:509:509:n03089624:confectionery:confectionery, confectionary, candy store
+709:788:788:n04200800:shoe shop:shoe shop, shoe-shop, shoe store
+710:860:860:n04443257:tobacco shop:tobacco shop, tobacconist shop, tobacconist
+711:865:865:n04462240:toyshop:toyshop
+712:562:562:n03388043:fountain:fountain
+713:500:500:n03042490:cliff dwelling:cliff dwelling
+714:915:915:n04613696:yurt:yurt
+715:536:536:n03216828:dock:dock, dockage, docking facility
+716:458:458:n02892201:brass:brass, memorial tablet, plaque
+717:649:649:n03743016:megalith:megalith, megalithic structure
+718:421:421:n02788148:bannister:bannister, banister, balustrade, balusters, handrail
+719:460:460:n02894605:breakwater:breakwater, groin, groyne, mole, bulwark, seawall, jetty
+720:525:525:n03160309:dam:dam, dike, dyke
+721:489:489:n03000134:chainlink fence:chainlink fence
+722:716:716:n03930313:picket fence:picket fence, paling
+723:912:912:n04604644:worm fence:worm fence, snake fence, snake-rail fence, Virginia fence
+724:825:825:n04326547:stone wall:stone wall
+725:581:581:n03459775:grille:grille, radiator grille
+726:799:799:n04239074:sliding door:sliding door
+727:877:877:n04501370:turnstile:turnstile
+728:672:672:n03792972:mountain tent:mountain tent
+729:781:781:n04149813:scoreboard:scoreboard
+730:599:599:n03530642:honeycomb:honeycomb
+731:729:729:n03961711:plate rack:plate rack
+732:708:708:n03903868:pedestal:pedestal, plinth, footstall
+733:437:437:n02814860:beacon:beacon, lighthouse, beacon light, pharos
+734:935:935:n07711569:mashed potato:mashed potato
+735:945:945:n07720875:bell pepper:bell pepper
+736:936:936:n07714571:head cabbage:head cabbage
+737:937:937:n07714990:broccoli:broccoli
+738:938:938:n07715103:cauliflower:cauliflower
+739:939:939:n07716358:zucchini:zucchini, courgette
+740:940:940:n07716906:spaghetti squash:spaghetti squash
+741:941:941:n07717410:acorn squash:acorn squash
+742:942:942:n07717556:butternut squash:butternut squash
+743:943:943:n07718472:cucumber:cucumber, cuke
+744:944:944:n07718747:artichoke:artichoke, globe artichoke
+745:946:946:n07730033:cardoon:cardoon
+746:947:947:n07734744:mushroom:mushroom
+747:794:794:n04209239:shower curtain:shower curtain
+748:608:608:n03594734:jean:jean, blue jean, denim
+749:478:478:n02971356:carton:carton
+750:591:591:n03485794:handkerchief:handkerchief, hankie, hanky, hankey
+751:774:774:n04133789:sandal:sandal
+752:412:412:n02747177:ashcan:ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin
+753:771:771:n04125021:safe:safe
+754:923:923:n07579787:plate:plate
+755:679:679:n03814906:necklace:necklace
+756:522:522:n03134739:croquet ball:croquet ball
+757:568:568:n03404251:fur coat:fur coat
+758:855:855:n04423845:thimble:thimble
+759:697:697:n03877472:pajama:pajama, pyjama, pj's, jammies
+760:770:770:n04120489:running shoe:running shoe
+761:503:503:n03062245:cocktail shaker:cocktail shaker
+762:492:492:n03014705:chest:chest
+763:640:640:n03717622:manhole cover:manhole cover
+764:662:662:n03777754:modem:modem
+765:876:876:n04493381:tub:tub, vat
+766:868:868:n04476259:tray:tray
+767:416:416:n02777292:balance beam:balance beam, beam
+768:931:931:n07693725:bagel:bagel, beigel
+769:741:741:n03998194:prayer rug:prayer rug, prayer mat
+770:614:614:n03617480:kimono:kimono
+771:926:926:n07590611:hot pot:hot pot, hotpot
+772:901:901:n04579145:whiskey jug:whiskey jug
+773:615:615:n03623198:knee pad:knee pad
+774:921:921:n07248320:book jacket:book jacket, dust cover, dust jacket, dust wrapper
+775:816:816:n04277352:spindle:spindle
+776:796:796:n04229816:ski mask:ski mask
+777:440:440:n02823428:beer bottle:beer bottle
+778:518:518:n03127747:crash helmet:crash helmet
+779:455:455:n02877765:bottlecap:bottlecap
+780:858:858:n04435653:tile roof:tile roof
+781:643:643:n03724870:mask:mask
+782:638:638:n03710637:maillot:maillot
+783:712:712:n03920288:Petri dish:Petri dish
+784:560:560:n03379051:football helmet:football helmet
+785:433:433:n02807133:bathing cap:bathing cap, swimming cap
+786:850:850:n04399382:teddy:teddy, teddy bear
+787:597:597:n03527444:holster:holster
+788:737:737:n03983396:pop bottle:pop bottle, soda bottle
+789:713:713:n03924679:photocopier:photocopier
+790:887:887:n04532106:vestment:vestment
+791:918:918:n06785654:crossword puzzle:crossword puzzle, crossword
+792:574:574:n03445777:golf ball:golf ball
+793:927:927:n07613480:trifle:trifle
+794:834:834:n04350905:suit:suit, suit of clothes
+795:900:900:n04562935:water tower:water tower
+796:552:552:n03325584:feather boa:feather boa, boa
+797:501:501:n03045698:cloak:cloak
+798:966:966:n07892512:red wine:red wine
+799:542:542:n03250847:drumstick:drumstick
+800:787:787:n04192698:shield:shield, buckler
+801:496:496:n03026506:Christmas stocking:Christmas stocking
+802:601:601:n03534580:hoopskirt:hoopskirt, crinoline
+803:922:922:n07565083:menu:menu
+804:819:819:n04296562:stage:stage
+805:452:452:n02869837:bonnet:bonnet, poke bonnet
+806:962:962:n07871810:meat loaf:meat loaf, meatloaf
+807:429:429:n02799071:baseball:baseball
+808:551:551:n03314780:face powder:face powder
+809:777:777:n04141327:scabbard:scabbard
+810:838:838:n04357314:sunscreen:sunscreen, sunblock, sun blocker
+811:441:441:n02823750:beer glass:beer glass
+812:996:996:n13052670:hen-of-the-woods:hen-of-the-woods, hen of the woods, Polyporus frondosus, Grifola frondosa
+813:924:924:n07583066:guacamole:guacamole
+814:619:619:n03637318:lampshade:lampshade, lamp shade
+815:911:911:n04599235:wool:wool, woolen, woollen
+816:958:958:n07802026:hay:hay
+817:457:457:n02883205:bow tie:bow tie, bow-tie, bowtie
+818:636:636:n03709823:mailbag:mailbag, postbag
+819:899:899:n04560804:water jug:water jug
+820:463:463:n02909870:bucket:bucket, pail
+821:533:533:n03207743:dishrag:dishrag, dishcloth
+822:809:809:n04263257:soup bowl:soup bowl
+823:969:969:n07932039:eggnog:eggnog
+824:666:666:n03786901:mortar:mortar
+825:869:869:n04479046:trench coat:trench coat
+826:693:693:n03873416:paddle:paddle, boat paddle
+827:488:488:n02999410:chain:chain
+828:840:840:n04367480:swab:swab, swob, mop
+829:659:659:n03775546:mixing bowl:mixing bowl
+830:964:964:n07875152:potpie:potpie
+831:907:907:n04591713:wine bottle:wine bottle
+832:789:789:n04201297:shoji:shoji
+833:465:465:n02916936:bulletproof vest:bulletproof vest
+834:540:540:n03240683:drilling platform:drilling platform, offshore rig
+835:446:446:n02840245:binder:binder, ring-binder
+836:474:474:n02963159:cardigan:cardigan
+837:841:841:n04370456:sweatshirt:sweatshirt
+838:738:738:n03991062:pot:pot, flowerpot
+839:448:448:n02843684:birdhouse:birdhouse
+840:588:588:n03482405:hamper:hamper
+841:722:722:n03942813:ping-pong ball:ping-pong ball
+842:709:709:n03908618:pencil box:pencil box, pencil case
+843:707:707:n03902125:pay-phone:pay-phone, pay-station
+844:925:925:n07584110:consomme:consomme
+845:411:411:n02730930:apron:apron
+846:747:747:n04023962:punching bag:punching bag, punch bag, punching ball, punchball
+847:414:414:n02769748:backpack:backpack, back pack, knapsack, packsack, rucksack, haversack
+848:982:982:n10148035:groom:groom, bridegroom
+849:439:439:n02817516:bearskin:bearskin, busby, shako
+850:710:710:n03908714:pencil sharpener:pencil sharpener
+851:462:462:n02906734:broom:broom
+852:669:669:n03788365:mosquito net:mosquito net
+853:399:399:n02667093:abaya:abaya
+854:667:667:n03787032:mortarboard:mortarboard
+855:735:735:n03980874:poncho:poncho
+856:523:523:n03141823:crutch:crutch
+857:732:732:n03976467:Polaroid camera:Polaroid camera, Polaroid Land camera
+858:810:810:n04264628:space bar:space bar
+859:968:968:n07930864:cup:cup
+860:752:752:n04039381:racket:racket, racquet
+861:920:920:n06874185:traffic light:traffic light, traffic signal, stoplight
+862:749:749:n04033901:quill:quill, quill pen
+863:754:754:n04041544:radio:radio, wireless
+864:961:961:n07860988:dough:dough
+865:524:524:n03146219:cuirass:cuirass
+866:652:652:n03763968:military uniform:military uniform
+867:629:629:n03676483:lipstick:lipstick, lip rouge
+868:793:793:n04209133:shower cap:shower cap
+869:664:664:n03782006:monitor:monitor
+870:688:688:n03857828:oscilloscope:oscilloscope, scope, cathode-ray oscilloscope, CRO
+871:658:658:n03775071:mitten:mitten
+872:459:459:n02892767:brassiere:brassiere, bra, bandeau
+873:930:930:n07684084:French loaf:French loaf
+874:883:883:n04522168:vase:vase
+875:653:653:n03764736:milk can:milk can
+876:768:768:n04118538:rugby ball:rugby ball
+877:700:700:n03887697:paper towel:paper towel
+878:995:995:n13044778:earthstar:earthstar
+879:549:549:n03291819:envelope:envelope
+880:655:655:n03770439:miniskirt:miniskirt, mini
+881:515:515:n03124170:cowboy hat:cowboy hat, ten-gallon hat
+882:874:874:n04487081:trolleybus:trolleybus, trolley coach, trackless trolley
+883:711:711:n03916031:perfume:perfume, essence
+884:435:435:n02808440:bathtub:bathtub, bathing tub, bath, tub
+885:934:934:n07697537:hotdog:hotdog, hot dog, red hot
+886:991:991:n12985857:coral fungus:coral fungus
+887:466:466:n02917067:bullet train:bullet train, bullet
+888:721:721:n03938244:pillow:pillow
+889:999:999:n15075141:toilet tissue:toilet tissue, toilet paper, bathroom tissue
+890:481:481:n02978881:cassette:cassette
+891:477:477:n02966687:carpenter's kit:carpenter's kit, tool kit
+892:618:618:n03633091:ladle:ladle
+893:994:994:n13040303:stinkhorn:stinkhorn, carrion fungus
+894:631:631:n03690938:lotion:lotion
+895:585:585:n03476991:hair spray:hair spray
+896:400:400:n02669723:academic gown:academic gown, academic robe, judge's robe
+897:538:538:n03220513:dome:dome
+898:519:519:n03127925:crate:crate
+899:903:903:n04584207:wig:wig
+900:965:965:n07880968:burrito:burrito
+901:720:720:n03937543:pill bottle:pill bottle
+902:490:490:n03000247:chain mail:chain mail, ring mail, mail, chain armor, chain armour, ring armor, ring armour
+903:854:854:n04418357:theater curtain:theater curtain, theatre curtain
+904:905:905:n04590129:window shade:window shade
+905:427:427:n02795169:barrel:barrel, cask
+906:896:896:n04553703:washbasin:washbasin, handbasin, washbowl, lavabo, wash-hand basin
+907:418:418:n02783161:ballpoint:ballpoint, ballpoint pen, ballpen, Biro
+908:430:430:n02802426:basketball:basketball
+909:434:434:n02808304:bath towel:bath towel
+910:514:514:n03124043:cowboy boot:cowboy boot
+911:578:578:n03450230:gown:gown
+912:904:904:n04589890:window screen:window screen
+913:992:992:n12998815:agaric:agaric
+914:487:487:n02992529:cellular telephone:cellular telephone, cellular phone, cellphone, cell, mobile phone
+915:680:680:n03825788:nipple:nipple
+916:422:422:n02790996:barbell:barbell
+917:637:637:n03710193:mailbox:mailbox, letter box
+918:617:617:n03630383:lab coat:lab coat, laboratory coat
+919:556:556:n03347037:fire screen:fire screen, fireguard
+920:654:654:n03769881:minibus:minibus
+921:692:692:n03871628:packet:packet
+922:646:646:n03733281:maze:maze, labyrinth
+923:733:733:n03976657:pole:pole
+924:602:602:n03535780:horizontal bar:horizontal bar, high bar
+925:808:808:n04259630:sombrero:sombrero
+926:715:715:n03929855:pickelhaube:pickelhaube
+927:756:756:n04049303:rain barrel:rain barrel
+928:893:893:n04548362:wallet:wallet, billfold, notecase, pocketbook
+929:482:482:n02979186:cassette player:cassette player
+930:917:917:n06596364:comic book:comic book
+931:719:719:n03935335:piggy bank:piggy bank, penny bank
+932:919:919:n06794110:street sign:street sign
+933:442:442:n02825657:bell cote:bell cote, bell cot
+934:563:563:n03388183:fountain pen:fountain pen
+935:906:906:n04591157:Windsor tie:Windsor tie
+936:890:890:n04540053:volleyball:volleyball
+937:689:689:n03866082:overskirt:overskirt
+938:775:775:n04136333:sarong:sarong
+939:748:748:n04026417:purse:purse
+940:451:451:n02865351:bolo tie:bolo tie, bolo, bola tie, bola
+941:443:443:n02834397:bib:bib
+942:701:701:n03888257:parachute:parachute, chute
+943:797:797:n04235860:sleeping bag:sleeping bag
+944:851:851:n04404412:television:television, television system
+945:842:842:n04371430:swimming trunks:swimming trunks, bathing trunks
+946:647:647:n03733805:measuring cup:measuring cup
+947:967:967:n07920052:espresso:espresso
+948:963:963:n07873807:pizza:pizza, pizza pie
+949:461:461:n02895154:breastplate:breastplate, aegis, egis
+950:790:790:n04204238:shopping basket:shopping basket
+951:910:910:n04597913:wooden spoon:wooden spoon
+952:773:773:n04131690:saltshaker:saltshaker, salt shaker
+953:960:960:n07836838:chocolate sauce:chocolate sauce, chocolate syrup
+954:981:981:n09835506:ballplayer:ballplayer, baseball player
+955:572:572:n03443371:goblet:goblet
+956:993:993:n13037406:gyromitra:gyromitra
+957:830:830:n04336792:stretcher:stretcher
+958:898:898:n04557648:water bottle:water bottle
+959:528:528:n03187595:dial telephone:dial telephone, dial phone
+960:804:804:n04254120:soap dispenser:soap dispenser
+961:610:610:n03595614:jersey:jersey, T-shirt, tee shirt
+962:779:779:n04146614:school bus:school bus
+963:611:611:n03598930:jigsaw puzzle:jigsaw puzzle
+964:728:728:n03958227:plastic bag:plastic bag
+965:759:759:n04069434:reflex camera:reflex camera
+966:529:529:n03188531:diaper:diaper, nappy, napkin
+967:419:419:n02786058:Band Aid:Band Aid
+968:929:929:n07615774:ice lolly:ice lolly, lolly, lollipop, popsicle
+969:885:885:n04525038:velvet:velvet
+970:852:852:n04409515:tennis ball:tennis ball
+971:570:570:n03424325:gasmask:gasmask, respirator, gas helmet
+972:539:539:n03223299:doormat:doormat, welcome mat
+973:630:630:n03680355:Loafer:Loafer
+974:928:928:n07614500:ice cream:ice cream, icecream
+975:932:932:n07695742:pretzel:pretzel
+976:750:750:n04033995:quilt:quilt, comforter, comfort, puff
+977:639:639:n03710721:maillot:maillot, tank suit
+978:848:848:n04392985:tape player:tape player
+979:502:502:n03047690:clog:clog, geta, patten, sabot
+980:605:605:n03584254:iPod:iPod
+981:997:997:n13054560:bolete:bolete
+982:983:983:n10565667:scuba diver:scuba diver
+983:725:725:n03950228:pitcher:pitcher, ewer
+984:644:644:n03729826:matchstick:matchstick
+985:445:445:n02837789:bikini:bikini, two-piece
+986:806:806:n04254777:sock:sock
+987:485:485:n02988304:CD player:CD player
+988:622:622:n03657121:lens cap:lens cap, lens cover
+989:853:853:n04417672:thatch:thatch, thatched roof
+990:884:884:n04523525:vault:vault
+991:438:438:n02815834:beaker:beaker
+992:971:971:n09229709:bubble:bubble
+993:933:933:n07697313:cheeseburger:cheeseburger
+994:702:702:n03888605:parallel bars:parallel bars, bars
+995:557:557:n03355925:flagpole:flagpole, flagstaff
+996:504:504:n03063599:coffee mug:coffee mug
+997:767:767:n04116512:rubber eraser:rubber eraser, rubber, pencil eraser
+998:824:824:n04325704:stole:stole
+999:959:959:n07831146:carbonara:carbonara
+1000:543:543:n03255030:dumbbell:dumbbell

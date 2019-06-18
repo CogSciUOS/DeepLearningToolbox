@@ -347,7 +347,8 @@ class QInputSelector(QWidget, QObserver, Datasource.Observer):
 
 from toolbox import Toolbox, View as ToolboxView
 from datasources import Datasource, View as DatasourceView
-from tools.activation import Engine as ActivationEngine
+from tools.activation import (Engine as ActivationEngine,
+                              View as ActivationView)
 
 import numpy as np
 
@@ -367,10 +368,12 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
     """
     _toolbox: ToolboxView = None
     _datasource: DatasourceView = None
+    _activation: ActivationView = None
     _processed: bool = False
 
     def __init__(self, toolbox: ToolboxView=None,
-                 datasource: DatasourceView=None, parent=None):
+                 datasource: DatasourceView=None,
+                 activations: ActivationView=None, parent=None):
         '''Create a new QInputInfoBox.
 
         parent  :   QWidget
@@ -379,10 +382,10 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
         super().__init__(parent)
         self._initUI()
         self._layoutUI()
-        self._model = None
         self._showInfo()
         self.setToolboxView(toolbox)
         self.setDatasourceView(datasource)
+        self.setActivationView(activations)
 
     def _initUI(self):
         '''Initialise the UI'''
@@ -406,6 +409,10 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
         layout.addWidget(self._dataLabel)
         self.setLayout(layout)
 
+    #
+    # Toolbox.Observer
+    #
+
     def setToolboxView(self, toolbox: ToolboxView) -> None:
         self._exchangeView('_toolbox', toolbox,
                            interests=Toolbox.Change('input_changed'))
@@ -423,6 +430,10 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
             description = self._toolbox.input_description
             self._showInfo(data=data, description=description)
 
+    #
+    # Datasource.Observer
+    #
+
     def setDatasourceView(self, datasource: DatasourceView) -> None:
         self._exchangeView('_datasource', datasource,
                            interests=Datasource.Change('data_changed'))
@@ -435,15 +446,35 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
             else:
                 self._showInfo()
 
+    #
+    # ActivationEngine.Observer
+    #
+
+    def setActivationView(self, toolbox: ActivationView) -> None:
+        interests = ActivationEngine.Change('input_changed')
+        self._exchangeView('_activation', toolbox, interests=interests)
+
+    def activation_changed(self, engine: ActivationEngine, info):
+        if info.input_changed:
+            self._updateInfo()
+
+    def _updateInfo(self):
+        if self._activation is None:
+            data = self._toolbox.input_data if self._toolbox else None
+        elif self._processed:
+            data = self._activation.input_data
+        else:
+            data = self._activation.raw_input_data
+        label = self._toolbox.input_label
+        description = self._toolbox.input_description
+        self._showInfo(data=data, label=label, description=description)
+        
+
+    # FIXME[old]
     def setController(self, controller) -> None:
         # FIXME[hack]: we need a more reliable way to observe multiple observable!
         self.observe(controller.get_observable(), interests=None)
 
-    def activation_changed(self, model, info):
-        self._model = model
-        if info.input_changed:
-            description = model.input_data_description
-            self._showInfo(description=description)
 
     @pyqtSlot(bool)
     @protect
@@ -460,7 +491,7 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
     def setMode(self, processed):
         if processed != self._processed:
             self._processed = processed
-            self._showInfo()
+            self._updateInfo()
         
     def _showInfo(self, data: np.ndarray=None, label=None,
                   description: str=''):

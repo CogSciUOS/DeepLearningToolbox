@@ -11,6 +11,8 @@ from PyQt5.QtWidgets import QWidget
 
 
 # FIXME[todo]: add docstrings!
+# FIXME[todo]: rename: QModelImageView is an old name ...
+
 
 class QModelImageView(QImageView, QObserver, Toolbox.Observer,
                       ActivationEngine.Observer):
@@ -62,62 +64,80 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         super().__init__(parent)
         self.modeChanged.connect(self.onModeChanged)
         self.setToolboxView(toolbox)
-        self.setActivationView(toolbox)
+        self.setActivationView(activations)
+
+    #
+    # Toolbox.Observer
+    #
 
     def setToolboxView(self, toolbox: ToolboxView) -> None:
         self._exchangeView('_toolbox', toolbox,
                            interests=Toolbox.Change('input_changed'))
 
-    def _setImageFromToolbox(self):
-        """Set the image to be displayed based on the current state of
-        the Toolbox. This will also take the current display mode (raw
-        or processed) into account.
-        """
-        image = self._toolbox.input_data if self._toolbox else None
-        self.setImage(image)
-        return  # FIXME[hack]: switch between
-        if self._activation is None:
-            image = None
-        elif self._processed:
-            image = self._activation.input_data
-        else:
-            image = self._activation.raw_input_data
-        self.setImage(image)
-        
-    def toolbox_changed(self, toolbox: Toolbox,
-                        change: Toolbox.Change) -> None:
-        self._setImageFromToolbox()
+    def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
+        if info.input_changed:
+            # Just use the image from the Toolbox if no ActivationView
+            # is available - otherwise we will use the image(s) from the
+            # ActivationView (which will inform us via activation_changed ...)
+            if self._activation is None:
+                self._updateImage()
+                self.setMask(None)
 
     #
     # ActivationEngine.Observer
     #
 
     def setActivationView(self, toolbox: ActivationView) -> None:
-        interests = ActivationEngine.Change('activation_changed',
-                                            'unit_changed')
+        interests = ActivationEngine.\
+            Change('activation_changed', 'input_changed', 'unit_changed')
         self._exchangeView('_activation', toolbox, interests=interests)
 
     def activation_changed(self, engine: ActivationEngine,
                            info: ActivationEngine.Change) -> None:
-        """The :py:class:`QModelImageView` is only interested in the
-        activations.
+        """The :py:class:`QModelImageView` is interested in the
+        input iamges, activations and units.
         """
-        try:
-            activation = engine.get_activation()
-            unit = engine.unit
-        except ValueError:
-            activation = None
-        print(f"QModelImageView.activation_changed({activation is not None})")
 
-        # For convolutional layers add a activation mask on top of the
-        # image, if a unit is selected
-        if (activation is not None and unit is not None and
-            activation.ndim > 1):  # exclude dens layers
-            from util import grayscaleNormalized
-            activation_mask = grayscaleNormalized(activation[..., unit])
-            self.setMask(activation_mask)
+        if info.input_changed:
+            self._updateImage()
+
+        if info.activation_changed or info.unit_changed:
+            try:
+                activation = engine.get_activation()
+                unit = engine.unit
+            except:
+                activation = None
+                unit = None
+
+            # For convolutional layers add a activation mask on top of the
+            # image, if a unit is selected
+            if (activation is not None and unit is not None and
+                activation.ndim > 1):
+                # exclude dense layers
+                from util import grayscaleNormalized
+                activation_mask = grayscaleNormalized(activation[..., unit])
+                self.setMask(activation_mask)
+            else:
+                self.setMask(None)
+
+    #
+    # Update
+    #
+
+    def _updateImage(self) -> None:
+        """Set the image to be displayed either based on the current
+        state of the Toolbox or the ActivationView. This will also
+        take the current display mode (raw or processed) into account.
+        """
+        if self._activation is None:
+            image = self._toolbox.input_data if self._toolbox else None
+        elif self._processed:
+            image = self._activation.input_data
         else:
-            self.setMask(None)
+            image = self._activation.raw_input_data
+            
+        self.setImage(image)
+
 
     @pyqtSlot(bool)
     def onModeChanged(self, processed: bool) -> None:
@@ -136,7 +156,7 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         if processed != self._processed:
             self._processed = processed
             self.modeChanged.emit(processed)
-            self._setImageFromToolbox()
+            self._updateImage()
 
     def mousePressEvent(self, event):
         """A mouse press toggles between raw and processed mode.
@@ -150,18 +170,3 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         if key == Qt.Key_Space:
             self.setMode(not self._processed)
 
-    # FIXME[old] but some parts should be recycled: convolution mask
-    def _setImageFromModel(self):
-        """Set the image to be displayed based on the current state of
-        the model. This will also take the current display mode (raw
-        or processed) into account.
-        """
-        print("FIXME: QModelImageView._setImageFromModel was ignored!")
-        return
-        if self._activation is None:
-            image = None
-        elif self._show_raw:
-            image = self._activation.raw_input_data
-        else:
-            image = self._activation.input_data
-        self.setImage(image)

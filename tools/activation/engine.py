@@ -67,6 +67,10 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         the layers of interest
     _activations: Dict[layer_ids, np.ndarray]
         Mapping layer_ids to the current activation values.
+    _processed_input: np.ndarray
+        The last input that was processed. This will usually be the same
+        as the _input, but it may be different in concurrent scenarios,
+        where the input may change while activations are computed.
     """
 
     _toolbox: Toolbox = None  # FIXME[question]: is this really needed?
@@ -92,6 +96,8 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         self._datasource = None
         self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
         self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
+
+        self._processed_input = None
 
         #
         # network related
@@ -135,7 +141,6 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
-        print(f"ActivationEngine.toolbox_changed({toolbox}): {change}")
         if change.input_changed:
             self.set_input_data(data=toolbox.input_data,
                                 label=toolbox.input_label,
@@ -224,7 +229,9 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         # adapt the data to match the network input shape
         #
         self._update_input()
-        self.change(input_changed=True)
+        # FIXME[problem]: why does change does not work here?
+        # self.change(input_changed=True)
+        self.notifyObservers(input_changed=True)
             
         #
         # recompute the network activations
@@ -289,6 +296,23 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         if data is not None:
             data = self._shape_adaptor(data)
             data = self._channel_adaptor(data)
+            self._data_reshaped = data
+
+            if data.shape[-1] == 3:
+                if issubclass(data.dtype.type, np.integer):
+                    data = data.astype(np.float32)
+                    data -= np.asarray([0.485, 0.456, 0.406])*256
+                else:
+                    # FIXME[hack]: all pretrained torch models use this
+                    # mean = [0.485, 0.456, 0.406]
+                    # std=[0.229, 0.224, 0.225]
+                    # normalize = transforms.Normalize(mean=mean, std=std),
+                    # this does: data |--> (data - mean) / std
+                    mean = np.asarray([0.485, 0.456, 0.406])
+                    std = np.asarray([0.229, 0.224, 0.225])
+                    data = (data - mean) / std
+            # FIXME[todo]: this may be integrated into the Network ...
+            
         self._input = data
 
     ##########################################################################
@@ -306,22 +330,27 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
             Key for the network
         """
         if network is not None and not isinstance(network, Network):
-            raise ValueError("Expecting a Network, "
-                             f"not {type(network)} ({network})")
+            raise TypeError("Expecting a Network, "
+                            f"not {type(network)} ({network})")
 
         if self._network != network:
             self._network = network
+            self._unit = None
+            self._layer = None
 
             if self._shape_adaptor is not None:
                 self._shape_adaptor.setNetwork(network)
                 self._channel_adaptor.setNetwork(network)
                 self._update_input()
 
-            self.change(network_changed=True)
+            # FIXME[problem]: why does change does not work here?
+            # self.change(network_changed=True,
+            #             layer_changed=True, unit_changed=True)
+            self.notifyObservers(network_changed=True,
+                                 layer_changed=True, unit_changed=True)
 
-            # Finally unset the layer (this will also trigger
-            # a computation of the activations)
-            self.layer = None
+            # Finally we will trigger the computation of the activations
+            self._update_activation(force=True)
 
     @property
     def network(self) -> Network:
@@ -390,20 +419,15 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         if self._layer != layer:
             self._unit = None
             self._layer = layer
-            print(f"Engine.set_layer(): layer changed: {self._layer} / {self._unit}")
+
             # FIXME[problem]: why does change does not work here?
             #self.change(layer_changed=True, unit_changed=True)
             self.notifyObservers(layer_changed=True, unit_changed=True)
-            print(f"Engine.set_layer(): observers were notified ... {self._input is not None}, {layer}")
-
 
             # FIXME[concept]: reconsider the update logic!
             #  should updating the layer_list automatically update the
             #  activation? or may there be another update to the layer list?
-            if self._input is not None and layer is not None:
-                print(f"Engine.set_layer(): now updating activations ...")
-                self._update_activation()
-                print(f"Engine.set_layer(): ... updating activations finished")
+            self._update_activation(force=True)
 
     @property
     def layer_id(self):
@@ -438,8 +462,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
             self._unit = unit
             # FIXME[problem]: why does change does not work here?
             #self.change(unit_changed=True)
-            print(f"activation.Engine.set_unit({unit}) - notifyObservers")
-            self.print_observers()
+            #self.print_observers()
             self.notifyObservers(unit_changed=True)
 
     @property
@@ -482,47 +505,61 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
     #@async
     #@change
-    def _update_activation(self):
+    def _update_activation(self, force: bool=False):
         """Set the :py:attr:`_activations` property by loading
         activations for :py:attr:`_layer` and :py:attr:`_data`.
         This is a noop if no layers are selected or no data is set.
         """
-        if not self._network or self._network.busy:
-            return  # FIXME[hack]: probably it would be better to wait ...
+        if force:
+            self._processed_input = None
+        
+        if self._network is not None and self._network.busy:
+            # Another Thread seems to be active.
+            # FIXME[hack]: this will work, if the other Thread is also
+            # running self._update_activation() and is in the loop below
+            # but not if it runs anything else. The clean way would be
+            # to wait until the network is not busy anymore ...
+            return
 
+        while self._processed_input is not self._input:
+            self._processed_input = self._input
 
-        self._update_layer_list()
-        logger.info(f"Activation: _update_activation: LAYERS={self._layers}")
-        if self._layers and self._input is not None:
-            layers = list(self._layers)
+            self._update_layer_list()
+            logger.info("Activation: _update_activation: "
+                        f"LAYERS={self._layers}")
+            if self._layers and self._input is not None:
+                layers = self._layers
 
-            # compute the activations for the layers of interest
-            activations = self._network.get_activations(layers,
-                                                        self._input)
+                # compute the activations for the layers of interest
+                activations = \
+                    self._network.get_activations(layers,
+                                                  self._processed_input)
 
-            # FIXME[hack]: should be done in network!
-            for i in range(len(activations)):
-                if activations[i].ndim in {2, 4}:
-                    if activations[i].shape[0] != 1:
-                        raise RuntimeError('Attempting to visualise batch.')
-                    activations[i] = np.squeeze(activations[i], axis=0)
+                # FIXME[hack]: should be done in network!
+                for i in range(len(activations)):
+                    if activations[i].ndim in {2, 4}:
+                        if activations[i].shape[0] != 1:
+                            raise RuntimeError('Attempting to compute '
+                                               'activation for a batch '
+                                               'of images.')
+                        activations[i] = np.squeeze(activations[i], axis=0)
 
-            self._activations = {id: activations[i]
-                                 for i, id in enumerate(layers)}
+                self._activations = {id: activations[i]
+                                     for i, id in enumerate(layers)}
 
-            # FIXME[debug]: if we work we multiple Threads, we have to
-            # care for synchroization!
-            if layers != self._layers:
-                logger.info(f"Activation: update_activation(): "
-                      "LAYERS CHANGED DURING UPDATE "
-                      "{layers} vs. {self._layers}")
+                # FIXME[debug]: if we work with multiple Threads, we have to
+                # care for synchroization!
+                if layers != self._layers:
+                    logger.info(f"Activation: update_activation(): "
+                                "LAYERS CHANGED DURING UPDATE "
+                                "{layers} vs. {self._layers}")
+                    self._processed_input = None
+            else:
+                self._activations = {}
 
-        else:
-            self._activations = {}
-
-        # FIXME[problem]: why does change does not work here?
-        #self.change(activation_changed=True)
-        self.notifyObservers(activation_changed=True)
+            # FIXME[problem]: why does change not work here?
+            #self.change(activation_changed=True)
+            self.notifyObservers(activation_changed=True)
 
     def get_activation(self, layer_id=None, batch_index: int=0) -> np.ndarray:
         if self._activations is None or not self._activations:

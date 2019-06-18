@@ -60,6 +60,7 @@ mpl_logger.setLevel(logging.WARNING)
 
 import util
 
+
 logger.info("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
 root_logger = logging.getLogger()
 root_logger.handlers = []
@@ -223,6 +224,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if self._tools is not None:
             for tool in self._tools.values():
                 tool.runner = runner
+        if self._datasource_controller is not None:
+            self._datasource_controller.runner = runner
 
     # FIXME[concept]: It may be better to define the interrupt handler as
     # a global function (not a method) to make sure it is not garbage
@@ -331,11 +334,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
             for network in networks:
                 self.add_network(network)
 
-        except Exception as e:
-            # FIXME[hack]: rethink error handling in threads!
-            import traceback
-            print(e)
-            traceback.print_tb(e.__traceback__)
+        except Exception as exception:
+            util.error.handle_exception(exception)
 
     ###########################################################################
     ###                            Networks                                 ###
@@ -548,7 +548,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
         self._input_description = description
         self.change('input_changed')
 
-
     ###########################################################################
     ###                               Tools                                 ###
     ###########################################################################
@@ -584,6 +583,13 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
         if isinstance(tool, str):
             name = tool
+            if name in self._tools:
+                return self._tools[name] # tool is already in this Toolbox
+                # FIXME[concept]: in some situations it may be desirable
+                # to have multiple instances of a tool in the Toolbox,
+                # e.g. multiple activation tools if we want to compare
+                # activations of multiple networks ...
+            
             if name == 'activation':
                 # FIXME[hack] ...
                 from tools.activation import (Engine as ActivationEngine,

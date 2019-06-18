@@ -77,13 +77,10 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
         gridLayout.addWidget(self._targetLabel, self._top_n+2, 0)
 
     def setEnabled(self, enabled: bool):
-        print(f"QClassesView: setEnabled({enabled})")
         super().setEnabled(enabled)
 
     def changeEvent(self, event):
-        print(f"QClassesView: changeEvent({event.type()}/{event.EnabledChange}): enabled={self.isEnabled()}")
         super().changeEvent(event)
-        print(f"QClassesView: after changeEvent: enabled={self.isEnabled()}")
 
     def setActivationView(self, activation: ActivationView) -> None:
         interests = ActivationEngine.\
@@ -101,7 +98,10 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
         if info.network_changed:
             network = activation.network
             self._datasource = network.datasource if network else None
-            self._label_format = network.label_format if network else None
+            self._label_format = network.label_format if network and \
+                self._datasource and \
+                network.label_format in self._datasource.label_formats \
+                else None
             self._output_format = 'text' if self._datasource and \
                 'text' in self._datasource.label_formats else None
 
