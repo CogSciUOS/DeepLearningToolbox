@@ -308,9 +308,9 @@ class ImageNet(DataDirectory, Random, Labeled, Predefined):
         val_labels_filename = \
             os.path.join(self._imagenet_data, 'ILSVRC2012_devkit_t12',
                          'data', 'ILSVRC2012_validation_ground_truth.txt')
-        # val_labels_filename = \
-        #    os.path.join(self._imagenet_data, 'val_labels.txt')
-
+        if not os.path.isfile(val_labels_filename):
+            val_labels_filename = \
+                os.path.join(self._imagenet_data, 'val_labels.txt')
         try:
             with open(val_labels_filename) as f:
                 self._val_labels = [int(l.strip())-1 for l in f.readlines()] 

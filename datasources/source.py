@@ -350,6 +350,9 @@ class Labeled(Datasource):
             The formated labels. Either a single label or some iterable,
             depending how labels were provided.
         """
+        if labels is None:
+            return None
+
         if origin is not None:
             if not origin in self._label_formats:
                 raise ValueError(f"Format {origin} is not supported by "
