@@ -163,7 +163,13 @@ class ActivationsPanel(Panel, QObserver, ActivationEngine.Observer):
         # FIXME[layout]
         inputLayout.setSpacing(0)
         inputLayout.setContentsMargins(0, 0, 0, 0)
-        inputLayout.addWidget(self._inputView)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(self._inputView)
+        row.addStretch()
+        inputLayout.addLayout(row)
+        #inputLayout.addWidget(self._inputView)
+        inputLayout.addStretch()
         inputLayout.addWidget(self._inputInfoBox)
         # FIXME[layout]
         self._inputInfoBox.setMinimumWidth(200)

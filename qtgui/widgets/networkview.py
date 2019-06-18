@@ -252,13 +252,13 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
     """A simple widget to display information on a network and select a
     layer.
 
-    The :py:class:`QNetworkView` observes a py:class:`Network` and an
-    py:class:`ActivationEngine`. If the network is changed, the
-    new network architecture needs to be displayed. 
-
     The Layers are presented as a stack of buttons. Clicking at a
     button will set the corresponding layer in the
     py:class:`ActivationEngine`.
+
+    The :py:class:`QNetworkView` observes a py:class:`Network` and an
+    py:class:`ActivationEngine`. If the network is changed, the
+    new network architecture needs to be displayed. 
 
     Attributes
     ----------
@@ -318,7 +318,6 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
     def setActivationsController(self, activations: ActivationsController):
         """Set the ActivationsController for this QNetworkView.
         """
-        print(f"QNetworkView: setActivationsController({activations})")
         interests = ActivationEngine.Change('layer_changed')
         self._exchangeView('_activations', activations,
                            interests=interests)
@@ -330,7 +329,6 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
         changes of the network itself or the current layer.
         
         """
-        print(f"QNetworkView.activation_changed():  {info}")
 
         # FIXME[design]: The 'network_changed' message can mean that
         # either the current model has changed or that the list of
@@ -353,7 +351,6 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
             #
 
             layer_id = activation.layer_id
-            print(f"QNetworkView.activation_changed(): layer changed: {layer_id} !!!!!")
             try:
                 layer_index = activation.idForLayer(layer_id)
             except ValueError as error:
@@ -454,14 +451,12 @@ class QNetworkView(QWidget, QObserver, Network.Observer,
         If we have an ActivationsController set, we will inform it
         that 
         """
-        print(f"QNetworkView.onLayerButtonClicked(): {self._current_selected}")
-        if (self._current_selected and
+        if (self._current_selected is not None and
             self._layer_buttons[self._current_selected] == self.sender()):
             layer = None
         else:
             layer = self.sender().text()
         if self._activations:
-            print(f"QNetworkView.onLayerButtonClicked(): set_layer({layer}) ... {self._activations}")
             self._activations.set_layer(layer)
 
     # FIXME[old]

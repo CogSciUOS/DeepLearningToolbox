@@ -1,6 +1,8 @@
+from typing import Iterable
 from base import View as BaseView
 from .toolbox import Toolbox
-
+from network import Network
+from datasources import Datasource
 
 class View(BaseView, view_type=Toolbox):
 
@@ -8,11 +10,13 @@ class View(BaseView, view_type=Toolbox):
         super().__init__(observable=toolbox, **kwargs)
 
     @property
-    def networks(self):
+    def networks(self) -> Iterable[Network]:
+        """Networks registered with this Toolbox."""
         return () if self._toolbox is None else iter(self._toolbox._networks)
 
     @property
-    def datasources(self):
+    def datasources(self) -> Iterable[Datasource]:
+        """Datasources registered with this Toolbox."""
         return (() if self._toolbox is None else
                 iter(self._toolbox._datasources))
 
@@ -165,15 +169,26 @@ class Controller(View, BaseController):
         self._toolbox.remove_datasource(datasource)
         # FIXME[todo]: unset datasource from views!
 
-    def set_datasource(self, datasource: Datasource):
-        for attribute in '_datasource_controller':
-            view = getattr(self._toolbox, attribute, None)
-            if view is not None:
-                view(datasource)
+    def set_datasource(self, datasource: Datasource, prepare=False):
+        """Set the main Datasource for Toolbox. Data fetched by that
+        Datasource will automatically be used as input data for
+        the Toolbox.
+
+        Parameter
+        ---------
+        
+        """
+        view = getattr(self._toolbox, '_datasource_controller', None)
+        if view is not None:
+            # FIXME[todo] stop looping the old datasource ...
+            # The DatasourceController currently does not provide a
+            # useful API ...
+            view(datasource)
+        if prepare and datasource is not None:
+            self._runner.runTask(datasource.prepare)
 
     def get_inputs(self, dtype=np.float32, flat=True, test=False):
         inputs = self.dataset[1 if test else 0][0]
-        print(f"ToolboxController.get_inputs(): inputs: {inputs.shape}, {inputs.dtype}, {inputs.max()}")
         if (np.issubdtype(inputs.dtype, np.integer) and
             np.issubdtype(dtype, np.floating)):
             # conversion from int to float will also scale to the interval
@@ -185,7 +200,6 @@ class Controller(View, BaseController):
             
     def get_labels(self, dtype=np.float32, one_hot=True, test=False):
         labels = self.dataset[1 if test else 0][1]
-        print(f"labels: {labels.shape}, {labels.dtype}")
         if not one_hot:
             labels = labels.argmax(axis=1)
         return labels

@@ -1022,7 +1022,6 @@ class QMaximizationControls(QWidget, QObserver,
 
     def setMaximizationController(self, maximization: MaximizationController
                                   ) -> None:
-        print(f"QMaximizationControls.setMaximizationController: maximization={maximization}")
         self._exchangeView('_maximization', maximization)
         # FIXME[todo]: what are we interested in?
         # interests=Network.Change('observable_changed'))

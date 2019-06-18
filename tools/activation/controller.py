@@ -27,6 +27,8 @@ class View(BaseView, view_type=Engine):
         super().__init__(observable=activation, **kwargs)
 
     def __str__(self) -> str:
+        """String representation for the ActivationEngine.
+        """
         self = self._engine  # FIXME[hack]
         result = f"Network = {self._network}"
         result += "\nLayers:"
@@ -147,7 +149,6 @@ class Controller(View, BaseController, Network.Observer):
         network :   network.network.Network
                     The new network object
         """
-        print(f"activations.onNetworkSelected({network_id})")
         self._runner.runTask(self._engine.set_network, network_id)
         # self._runner.runTask(self._model.__class__.network.__set__,
         #                     self._model, network_id)

@@ -80,7 +80,7 @@ class DataArray(Random):
             self._index = index 
         elif self._index is None:
             self._index = 0
-        print(f"Array:fetch({self._index})")
+        # print(f"Array:fetch({self._index})")
 
     def _fetch_random(self, **kwargs):
         self._index = randint(0, len(self))

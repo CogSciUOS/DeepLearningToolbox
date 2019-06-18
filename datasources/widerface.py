@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 class WiderFace(DataDirectory, Random, Labeled, Predefined):
     """
     http://shuoyang1213.me/WIDERFACE/
+
+    Class attributes
+    ----------------
+    
     """
 
     blur = ('clear', 'normal blur', 'heavy blur')
@@ -22,7 +26,7 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
     pose = ('typical pose', 'atypical pose')
     invalid = ('valid image', 'invalid image')
 
-    # FIXME[hack]
+    # FIXME[hack]: we should put this in the util package!
     try:
         from appdirs import AppDirs
         appname = "deepvis"  # FIXME: not the right place to define here!
@@ -39,6 +43,8 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
             "--------------------------------------------------------------\n")
 
     def __init__(self, prefix=None, section='train', **kwargs):
+        """Initialize the WIDER Face Datasource.
+        """
         super().__init__(id=f"wider-faces-{section}",
                          description=f"WIDER Faces", **kwargs)
         self._widerface_data = os.getenv('WIDERFACE_DATA', '.')
@@ -47,8 +53,19 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
                                       'WIDER_' + self._section, 'images')
         self._available = os.path.isdir(self.directory)
         self._image = None
-        self.load_annotations()
+        self._initialize_filenames()
 
+    def _initialize_filenames(self, widerface_data: str=None) ->None:
+        if widerface_data is not None:
+            self._widerface_data = widerface_data
+
+        self._annotations_filename = None
+        if self._widerface_data is not None:
+            annotations = os.path.join(self._widerface_data, 'wider_face_split',
+                                       'wider_face_train_bbx_gt.txt')
+            if os.path.isfile(annotations):
+                self._annotations_filename = annotations
+        
     @property
     def number_of_labels(self) -> int:
         """The WIDER face dataset has 62 classes.
@@ -90,22 +107,46 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
         self.load_annotations()
 
     def load_annotations(self):
+        """Load the annotations for the training images.
+
+        The annotations are stored in a single large text file
+        ('wider_face_train_bbx_gt.txtX'), with a multi-line entry per file.
+        An entry has the following structure: The first line contains
+        the filename of the training image. The second line contains
+        the number of faces in that image. Then follows one line for
+        each face, consisting of a bounding box (x,y,w,h) and attributes
+        (blur, expression, illumination, invalid, occlusion, pose)
+        encoded numerically. In these lines, all numbers are separated
+        by spaces. Example:
+
+        0--Parade/0_Parade_marchingband_1_95.jpg
+        5
+        828 209 56 76 0 0 0 0 0 0 
+        661 258 49 65 0 0 0 0 0 0 
+        503 253 48 66 0 0 1 0 0 0 
+        366 181 51 74 0 0 1 0 0 0 
+        148 176 54 68 0 0 1 0 0 0 
+
+        """
         self._annotations = {}
-        annotations_filename = os.path.join(self._widerface_data,
-                                            'wider_face_split',
-                                            'wider_face_train_bbx_gt.txt')
-        with open(annotations_filename, "r") as f:
-            for filename in f:
-                filename = filename.rstrip()
-                lines = int(f.readline())
-                faces = []
-                for l in range(lines):
-                    line = f.readline()
-                    x1, y1, w, h, blur, expression, illumination, invalid, occlusion, pose = map(int, line.split())
-                    faces.append((x1, y1, w, h, blur, expression, illumination, invalid, occlusion, pose))
-                if lines == 0:
-                    f.readline()
-                self._annotations[filename] = faces
+        try:
+            with open(self._annotations_filename, "r") as f:
+                for filename in f:
+                    filename = filename.rstrip()
+                    lines = int(f.readline())
+                    faces = []
+                    for l in range(lines):
+                        # x1, y1, w, h, blur, expression, illumination,
+                        #    invalid, occlusion, pose
+                        faces.append(map(int, f.readline().split()))
+                    if lines == 0:
+                        # images with 0 faces nevertheless have one
+                        # line with dummy attributes -> just ignore that line
+                        f.readline()
+                    # Store all faces for the current file
+                    self._annotations[filename] = faces
+        except FileNotFoundError as error:
+            self._annotations = {}
 
     def _fetch(self, **kwargs):
         self._fetch_random(**kwargs)
@@ -137,4 +178,14 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
         return self._label
 
     def __str__(self):
-        return f'<DataDirectory "{self.directory}">'
+        return f'WIDER Faces'
+
+    def check_availability() -> bool:
+        """Check if this Datasource is available.
+
+        Returns
+        -------
+        available: bool
+            True if the DataSource can be prepared, False otherwise.
+        """
+        return self._annotations_filename is not None

@@ -56,6 +56,7 @@ class QtAsyncRunner(AsyncRunner, QObject):
         emit a pyqtSignal that is received in the main Thread and
         therefore can notify the Qt GUI.
         """
+        self._completed += 1
         result = future.result()
         if result is not None:
             observable, info = result
@@ -103,7 +104,7 @@ class QObserver:
         if interests is not None:
             key = interests.__class__
             if not key in self._qObserverHelpers:
-                print(f"INFO: creating a new QObserverHelper for {interests}: {interests.__class__}!")
+                #print(f"INFO: creating a new QObserverHelper for {interests}: {interests.__class__}!")
                 self._qObserverHelpers[key] = \
                     QObserver.QObserverHelper(self, interests)
         else:
@@ -115,7 +116,7 @@ class QObserver:
                                "called (QObserverHelpers is not set)")
         key = observable.Change
         if not key in self._qObserverHelpers:
-            print(f"INFO: no QObserverHelper for observing {observable} in {self} yet - creating a new one ({key}: {key.__name__})!")
+            #print(f"INFO: no QObserverHelper for observing {observable} in {self} yet - creating a new one ({key}: {key.__name__})!")
             self._qObserverHelpers[key] = \
                 QObserver.QObserverHelper(self, interests)
         observable.add_observer(self._qObserverHelpers[key],
@@ -450,5 +451,17 @@ class QLogHandler(QPlainTextEdit, logging.Handler):
         #   (Make sure 'QTextBlock' is registered using qRegisterMetaType().)
         # Hence we are doing this via a signal now.        
         self._counter += 1
-        self._message_signal.emit(self.format(record))
+        try:
+            self._message_signal.emit(self.format(record))
+        except AttributeError as error:
+            # FIXME[bug/problem]
+            # When quitting the program while running some background
+            # thread (e.g. camera loop), we get the following exception:
+            # AttributeError: 'QLogHandler' does not have a signal with
+            #                 the signature _message_signal(QString)
+            #print(error)
+            #print(f"  type of record: {type(record)}")
+            #print(f"  record: {record}")
+            #print(f"  signal: {self._message_signal}")
+            pass
 

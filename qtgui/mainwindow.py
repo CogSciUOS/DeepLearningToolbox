@@ -14,11 +14,11 @@ import importlib
 
 # Toolbox imports
 from base import Runner
-from toolbox import ToolboxController
+from toolbox import Toolbox, ToolboxController
 
 
 # Toolbox GUI imports
-from qtgui.utils import QtAsyncRunner, protect
+from qtgui.utils import QtAsyncRunner, QObserver, protect
 from qtgui.panels import Panel
 
 # FIXME[old]: this should not be needed for the MainWindow
@@ -37,7 +37,7 @@ from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
                              QWidget, QLabel, QApplication)
 
-class DeepVisMainWindow(QMainWindow):
+class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     """The main window of the Deep Visualization Toolbox. The window
     is intended to hold different panels that allow for different
     kinds of visualizations.
@@ -115,6 +115,9 @@ class DeepVisMainWindow(QMainWindow):
                   'Show the logging panel', [])
     ]
 
+    _toolbox: ToolboxController = None
+    _datasourceMenu = None
+
     # FIXME[problem]: currently this prints the following message
     # (when calling MainWindow.setWindowIcon('assets/logo.png')):
     # "libpng warning: iCCP: extra compressed data"
@@ -135,7 +138,7 @@ class DeepVisMainWindow(QMainWindow):
         self._app = application
         
         self._logger = logging.getLogger(__name__)
-        self._toolbox = toolbox
+        self.setToolbox(toolbox)
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
 
@@ -192,7 +195,7 @@ class DeepVisMainWindow(QMainWindow):
     #                          Public Interface                              #
     ##########################################################################
 
-    def setToolbox(toolbox: ToolboxController) -> None:
+    def setToolbox(self, toolbox: ToolboxController) -> None:
         """Set the Toolbox controlled by this MainWindow.
 
         Arguments
@@ -200,8 +203,36 @@ class DeepVisMainWindow(QMainWindow):
         toolbox: ToolboxController
             The ToolboxController.
         """
-        self._toolbox = toolbox
+        interests = Toolbox.Change('datasources_changed')
+        self._exchangeView('_toolbox', toolbox, interests=interests)
         # FIXME[todo]: also inform the Panels that the toolbox was changed.
+
+    def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
+        if info.datasources_changed and self._datasourceMenu is not None:
+            self._updateDatasourceMenu()
+
+    def _updateDatasourceMenu(self) -> None:
+        # self._datasourceMenu is of type PyQt5.QtWidgets.QMenu'
+        self._datasources = {}
+        if self._toolbox is None:
+            return  # FIXME[todo]: erase all Datasources from the menu
+
+        def slot(id):
+            def set_datasource(checked):
+                print(f"!!! MainWindow.set_datasource({checked}): {id}")
+                datasource = self._datasources[id]
+                print(type(datasource))
+                datasource.prepare()
+                self._toolbox.set_datasource(datasource)
+            return protect(set_datasource)
+
+        for datasource in self._toolbox.datasources:
+            self._datasources[str(datasource)] = datasource
+            label = str(datasource)
+            id = str(datasource)
+            action = QAction(label, self)
+            action.triggered.connect(slot(id))
+            self._datasourceMenu.addAction(action)
 
     def getRunner(self) -> Runner:
         """Get the runner set up by this MainWindow. This will
@@ -324,7 +355,8 @@ class DeepVisMainWindow(QMainWindow):
         #
         # Datasource Menu
         #
-        datasourceMenu = menubar.addMenu('&Data')
+        self._datasourceMenu = menubar.addMenu('&Data')
+        self._updateDatasourceMenu()
 
         #
         # Tools Menu
@@ -367,6 +399,7 @@ class DeepVisMainWindow(QMainWindow):
     def showStatusMessage(self, message):
         self.statusBar().showMessage(message, 2000)
 
+    @protect
     def showStatusResources(self):
         message = f"{time.ctime()}"
         # message += (f", {self._runner.active_workers}/"
@@ -381,7 +414,9 @@ class DeepVisMainWindow(QMainWindow):
             message += (", memory={:,}/{:,}MiB".
                         format(resources.gpus[0].mem,
                                resources.gpus[0].mem_total))
-
+        if self._runner is not None:
+            message += (f", Tasks: {self._runner.active_workers}/" 
+                        f"{self._runner.max_workers}")
         self._statusResources.setText(message)
 
     ###########################################################################
@@ -498,7 +533,6 @@ class DeepVisMainWindow(QMainWindow):
         """
         networkController = self._toolbox.autoencoder_controller  # FIXME[hack]
         maximizationController = self._toolbox.maximization_engine
-        print(f"_initMaximizationPanel: maximizationController={maximizationController}")
         maximization.setToolboxController(self._toolbox)
         maximization.setMaximizationController(maximizationController)
         maximization.setNetworkController(networkController)

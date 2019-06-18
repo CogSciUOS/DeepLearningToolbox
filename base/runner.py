@@ -53,9 +53,12 @@ class AsyncRunner(Runner):
         Singular reusable thread to run computations in.
 
     """
+    _executor: ThreadPoolExecutor = None
 
     def __init__(self) -> None:
         super().__init__()
+        self._submitted = 0
+        self._completed = 0
         self._executor = ThreadPoolExecutor(max_workers=4,
                                             thread_name_prefix='runner')
 
@@ -78,6 +81,7 @@ class AsyncRunner(Runner):
         """
         future = self._executor.submit(fn, *args, **kwargs)
         future.add_done_callback(self.onCompletion)
+        self._submitted += 1
 
     def onCompletion(self, result):
         # FIXME[old]: explain what is done now!
@@ -104,7 +108,8 @@ class AsyncRunner(Runner):
         # created. This number will grow up to max_workers.
         # Threads will not be terminated on completion. They rather
         # stay alive and wait for new functions to be executed.
-        return len(self._executor._threads)
+        #return len(self._executor._threads)
+        return self._submitted - self._completed
 
     @property
     def max_workers(self):

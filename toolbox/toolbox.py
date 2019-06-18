@@ -140,7 +140,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
     Usage
     -----
-
     Upon construction, a :py:class:`Toolbox` will be basically empty.
     No resources are loaded, not tools are prepared and no user
     interface is attachted to the new :py:class:`Toolbox`. Those can
@@ -265,7 +264,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
         # FIXME[hack]: we need a better solution here!
         self.set_runner(self._gui.getRunner())
-
 
         #
         # Initialise the panels.
@@ -616,7 +614,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         else:
             name = tool.name
         if isinstance(tool, str):
-            print(f"FIXME[error]: Tool '{tool}' is a string!")
+            # print(f"FIXME[error]: Tool '{tool}' is a string!")
+            pass
         elif tool is not None:
             self._tools[name] = tool
             tool.runner = self._runner

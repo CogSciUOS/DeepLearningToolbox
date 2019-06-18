@@ -137,8 +137,19 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         data_format = kwargs.get('data_format', 'channels_last')
         self._data_format = data_format
 
+        #
         # Create the layer representation.
+        #
+
+        # fill the layer dictionary
         self.layer_dict = self._create_layer_dict()
+
+        # connect layers in the dictionary
+        for i in range(len(self.layer_dict)):
+            if i > 0:
+                self[i]._predecessor = self[i-1]
+            if i+1 < len(self.layer_dict):
+                self[i]._successor = self[i+1]
 
         self._output_labels = None
         self._labels = (None, None)
@@ -792,6 +803,9 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
 
+    #
+    # Classification
+    #
     # FIXME[concept]: the following methods are only relevant for classifiers.
     # redesign the API to introduce a special Classifier Network class.
 

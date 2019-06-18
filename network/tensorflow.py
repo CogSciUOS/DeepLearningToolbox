@@ -37,7 +37,26 @@ class TensorflowException(Exception):
 class Network(BaseNetwork):
     """Network interface to TensorFlow.
 
+    Class Attributes
+    ----------------
 
+    _OPERATION_TYPES: dict
+        Auxiliary mapping of custom operation types (str) 
+        to sets of TensorFlow operation types (str).
+        This is only used to build up the _LAYER_DEFS (see below).
+
+    _LAYER_TYPES_TO_CLASSES: dict
+        Mapping layer class names (str) to corresponding Layer types (type).
+        This is used to instantiate Layers when building up the layer_dict.
+
+    _LAYER_DEFS: dict
+        Mapping layer class names (str) to a list of TensorFlow operations
+        types (str). This information is used when analyzing
+        ("parsing") the graph to extract the network structure.
+    
+    Attributes
+    ----------
+    
     _graph: tf.Graph
         The internal representation of the computational graph.
         Can be initialized from the graph_def by calling
@@ -59,8 +78,12 @@ class Network(BaseNetwork):
                                  'Softsign',
                                  'Sigmoid',
                                  'Tanh',
-                                 'Softmax' # Should not really count as an activation function, as it is computed
-                                           # base on the whole layer inputs. It is convenient though.
+                                 'Softmax' # Should not really count
+                                           # as an activation
+                                           # function, as it is
+                                           # computed based on the
+                                           # whole layer inputs. It is
+                                           # convenient though.
                                  },
         'classification': [],
         'convolution': {'Conv2D',
@@ -82,8 +105,6 @@ class Network(BaseNetwork):
                     'FractionalMaxPool'},
         'recurrent_neural_networks': set()
     }
-
-
 
     _LAYER_TYPES_TO_CLASSES = {
         'Conv2D': Conv2D,
@@ -131,6 +152,23 @@ class Network(BaseNetwork):
                     'RealDiv',
                     'Mul']
     }
+    
+    _LAYER_DEFS2 = {
+        'Conv2D': [
+            _OPERATION_TYPES['convolution'],
+            {'Add', 'BiasAdd'},
+            _OPERATION_TYPES['activation_functions'],
+            {'LRN', '?'}
+        ],
+        'MaxPooling2D': {'MaxPool'},
+        'Dense': [
+            {'MatMul'},
+            {'Add', 'BiasAdd'},
+            _OPERATION_TYPES['activation_functions'],
+        ]
+        # FIXME[todo]: 'Flatten'
+        # FIXME[todo]: 'Dropout'
+    }
 
     keras_name_regex = re.compile(r'(.)([A-Z][a-z0-9]+)')
 
@@ -171,11 +209,15 @@ class Network(BaseNetwork):
         elif 'session' in kwargs:
             self._init_from_session(kwargs['session'])
 
+        # Finally we call the superclass constructor to initialize the
+        # network. This will make use of the _graph (by calling
+        # _create_layer_dict).
+
         # TensorFlow uses channels last as data format by
         # default. This can however be changed by the user.
-        # FIXME[todo]: make this more flexible.
-        
+        # FIXME[todo]: make this more flexible.        
         kwargs['data_format'] = 'channels_last'
+        
         super().__init__(**kwargs)
 
     def __del__(self):
@@ -259,66 +301,214 @@ class Network(BaseNetwork):
             self._session.close()
             self._session = None
 
+    #
+    # Extracting the network structure from the graph
+    #
+
     def _create_layer_dict(self) -> FrozenOrderedDict:
         """Try to find the sequences in operations of the graph that
-        match the idea of a layer.
+        match the idea of a Layer.
 
         Returns
         -------
         A mapping of layer_ids to layer objects.
         """
+
+        # Collect the relevant operations ...
+        self._ops = self._get_operations()
+
+        # ... and then build Layers from these operations.
+        self._input_placeholder = self._ops[0]
+        layer_dict = self._layers_from_operations(self._ops[1:])
+
+        return FrozenOrderedDict(layer_dict)
+
+    def _layers_from_operations(self, ops: list) -> OrderedDict:
+        """Group TensorFlow operations to form Layers.
+
+        Parameters
+        ----------
+        ops: list
+            A list of TensorFlow operations.
+
+        Result
+        ------
+        layer_dict: OrderedDict
+            An ordered dictionary, mapping layer names to Layers.
+        """
+
+        # The layer_dict maps layer names to Layers
         layer_dict = OrderedDict()
+
+        # we will count the number of Layers of each type to generate
+        # unique names.
         layer_counts = {
             layer_type: 0 for layer_type in self._LAYER_DEFS.keys()
         }
 
-        graph_def = self._graph.as_graph_def()
-        
-        # Output information about the underlying graph:
-        logger.debug(f"Network: {self.get_id()} ({type(self)}):") 
-        for i, tensor in enumerate(graph_def.node):
-            logger.debug(f"  {i}) {tensor.name}: {type(tensor)}")
-            #logger.debug(tf.get_default_graph().get_tensor_by_name(tensor.name+":0")[0])
-        logger.debug(f"debug: Layer dict:") 
+        # The current index in the operator list
+        op_idx = 0
+        while op_idx < len(ops):
+            op = ops[op_idx]
+            logger.debug(f"parsing op-{op_idx}: "
+                         f"{op.type} with name '{op.name}', "
+                         f"{op.values()}")
 
+            for layer_type, layer_def in self._LAYER_DEFS2.items():
+                try:
+                    # try to match the layer definition with the
+                    # given operations
+                    matching_ops, op_idx_last = \
+                        self._match_layer_def(op_idx, layer_def)
 
-        ops = self._graph.get_operations()
+                    # No exeception -> we are fine: create a new Layer...
 
-        depth = {}
-        indent = ""
-        for op_idx, op in enumerate(ops):
-            # The first placeholder we find will be our input layer:
-            if not depth:
-                if op.type == 'Placeholder':
-                    depth[op.name] = 1
-                    #print(f"{op_idx}: {op.name} is input layer! (depth={depth[op.name]})")
-            else:
-                #print(f"Parsing at opeartor index {op_idx} ({ops[op_idx].type})")
-                for input_name in [t.op.name for t in op.inputs]:
-                    if input_name in depth:
-                        info = ""
-                        depth[op.name] = depth[input_name]+1
-                        if op.type == 'ConcatV2':
-                            indent = ""
-                            info = f"{op.inputs[0].shape} + {op.inputs[1].shape} -> {op.outputs[0].shape}"
-                        if op.type == 'Split':
-                            info = f"{op.inputs[1].shape} -> {op.outputs[0].shape} x {op.outputs[1].shape}"
-                        if op.type == 'Conv2D':
-                            info = f"{op.inputs[0].shape} * {op.inputs[1].shape} -> {op.outputs[0].shape}; strides: {op.get_attr('strides')}, padding: {op.get_attr('padding')}, data_format: {op.get_attr('data_format')}"
-                        if op.type == 'MaxPool':
-                            info = f"{op.inputs[0].shape} -> {op.outputs[0].shape}; strides: {op.get_attr('strides')}, padding: {op.get_attr('padding')}, data_format: {op.get_attr('data_format')}"
-                        if op.type == 'Reshape':
-                            info = f"{op.inputs[0].shape} -> {op.outputs[0].shape}"
-                        #print(f"{op_idx}: {indent}{op.name} ({op.type}) is successor of {input_name} (depth={depth[op.name]}) [{info}]")
-                        if op.type == 'ConcatV2':
-                            break
-                        if op.type == 'Split':
-                            indent = "  "
+                    # Invent a name for the new Layer
+                    layer_counts[layer_type] += 1
+                    layer_name = (f'{self._to_keras_name(layer_type)}'
+                                  f'_{layer_counts[layer_type]}')
+
+                    # Instantiate the new Layer
+                    layer_cls = self._LAYER_TYPES_TO_CLASSES[layer_type]
+                    layer_dict[layer_name] = layer_cls(self, matching_ops)
+
+                    logger.debug(f"debug:   ** {layer_name}"
+                                 f" => {type(layer_dict[layer_name])}")
+
+                    # If the layer definition was successfully
+                    # matched, advance the number of ops that were
+                    # matched. Don't try to match another layer
+                    # definition at the same op by breaking the for
+                    # loop.
+                    op_idx = op_idx_last
+                    break  # Do not try more layer types for this operation
+                except NonMatchingLayerDefinition:
+                    continue  # Try the next layer type
+
+            # Try to match at the next op.
             op_idx += 1
 
-        op_idx = 0
-        self._input_placeholder = None
+        if not layer_dict:
+            raise ParsingError('Could not find any layers in TensorFlow graph.')
 
+        if False:
+            self._debug_layer_dict(layer_dict)
+
+        return layer_dict
+
+    def _to_keras_name(self, name):
+        return self.keras_name_regex.sub(r'\1_\2', name).lower()
+
+    def _get_operations(self) -> list:
+        """Get the (relevant) operations from the TensorFlow graph.  An
+        operation is judged as relevant, if it lies on a path between
+        the input (the first placeholder) and the output (the last
+        activation function).
+
+        Result
+        ------
+        operations: list
+            A list of TensorFlow operations, ordered by their input-output
+            relations, i.e., all inputs to an operation will occur in this
+            list before that operation.
+        """
+
+        # get the graph as a list of operations
+        ops = self._graph.get_operations()
+        
+        # depth_dict will map TensorFlow operator names to their depth,
+        # that is the length of the path from the input. The
+        # input (the first placeholder) will get depth 1.
+        depth_dict = OrderedDict()
+
+        # walk through this list and extract the relevant operations:
+        for op_idx, op in enumerate(ops):
+            # The first placeholder we find will be our input layer:
+            if not depth_dict:
+                # depth_dict is not initialized, that means, no input
+                # (placeholder) has been detected yet.
+                # Ignore this op unless it is a Placeholder
+                if op.type == 'Placeholder':
+                    depth_dict[op.name] = 1
+                continue
+
+            # ok, we had found an input layer, that mean, this op can
+            # be in the path. Check if one of its predecessors is
+            # in the path:
+            for input_name in [t.op.name for t in op.inputs]:
+                if input_name in depth_dict:
+                    depth_dict[op.name] = depth_dict[input_name]+1
+                    if op.type == 'ConcatV2':
+                        break
+
+        if False:
+            self._debug_depth_dict(depth_dict)
+            
+        return [self._graph.get_operation_by_name(name)
+                for name in depth_dict.keys()]
+
+
+
+    def _match_layer_def(self, op_idx: int, layer_def: dict) -> list:
+        """Check whether the layer definition match the operations
+        starting from a certain index.
+
+        Parameters
+        ----------
+        op_idx: int
+            The index of the first operation to match.
+        layer_def: dict
+            A dictionary mapping Layer classes to layer definitions.
+            The index of the first operation to match.
+
+        Returns
+        -------
+        matched_ops: list
+            The list of TensorFlow operations matched.
+            This list can be used to intialize a TensorFlow Layer.
+        last_idx: int
+            The index of the last operation included in the matched_ops
+            list.
+
+        Raises
+        ------
+        NonMatchingLayerDefinition:
+            The operations fount in the TensorFlow operations list do
+            not match the layer definition.
+        """
+        ops = self._ops
+        matched_ops = []
+        for i, op_group in enumerate(layer_def):
+
+            if op_idx >= len(ops):
+                raise NonMatchingLayerDefinition
+            op = ops[op_idx]
+
+            # skip irrelevant layers
+            while op.type in ('Split', 'ConcatV2', 'Reshape'):
+                op_idx += 1
+                matched_ops.append(op)
+                if op_idx >= len(ops):
+                    raise NonMatchingLayerDefinition
+                op = ops[op_idx]
+            
+            if op.type in op_group:
+                while op_idx < len(ops) and ops[op_idx].type in op_group:
+                    matched_ops.append(ops[op_idx])
+                    op_idx += 1
+            elif '?' in op_group:
+                pass  # The operation group at this position is optional.
+            else:
+                raise NonMatchingLayerDefinition
+
+        # If all operations could be matched, return the respective operations.
+        return matched_ops, op_idx-1
+
+    #
+    # Old code for layer parsing ...
+    #
+
+    def _parse_old(self):
         while op_idx < len(ops):
             logger.debug(f"debug:  op-{op_idx}: "
                          # "{type(ops[op_idx])}, "
@@ -327,23 +517,30 @@ class Network(BaseNetwork):
                          f"{ops[op_idx].values()}")
 
             op = ops[op_idx]
-
             # The first placeholder we find will be our input layer:
             if self._input_placeholder is None:
                 if op.type == 'Placeholder':
                     self._input_placeholder = op
-                    depth[op.name] = 1
-                    #print(f"   {op.name} is input layer! (depth={depth[op.name]})")
-                op_idx += 1
-                continue
+                    op_idx += 1
 
             for layer_type, layer_def in self._LAYER_DEFS.items():
                 try:
-                    matching_ops = self._match_layer_def(op_idx, layer_def)
-                    # Increment count for layer type.
+                    # try to match the layer definition with the
+                    # given operations
+                    matching_ops, op_idx_last = \
+                        self._match_layer_def(op_idx, layer_def)
+
+                    # No exeception -> we are fine: create a new Layer...
+
+                    # Invent a name for the new Layer
                     layer_counts[layer_type] += 1
-                    layer_name = '{}_{}'.format(self._to_keras_name(layer_type), layer_counts[layer_type])
-                    layer_dict[layer_name] = self._LAYER_TYPES_TO_CLASSES[layer_type](self, matching_ops)
+                    layer_name = (f'{self._to_keras_name(layer_type)}'
+                                  f'_{layer_counts[layer_type]}')
+
+                    # Instantiate the new Layer
+                    layer_cls = self._LAYER_TYPES_TO_CLASSES[layer_type]
+                    layer_dict[layer_name] = layer_cls(self, matching_ops)
+
                     logger.debug(f"debug:   ** {layer_name}"
                                  f" => {type(layer_dict[layer_name])}")
 
@@ -353,20 +550,13 @@ class Network(BaseNetwork):
                     # definition at the same op by breaking the for
                     # loop.
                     op_idx += len(layer_def) - 1
-                    #print(f"  -> found layer {matching_ops}  -> {op_idx}")
                     break
                 except NonMatchingLayerDefinition:
-                    continue
+                    continue  # Try the next layer type
             # Try to match at the next op.
             op_idx += 1
 
-        if not layer_dict:
-            raise ParsingError('Could not find any layers in TensorFlow graph.')
-
-        layer_dict = FrozenOrderedDict(layer_dict)
-        return layer_dict
-
-    def _match_layer_def(self, op_idx: int, layer_def: dict) -> list:
+    def _match_layer_def_old(self, op_idx: int, layer_def: dict) -> list:
         """Check whether the layer definition match the operations
         starting from a certain index.
 
@@ -397,8 +587,76 @@ class Network(BaseNetwork):
         # If all operations could be matched, return the respective operations.
         return matched_ops
 
-    def _to_keras_name(self, name):
-        return self.keras_name_regex.sub(r'\1_\2', name).lower()
+    #
+    # Debug
+    #
+
+    def _debug_graph_def(self) -> None:
+        """Output information about the underlying TensorFlow graph
+        definition.
+        """
+        graph_def = self._graph.as_graph_def()
+
+        logger.debug(f"Network: {self.get_id()} ({type(self)}):") 
+        for i, tensor in enumerate(graph_def.node):
+            logger.debug(f"  {i}) {tensor.name}: {type(tensor)}")
+        logger.debug(f"debug: Layer dict:") 
+
+    def _debug_layer_dict(self, layer_dict: dict=None) -> None:
+        """Output the given layer dict.
+
+        Parameter
+        ---------
+        layer_dict: dict
+            A dictionary mapping layer names to Layers.
+        """
+        if layer_dict is None:
+            layer_dict = self.layer_dict
+        if layer_dict is None:
+            print("No layer dictionary available.")
+        for i, (name, layer) in enumerate(layer_dict.items()):
+            print(f"{i}. {name}: {layer}")
+
+    def _debug_depth_dict(self, depth_dict: dict) -> None:
+        """Output a depth dictionary of TensorFlow operations.  Some
+        operations will be annotated with additional information like
+        input and output shape, strides, kernel size, etc.
+        """
+        indent = ""
+        for name, depth in depth_dict.items():
+            op = self._graph.get_operation_by_name(name)
+            if op.type == 'ConcatV2':
+                info = (f"{op.inputs[0].shape} + {op.inputs[1].shape}"
+                        f" -> {op.outputs[0].shape}")
+                indent = ""
+            elif op.type == 'Split':
+                info = (f"{op.inputs[1].shape}"
+                        " -> {op.outputs[0].shape} x {op.outputs[1].shape}")
+            elif op.type == 'Conv2D':
+                info = (f"{op.inputs[0].shape} * {op.inputs[1].shape}"
+                        f" -> {op.outputs[0].shape}; "
+                        f"strides: {op.get_attr('strides')}, "
+                        f"padding: {op.get_attr('padding')}, "
+                        f"data_format: {op.get_attr('data_format')}")
+            elif op.type == 'MaxPool':
+                info = (f"{op.inputs[0].shape}"
+                        f" -> {op.outputs[0].shape}; "
+                        f"strides: {op.get_attr('strides')}, "
+                        f"padding: {op.get_attr('padding')}, "
+                        f"data_format: {op.get_attr('data_format')}")
+            elif op.type == 'Reshape':
+                info = f"{op.inputs[0].shape} -> {op.outputs[0].shape}"
+            else:
+                info = ""
+
+            print(f"{depth}: {indent}{op.name} ({op.type}): [{info}]")
+            
+            if op.type == 'Split':
+                indent = "  "
+
+    #
+    # Network operations
+    #
 
     def _compute_activations(self, layer_ids: list, input_samples: np.ndarray) -> list:
         """

@@ -8,6 +8,9 @@ from util import Identifiable
 
 class Layer(Identifiable):
     """A Layer encapsulates operations that transform a tensor."""
+
+    _predecessor: 'Layer' = None
+    _sucessor: 'Layer' = None
     
     def __init__(self, network, id=None):
         super().__init__(id)
@@ -26,12 +29,12 @@ class Layer(Identifiable):
     @property
     def predecessor(self) -> 'Layer':
         """The preceeding Layer in a network."""
-        raise NotImplementedError
+        return self._predecessor
 
     @property
     def sucessor(self) -> 'Layer':
         """The suceeding Layer in a network."""
-        raise NotImplementedError
+        return self._sucessor
 
     def receptive_field(self, p1: Tuple[int, ...], p2: Tuple[int, ...]=None
                         ) -> (Tuple[int, ...], Tuple[int, ...]):
