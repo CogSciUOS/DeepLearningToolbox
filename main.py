@@ -20,7 +20,7 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
         print(f"find_module({fullname}, {path})")
         return None
 
-if not hasattr(sys,'frozen'):
+if not hasattr(sys, 'frozen'):
     # sys.meta_path = [ImportInterceptor()] + sys.meta_path
     pass
 

@@ -59,6 +59,7 @@ mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
 
 import util
+from util import addons
 
 
 logger.info("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
@@ -72,7 +73,6 @@ import numpy as np
 
 from base import (Observable, BusyObservable, busy, change,
                   Runner, Controller as BaseController)
-from util import addons
 
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
@@ -698,6 +698,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
                             help='Load the adversarial example module'
                             ' (experimental!)',
                             action=addons.UseAddon, default=False)
+        parser.add_argument('--internals',
+                            help='Open the internals panel'
+                            ' (experimental!)',
+                            action='store_true', default=False)
 
     def process_command_line_arguments(self, args):
         util.use_cpu = args.cpu
@@ -743,6 +747,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if args is not None:
             if args.alexnet:
                 networks.append('alexnet')
+
             if args.framework.startswith('keras'):
                 # "keras-tensorflow" or "keras-theano"
                 networks.append('keras-network')
@@ -755,7 +760,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
             panels = []
             if addons.use('autoencoder'):
                 panels.append('autoencoder')
-
+               
+            if args.internals:
+                panels.append('internals')
+            #if addons.internals('internals')
             # Initialise the "Activation Maximization" panel.
             #if addons.use('maximization'):
             #    panels.append('maximization')

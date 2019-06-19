@@ -15,21 +15,39 @@ from .panel import Panel
 
 import numpy as np
 import importlib
-#import tensorflow as tf
-#import cv2
-#import keras
+
 import sys
 import os
 import re
 from types import ModuleType
 import util.resources
 import util
+from util import addons
+
+from ..utils import protect
 
 class InternalsPanel(Panel):
     '''A Panel displaying system internals.
     May be of interest during development.
+
+    Attributes
+    ----------
+    _modules: dict
+        A mapping from module names to module information.
+        This can be the acutal module (if already loaded),
+        or a string describing the state of the module
+        ("not loaddd" or "not found"). This information
+        is initialized and updated by the method
+        :py:meth:_updateModules.
+
+    Graphical elements
+    ------------------
+    _grid: QGridLayout
     '''
-    modules = ["numpy", "tensorflow", "keras", "appsdir", "matplotlib", "keras", "cv2", "caffe", "PyQt5", "pycuda", "lucid", "dlib", "imutils"]
+
+    @property
+    def modules(self):
+        return addons.get_addons(addons.Types.module)
 
     _grid: QGridLayout = None
     _moduleGrid: QGridLayout = None
@@ -65,7 +83,17 @@ class InternalsPanel(Panel):
             self._info.deleteLater()
             self._info = info
 
-    def modulesInfo(self):
+    def modulesInfo(self) -> QGroupBox:
+        """Create a QGridLayout with two columns displaying module
+        information. The first column contains the module name, the
+        second column version (if loaded) or availability.
+        Modules are listed in the order given by :py:meth:modules.
+
+        Result
+        ------
+        box: QGroupBox
+            A QWidget displaying the module information.
+        """
         box = QGroupBox('Modules')
         box.setMinimumWidth(300)
         
@@ -89,10 +117,12 @@ class InternalsPanel(Panel):
         boxLayout.addWidget(updateButton)
         boxLayout.addStretch()
         box.setLayout(boxLayout)
-        
+
         return box
 
     def _updateModules(self):
+        """Update the module list.
+        """
         for i, m in enumerate(self.modules):
             if m in sys.modules:
                 module = sys.modules[m]
@@ -203,7 +233,9 @@ class InternalsPanel(Panel):
         if util.resources.cuda is not None:
             button = QPushButton("CUDA")
             #button.setFlat(True)
-            def slot(clicked: bool): self.showInfo(self.cudaInfo())
+            @protect
+            def slot(clicked: bool):
+                self.showInfo(self.cudaInfo())
             button.clicked.connect(slot)
             boxLayout.addWidget(button)
 
@@ -233,12 +265,15 @@ class InternalsPanel(Panel):
         box = QGroupBox(labels.get(name, name))
 
         if name not in self._modules:
+            # the module unknown, that is not listed in our list of
+            # modules
             boxLayout = QVBoxLayout()
             boxLayout.addWidget(QLabel("Not availabe"))
             boxLayout.addStretch()
         elif isinstance(self._modules[name], str):
             boxLayout = QVBoxLayout()
             boxLayout.addWidget(QLabel(self._modules[name]))
+            boxLayout.addWidget(QPushButton("Load (not implemented yet ...)"))
             boxLayout.addStretch()
         elif isinstance(self._modules[name], ModuleType):
             #boxLayout = contentProvider(self._modules[name])
@@ -356,11 +391,11 @@ class InternalsPanel(Panel):
             import pycuda.driver as cuda
 
             (free,total) = cuda.mem_get_info()
-            boxLayout.addWidget(QLabel("<b>Global Memory</b>"))
-            boxLayout.addWidget(QLabel(f"{total}"))
-            boxLayout.addWidget(QLabel(f"{free}"))
+            boxLayout.addWidget(QLabel("<b>Global GPU Memory</b>"))
+            boxLayout.addWidget(QLabel(f"Total: {total}"))
+            boxLayout.addWidget(QLabel(f"Free: {free}"))
             boxLayout.addWidget(QLabel("Global memory occupancy: "
-                                       f"{free*100/total}%% free"))
+                                       f"{free*100/total:2.4}% free"))
 
             for devicenum in range(cuda.Device.count()):
                 device=cuda.Device(devicenum)
@@ -368,7 +403,7 @@ class InternalsPanel(Panel):
             
                 # Beyond this point is just pretty printing
                 print("\n===Attributes for device %d"%devicenum)
-                for (key,value) in attrs.iteritems():
+                for (key,value) in attrs.items():
                     print("%s:%s"%(str(key),str(value)))
         except ImportError as e:
             print(e, file=sys.stderr)
@@ -393,20 +428,64 @@ class InternalsPanel(Panel):
 
 
 class QNvmlInfo(QWidget):
+    """A QWidget for displaying information obtained from the
+    NVIDIA Management Library (Python bindings: py3nvml)
 
-    nvml = importlib.import_module('py3nvml.py3nvml')
+    Attributes
+    ----------
+
+    nvml: module
+        A reference to the NVIDIA Management Library.
+    _deviceCount: int
+        The number of NVIDA devices.
+    _handle:
+        An NVML handle for the current device. None if no device
+        is selected.
+    
+    Graphical elements
+    ------------------
+    _devices: QComboBox
+        A combo box to select the current device.
+    _name: QLabel
+    _driver_version: QLabel
+    _temperature: QLabel
+    _temperature_slowdown: QLabel
+    _temperature_shutdown: QLabel
+    """
 
     def __init__(self, parent=None):
+        """Initialize this :py:class:`QNvmlInfo`. This includes importing the
+        NVIDIA Management Library Python bindings (py3nvml) and
+        initializing that module. If any of these operations fails, a
+        dummy content will be created displaying a corresponding
+        message.
+        """
         super().__init__(parent)
-        self.nvml.nvmlInit()
-        self._deviceCount = self.nvml.nvmlDeviceGetCount()
-        self._handle = None
-        self._initUI()
-        
+        try:
+            self.nvml = importlib.import_module('py3nvml.py3nvml')
+            self.nvml.nvmlInit()
+            self._deviceCount = self.nvml.nvmlDeviceGetCount()
+            self._handle = None
+            self._initUI()
+        except ModuleNotFoundError as e:
+            self.nvml = None
+            layout = QVBoxLayout()
+            layout.add(QLabel("NVIDIA Management Library not available"))
+            self.setLayout(layout)
+
     def __del__(self):
-        self.nvml.nvmlShutdown()
+        """Freeing resources. This includes shutting down the NVML module.
+        """
+        if self.nvml is not None:
+            self.nvml.nvmlShutdown()
+            self.nvml = None
 
     def _initUI(self):
+        """Create an interface containing a QComboBox to select the current
+        device and several QLabels to display (device) information,
+        including driver version, as well as slowdown, shutdown, and
+        current device temperature.
+        """
         layout = QVBoxLayout()
 
         grid = QGridLayout()
@@ -421,11 +500,14 @@ class QNvmlInfo(QWidget):
         for i in range(self._deviceCount):
             handle = self.nvml.nvmlDeviceGetHandleByIndex(i)
             self._devices.addItem(self.nvml.nvmlDeviceGetName(handle))
+        @protect
+        def slot(device: int) -> None:
+            self.update()
+        self._devices.activated.connect(slot)
         layout.addWidget(self._devices)
-            
-        
+
         grid = QGridLayout()
-        
+
         self._name = QLabel()
         grid.addWidget(QLabel("Name"), 0,0)
         grid.addWidget(self._name, 0,1)
@@ -459,13 +541,22 @@ class QNvmlInfo(QWidget):
         self.setLayout(layout)
 
     def update(self):
-        if self._handle is None and self._devices.currentIndex() is not None:
-            self._handle = self.nvml.nvmlDeviceGetHandleByIndex(self._devices.currentIndex())
+        """Update the widgets indicating slowdown, shutdown, and current
+        temperature.
+        """
+        currentIndex = self._devices.currentIndex()
+        if self._handle is None and currentIndex is not None:
+            self._handle = self.nvml.nvmlDeviceGetHandleByIndex(currentIndex)
             self._name.setText(self.nvml.nvmlDeviceGetName(self._handle))
-            self._temperature_slowdown.setText(str(self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,self.nvml.NVML_TEMPERATURE_THRESHOLD_SLOWDOWN)))
-            self._temperature_shutdown.setText(str(self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,self.nvml.NVML_TEMPERATURE_THRESHOLD_SHUTDOWN)))
+
+            slowdown = self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,
+                self.nvml.NVML_TEMPERATURE_THRESHOLD_SLOWDOWN)
+            shutdown = self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,
+                self.nvml.NVML_TEMPERATURE_THRESHOLD_SHUTDOWN)
+            self._temperature_slowdown.setText(str(slowdown))
+            self._temperature_shutdown.setText(str(shutdown))
 
         if self._handle is not None:
-            self._temperature.setText(str(self.nvml.nvmlDeviceGetTemperature(self._handle,self.nvml.NVML_TEMPERATURE_GPU)))
-        
-
+            temperature = self.nvml.nvmlDeviceGetTemperature(self._handle,
+                self.nvml.NVML_TEMPERATURE_GPU)
+            self._temperature.setText(str(temperature))
