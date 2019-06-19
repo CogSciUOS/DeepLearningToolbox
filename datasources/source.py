@@ -500,15 +500,15 @@ class Labeled(Datasource):
         if with_label:
             if not self.labels_prepared:
                 description += " (without labels)"
-            else:
-                description += f" (with {self.number_of_labels})"
+            else:  # FIXME[hack]: description2 is not used ...
+                description2 = f" (with {self.number_of_labels})"
                 if self.fetched:
                     label = self._get_label()
                     description += f": {label}"
                     if label is not None: # FIXME[bug] should never be the case
                         for format in self._label_formats.keys():
                             formated_label = self.format_labels(label, format)
-                            description += f", {format}: {formated_label}"
+                            description2 += f", {format}: {formated_label}"
         return description
 
 

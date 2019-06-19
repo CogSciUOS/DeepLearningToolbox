@@ -65,18 +65,18 @@ class QNetworkBox(QLabel, QObserver, Network.Observer,
         # Set Network info text
         #
         network_text = ''
-        network_text += '<b>Network info:</b> '
+        #network_text += '<b>Network info:</b> '
         if network is not None:
             network_name = type(network).__name__
-            network_text += 'FIXME[todo]: obtain network information ...'
+            # network_text += 'FIXME[todo]: obtain network information ...'
             network_text += ('<br>\n<b>class:</b> '
                              f'{network.__class__.__name__}')
             network_text += f'<br>\n<b>name:</b> {network}'
-            if not network.empty():
-                network_text += ('<br>\n<b>input layer:</b> '
-                                 f'{network.input_layer_id()}')
-                network_text += ('<br>\n<b>output layer:</b> '
-                                 f'{network.output_layer_id()}')
+            #if not network.empty():
+            #    network_text += ('<br>\n<b>input layer:</b> '
+            #                     f'{network.input_layer_id()}')
+            #    network_text += ('<br>\n<b>output layer:</b> '
+            #                     f'{network.output_layer_id()}')
         else:
             network_text += "No network"
         self._network_text = network_text
@@ -86,9 +86,9 @@ class QNetworkBox(QLabel, QObserver, Network.Observer,
 
 
     def paintEvent(self, event):
-        text = ('<b>Network Info Box</b><br>' +
-                self._network_text + self._layer_text)
-        self.setText(text)
+        #text = ('<b>Network Info Box</b><br>' +
+        #        self._network_text + self._layer_text)
+        #self.setText(text)
         super().paintEvent(event)
         
 
