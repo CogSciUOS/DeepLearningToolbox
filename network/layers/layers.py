@@ -50,9 +50,8 @@ class Layer(Identifiable):
         The upper left corner and the lower right corner of the
         receptive field for the region of interest.
         """
-        if self.predecessor is None:
-            return p1, p2
-        return self.predecessor.receptive_field(p1,p2)
+        return ((p1, p2) if self.predecessor is None else
+                self.predecessor.receptive_field(p1,p2))
 
     @property
     def info(self) -> OrderedDict:
@@ -112,6 +111,16 @@ class StridingLayer(Layer):
         """
         raise NotImplementedError
 
+    @property
+    def filter_size(self) -> str:
+        """The filter size of this striding layer.
+
+        Returns
+        -------
+        Either 'valid' or 'same'.
+        """
+        raise NotImplementedError
+
     def receptive_field(self, p1: Tuple[int, ...], p2: Tuple[int, ...]=None
                         ) -> (Tuple[int, ...], Tuple[int, ...]):
         """The receptive field of a layer.
@@ -130,12 +139,21 @@ class StridingLayer(Layer):
         """
         if p2 is None:
             p2 = p1
-        q1 = (), q2 = ()
+        q1, q2 = (), ()
         for i, s in enumerate(self.strides):
-            q1 = q1 + (p[i] * s)
-            q2 = q2 + (p[i] * s)
+            q1 = q1 + (p1[i] * s,)
+            q2 = q2 + (p2[i] * s,)
 
-        return self.predecessor.receptive_field(q1,q2)
+        p1, p2 = (), ()
+        for i, size in enumerate(self.filter_size):
+            if self.padding == 'SAME':
+                p1 = p1 + (q1[i] - size//2,)
+                p2 = p2 + (q2[i] + size//2,)
+            else:
+                p1 = p1 + (q1[i],)
+                p2 = p2 + (q2[i] + size-1,)
+
+        return super().receptive_field(p1, p2)
 
     @property
     def info(self) -> OrderedDict:
@@ -158,6 +176,15 @@ class Conv2D(NeuralLayer, StridingLayer):
         raise NotImplementedError
 
     @property
+    def filter_size(self) -> Tuple[int, int]:
+        """The filter size of a convolutional layer is the kernel size.
+
+        Returns
+        -------
+        """
+        return self.kernel_size
+
+    @property
     def filters(self) -> int:
         """
 
@@ -166,34 +193,6 @@ class Conv2D(NeuralLayer, StridingLayer):
         The number of filter maps created by the convolution layer.
         """
         raise NotImplementedError
-
-    def receptive_field(self, p1: Tuple[int, ...], p2: Tuple[int, ...]=None
-                        ) -> (Tuple[int, ...], Tuple[int, ...]):
-        """The receptive field of a layer.
-
-        Parameters
-        ----------
-        p1: the upper left corner of the region of interest.
-        p2: the lower right corner of the region of interest.
-
-        Result
-        ------
-        q1: The upper left corner of the receptive field for the region
-            of interest.
-        q2: The lower right corner of the receptive field for the region
-            of interest.
-        """
-        p1, p2 = super().receptive_field(self, p1, p2)
-        q1 = (), q2 = ()
-        for i, s in enumerate(self.kernel_size):
-            if self.padding == 'same':
-                q1 = q1 + (p[i] - s//2)
-                q2 = q2 + (p[i] + s//2)
-            else:
-                q1 = q1 + (p[i])
-                q2 = q2 + (p[i] + s-1)
-
-        return self.predecessor.receptive_field(q1,q2)
 
     @property
     def info(self) -> OrderedDict:
@@ -216,33 +215,14 @@ class MaxPooling2D(StridingLayer):
         """
         raise NotImplementedError
 
-    def receptive_field(self, p1: Tuple[int, ...], p2: Tuple[int, ...]=None
-                        ) -> (Tuple[int, ...], Tuple[int, ...]):
-        """The receptive field of a layer.
+    @property
+    def filter_size(self) -> Tuple[int, int]:
+        """The filter size of a pooling layer is the pool size.
 
-        Parameters
-        ----------
-        p1: the upper left corner of the region of interest.
-        p2: the lower right corner of the region of interest.
-
-        Result
-        ------
-        q1: The upper left corner of the receptive field for the region
-            of interest.
-        q2: The lower right corner of the receptive field for the region
-            of interest.
+        Returns
+        -------
         """
-        p1, p2 = super().receptive_field(self, p1, p2)
-        q1 = (), q2 = ()
-        for i, s in enumerate(self.pool_size):
-            if self.padding == 'same':
-                q1 = q1 + (p[i] - s//2)
-                q2 = q2 + (p[i] + s//2)
-            else:
-                q1 = q1 + (p[i])
-                q2 = q2 + (p[i] + s-1)
-
-        return self.predecessor.receptive_field(q1,q2)
+        return self.pool_size
 
     @property
     def info(self) -> OrderedDict:

@@ -4,10 +4,11 @@ from tools.activation import (Engine as ActivationEngine,
 
 from ..utils import QObserver
 
-from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
-from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtCore import Qt, QPoint, QRect, QSize, QMargins, pyqtSignal
+from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush, QMouseEvent
+from PyQt5.QtWidgets import QWidget, QToolTip
 
+from typing import Tuple
 import math
 import numpy as np
 
@@ -41,32 +42,47 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
 
     Attributes
     -----------
-    _activation :   np.ndarray
-                    The activation values to be displayed in this
-                    activation view. ``None`` means that no activation
-                    is assigned to this :py:class:``QActivationView``
-                    and will result in an empty widget.
+    _activations: np.ndarray
+        The activation values to be displayed in this
+        activation view. ``None`` means that no activation
+        is assigned to this :py:class:``QActivationView``
+        and will result in an empty widget.
 
-    _padding    :   int
-                    Padding between the individual units in this
-                    :py:class:``QActivationView``.
+    _units: int
+        Number of units in this view. This is simply the length
+        of the activations array.
 
-    _current_unit   :   int
-                        The currently selected unit. The value None means that
-                        no unit is currently selected.
+    _currentUnit: int
+        The currently selected unit. The value None means that
+        no unit is currently selected.
 
-    _isConvolution  :   bool
-                        A flag indicating if the current QActivationView is
-                        currently in convolution mode (True) or not (False).
+    _currentPosition: QPoint
+        The currently selected position in the activation map of
+        the current unit.
 
-    _n_units    :   int
-                    Number of units in this view
+    _isConvolution: bool
+        A flag indicating if the current QActivationView is
+        currently in convolution mode (True) or not (False).
 
+    _unitSize: QSize
+        The size of of a unit (its activation map). This will be (1,1)
+        for a fully connected layer and the shape of the activation map
+        for a convolutional layer.
+
+    _padding: int
+        Padding between the individual units in this
+        :py:class:``QActivationView``.
+
+    _unitDisplaySize: QSize
+        The width of a unit in pixels, including padding.
+
+    toolTipActive : bool
+        A flag indicating whether tooltips shoould be shown.
     '''
 
     _activationController: ActivationsController = None
 
-    def __init__(self, parent: QWidget=None):
+    def __init__(self, parent: QWidget=None) -> None:
         '''Initialization of the QActivationView.
 
         Parameters
@@ -76,19 +92,23 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         '''
         super().__init__(parent)
 
-        self._padding = 2
+        self._activations = None
+        self._units = 0
         self._isConvolution = False
-        self._current_unit = None
-        #self._controller = None
-        self._unit_activations = None
-        self._n_units = 0
+        self._currentUnit = None
+        self._currentPosition = None
+        self._unitSize = None
+        self._padding = 2
+        self._unitDisplaySize = None
 
         # By default, a QWidget does not accept the keyboard focus, so
         # we need to enable it explicitly: Qt.StrongFocus means to
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def setActivationController (self, activation: ActivationsController ):
+        self.setToolTip(False)
+
+    def setActivationController(self, activation: ActivationsController):
         interests = ActivationEngine.Change('activation_changed',
                                             'unit_changed')
         self._exchangeView('_activationController', activation,
@@ -103,21 +123,23 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
 
         '''
         if engine is None:
+            self._activations = None
+            self._units = 0
+            self._isConvolution = False
+            self._currentUnit = None
+            self._currentPosition = None
+            self._unitSize = None
+            self._unitDisplaySize = None
             return
-
-        if info.unit_changed:
-            self._current_unit = engine.unit
 
         # get activation and update overlay only when
         # significant properties change
-        if info & {'network_changed', 'layer_changed', 'input_changed',
-                   'activation_changed'}:
-            
+        if info & {'activation_changed', 'layer_changed'}:
+            # activation is also changed when a new network is selected ...
             try:
                 activation = engine.get_activation()
             except ValueError:
                 activation = None
-            self._current_unit = engine.unit
 
             if activation is not None:
                 if activation.dtype != np.float32:
@@ -139,15 +161,40 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
                 activation = \
                     np.ascontiguousarray(grayscaleNormalized(activation))
 
-            self._unit_activations = activation
+            self._activations = activation
+            self._updateGeometry()
 
-        # deselect unit on layer change
-        if info.network_changed or info.layer_changed:
-            self._current_unit = None
+        if info.unit_changed:
+            # unit_changed includes also a change of position
+            self._currentUnit = engine.unit
+            self._currentPosition = (None if engine.position is None else
+                                     QPoint(engine.position[1],
+                                            engine.position[0]))
+            self.update()
 
-        self._computeGeometry()
-        self.update()
+    def setUnit(self, unit: int=None, position: QPoint=None) -> None:
+        """Set the current unit for this activations view.
+        """
+        pos = None if position is None else (position.y(), position.x())
+        self._activationController.onUnitSelected(unit, pos)
 
+    def setToolTip(self, active: bool=True) -> None:
+        '''Turn on/off the tooltips for this Widget.
+        The tooltip will display the index and value for the matrix
+        at the current mouse position.
+
+        Parameters
+        ----------
+        active: bool
+            Will turn the tooltips on or off.
+        '''
+        self.toolTipActive = active
+        self.setMouseTracking(self.toolTipActive)
+
+        if not self.toolTipActive:
+            QToolTip.hideText()
+
+    # FIXME[old]: should be provided by the model, not by the view ...
     def getUnitActivation(self, unit: int=None) -> np.ndarray:
         '''Get the activation mask for a given unit.
 
@@ -163,32 +210,36 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
                 activations (the channel) for 2d conv layers
 
         '''
-        if self._unit_activations is None or unit is None:
+        if self._activations is None or unit is None:
             return None
         elif not self._isConvolution:
             return None
         else:
             if unit is None:
-                unit = self._current_unit
-            return self._unit_activations[unit]
+                unit = self._currentUnit
+            return self._activations[unit]
 
-    def _computeGeometry(self):
-        if self._unit_activations is None:
+    def _updateGeometry(self) -> None:
+        '''Update the private attributes containing geometric information on
+        the currently selected activation map. This method should be
+        called whenever this :py:class:`QActivationView` is adapted in
+        a way that affects its geometric properties.
+        '''
+        if self._activations is None:
             self._rows = None
             self._columns = None
-            self._unitWidth = None
-            self._unitHeight = None
+            self._unitDisplaySize = None
         else:
             # In case of a convolutional layer, the axes of activation are:
             # (width, height, output_channels)
             # For fully connected (i.e., dense) layers, the axes are:
             # (units,)
-            activation = self._unit_activations
-            self._n_units = activation.shape[0]
+            activation = self._activations
+            self._units = activation.shape[0]
+            self._unitSize = QSize(activation.shape[2], activation.shape[1])
             self._isConvolution = (activation.ndim == 3)
             if self._isConvolution:
-                unitRatio = activation.shape[2] / activation.shape[1]
-                # unitRatio = width/height
+                unitRatio = self._unitSize.width() / self._unitSize.height()
             else:
                 unitRatio = 1
 
@@ -196,38 +247,33 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
             # - allow for rectangular (i.e. non-quadratic) widget size
             # - allow for rectangular (i.e. non-quadratic) convolution filters
             # and maintain aspect ratio ...
+            pixelsPerUnit = (self.width() * self.height()) / self._units
 
-            unitSize = (self.width() * self.height()) / self._n_units
-
-            unitHeight = math.floor(math.sqrt(unitSize / unitRatio))
+            unitHeight = math.floor(math.sqrt(pixelsPerUnit / unitRatio))
             self._rows = math.ceil(self.height() / unitHeight)
-            self._unitHeight = math.floor(self.height() / self._rows)
 
-            unitWidth = math.floor(unitRatio * self._unitHeight)
+            unitWidth = math.floor(unitRatio * unitHeight)
             self._columns = math.ceil(self.width() / unitWidth)
-            self._unitWidth = math.floor(self.width() / self._columns)
 
-    def paintEvent(self, event):
-        '''Process the paint event by repainting this Widget.
+            self._unitDisplaySize = \
+                QSize(math.floor(self.width() / self._columns),
+                      math.floor(self.height() / self._rows))
+        self.update()
 
-        Parameters
-        -----------
-        event : QPaintEvent
+    def _getUnitDisplayCorner(self, unit: int, padding: int=0) -> QPoint:
+        '''Get the display coordinates of the left upper corner of a unit.
+
         '''
-        qp = QPainter()
-        qp.begin(self)
-        if self._unit_activations is None:
-            self._drawNone(qp)
-        elif self._isConvolution:
-            self._drawConvolution(qp)
-        else:
-            self._drawDense(qp)
-        if self._current_unit is not None:
-            self._drawSelection(qp)
+        if unit is None or self._unitDisplaySize is None:
+            return None
+        corner = \
+            QPoint(self._unitDisplaySize.width() * (unit % self._columns),
+                   self._unitDisplaySize.height() * (unit // self._columns))
+        if padding:
+            corner += QPoint(padding, padding)
+        return corner
 
-        qp.end()
-
-    def _getUnitRect(self, unit: int, padding: int=None):
+    def _getUnitDisplayRect(self, unit: int, padding: int=0) -> QRect:
         '''Get the rectangle (screen position and size) occupied by the given
         unit.
 
@@ -240,40 +286,95 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         Returns
         -------
         QRect
-            The rectangle occupied by the unie
+            The rectangle occupied by the unit, excluding the padding.
         '''
-        if padding is None:
-            padding = self._padding
-        return QRect(self._unitWidth * (unit % self._columns) + padding,
-                     self._unitHeight * (unit // self._columns) + padding,
-                     self._unitWidth - 2 * padding,
-                     self._unitHeight - 2 * padding)
+        if unit is None or self._unitDisplaySize is None:
+            return None
+        rect = QRect(self._getUnitDisplayCorner(unit), self._unitDisplaySize)
+        if padding:
+            rect -= QMargins(padding, padding, padding, padding)
+        return rect
 
-    def _unitAtPosition(self, position: QPoint):
+    def _getPositionDisplayRect(self, unit: int, position: QPoint) -> QPoint:
+        '''Get the rectangle (screen position and size) occupied by the given
+        position (in the given) unit.
+
+        Parameters
+        ----------
+        unit: int
+            Index of the unit of interest
+        position: QPoint
+            Position in the activation map of that unit.
+
+        Returns
+        -------
+        position: QRect
+            The rectangle occupied by the unit, excluding the padding.
+        '''
+        if unit is None or position is None or self._unitDisplaySize is None:
+            return None
+
+        corner = self._getUnitDisplayCorner(unit, self._padding)
+
+        unitDisplaySizeWithoutPadding = QSize(self._unitDisplaySize) \
+            - QSize(2 * self._padding, 2 * self._padding)
+
+        offset = QPoint((unitDisplaySizeWithoutPadding.width() *
+                         position.x()) // self._unitSize.width(),
+                        (unitDisplaySizeWithoutPadding.height() *
+                         position.y()) // self._unitSize.height())
+        corner += offset
+
+        size = QSize(unitDisplaySizeWithoutPadding.width() //
+                     self._unitSize.width(),
+                     unitDisplaySizeWithoutPadding.height() //
+                     self._unitSize.height())
+
+        rect = QRect(corner, size)
+        rect += QMargins(1, 1, 1, 1)
+        return rect
+
+    def _unitAtDisplayPosition(self, pos: QPoint) -> Tuple[int, QPoint]:
         '''Compute the entry corresponding to some point in this widget.
 
         Parameters
         ----------
-        position    :   QPoint
-                        The position of the point in question (in Widget
-                        coordinates).
+        pos: QPoint
+            The position of the point in question (in Widget
+            position).
 
         Returns
         -------
-        int
+        unit: int
             The unit occupying that position or ``None`` if no entry
             corresponds to that position.
+        position: QPoint
+            The position inside the activation map of the selected unit
+            or None if no valid unit is at that position.
         '''
 
-        if self._unit_activations is None:
-            return None
-        unit = ((position.y() // self._unitHeight) * self._columns +
-                (position.x() // self._unitWidth))
-        if unit >= self._unit_activations.shape[0]:
+        if self._activations is None:
+            return None, None
+        unit = ((pos.y() // self._unitDisplaySize.height()) * self._columns +
+                (pos.x() // self._unitDisplaySize.width()))
+        if unit >= self._units:
             # selected something which may be on the grid, but where there's no
             # unit anymore
             unit = None
-        return unit
+
+        if unit is None:
+            return None, None
+
+        row, column = (unit // self._columns), (unit % self._columns)
+        corner = QPoint(self._unitDisplaySize.width() * column,
+                        self._unitDisplaySize.height() * row)
+        padding = 0 if self._padding is None else self._padding
+        corner += QPoint(padding, padding)
+        position = QPoint(((pos - corner).x() * self._unitSize.width()) /
+                          (self._unitDisplaySize.width()-2*padding),
+                          ((pos - corner).y() * self._unitSize.height()) /
+                          (self._unitDisplaySize.height()-2*padding))
+        return unit, position
 
     def _drawConvolution(self, qp):
         '''Draw activation values for a convolutional layer in the form of
@@ -281,28 +382,27 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
 
         Parameters
         ----------
-        qp  :   QPainter
+        qp: QPainter
 
         '''
-        # image size: filter size (or a single pixel per neuron)
-        map_height, map_width = self._unit_activations.shape[1:3]
-
-        for unit in range(self._unit_activations.shape[0]):
-            image = QImage(self._unit_activations[unit],
-                           map_width, map_height,
-                           map_width,
-                           QImage.Format_Grayscale8)
-            qp.drawImage(self._getUnitRect(unit), image)
+        for unit in range(self._units):
+            rect = self._getUnitDisplayRect(unit)
+            if rect is not None:
+                image = QImage(self._activations[unit],
+                               self._unitSize.width(), self._unitSize.height(),
+                               self._unitSize.width(),
+                               QImage.Format_Grayscale8)
+                qp.drawImage(rect, image)
 
     def _drawDense(self, qp):
         '''Draw activation values for a dense layer in the form of rectangles.
 
         Parameters
         ----------
-        qp : QPainter
+        qp: QPainter
         '''
-        for unit, value in enumerate(self._unit_activations):
-            qp.fillRect(self._getUnitRect(unit),
+        for unit, value in enumerate(self._activations):
+            qp.fillRect(self._getUnitDisplayRect(unit),
                         QBrush(QColor(value, value, value)))
 
     def _drawSelection(self, qp):
@@ -317,7 +417,18 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         pen = QPen(pen_color)
         pen.setWidth(pen_width)
         qp.setPen(pen)
-        qp.drawRect(self._getUnitRect(self._current_unit, 0))
+        qp.drawRect(self._getUnitDisplayRect(self._currentUnit, 0))
+
+    def _drawPosition(self, qp):
+        rect = self._getPositionDisplayRect(self._currentUnit,
+                                            self._currentPosition)
+        if rect is not None:
+            pen_width = 1
+            pen_color = Qt.green
+            pen = QPen(pen_color)
+            pen.setWidth(pen_width)
+            qp.setPen(pen)
+            qp.drawRect(rect)
 
     def _drawNone(self, qp):
         '''Draw a view when no activation values are available.
@@ -327,6 +438,27 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         qp : QPainter
         '''
         qp.drawText(self.rect(), Qt.AlignCenter, 'No data!')
+
+    def paintEvent(self, event):
+        '''Process the paint event by repainting this Widget.
+
+        Parameters
+        -----------
+        event : QPaintEvent
+        '''
+        qp = QPainter()
+        qp.begin(self)
+        if self._activations is None:
+            self._drawNone(qp)
+        elif self._isConvolution:
+            self._drawConvolution(qp)
+        else:
+            self._drawDense(qp)
+        if self._currentUnit is not None:
+            self._drawSelection(qp)
+        if self._currentPosition is not None:
+            self._drawPosition(qp)
+        qp.end()
 
     def resizeEvent(self, event):
         '''Adapt to a change in size. The behavior dependes on the zoom
@@ -339,8 +471,7 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         event : QResizeEvent
 
         '''
-        self._computeGeometry()
-        self.update()
+        self._updateGeometry()
 
     def mousePressEvent(self, event):
         '''Process mouse event. A mouse click will select (or deselect)
@@ -350,11 +481,43 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         ----------
         event : QMouseEvent
         '''
-        unit = self._unitAtPosition(event.pos())
-        if unit is not None and unit == self._current_unit:
-            unit = None
-        self._activationController.onUnitSelected(unit, self)
-        self._current_unit = unit
+        unit, position = self._unitAtDisplayPosition(event.pos())
+        if event.button() == Qt.LeftButton:
+            if unit is not None:
+                if unit == self._currentUnit:
+                    # clicking the active unit -> toggle position
+                    if self._currentPosition == position:
+                        position = None
+                else:
+                    # selecting a new unit -> turn off position
+                    position = None
+        elif event.button() == Qt.RightButton:
+            position = None
+            if self._currentPosition is None:
+                unit = None
+        self.setUnit(unit, position)
+
+    # The widget will also in addition to the double click event
+    # receive mouse press (before) and mouse release events
+    # (afterwards).  It is up to the developer to ensure that the
+    # application interprets these events correctly.
+    def mouseDoubleClickEvent(self, event: QMouseEvent):
+        '''Process a double click. We use double click to deselect a
+        unit.
+
+        Parameters
+        ----------
+        event : QMouseEvent
+        '''
+        if event.button() == Qt.LeftButton:
+            unit, position = self._unitAtDisplayPosition(event.pos())
+            if unit == self._currentUnit:
+                if (self._currentPosition is None or
+                        self._currentPosition == position):
+                    # double click: deactivate the unit
+                    position = None
+                    unit = None
+            self.setUnit(unit, position)
 
     def mouseReleaseEvent(self, event):
         '''Process mouse event.
@@ -368,15 +531,29 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         # other widgets.
         pass
 
-    def mouseDoubleClickEvent(self, event):
-        '''Process a double click. We use double click to select a
-        matrix entry.
+    # Attention: The mouseMoveEvent() is only called for regular mouse
+    # movements, if mouse tracking is explicitly enabled for this
+    # widget by calling self.setMouseTracking(True).  Otherwise it may
+    # be called on dragging.
+    def mouseMoveEvent(self, event):
+        '''Process mouse movements.  If tooltips are active, information on
+        the entry at the current mouse position are displayed.
 
         Parameters
         ----------
         event : QMouseEvent
+            The mouse event, providing local and global coordinates.
         '''
-        self.mousePressEvent(event)
+        if self.toolTipActive:
+            unit, position = self._unitAtDisplayPosition(event.pos())
+            if position is not None:
+                text = (f"unit: {unit}, "
+                        f"position=({position.x()},{position.y()})")
+            elif unit is not None:
+                text = f"unit: {unit}"
+            else:
+                text = "no unit"
+            QToolTip.showText(event.globalPos(), text)
 
     def keyPressEvent(self, event):
         '''Process special keys for this widget.  Allow moving selected entry
@@ -387,37 +564,49 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         event : QKeyEvent
 
         '''
+        unit = self._currentUnit
+        position = (None if self._currentPosition is None else
+                    QPoint(self._currentPosition))
         key = event.key()
+        shiftPressed = event.modifiers() & Qt.ShiftModifier
+
         # Space will toggle display of tooltips
         if key == Qt.Key_Space:
             self.setToolTip(not self.toolTipActive)
         # Arrow keyes will move the selected entry
-        elif self._current_unit is not None:
-            row = self._current_unit // self._columns
-            col = self._current_unit % self._columns
+        elif position is not None and not shiftPressed:
             if key == Qt.Key_Left:
-                new_col = max(col-1,0)
-                new_unit =  row * self._columns + new_col
-                self._activationController.onUnitSelected(new_unit, self)
+                position.setX(max(0, position.x()-1))
             elif key == Qt.Key_Up:
-                new_row = max(row-1,0)
-                new_unit = new_row * self._columns + col
-                self._activationController.onUnitSelected(new_unit, self)
+                position.setY(max(0, position.y()-1))
             elif key == Qt.Key_Right:
-                new_col = min(col+1,self._columns-1)
-                new_unit = row * self._columns + new_col
-                if new_unit >= self._unit_activations.shape[0]:
-                    new_unit = self._current_unit
-                self._activationController.onUnitSelected(new_unit, self)
+                position.setX(min(self._unitSize.width()-1, position.x()+1))
             elif key == Qt.Key_Down:
-                new_row = min(row+1,self._rows-1)
-                new_unit = new_row * self._columns + col
-                if new_unit >= self._unit_activations.shape[0]:
-                    new_unit = self._current_unit
-                self._activationController.onUnitSelected(new_unit, self)
+                position.setY(min(self._unitSize.height()-1, position.y()+1))
             elif key == Qt.Key_Escape:
-                self._activationController.onUnitSelected(None, self)
+                self._currentPosition = None
             else:
                 event.ignore()
+        elif unit is not None:
+            row = self._currentUnit // self._columns
+            col = self._currentUnit % self._columns
+            if key == Qt.Key_Left:
+                col = max(col-1, 0)
+            elif key == Qt.Key_Up:
+                row = max(row-1, 0)
+            elif key == Qt.Key_Right:
+                col = min(col+1, self._columns-1)
+            elif key == Qt.Key_Down:
+                row = min(row+1, self._rows-1)
+            elif key == Qt.Key_Escape:
+                unit = None
+            else:
+                event.ignore()
+            unit = row * self._columns + col
+            if unit >= self._units:
+                unit = self._currentUnit
         else:
             event.ignore()
+
+        if unit != self._currentUnit or position != self._currentPosition:
+            self.setUnit(unit, position)

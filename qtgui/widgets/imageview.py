@@ -6,7 +6,7 @@ from ..utils import QImageView, QObserver
 import numpy as np
 from scipy.misc import imresize
 
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QRect
 from PyQt5.QtWidgets import QWidget
 
 
@@ -117,6 +117,11 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
                 from util import grayscaleNormalized
                 activation_mask = grayscaleNormalized(activation[..., unit])
                 self.setMask(activation_mask)
+                field = engine.receptive_field
+                if field is not None:
+                    self.setRect(QRect(field[0][1], field[0][0],
+                                       field[1][1]-field[0][1],
+                                       field[1][0]-field[0][0]))
             else:
                 self.setMask(None)
 
@@ -169,4 +174,3 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         print(f"{self.__class__.__name__}.keyPressEvent({key})")
         if key == Qt.Key_Space:
             self.setMode(not self._processed)
-

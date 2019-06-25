@@ -9,8 +9,7 @@ import sys
 import numpy as np
 
 # for type hints
-import PyQt5.QtWidgets  # FIXME: no Qt here
-from typing import Union
+from typing import Union, Tuple
 import datasources
 
 class View(BaseView, view_type=Engine):
@@ -93,27 +92,17 @@ class Controller(View, BaseController, Network.Observer):
         """
         return self._engine
 
-    def onUnitSelected(self, unit: int, sender: PyQt5.QtWidgets.QWidget):
+    def onUnitSelected(self, unit: int, position: Tuple[int, int]) -> None:
         """(De)select a unit in the :py:class:`qtgui.widgets.QActivationView`.
 
         Parameters
         -----------
-        unit    :   int
-                    index of the unit in the layer
-        sender  :   PyQt5.QtWidgets.QWidget
-                    UI element triggering the callback
+        unit: int
+            Index of the unit in the layer
+        position: Tuple[int, int]
+            Position in the activation map of the current unit.
         """
-        self._runner.runTask(self._engine.set_unit, unit)
-
-    def onKeyPressed(self, sender: PyQt5.QtWidgets.QWidget):
-        """Callback for handling keyboard events.
-
-        Parameters
-        ----------
-        sender  :   PyQt5.QtWidgets.QWidget
-                    UI element triggering the callback
-        """
-        pass
+        self._runner.runTask(self._engine.set_unit, unit, position)
 
     def setInputData(self, raw: np.ndarray=None, fitted: np.ndarray=None,
                      description: str=None) -> None:

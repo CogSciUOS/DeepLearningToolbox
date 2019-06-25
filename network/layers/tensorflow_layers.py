@@ -1,6 +1,7 @@
 from typing import Tuple
 from . import layers
 
+import tensorflow as tf
 
 class TensorFlowLayer(layers.Layer):
     """A TensorFlow Layer groups a sequence of operations (nodes) in a
@@ -24,6 +25,15 @@ class TensorFlowLayer(layers.Layer):
     def type(self):
         return self._type
 
+    def _first_op_with_attr(self, attr: str): # -> tf.Operation:
+        """Provide the first operation providing the requested attribute.
+        """
+        for op in self._ops:
+            if attr in op.node_def.attr:
+                return op
+        raise ValueError("Layer contains no operation with"
+                         f"attribute '{attr}'")
+
     # Assume that there is only one input/output that matters.
     @property
     def input_shape(self) -> Tuple[int, ...]:
@@ -33,7 +43,11 @@ class TensorFlowLayer(layers.Layer):
         to adapt this behaviour.
 
         """
-        return tuple(self._ops[0].inputs[0].shape.as_list())
+        if self._ops[0].type == 'Split':
+            shape = self._ops[0].inputs[1].shape
+        else:
+            shape = self._ops[0].inputs[0].shape
+        return tuple(shape.as_list())
 
     @property
     def output_shape(self) -> Tuple[int, ...]:
@@ -87,15 +101,16 @@ class TensorFlowNeuralLayer(TensorFlowLayer, layers.NeuralLayer):
 
 
 class TensorFlowStridingLayer(TensorFlowLayer, layers.StridingLayer):
+
     @property
     def strides(self):
-        striding_op = self._ops[0]
+        striding_op = self._first_op_with_attr('strides')
         strides = striding_op.node_def.attr['strides']
         return (strides.list.i[1], strides.list.i[2])
 
     @property
     def padding(self):
-        striding_op = self._ops[0]
+        striding_op = self._first_op_with_attr('padding')
         return striding_op.node_def.attr['padding'].s.decode('utf8')
 
     @property
@@ -104,7 +119,6 @@ class TensorFlowStridingLayer(TensorFlowLayer, layers.StridingLayer):
         # For now assume that the last operation is the activation.
         # Maybe differentiate with subclasses later.
         return self._ops[0].outputs[0]
-
 
 class TensorFlowDense(TensorFlowNeuralLayer, layers.Dense):
     pass
@@ -140,6 +154,12 @@ class TensorFlowConv2D(TensorFlowNeuralLayer, TensorFlowStridingLayer, layers.Co
     def filters(self):
         return self.output_shape[-1]
 
+    @property
+    def weight_tensor(self):
+        # The last input of the first operation with strides
+        # should correspond to the (first part of the) weights.
+        striding_op = self._first_op_with_attr('strides')
+        return striding_op.inputs[-1]
 
 class TensorFlowMaxPooling2D(TensorFlowStridingLayer, layers.MaxPooling2D):
 

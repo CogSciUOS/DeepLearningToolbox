@@ -1,7 +1,7 @@
 from toolbox import Toolbox
 from datasources import Datasource
 
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Tuple
 
 import numpy as np
 
@@ -35,7 +35,8 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
     layer_changed : bool
         Whether the current :py:class:`network.layers.Layer` has changed
     unit_changed : bool
-        Whether the selected unit changed
+        Whether the selected unit changed. This also includes a change
+        of the position in the activation map (if applicable).
     input_changed : bool
         Whether the input signal changed
     activation_changed: bool
@@ -56,6 +57,10 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         in addition to the current (hidden) layer.
     _unit: int
         Currently selected unit in the layer
+    _position: Tuple[int, ...]
+        Currently selected position in the activation map of the
+        selected unit if applicable, otherwise (0,0) or None if
+        no position is selected.
     _network: Network
         Currently active network
     _data: np.ndarray
@@ -105,6 +110,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         self._network = None
         self._layer = None
         self._unit = None
+        self._position = None
         self._classification = None
         self._layers = []
         self._activations = {}
@@ -336,6 +342,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         if self._network != network:
             self._network = network
             self._unit = None
+            self._position = None
             self._layer = None
 
             if self._shape_adaptor is not None:
@@ -418,6 +425,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
 
         if self._layer != layer:
             self._unit = None
+            self._position = None
             self._layer = layer
 
             # FIXME[problem]: why does change does not work here?
@@ -444,7 +452,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
         self.set_layer(layer)
 
     @change
-    def set_unit(self, unit: int):
+    def set_unit(self, unit: int, position: Tuple[int, ...]=None) -> None:
         """Change the currently visualised channel/unit.
 
         Parameters
@@ -458,13 +466,14 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
             layer_shape = self._network.get_layer_output_shape(self._layer)
             if unit < 0 or unit >= layer_shape[-1]:
                 unit = None
-        if unit != self._unit:
+        if unit != self._unit or position != self._position:
             self._unit = unit
+            self._position = position
             # FIXME[problem]: why does change does not work here?
             #self.change(unit_changed=True)
             #self.print_observers()
             self.notifyObservers(unit_changed=True)
-
+    
     @property
     def unit(self) -> int:
         """The currently selected unit.
@@ -479,6 +488,25 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
     @unit.setter
     def unit(self, unit: int):
         self.set_unit(unit)
+
+    @property
+    def position(self) -> Tuple[int, ...]:
+        """The position in the activation map of the currently selected unit.
+
+        Result
+        ------
+        position: Tuple[int, int]
+            Index of the unit in the layer (0-based).
+        """
+        return self._position
+
+    @property
+    def receptive_field(self) -> (Tuple[int, ...], Tuple[int, ...]):
+        if self._layer is None or self._position is None:
+            return None
+        
+        layer = self._network.layer_dict[self._layer]
+        return layer.receptive_field(self._position)
 
     def set_classification(self, classication: bool=True):
         """Record the classification results.  This assumes that the network

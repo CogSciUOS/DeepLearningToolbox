@@ -260,7 +260,7 @@ import numpy as np
 from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
-from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtGui import QImage, QPainter, QPen
 from PyQt5.QtWidgets import QWidget
 
 
@@ -286,6 +286,7 @@ class QImageView(QWidget):
 
         self._raw: np.ndarray = None
         self._image: QImage = None
+        self._rect: QRect = None
         self._overlay: QImage = None
         self._imageRect = None
 
@@ -358,6 +359,10 @@ class QImageView(QWidget):
             painter.end()
         self.update()
 
+    def setRect(self, rect: QRect):
+        self._rect = rect
+        self.update()
+        
     def paintEvent(self, event):
         """Process the paint event by repainting this Widget.
 
@@ -369,6 +374,13 @@ class QImageView(QWidget):
         painter.begin(self)
         self._drawImage(painter)
         self._drawMask(painter)
+        if self._rect is not None:
+            pen_width = 4
+            pen_color = Qt.green
+            pen = QPen(pen_color)
+            pen.setWidth(pen_width)
+            painter.setPen(pen)
+            painter.drawRect(self._rect)
         painter.end()
 
     def _drawImage(self, painter: QPainter):
