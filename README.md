@@ -1,13 +1,23 @@
 ![travis-ci](https://travis-ci.org/JarnoRFB/qtpyvis.svg?branch=master)
 
-PyQt5 visualization of Deep Neural Networks (Development stage)
-===============================================================
-One can use this code to visualize DNNs (activations, filters, network structure).
+Deep Learning Toolbox (Development stage)
+=========================================
 
-Main goal of the toolbox is to visualize networks that solve image classifications tasks. Current version assumes to be given a model trained and saved using [Keras: The Python Deep Learning library](https://keras.io/ "Keras's Homepage")
-Development of this toolbox was motivated by the paper:
+A collection of tools to analyze and visualize deep neural networks.
+
+The original goal of the toolbox was visualizing networks that solve image classifications tasks. It was motivated by the paper:
 
  - Jason Yosinski, Jeff Clune, Anh Nguyen, Thomas Fuchs, and Hod Lipson. [Understanding neural networks through deep visualization](http://arxiv.org/abs/1506.06579/ "Computer Science > Computer Vision and Pattern Recognition") Presented at the Deep Learning Workshop, International Conference on Machine Learning (ICML), 2015.
+
+The main design goals are (not fully achieved yet):
+* modularity: new tools can be added, building on common core functionality
+* framework agnosticity: the toolbox should be able to use different neural network frameworks like TensorFlow, Torch, Caffe, ...
+* clear API: the toolbox should define an interface allowing to use tools from within other programs
+* comprehensive CLI: allowing to run all tools from the command line or scripts
+* easy to use GUI: providing intuitive access to the tools
+
+This is still work in progress. Below we document some aspects already
+realized.
 
 
 Functionality
