@@ -40,12 +40,13 @@ del logging
 
 import sys
 
-for d in KerasDatasource.KERAS_IDS:
-    try:
-        KerasDatasource(d)
-    except ValueError as err:
-        print(f"Error instantiating keras data source '{d}': {err}",
-              file=sys.stderr)
+if False:
+    for d in KerasDatasource.KERAS_IDS:
+        try:
+            KerasDatasource(d)
+        except ValueError as err:
+            print(f"Error instantiating keras data source '{d}': {err}",
+                  file=sys.stderr)
 #ImageNet(section='train')
 ImageNet(section='val')
 DataNoise(shape=(100,100,3))

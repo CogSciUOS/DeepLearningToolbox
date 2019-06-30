@@ -48,7 +48,7 @@ import os
 import sys
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 # local loggger
 logger = logging.getLogger(__name__)
@@ -67,7 +67,6 @@ root_logger = logging.getLogger()
 root_logger.handlers = []
 logRecorder = util.RecorderHandler()
 root_logger.addHandler(logRecorder)
-
 
 import numpy as np
 
@@ -479,8 +478,15 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """
         if self.dataset is not None:
             return  # already loaded
+
         # load the MNIST dataset
+        # FIXME[hack]: Suppress messages from keras/tensorflow
+        stderr = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
         from keras.datasets import mnist
+        sys.stderr = stderr
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        
         mnist = mnist.load_data()
         #self.x_train, self.y_train = mnist[0]
         #self.x_test, self.y_test = mnist[1]
