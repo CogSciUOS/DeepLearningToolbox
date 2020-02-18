@@ -14,9 +14,78 @@ import numpy as np
 
 from base.observer import Observable, change
 
+class BaseFaceDetector:
+
+    @staticmethod
+    def DetectorAvailable():
+        # is the module installed?
+        # are all necessary data files installed?
+        
+    @staticmethod
+    def Prepare():
+        # install required modules
+        # download necessary data files
+
+    def __init__():
+
+class OpenCVFaceDetectorTensorflow:
+    """The OpenCV Single Shot MultiBox Detector (SSD).
+        
+    This model was included in OpenCV from version 3.3.
+    It uses ResNet-10 Architecture as backbone.
+
+    OpenCV provides 2 models for this face detector.
+    1. Floating point 16 version of the original caffe implementation
+       (5.4 MB)
+    2. 8 bit quantized version using Tensorflow
+       (2.7 MB)
+
+    The required files can be fount in the opencv_extra repository
+        #
+        #    git clone https://github.com/opencv/opencv_extra.git
+        #
+        # You can find the data in the directory testdata/dnn.
+        # The functions readNetFrom...() will look for relative filenames
+
+        # in the current working directory (where the toolbox was started).
+    """
+
+    def __init__(dnn='TF'):
+        self._dnn = dnn
+        if dnn == 'CAFFE':
+            self._model_file = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
+            self._config_file = "deploy.prototxt"
+            self._ssd_detector = cv2.dnn.readNetFromCaffe(configFile, modelFile)
+        else:
+            modelFile = "opencv_face_detector_uint8.pb"
+            configFile = "opencv_face_detector.pbtxt"
+            self._ssd_detector = cv2.dnn.readNetFromTensorflow(modelFile, configFile)
+
+
+    def available():
+
+        
+    _detector = None
+    _canvas = None
+    _duration = None
+    _rects = None
+
+
 class FaceDetector(Observable, method='face_changed',
                    changes=['hog_changed', 'cnn_changed', 'haar_changed',
                             'predict_changed', 'image_changed']):
+    """The face detector is an Observable that will inform the method
+    face_changed.
+
+
+    Attributes:
+
+    _hog_detector:
+    _cnn_detector:
+    _haar_detector:
+    _ssd_detector:
+    _predictor:
+    """
 
     _hog_detector = None
     _cnn_detector = None
@@ -75,6 +144,7 @@ class FaceDetector(Observable, method='face_changed',
         #
         # The OpenCV Haar cascade face detector
         #
+        
         # FIXME[hack]: make this more flexible ...
         faceCascadePath = '/space/home/ulf/distro/bionic/software/opencv4/share/opencv4/haarcascades/haarcascade_frontalface_default.xml'
         if os.path.exists(faceCascadePath):
@@ -88,6 +158,24 @@ class FaceDetector(Observable, method='face_changed',
 
         #
         # The OpenCV Single Shot MultiBox Detector (SSD)
+        #
+        
+        # This model was included in OpenCV from version 3.3.
+        # It uses ResNet-10 Architecture as backbone.
+        #
+        # OpenCV provides 2 models for this face detector.
+        # 1. Floating point 16 version of the original caffe implementation
+        #    (5.4 MB)
+        # 2. 8 bit quantized version using Tensorflow
+        #    (2.7 MB)
+        #
+        # The required files can be fount in the opencv_extra repository
+        #
+        #    git clone https://github.com/opencv/opencv_extra.git
+        #
+        # You can find the data in the directory testdata/dnn.
+        # The functions readNetFrom...() will look for relative filenames
+        # in the current working directory (where the toolbox was started).
         DNN = "TF"
         if DNN == "CAFFE":
             modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
