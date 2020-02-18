@@ -14,6 +14,7 @@ del logging
 import util
 
 import numpy as np
+
 import tensorflow as tf
 
 from . import Network as BaseNetwork

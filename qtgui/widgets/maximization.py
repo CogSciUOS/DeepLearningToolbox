@@ -838,7 +838,6 @@ class QMaximizationConfigView(QWidget):
         self.selected.emit(self)
 
 
-from util import async
 from toolbox import Controller as ToolboxController
 from tools.am import (Engine as MaximizationEngine,
                       Controller as MaximizationController)

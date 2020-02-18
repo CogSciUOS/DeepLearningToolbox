@@ -13,9 +13,6 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QListWidget,
                              QSplitter, QComboBox)
 
 from qtgui.utils import QLogHandler
-from qtgui.widgets.maximization import (QMaximizationConfig,
-                                        QMaximizationControls,
-                                        QMaximizationDisplay)
 from .panel import Panel
 
 import logging

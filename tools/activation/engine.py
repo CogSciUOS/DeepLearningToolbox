@@ -8,7 +8,6 @@ import numpy as np
 from network import Network, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from base.observer import Observable, change
-from util import async
 
 import logging
 logger = logging.getLogger(__name__)
@@ -531,7 +530,6 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
                 layers.add(self._network.output_layer_id())
             self._layers = list(layers)
 
-    #@async
     #@change
     def _update_activation(self, force: bool=False):
         """Set the :py:attr:`_activations` property by loading

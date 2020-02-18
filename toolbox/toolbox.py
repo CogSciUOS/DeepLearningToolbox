@@ -47,6 +47,8 @@ Concepts:
 import os
 import sys
 
+import importlib.util
+
 import logging
 #logging.basicConfig(level=logging.DEBUG)
 
@@ -761,12 +763,18 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 networks.append('torch-network')
 
         # we need the GUI first to get the runner ...
-        gui = 'qt'
+        spec = importlib.util.find_spec('PyQt5')
+        if spec is not None:
+            gui = 'qt'
+        else:
+            logging.fatal("No GUI library (PyQt5) was found.")
+            gui = None
+
         if gui is not None:
             panels = []
             if addons.use('autoencoder'):
                 panels.append('autoencoder')
-               
+
             if args.internals:
                 panels.append('internals')
             #if addons.internals('internals')
@@ -780,8 +788,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
             rc = self._run_gui(gui=gui, panels=panels, tools=tools,
                                networks=networks, datasources=datasources)
         else:
-            self._initialize_toolbox(tools=tools, networks=networks,
-                                     datasources=datasources)
+            self.setup(tools=tools, networks=networks, datasources=datasources)
             rc = 0
         return rc
 

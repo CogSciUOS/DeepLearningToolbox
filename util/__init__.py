@@ -5,6 +5,9 @@
 
 This module collects miscellaneous utilities.
 """
+
+import sys
+import logging
 from . import check, error
 
 try:
@@ -13,8 +16,16 @@ except ImportError:
     try:
         from scipy.misc import imread
     except ImportError:
-        from matplotlib.pyplot import imread
-# maybe also cv2, but convert the colorchannels
+        try:
+            from matplotlib.pyplot import imread
+        except ImportError:
+            # FIXME[hack]: better strategy to inform on missing modules
+            explanation = ("Could not find any module providing 'imread'. "
+                           "At least one such module is required "
+                           "(e.g. imageio, scipy, matplotlib).")
+            logging.fatal(explanation)
+            sys.exit(1)
+        # maybe also cv2, but convert the colorchannels
 
 
 def debug(func):
@@ -95,7 +106,7 @@ def run_async(function, *args, **kwargs):
     _executor.submit(function, *args, **kwargs)
 
 
-def async(function):
+def async_decorator(function):
     """A decorator to enforce asyncronous execution. 
     """
     def wrapper(*args, **kwargs):
@@ -144,6 +155,8 @@ use_cpu = True
 #
 import logging
 
+# FIXME[bug]: with python 3.7, I get the following error here:
+#   TypeError: unhashable type: 'RecorderHandler'
 class RecorderHandler(logging.Handler, list):
     """A RecorderHandler store :py:class:logging.LogEvent, allowing to
     replay the log history. Similar to a logging.BufferingHandler, but

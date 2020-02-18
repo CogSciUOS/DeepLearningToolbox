@@ -379,6 +379,10 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
+        """Callback for a change of the DataSource.
+        We are interested when the Datasource itself has changed and
+        when its state (looping/pause) has changed.
+        """
         self.update()
 
     def onToggled(self):
@@ -392,9 +396,9 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (self._datasourceController and
+        enabled = (self._datasourceController is not None and
                    self._datasourceController.isinstance(Loop) and
                    self._datasourceController.prepared)
-        self.setEnabled(enabled)
         checked = enabled and self._datasourceController.looping
+        self.setEnabled(enabled)
         self.setChecked(checked)

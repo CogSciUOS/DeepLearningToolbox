@@ -41,7 +41,9 @@ try:
     #    maybe not a version issue?
     
 except ModuleNotFoundError as e:
-    logging.fatal(str(e))
+    # FIXME[hack]: better strategy to inform on missing modules
+    explanation = "The module can be installed by typing: conda install packaging"
+    logging.fatal(str(e) + ". " + explanation)
     sys.exit(1)
 
 # End checking for modules

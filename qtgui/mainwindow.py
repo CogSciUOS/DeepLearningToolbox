@@ -24,10 +24,11 @@ from qtgui.panels import Panel
 # FIXME[old]: this should not be needed for the MainWindow
 import util
 from util import resources, addons
-from tools.activation import Engine as ActivationEngine
 
-from tools.am import Engine as MaximizationEngine  # FIXME[old]
-from tools.am import Controller as MaximizationController
+#from tools.activation import Engine as ActivationEngine
+
+#from tools.am import Engine as MaximizationEngine  # FIXME[old]: check if we still need this ...
+#from tools.am import Controller as MaximizationController # FIXME[old]: check if we still need this ...
 from datasources import Datasource, Controller as DatasourceController
 
 # Qt imports
@@ -560,6 +561,8 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
     def setActivationEngine(self) -> None:
         print("FIXME[old]: MainWindow.setActivationEngine() was called!")
+        # FIXME[hack]
+        from tools.activation import Engine as ActivationEngine
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
             activationsPanel.setController(self._toolbox.get_tool('activation'),
