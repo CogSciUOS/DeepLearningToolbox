@@ -519,6 +519,15 @@ class Random(Datasource):
     """
 
     def fetch(self, random: bool=False, **kwargs) -> None:
+        """A version of :py:meth:`fetch` that allows for an
+        additional argument `random`.
+
+        Arguments
+        ---------
+        random: bool
+            If set, a random element is fetched from this
+            :py:class:`Datasource`.
+        """
         if random:
             self._fetch_random(**kwargs)
             self.change('data_changed')
@@ -526,6 +535,11 @@ class Random(Datasource):
             super().fetch(**kwargs)
 
     def _fetch_random(self, **kwargs) -> None:
+        """This method should be implemented by subclasses that claim
+        to be a py:meth:`Random` datasource.
+        It should perform whatever is necessary to fetch a random
+        element from the dataset.
+        """
         raise NotImplementedError(f"{self.__class__.__name__} claims to be "
                                   "a 'Random' datasource, but it does not "
                                   "implement the '_fetch_random' method.")
@@ -590,17 +604,26 @@ from threading import Event
 
 
 class Loop:
+    """The :py:class:`Loop` class provides a loop logic.
+
+    Notice: the methods of this class are not intended to be
+    called directly, but they are engaged via the
+    :py:meth:`loop` method of the :py:class:`datasources.Controller`
+    class.
+    """
 
     # An event manages a flag that can be set to true with the set()
     # method and reset to false with the clear() method. The wait()
     # method blocks until the flag is true.
     _loop_event: Event = None
     _loop_running: bool = False
+    _loop_interval: float = None
     
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._loop_running = False
         self._loop_event = None
+        self._loop_interval = 0.2
 
     @property
     def looping(self):
@@ -620,9 +643,28 @@ class Loop:
             self.change('state_changed')
 
     def run_loop(self):
+        """
+        This method is intended to be invoked in its own Thread.
+        """
         # self._logger.info("Running datasource loop")
         while self._loop_running:
             self.fetch(random=True)
+            # Now wait before fetching the next input
             self._loop_event.clear()
-            self._loop_event.wait(timeout=.2)
+            self._loop_event.wait(timeout=self._loop_interval)
         self._loopEvent = None
+
+
+class Snapshot:
+    """Instances of this class are able to provide a snapshot.
+    """
+
+    def __init__(self, **kwargs) -> None:
+        """Instantiate a new :py:class:`Snapshot` object.
+        """
+        super().__init__(**kwargs)
+
+    def snapshot(self) -> None:
+        """Create a snapshot.
+        """
+        self.fetch()

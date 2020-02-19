@@ -1,24 +1,40 @@
+import os
 import sys
+import time
+import imutils
+import imutils.face_utils
 import numpy as np
 
-# FIXME[todo]: import only if needed to speed up import of this module
-import dlib
-import cv2
-import time
+from base.observer import Observable, change
 
-class Detector:
+
+class Detector(Observable, method='detector_changed',
+               changes=['image_changed', 'detection_finished']):
+    """
+
+    image_changed:
+        The input image given to the detector has changed.
+
+    detection_finished:
+        The detection has finished. This is reported when the
+        detector has finished its work.
+
+    """
 
     _requirements = None
     
     def __init__(self):
+        super().__init__()
         self._requirements = {}
+        self._image = None
+        self._canvas = None
+        self._duration = 0
 
     def _add_requirement(self, name, what, *data):
         self._requirements[name] = (what,) + data
 
     def _remove_requirement(self, name):
         self._requirements.pop(name, None)
-
 
     def available(self, verbose=True):
         """Check if required resources are available.
@@ -81,17 +97,46 @@ class Detector:
         return True
 
     def detect(self, image: np.ndarray):
+        """Do the actual detection.
+        """
         raise NotImplementedError("Face detection for class '" +
                                   type(self).__name__ +
                                   "' is not implemented (yet).")
 
+
     def process(self, gray: np.ndarray, canvas: np.ndarray=None):
+        print(f"Detector.process [start]")
+        self._image = gray
+        self.change(image_changed=True)
+
         start = time.time()
         rects = self.detect(gray)
         end = time.time()
         self._duration = end - start
+
         if canvas is not None:
             self.paint_detect(canvas, rects)
+
+        self._canvas = canvas
+        print(f"Detector: detected {rects} faces")
+        self.change(detection_finished=True)
+        print(f"Detector.process [end]: {self.duration}")
+
+    @property
+    def image(self):
+        return self._image
+        
+    @property
+    def canvas(self):
+        return self._canvas
+
+    @property
+    def rects(self):
+        return self._rects
+    
+    @property
+    def duration(self):
+        return self._duration
 
     def paint_detect(self, canvas: np.ndarray, rects, color=(255, 0, 0)):
         """Mark detected faces in an image.
@@ -111,7 +156,7 @@ class Detector:
  
         # check to see if a face was detected, and if so, draw the total
         # number of faces on the image
-        if len(rects) > 0:
+        if True or len(rects) > 0:
             text = "{} face(s) found".format(len(rects))
             if canvas is not None:
                 cv2.putText(canvas, text,
@@ -129,273 +174,106 @@ class Detector:
                     bX, bY, bW, bH = rect
                 cv2.rectangle(canvas, (bX, bY), (bX + bW, bY + bH), color, 1)
 
-        
-class DetectorOpencvHaar(Detector):
-    """ The OpenCV Haar cascade face detector.
-    
-    _model_file: str
-        Absolute path to the model file.
+
+
+from base import View as BaseView, Controller as BaseController, run
+
+class DetectorView(BaseView, view_type=Detector):
+    """Viewer for :py:class:`Engine`.
+
+    Attributes
+    ----------
+    _engine: Engine
+        The engine controlled by this Controller
+
     """
 
-    _model_file: str = None
-    _detector = None
-
-    def __init__(self, model_file='haarcascade_frontalface_default.xml',
-                 *args, **kwargs):
-        """The OpenCV Haar cascade face detector.
-
-        Arguments
-        ---------
-        model_file: str
-            The path to the pretrained model file.
-        """
-        super().__init__(*args, **kwargs)
-        self.set_model_file(model_file)
-
-    def _get_cascade_dir(self):
-        """Get the default directory in which the files for the
-        cascade classifiers are located."""
-        cascade_path = cv2.__file__
-        for _ in range(4):
-            cascade_path, _ = os.path.split(cascade_path)
-        if os.path.basename(cascade_path) == 'lib':
-            cascade_path, _ = os.path.split(cascade_path)
-    
-        if os.path.isdir(os.path.join(cascade_path, 'share', 'OpenCV',
-                                      'haarcascades')):
-            cascade_path = os.path.join(cascade_path, 'share', 'OpenCV',
-                                        'haarcascades')
-        elif os.path.isdir(os.path.join(cascade_path, 'share', 'opencv4',
-                                        'haarcascades')):
-            cascade_path = os.path.join(cascade_path, 'share', 'opencv4',
-                                        'haarcascades')
-        return cascade_path
-
-    def set_model_file(self, model_file):       
-        if not os.path.isabs(model_file):
-            opencv_data = self._get_cascade_dir()
-            model_file = os.path.join(opencv_data, model_file)
-
-        if model_file != self._model_file:
-            self._model_file = model_file
-            self._add_requirement('model_file', 'file', model_file)
-
-    def _prepare(self):
-        self._detector = cv2.CascadeClassifier(self._model_file)
-
-        if self._detector.empty():
-            self._detector = None
-            raise RuntimeError("Haar detector is empty")
-
-    def prepared(self):
-        return self._detector is not None
-
-    def detect(self, image: np.ndarray):
-        if self._detector is None:
-            return None
-        
-        rects = self._detector.detectMultiScale(image)
-        return rects
+    def __init__(self, engine: Detector=None, **kwargs):
+        super().__init__(observable=engine, **kwargs)
 
 
-class DetectorOpencvSSD(Detector):
-    """The OpenCV Single Shot MultiBox Face Detector (SSD).
-        
-    This model was included in OpenCV from version 3.3.
-    It uses ResNet-10 Architecture as backbone.
+class DetectorController(DetectorView, BaseController):
+    """Controller for :py:class:`Engine`.
+    This class contains callbacks for all kinds of events which are
+    effected by the user in the ``MaximizationPanel``.
 
-    OpenCV provides 2 models for this face detector.
-    1. Floating point 16 version of the original caffe implementation
-       (5.4 MB)
-    2. 8 bit quantized version using Tensorflow
-       (2.7 MB)
-
-    The required files can be fount in the opencv_extra repository
-        #
-        #    git clone https://github.com/opencv/opencv_extra.git
-        #
-        # You can find the data in the directory testdata/dnn.
-        # The functions readNetFrom...() will look for relative filenames
-
-        # in the current working directory (where the toolbox was started).
+    Attributes
+    ----------
+    _engine: Engine
+        The engine controlled by this Controller
     """
     
-    _detector = None
-    _canvas = None
-    _duration = None
-    _rects = None
-
-    _dnn: str = None
-    _model_file: str = None
-    _config_file: str = None
-
-    def __init__(self, dnn='TF', *args, **kwargs):
-        """The OpenCV Single Shot MultiBox Detector (SSD).
-
-        Arguments
-        ---------
-        dnn: str
-            The model to use. There are currently two models available:
-            'CAFFE' is the original 16-bit floating point model trained
-            with Caffe, and 'TF' is a 8-bit quantized version for TensorFlow.
+    def __init__(self, engine: Detector, **kwargs) -> None:
         """
-        super().__init__(*args, **kwargs)
-        self._dnn = dnn
-        self.set_model_file()
-        self._add_requirement('cv2', 'module', 'cv2')
-
-    def set_model_file(self, model_file: str=None, config_file: str=None):
-        if self._dnn == 'CAFFE':
-            model_file = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
-            config_file = "deploy.prototxt"
-        else:
-            model_file = "opencv_face_detector_uint8.pb"
-            config_file = "opencv_face_detector.pbtxt"
-
-        if model_file != self._model_file or config_file != self._config_file:
-            self._model_file = model_file
-            self._config_file = config_file
-            self._add_requirement('model_file', 'file', model_file)
-            self._add_requirement('config_file', 'file', config_file)
-
-    def _prepare(self):
-        if self._dnn == 'CAFFE':
-            constructor = cv2.dnn.readNetFromCaffe
-        else:
-            constructor = cv2.dnn.readNetFromTensorflow
-
-        self._detector = constructor(self._model_file, self._config_file)
-
-    def prepared(self):
-        return self._detector is not None
-
-    def detect(self, image):
-        """Use the OpenCV
+        Parameters
+        ----------
+        engine: Engine
         """
-        # the image is converted to a blob
-        blob = cv2.dnn.blobFromImage(frameOpencvDnn, 1.0, (300, 300),
-                                     [104, 117, 123], False, False)
+        super().__init__(engine=engine, **kwargs)
+        self._busy = False
+        self._next_image = None
 
-        # the blob passed through the network using the forward() function.
-        self._detector.setInput(blob)
-        detections = self._detector.forward()
+    def process(self, image):
+        """Process the given image.
 
-        # The output detections is a 4-D matrix, where
-        #  * the 3rd dimension iterates over the detected faces.
-        #    (i is the iterator over the number of faces)
-        #  * the fourth dimension contains information about the
-        #    bounding box and score for each face.
-        #    - detections[0,0,i,2] gives the confidence score
-        #    - detections[0,0,i,3:6] give the bounding box
-        #
-        # The output coordinates of the bounding box are normalized
-        # between [0,1]. Thus the coordinates should be multiplied by
-        # the height and width of the original image to get the
-        # correct bounding box on the image.
-        bboxes = []
-        for i in range(detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-            if confidence > conf_threshold:
-                x1 = int(detections[0, 0, i, 3] * frameWidth)
-                y1 = int(detections[0, 0, i, 4] * frameHeight)
-                x2 = int(detections[0, 0, i, 5] * frameWidth)
-                y2 = int(detections[0, 0, i, 6] * frameHeight)
-        return bboxes
-
-class DetectorDlibHOG(Detector):
-    """The dlib HOG detector.
-    """
-    _detector = None
-
-
-    def _prepare(self):
-        self._detector = dlib.get_frontal_face_detector()
-
-    def prepared(self):
-        return self._detector is not None
-
-    def detect(self, image):
-        """Apply the dlib historgram of gradients detector (HOG) to
-        detect faces in the given image.
         """
-        if self._detector is None:
-            return None
+        print(f"DetectorController.process [start]: {self._busy}")
+        self._next_image = image
+        if not self._busy:
+            self._process()
+        print(f"DetectorController.process [end]: {self._busy}")
 
-        rects = self._detector(image, 2)
-        return rects
+    @run
+    def _process(self):
+        self._busy = True
+        print(f"DetectorController._process [start] {self._next_image is not None}")
+        while self._next_image is not None:
+            print("DetectorController._process: next image ...")
+            image = imutils.resize(self._next_image, width=400)
+            self._next_image = None
 
-class DetectorDlibCNN(Detector):
-    """The dlib CNN detector.
-    """
-    _model_file: str = None
-    _detector = None
+            print("DetectorController._process: ... processed")
+            self._detector.process(image, image)
 
-    def __init__(self, model_file='mmod_human_face_detector.dat',
-                 *args, **kwargs):
-        """The OpenCV Single Shot MultiBox Detector (SSD).
+            print("DetectorController: image done")
+        self._busy = False
+        print(f"DetectorController._process [end]")
 
-        Arguments
-        ---------
-        dnn: str
-            The model to use. There are currently two models available:
-            'CAFFE' is the original 16-bit floating point model trained
-            with Caffe, and 'TF' is a 8-bit quantized version for TensorFlow.
-        """
-        super().__init__(*args, **kwargs)
-        self.set_model_file(model_file)
 
-    def set_model_file(self, model_file):       
-        if not os.path.isabs(model_file):
-            dlib_model_directory = os.environ.get('DLIB_MODELS', '.')
-            model_file = os.path.join(dlib_model_directory, model_file)
 
-        if model_file != self._model_file:
-            self._model_file = model_file
-            self._add_requirement('model', 'file', model_file)
 
-    def _prepare(self):
-        self._detector = dlib.cnn_face_detection_model_v1(self._model_file)
+def create_detector(name: str, prepare: bool=True):
+    if name == 'haar':
+        from .opencv import DetectorHaar
+        detector = DetectorHaar()
+    elif name == 'ssd':
+        from .opencv import DetectorSSD
+        detector = DetectorSSD()
+    elif name == 'hog':
+        from .dlib import DetectorHOG
+        detector = DetectorHOG()
+    elif name == 'cnn':
+        from .dlib import DetectorHOG
+        detector = DetectorHOG()
+    else:
+        raise ValueError("face.create_detector: "
+                         f"unknown detector name '{name}'.")
 
-    def prepared(self):
-        return self._detector is not None
+    if prepare:
+        detector.prepare()
+    return detector
 
-    def detect(self, image):
-        """The dlib CNN face detector.
-        """
-        if self._detector is None:
-            return None
 
-        dets = self._detector(image, 2)
 
-        # It is also possible to pass a list of images to the
-        # detector - like this:
-        #   dets = detector([image # list], upsample_num, batch_size = 128)
-        # In this case it will return a mmod_rectangless object. This object
-        # behaves just like a list of lists and can be iterated over.
-
-        # d.rect.left(), d.rect.top(), d.rect.right(), d.rect.bottom(),
-        # d.confidence
-
-        rects = [d.rect for d in dets]
-        confs = [d.confidence for d in dets]
-        return rects
 
 ### Old
 
 
 
-import dlib
+
+
 import cv2
-import os
-import imutils
-import imutils.face_utils
-import numpy as np
-
-from base.observer import Observable, change
-
-from tools.face.detector import Detector
-
-
+import dlib
 
 class FaceDetector(Observable, method='face_changed',
                    changes=['hog_changed', 'cnn_changed', 'haar_changed',
@@ -461,7 +339,7 @@ class FaceDetector(Observable, method='face_changed',
         self._detectors.pop(name, None)
 
     def busy(self):
-        return self._image is not None
+        return self._next_image is not None
 
     def queue(self, image):
         self._next_image = image

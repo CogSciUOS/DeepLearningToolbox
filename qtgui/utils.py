@@ -261,7 +261,7 @@ from scipy.misc import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
 from PyQt5.QtGui import QImage, QPainter, QPen
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy
 
 
 class QImageView(QWidget):
@@ -280,8 +280,14 @@ class QImageView(QWidget):
         the raw input data, or the data acutally fed to the network.
     _imageRect: 
     """
-    
+    _image: QImage = None
+    _overlay: QImage = None
+    _show_raw: bool = False
+    _contextMenu: QMenu = None
+
     def __init__(self, parent: QWidget=None):
+        """Construct a new :py:class:`QImageView`.
+        """
         super().__init__(parent)
 
         self._raw: np.ndarray = None
@@ -289,6 +295,26 @@ class QImageView(QWidget):
         self._rect: QRect = None
         self._overlay: QImage = None
         self._imageRect = None
+
+        # Prepare the context Menu
+        self._contextMenu = QMenu(self)
+        self._contextMenu.addAction(QAction('Info', self))
+        self._contextMenu.addSeparator()
+        self._contextMenu.addAction(QAction('Save image', self))
+        self._contextMenu.addAction(QAction('Save image as ...', self))
+
+        # set button context menu policy
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.onContextMenu)
+
+        # set the size policy
+        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        #sizePolicy.setHeightForWidth(self.assetsListWidget.sizePolicy().hasHeightForWidth())
+        self.setSizePolicy(sizePolicy)
+
+    def onContextMenu(self, point):
+        # show context menu
+        self._contextMenu.exec_(self.mapToGlobal(point))
 
     def getImage(self) -> np.ndarray:
         return self._raw
@@ -321,15 +347,21 @@ class QImageView(QWidget):
             self._image = QImage(image,
                                  image.shape[1], image.shape[0],
                                  bytes_per_line, img_format)
-            self.resize(self._image.size())
+            #self.resize(self._image.size())
         else:
             self._image = None
 
-        self.updateGeometry()
+        #self.updateGeometry()
         self.update()
 
     def minimumSizeHint(self):
-        return QSize(-1,-1) if self._image is None else self._image.size()
+        # FIXME[hack]: this will change the size of the widget depending
+        # on the size of the image, probably not what we want ...
+        #return QSize(-1,-1) if self._image is None else self._image.size()
+        return QSize(100,100)
+    
+    def sizeHint(self):
+        return QSize(1000,1000)
 
     def setMask(self, mask):
         """Set a mask to be displayed on top of the actual image.

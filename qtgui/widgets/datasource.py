@@ -141,7 +141,6 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         # A list of predefined datasources
         #
         dataset_names = Predefined.get_data_source_ids()
-        print(f"dataset_names={dataset_names}")
         self._datasetDropdown = QComboBox()
         self._datasetDropdown.addItems(dataset_names)
         self._datasetDropdown.currentIndexChanged.\
@@ -254,7 +253,6 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
 
             #self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
-            print(f"!!!{name}!!!")
             datasource = Predefined.get_data_source(name)
 
         elif self._radioButtons['Filesystem'].isChecked():
@@ -402,3 +400,137 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
         checked = enabled and self._datasourceController.looping
         self.setEnabled(enabled)
         self.setChecked(checked)
+
+
+from PyQt5.QtWidgets import QWidget, QPushButton
+
+from datasources import (Datasource, Loop, Snapshot,
+                         Controller as DatasourceController)
+
+class QSnapshotButton(QPushButton, QObserver, Datasource.Observer):
+    """A Button to control a :py:class:`Datasource` of type
+    :py:class:`Loop`. Pressing this button will will obtain a
+    snapshot from the datasource.
+
+    The :py:class:`QSnapshotButton` can observe a :py:class:`Datasource`
+    and adapt its appearance and function based on the state of that
+    datasource.
+
+    The :py:class:`QSnapshotButton` will only be enabled if a
+    :py:class:`Datasource` was registered with the
+    :py:meth:`setDatasourceController` method and if this
+    datasource is not busy (e.g., by looping).
+
+
+    Attributes
+    ----------
+    _datasourceController: DatasourceController
+        A datasource controller used by this Button to control the
+        (loop mode) of the Datasource.
+    """
+    _datasourceController: DatasourceController = None
+
+    def __init__(self, text: str='Snapshot',
+                 datasource: DatasourceController=None,
+                 parent: QWidget=None) -> None:
+        super().__init__(text, parent)
+        self.setDatasourceController(datasource)
+        self.clicked.connect(self.onClicked)
+
+    def setDatasourceController(self, datasource: DatasourceController) -> None:
+        interests = Datasource.Change('observable_changed', 'state_changed')
+        self._exchangeView('_datasourceController', datasource,
+                           interests=interests)
+
+    def datasource_changed(self, datasource: Datasource,
+                           change: Datasource.Change) -> None:
+        """Callback for a change of the DataSource.
+        We are interested when the Datasource itself has changed and
+        when its state (looping/pause) has changed.
+        """
+        self.update()
+
+    def onClicked(self):
+        if (self._datasourceController is not None and
+            self._datasourceController.isinstance(Snapshot)):
+            #
+            self._datasourceController.snapshot()
+
+    def update(self) -> None:
+        """Update this QLoopButton based on the state of the
+        :py:class:`Datasource`.
+        """
+        enabled = (self._datasourceController is not None and
+                   self._datasourceController.isinstance(Snapshot) and
+                   self._datasourceController.prepared)
+
+        if enabled and self._datasourceController.isinstance(Loop):
+            enabled = not self._datasourceController.looping
+
+        self.setEnabled(enabled)
+
+
+from PyQt5.QtWidgets import QWidget, QPushButton
+
+from datasources import (Datasource, Loop, Random,
+                         Controller as DatasourceController)
+
+class QRandomButton(QPushButton, QObserver, Datasource.Observer):
+    """A Button to control a :py:class:`Datasource` of type
+    :py:class:`datasources.Random`. Pressing this button will
+    obtain a entry from the datasource.
+
+    The :py:class:`QRandomButton` can observe a :py:class:`Datasource`
+    and adapt its appearance and function based on the state of that
+    datasource. The :py:class:`QRandomButton` will only be enabled if a
+    :py:class:`Datasource` was registered with the
+    :py:meth:`setDatasourceController` method and if this
+    datasource is not busy (e.g., by looping).
+
+
+    Attributes
+    ----------
+    _datasourceController: DatasourceController
+        A datasource controller used by this Button to control the
+        (loop mode) of the Datasource.
+    """
+    _datasourceController: DatasourceController = None
+
+    def __init__(self, text: str='Snapshot',
+                 datasource: DatasourceController=None,
+                 parent: QWidget=None) -> None:
+        super().__init__(text, parent)
+        self.setDatasourceController(datasource)
+        self.clicked.connect(self.onClicked)
+
+    def setDatasourceController(self, datasource: DatasourceController) -> None:
+        interests = Datasource.Change('observable_changed', 'state_changed')
+        self._exchangeView('_datasourceController', datasource,
+                           interests=interests)
+
+    def datasource_changed(self, datasource: Datasource,
+                           change: Datasource.Change) -> None:
+        """Callback for a change of the DataSource.
+        We are interested when the Datasource itself has changed and
+        when its state (looping/pause) has changed.
+        """
+        self.update()
+
+    def onClicked(self):
+        if (self._datasourceController is not None and
+            self._datasourceController.isinstance(Random)):
+            #
+            self._datasourceController.fetch(random=True)
+
+    def update(self) -> None:
+        """Update this QLoopButton based on the state of the
+        :py:class:`Datasource`.
+        """
+        enabled = (self._datasourceController is not None and
+                   self._datasourceController.isinstance(Random) and
+                   self._datasourceController.prepared)
+
+        if enabled and self._datasourceController.isinstance(Loop):
+            enabled = not self._datasourceController.looping
+
+        self.setEnabled(enabled)

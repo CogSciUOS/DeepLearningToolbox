@@ -20,7 +20,7 @@ Datasources can have different
 
 """
 from .source import Datasource, InputData, Predefined
-from .source import Datasource as DataSource, Labeled, Random, Loop
+from .source import Datasource as DataSource, Labeled, Random, Loop, Snapshot
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile

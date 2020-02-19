@@ -220,11 +220,14 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
         def slot(id):
             def set_datasource(checked):
-                print(f"!!! MainWindow.set_datasource({checked}): {id}")
+                print(f"qtgui.MainWindow.set_datasource({checked}): {id}")
                 datasource = self._datasources[id]
-                print(type(datasource))
-                datasource.prepare()
+                print(f"qtgui.MainWindow.set_datasource: {type(datasource)}")
+                # We first set the Datasource in the toolbox
+                # and then prepare it, in order to get a smooth
+                # reaction in the user interface.
                 self._toolbox.set_datasource(datasource)
+                datasource.prepare()
             return protect(set_datasource)
 
         for datasource in self._toolbox.datasources:

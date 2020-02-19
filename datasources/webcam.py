@@ -1,9 +1,11 @@
-from . import Predefined, InputData, Loop
+from . import Predefined, InputData, Loop, Snapshot
 
+import sys
+import time
 import importlib
 import numpy as np
 
-class DataWebcam(Predefined, Loop):
+class DataWebcam(Predefined, Loop, Snapshot):
     """A data source fetching images from the webcam.
 
     Attributes
@@ -36,6 +38,10 @@ class DataWebcam(Predefined, Loop):
         """
         super().__init__(id=id, description=description, **kwargs)
 
+        # FIXME[bug]: for some reason, the Loop constructor is not called!
+        self._loop_interval = 0.2
+
+
     @property
     def prepared(self) -> bool:
         """Report if this Datasource prepared for use.
@@ -52,7 +58,9 @@ class DataWebcam(Predefined, Loop):
             raise RuntimeError("Acquiring video capture failed!")
 
     def _unprepare_data(self):
-        """Unprepare this Datasource for use.
+        """Unprepare this Datasource. This will free resources but
+        the webcam can no longer be used.  Call :py:meth:`prepare`
+        to prepare the webcam for another use.
         """
         self._capture.release()
         self._capture = None
@@ -67,6 +75,41 @@ class DataWebcam(Predefined, Loop):
         if not ret:
             raise RuntimeError("Reading an image from video capture failed!")
         self._frame = frame[:,:,::-1]
+
+    def run_loop(self):
+        if sys.platform == 'linux':
+            # Hack: under linux, the av-based linux capture code is using
+            # an internal fifo (5 frames, iirc), and you cannot clean (or
+            # say, flush) it.
+            #
+            # Hence we will apply another loop logic: we read frames as
+            # fast as possible and only report them at certain times.
+            last_time = time.time()
+            while self._loop_running:
+                if time.time() - last_time > self._loop_interval:
+                    self.fetch(random=True)
+                else:
+                    ret, frame = self._capture.read()
+            self._loopEvent = None
+        else:
+            super().run_loop()
+
+    def snapshot(self) -> None:
+        """Create a snapshot.
+        """
+        # Hack: under linux, the av-based linux capture code is using
+        # an internal fifo (5 frames, iirc), and you cannot clean (or
+        # say, flush) it.
+        #
+        # Hence we will skip some frames to really get the current image.
+        if sys.platform == 'linux':
+            ignore = 4
+            for i in range(ignore):
+                ret, frame = self._capture.read()
+                if not ret:
+                    raise RuntimeError("Snapshot: Reading an image from "
+                                       "video capture failed!")
+        super().snapshot()
 
     def _get_data(self):
         return self._frame

@@ -112,7 +112,7 @@ class View:
             return None  # avoid RecursionError
         observable = getattr(self, type(self)._view_attribute, None)
         if observable is None:
-            raise AttributeError(f"Cannot access attribute {attr} in "
+            raise AttributeError(f"Cannot access attribute '{attr}' in "
                                  "observable as currently nothing is viewed.")
         if attr[0] == '_':
             raise AttributeError("Trying to access private attribute "
