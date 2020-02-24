@@ -1,5 +1,5 @@
 from datasources import DataSource, InputData
-from util import imread
+from util.image import imread
 
 from os.path import join
 import numpy as np

@@ -4,7 +4,7 @@ from tools.activation import (Engine as ActivationEngine,
 from ..utils import QImageView, QObserver
 
 import numpy as np
-from scipy.misc import imresize
+from util.image import imresize
 
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QRect
 from PyQt5.QtWidgets import QWidget

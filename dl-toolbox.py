@@ -7,11 +7,9 @@ Diederichsen
 
 '''
 
-
 import os
 import sys
 import argparse
-
 
 import importlib.abc
 
@@ -52,6 +50,7 @@ if not hasattr(sys, 'frozen') and False:
 
 
 from toolbox import Toolbox
+
 
 def main():
     '''Start the program.'''

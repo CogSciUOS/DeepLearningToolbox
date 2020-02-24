@@ -142,6 +142,8 @@ _infos = {
 }
 
 def get_addons(type: Types):
+    """Obtain a list of all registered addons of the given type.
+    """
     return [name for name, info in _infos.items()
             if info['type'] == Types.module]
     

@@ -57,3 +57,10 @@ conda install  dlib
 Incompatibilities:
 
 * tensorflow 1.10.0 has requirement numpy<=1.14.5,>=1.13.3
+
+
+
+To do
+* end running threads (e.g. loops) gracefully
+* turn off (unprepare) the webcam (or other data sources) if they
+  are no longer used

@@ -7,6 +7,7 @@ from . import DataSource, Labeled, Random, DataDirectory, InputData, Predefined
 # We may want to integrate this into the class to
 # avoid redundancies or even inconsistencies
 from datasources.imagenet_classes import class_names
+from util.image import imread
 
 import os
 import re
@@ -17,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 import random
 import pickle
-from scipy.misc import imread
 
 
 

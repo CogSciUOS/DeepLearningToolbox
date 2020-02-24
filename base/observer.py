@@ -68,7 +68,7 @@ class Observable:
     """
 
     def __init_subclass__(cls: type, method: str=None, changes: list=None,
-                          changeables: list=None):
+                          changeables: dict=None):
         """Initialization of subclasses of :py:class:`Observable`.
         Each of this classes will provide some extra class members
         describing the observation (Change, Observer, _change_method).
@@ -88,6 +88,9 @@ class Observable:
             observers. This dictionary will be merged with the
             changeables inherited from the super class.
         """
+        logger.debug(f"Initializing new Observable class: {cls}, "
+                     f"method={method}, changes={changes}, "
+                     f"changeables={changeables}")
         if changes is not None:
             changes = cls.Change.ATTRIBUTES + changes
             cls.Change = type(cls.__name__ + ".Change", (Observable.Change,),
@@ -409,7 +412,15 @@ def busy(function):
         return result
     return wrapper
 
-
+def busy_message(message):
+    def decorator(function):
+        def wrapper(self, *args, **kwargs):
+            self.busy = message
+            result = function(self, *args, **kwargs)
+            self.busy = False
+            return result
+        return wrapper
+    return decorator
 
 class BusyObservable(Observable, changes=['busy_changed']):
     """A :py:class:Config object provides configuration data.  It is an
@@ -419,7 +430,8 @@ class BusyObservable(Observable, changes=['busy_changed']):
     """
 
     def __init_subclass__(cls: type, changes: list=[], **kwargs):
-        changes += ['busy_changed']
+        if 'busy_changed' not in changes:
+            changes.append('busy_changed')
         Observable.__init_subclass__.__func__(cls, changes=changes, **kwargs)
 
     def __init__(self):
@@ -430,8 +442,17 @@ class BusyObservable(Observable, changes=['busy_changed']):
     def busy(self) -> bool:
         return self._busy
 
+    @property
+    def busy_message(self) -> str:
+        return self.__dict__.get('_busy_message', 'busy') if self._busy else ''
+
     @busy.setter
     def busy(self, state: bool) -> None:
+        if isinstance(state, str):
+            message = state
+            state = True
+        else:
+            message = None
         if self._busy == state:
             if self._busy:
                 raise RuntimeError("Object is currently busy.")
@@ -439,4 +460,8 @@ class BusyObservable(Observable, changes=['busy_changed']):
                 raise RuntimeError("Trying to unemploy an object "
                                    "thatis already lazy.")
         self._busy = state
+        if message is None:
+            self.__dict__.pop('_busy_message', None)
+        else:
+            self._busy_message = message
         self.notifyObservers('busy_changed')

@@ -25,7 +25,7 @@ for id in loaded_network.layer_dict:
 
 
 import numpy as np
-from scipy.misc import imread, imresize
+from util.image import imread, imresize
 # "laska.png", "poodle.png"
 images = []
 for arg in sys.argv[1:]:

@@ -45,7 +45,7 @@ class KerasDatasource(LabeledArray, Predefined):
     _section_index: int = 0
     _variant: str = None
 
-    def __init__(self, name: str, section:str = 'train', **kwargs):
+    def __init__(self, name: str, section: str='train', **kwargs):
         """Initialize a keras dataset.
 
         Arguments

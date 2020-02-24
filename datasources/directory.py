@@ -1,5 +1,5 @@
 from datasources import Datasource, InputData
-from util import imread
+from util.image import imread
 
 from os.path import join, isdir, isfile
 from os import listdir

@@ -64,11 +64,12 @@ import util
 from util import addons
 
 
-logger.info("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
-root_logger = logging.getLogger()
-root_logger.handlers = []
-logRecorder = util.RecorderHandler()
-root_logger.addHandler(logRecorder)
+if True: # FIXME[todo]: cannot be False ...
+    logger.info("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
+    root_logger = logging.getLogger()
+    root_logger.handlers = []
+    logRecorder = util.RecorderHandler()
+    root_logger.addHandler(logRecorder)
 
 import numpy as np
 
@@ -82,8 +83,10 @@ from base import (Observable, BusyObservable, busy, change,
 from network import Network
 #from network.examples import keras, torch
 
+
 from datasources import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
+
 
 class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
@@ -503,6 +506,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #             self.get_labels(dtype=np.float32, test=False),
         #             self.get_inputs(dtype=np.float32, flat=True, test=True),
         #             self.get_labels(dtype=np.float32, test=True))
+
+        
 
     def hack_load_imagenet(self):
         from datasources import Predefined

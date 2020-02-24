@@ -105,7 +105,6 @@ class Detector(Observable, method='detector_changed',
 
 
     def process(self, gray: np.ndarray, canvas: np.ndarray=None):
-        print(f"Detector.process [start]")
         self._image = gray
         self.change(image_changed=True)
 
@@ -118,9 +117,7 @@ class Detector(Observable, method='detector_changed',
             self.paint_detect(canvas, rects)
 
         self._canvas = canvas
-        print(f"Detector: detected {rects} faces")
         self.change(detection_finished=True)
-        print(f"Detector.process [end]: {self.duration}")
 
     @property
     def image(self):
@@ -217,29 +214,19 @@ class DetectorController(DetectorView, BaseController):
         """Process the given image.
 
         """
-        print(f"DetectorController.process [start]: {self._busy}")
         self._next_image = image
         if not self._busy:
             self._process()
-        print(f"DetectorController.process [end]: {self._busy}")
 
     @run
     def _process(self):
         self._busy = True
-        print(f"DetectorController._process [start] {self._next_image is not None}")
         while self._next_image is not None:
-            print("DetectorController._process: next image ...")
             image = imutils.resize(self._next_image, width=400)
             self._next_image = None
-
-            print("DetectorController._process: ... processed")
             self._detector.process(image, image)
 
-            print("DetectorController: image done")
         self._busy = False
-        print(f"DetectorController._process [end]")
-
-
 
 
 def create_detector(name: str, prepare: bool=True):
@@ -346,7 +333,6 @@ class FaceDetector(Observable, method='face_changed',
 
 
     def process(self, image):
-        print("FaceDetector.process")
         self._image = image
 
         while self._image is not None:
@@ -377,7 +363,6 @@ class FaceDetector(Observable, method='face_changed',
             self._image = self._next_image
             self._next_image = None
 
-        print("FaceDetector.process [end]")
 
     #
     # OLD: predictors

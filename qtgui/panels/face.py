@@ -9,6 +9,8 @@ Graphical interface for face detection and recognition.
 from tools.face.detector import (Detector, DetectorController)
 from ..utils import QImageView, QObserver
 
+import numpy as np
+
 from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel, QVBoxLayout)
 
 class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
@@ -51,7 +53,7 @@ class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
         layout = QVBoxLayout()
         layout.addWidget(self._view)
         layout.addWidget(self._label)
-        self.setTitle("NAME")
+        layout.addStretch(3)
         self.setLayout(layout)
         self.setCheckable(True)
 
@@ -61,16 +63,23 @@ class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
         detected by one of the detectors.
         """
         interests = Detector.Change('detection_finished')
-        print("DetectorWidget:", detector.__class__.__name__)
-        print("DetectorWidget:", type(detector))
-        self._exchangeView('_detectorController', detector, interests=interests)
+        self._exchangeView('_detectorController', detector,
+                           interests=interests)
+        self.setTitle("None" if self._detectorController is None else
+                      (self._detectorController._detector.__class__.__name__
+                       if self._detectorController else "Off"))  # FIXME[hack]
 
     def detector_changed(self, detector: Detector,
                          change: Detector.Change) -> None:
         if change.detection_finished:
-            print(f"DetectorWidget: Detection finished {detector.duration}")
             self._view.setImage(detector.canvas)
+            self._label.setText(f"{detector.duration:.3f}s")
 
+    def setImage(self, image: np.ndarray):
+        if self._detectorController is None or not self._detectorController:
+            self._view.setImage(None)
+        else:
+            self._detectorController.process(image)
 
 from toolbox import Toolbox, Controller as ToolboxController
 from datasources import Datasource, Controller as DatasourceController
@@ -104,10 +113,8 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
     _toolboxController: ToolboxController = None
 
     _detectors: list = None
+    _detectorViews: list = None
     _inputView: QModelImageView = None
-    _detectorView1: DetectorWidget = None
-    _detectorView2: QImageView = None
-    _predictorView: QImageView = None
 
     _inputCounter: QLabel = None
     _processCounter: QLabel = None
@@ -133,6 +140,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
         name = 'shape_predictor_68_face_landmarks.dat'  # FIXME[hack]
 
         self._detectors = []
+        self._detectorViews = []
         for name in 'haar', 'ssd':
             detector = create_detector(name, prepare=True)
             controller = DetectorController(engine=detector)
@@ -171,10 +179,8 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
         self._snapshotButton = QSnapshotButton('Snapshot')
         self._randomButton = QRandomButton('Random')
 
-        self._detectorView1 = DetectorWidget(detector=self._detectors[0])
-        self._detectorView2 = DetectorWidget(detector=self._detectors[1])
-        self._detectorView3 = QImageView()
-        self._predictorView = QImageView()
+        for detector in self._detectors:
+            self._detectorViews.append(DetectorWidget(detector=detector))
 
     def _layoutUI(self):
         """Initialize the user interface
@@ -192,17 +198,13 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
         row.addWidget(self._snapshotButton)
         row.addWidget(self._loopButton)
         layout2.addLayout(row)
-        layout2.addStretch()
+        layout2.addStretch(1)
         layout.addLayout(layout2)
         layout.setStretchFactor(layout2, 1)
 
         grid = QGridLayout()
-        grid.addWidget(self._detectorView1, 0,0)
-        grid.addWidget(self._detectorView2, 0, 1)
-        grid.addWidget(self._detectorWidget('DNN',
-                                            self._detectorView3), 1, 0)
-        grid.addWidget(self._detectorWidget('Predictor',
-                                            self._predictorView), 1, 1)
+        for i, view in enumerate(self._detectorViews):
+            grid.addWidget(view, i//2, i%2)
         layout.addLayout(grid)
         layout.setStretchFactor(grid, 1)
 
@@ -237,9 +239,9 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
         """
         if change.input_changed:
             image = toolbox.input_data if toolbox is not None else None
-            for controller in self._detectors:
-                if controller:
-                    controller.process(image)
+            for detectorView in self._detectorViews:
+                if detectorView.isChecked():
+                    detectorView.setImage(image)
             self._inputCounter.setText(str(int(self._inputCounter.text())+1))
 
     def setDatasourceController(self, datasource: DatasourceController) -> None:

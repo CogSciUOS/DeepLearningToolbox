@@ -153,6 +153,13 @@ class DetectorSSD(Detector):
     def detect(self, image):
         """Use the OpenCV
         """
+
+        # The detector expects 3-channel images (BGR!)
+        if image.ndim < 3:
+            image = np.repeat(image[:,:,np.newaxis], 3, axis=2)
+        elif image.shape[2] == 1:
+            image = np.repeat(image, 3, axis=2)
+
         conf_threshold = 1 # FIXME[hack]
         # the image is converted to a blob
         blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300),

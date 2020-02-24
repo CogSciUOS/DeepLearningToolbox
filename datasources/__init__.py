@@ -47,6 +47,9 @@ if False:
         except ValueError as err:
             print(f"Error instantiating keras data source '{d}': {err}",
                   file=sys.stderr)
+KerasDatasource('mnist', section='train')
+KerasDatasource('mnist', section='test')
+
 #ImageNet(section='train')
 ImageNet(section='val')
 DataNoise(shape=(100,100,3))

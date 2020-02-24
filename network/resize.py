@@ -58,8 +58,7 @@ class ResizePolicyBilinear(_ResizePolicyBase):
     '''Resize policy which bilinearly interpolates images to the target size.'''
 
     def resize(self, img):
-        #from skimage.transforms import resize
-        from scipy.misc import imresize
+        from util.image import imresize
 
         if self._new_shape is None:
             return img

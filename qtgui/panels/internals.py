@@ -5,6 +5,106 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 '''
 
+import sys
+from util.resources import (Resource, ModuleResource,
+                            View as ResourceView,
+                            Controller as ResourceController)
+from ..utils import QObserver
+
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import (QWidget, QGroupBox, QLabel, QPushButton,
+                             QHBoxLayout, QVBoxLayout)
+
+
+class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
+    """A Widget providing information about a module.
+
+    The Widget observes the :py:class:`ModuleResource` associated
+    with the module it provides information about.  If the
+    state of this resource changes (e.g. if the module is imported),
+    the information will be updated.
+    """
+    _resource: ResourceController = None
+    
+    def __init__(self, resource: ResourceController=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._initGui()
+        self.setResource(resource)
+
+    def __del__(self):
+        self.setResource(None)
+        super().__del__()
+        
+    def setResource(self, resource: ResourceController) -> None:
+        interests = Resource.Change('status_changed')
+        self._exchangeView('_resource', resource, interests=interests)
+
+    def resource_changed(self, resource: Resource,
+                         change: Resource.Change) -> None:
+        if change.status_changed:
+            self.update()
+
+    def _initGui(self):
+        """Create a :py:class:`QGroupBox` showing module information.
+        """
+        layout = QVBoxLayout()
+
+        buttonLayout = QHBoxLayout()
+        self._importButton = QPushButton("Load")
+        self._importButton.clicked.connect(self._onImportButtonClicked)
+        buttonLayout.addWidget(self._importButton)
+
+        self._installButton = QPushButton("Install")
+        self._installButton.clicked.connect(self._onInstallButtonClicked)
+        buttonLayout.addWidget(self._installButton)
+        buttonLayout.addStretch()
+
+        self._nameLabel = QLabel()
+        self._versionLabel = QLabel()
+        self._libraryLabel = QLabel()
+        self._descriptionLabel = QLabel()
+        layout.addWidget(self._nameLabel)
+        layout.addLayout(buttonLayout)
+        layout.addWidget(self._versionLabel)
+        layout.addWidget(self._libraryLabel)
+        layout.addWidget(self._descriptionLabel)
+        layout.addStretch()
+        self.setLayout(layout)
+
+    @QtCore.pyqtSlot()
+    def _onImportButtonClicked(self):
+        self._resource.prepare()
+
+    @QtCore.pyqtSlot()
+    def _onInstallButtonClicked(self):
+        self._resource.install()
+        
+    def update(self):
+        haveResource = self._resource is not None and bool(self._resource)
+        self.setTitle(self._resource.label if haveResource else "None")
+        self._installButton.setVisible(haveResource and
+                                       not self._resource.available)
+        self._importButton.setVisible(haveResource and
+                                      self._resource.available and
+                                      not self._resource.prepared)
+            
+        if not haveResource:
+            self._nameLabel.setText("No module")
+            self._versionLabel.setText("")
+            self._libraryLabel.setText("")
+            self._descriptionLabel.setText("")
+        else:
+            self._nameLabel.setText(self._resource.module)
+            self._descriptionLabel.setText(self._resource.description)
+            if self._resource.prepared:
+                module = sys.modules[self._resource.module]
+                self._versionLabel.setText("Version: " + self._resource.version)
+                self._libraryLabel.setText("Library: " + module.__file__)
+            else:
+                self._versionLabel.setText("")
+                self._libraryLabel.setText("")
+
+
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QGroupBox,
                              QGridLayout, QHBoxLayout, QVBoxLayout,
@@ -22,9 +122,10 @@ import re
 from types import ModuleType
 import util.resources
 import util
-from util import addons
 
 from ..utils import protect
+
+
 
 class InternalsPanel(Panel):
     '''A Panel displaying system internals.
@@ -45,12 +146,12 @@ class InternalsPanel(Panel):
     _grid: QGridLayout
     '''
 
-    @property
-    def modules(self):
-        return addons.get_addons(addons.Types.module)
 
     _grid: QGridLayout = None
     _moduleGrid: QGridLayout = None
+
+    _moduleName: str = None
+
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,20 +166,30 @@ class InternalsPanel(Panel):
         self._grid.addLayout(self.systemInfo(), 0,1)
 
         self._layout.addLayout(self._grid)
-        self._info = self._moduleInfo('cv2')
+        self._info = QLabel("Info")
         self._layout.addWidget(self._info)
         self.setLayout(self._layout)
 
     @QtCore.pyqtSlot()
     def _onInfo(self):
-        name = self.sender().text()
-        self.showInfo(self._moduleInfo(name))
+        sender = self.sender()
+        resource = ResourceController(Resource[sender.ID])
+        self.showInfo(ModuleInfo(resource=resource))
 
     @QtCore.pyqtSlot()
     def _onUpdateModules(self):
         self._updateModules()
 
     def showInfo(self, info: QWidget):
+        """Show a new info widget.
+
+        Arguments
+        ---------
+        info: QWidget
+           The widget to be displayed in the info region of the
+           panel. This will replace the previously displayed
+           info widget.
+        """
         if self._layout.replaceWidget(self._info, info) is not None:
             self._info.deleteLater()
             self._info = info
@@ -101,8 +212,9 @@ class InternalsPanel(Panel):
         self._moduleGrid.addWidget(QLabel("<b>Package</b>", self), 0,0)
         self._moduleGrid.addWidget(QLabel("<b>Version</b>", self), 0,1)
 
-        for i,m in enumerate(self.modules):
-            button = QPushButton(m, self)
+        for i,m in enumerate(ModuleResource):
+            button = QPushButton(m.label, self)
+            button.ID = m._id  # FIXME[hack]
             button.setFlat(True)
             button.clicked.connect(self._onInfo)
             self._moduleGrid.addWidget(button, 1+i, 0)
@@ -123,25 +235,13 @@ class InternalsPanel(Panel):
     def _updateModules(self):
         """Update the module list.
         """
-        for i, m in enumerate(self.modules):
-            if m in sys.modules:
-                module = sys.modules[m]
-                if hasattr(module, '__version__'):
-                    info = str(module.__version__)
-                elif m == "PyQt5":
-                    info = QtCore.QT_VERSION_STR
-                else:
-                    info = "loaded, no version"
-                self._modules[m] = sys.modules[m]
+        for i, m in enumerate(ModuleResource):
+            if m.prepared:
+                info = m.version
+            elif m.available:
+                info = "not loaded"
             else:
-                spec = importlib.util.find_spec(m)
-                if spec is None:
-                    info = "not found"
-                else:
-                    # spec.name
-                    # spec.origin -> file
-                    info = "not loaded"
-                self._modules[m] = info
+                info = "not found"
             self._moduleGrid.itemAtPosition(1+i, 1).widget().setText(info)
 
     def systemInfo(self):
@@ -255,54 +355,6 @@ class InternalsPanel(Panel):
         layout.addWidget(resourcesBox)
         layout.addStretch()
         return layout
-
-    def _moduleInfo(self, name):
-        labels = {
-            'cv2': 'OpenCV',
-            'tensorflow': 'TensorFlow',
-            'keras': 'Keras',
-        }
-        box = QGroupBox(labels.get(name, name))
-
-        if name not in self._modules:
-            # the module unknown, that is not listed in our list of
-            # modules
-            boxLayout = QVBoxLayout()
-            boxLayout.addWidget(QLabel("Not availabe"))
-            boxLayout.addStretch()
-        elif isinstance(self._modules[name], str):
-            boxLayout = QVBoxLayout()
-            boxLayout.addWidget(QLabel(self._modules[name]))
-            boxLayout.addWidget(QPushButton("Load (not implemented yet ...)"))
-            boxLayout.addStretch()
-        elif isinstance(self._modules[name], ModuleType):
-            #boxLayout = contentProvider(self._modules[name])
-            module = self._modules[name]
-            infoMethod = name + "Info"
-            op = getattr(self, infoMethod, None)
-            if callable(op):
-                boxLayout = op(module)
-            else:
-                boxLayout = QVBoxLayout()
-                boxLayout = QVBoxLayout()
-                if hasattr(module, '__version__'):
-                    version = str(module.__version__)
-                elif name == "PyQt5":
-                    version = QtCore.QT_VERSION_STR
-                else:
-                    version = "no version info"
-                boxLayout.addWidget(QLabel(f"Version = {version}"))
-                boxLayout.addWidget(QLabel(f"Library = {module.__file__}"))
-                boxLayout.addStretch()
-                
-        else:
-            boxLayout = QVBoxLayout()
-            boxLayout.addWidget(QLabel(f"'{name}' is of type "
-                                       f"{type(self._modules[name])}"))
-            boxLayout.addStretch()
-
-        box.setLayout(boxLayout)
-        return box
 
     def cv2Info(self, cv2):
         layout = QVBoxLayout()

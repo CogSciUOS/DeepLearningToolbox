@@ -36,7 +36,7 @@ from datasources import DataFiles, ImageNet
 # FIXME[hack]: instead of prepare_input_image use the network.resize
 # API once it is finished!
 import numpy as np
-from scipy.misc import imresize
+from util.image import imresize
 
 def prepare_input_image(input_data):
     im = (input_data[0][:,:,:3]).astype(np.float32)

@@ -21,8 +21,7 @@ if sys.version_info < (3, 6):
                   + ".".join([str(_) for _ in sys.version_info]))
     sys.exit(1)
 
-try:
-    
+try:   
     # Version checking.
     # We use the 'packaging.version' module, which is a popular
     # third-party module (e.g. used by setuptools) and which
@@ -45,5 +44,32 @@ except ModuleNotFoundError as e:
     explanation = "The module can be installed by typing: conda install packaging"
     logging.fatal(str(e) + ". " + explanation)
     sys.exit(1)
+
+
+# FIXME[hack]: this should be integrated into some more general check
+# mechanism. We do it here explicitly, as 'frozendict' is required
+# by (some) networks - but probably the cleaner way is to just
+# disable these networks ...
+#import importlib.util
+#if importlib.util.find_spec('frozendict'):
+try:
+    import frozendict
+except ModuleNotFoundError as e:
+    explanation = "The module can be installed by typing: conda install -c conda-forge frozendict"
+    logging.fatal(str(e) + ". " + explanation)
+    sys.exit(1)
+
+modules = {
+    'packaging.version': {
+        'level': 'critical',
+        'explanation': 'needed for version checking',
+        'conda' : 'conda install packaging'
+        },
+    'frozendict': {
+        'level': 'recommended',
+        'explanation': 'needed for some neural network models',
+        'conda': 'conda install -c conda-forge frozendict'
+        }
+    }
 
 # End checking for modules

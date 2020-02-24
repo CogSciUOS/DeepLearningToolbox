@@ -10,23 +10,6 @@ import sys
 import logging
 from . import check, error
 
-try:
-    from imageio import imread
-except ImportError:
-    try:
-        from scipy.misc import imread
-    except ImportError:
-        try:
-            from matplotlib.pyplot import imread
-        except ImportError:
-            # FIXME[hack]: better strategy to inform on missing modules
-            explanation = ("Could not find any module providing 'imread'. "
-                           "At least one such module is required "
-                           "(e.g. imageio, scipy, matplotlib).")
-            logging.fatal(explanation)
-            sys.exit(1)
-        # maybe also cv2, but convert the colorchannels
-
 
 def debug(func):
     """A decorator to output exceptions raised in a function.

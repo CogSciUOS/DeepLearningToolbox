@@ -1,9 +1,10 @@
 from . import Datasource, Labeled, Random, Predefined
 
+from util.image import imread
+
 import os
 import random
 import numpy as np
-from scipy.misc import imread
 
 import logging
 logger = logging.getLogger(__name__)

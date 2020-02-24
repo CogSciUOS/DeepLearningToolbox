@@ -257,7 +257,7 @@ class QObserver:
 
 
 import numpy as np
-from scipy.misc import imresize
+from util.image import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
 from PyQt5.QtGui import QImage, QPainter, QPen
