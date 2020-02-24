@@ -119,7 +119,7 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
                 self.setMask(activation_mask)
                 field = engine.receptive_field
                 if field is not None:
-                    self.setRect(QRect(field[0][1], field[0][0],
+                    self.addMark(QRect(field[0][1], field[0][0],
                                        field[1][1]-field[0][1],
                                        field[1][0]-field[0][0]))
             else:
@@ -168,9 +168,9 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
         """
         self.setMode(not self._processed)
 
-    # FIXME[todo]: does not work!
     def keyPressEvent(self, event):
         key = event.key()
-        print(f"{self.__class__.__name__}.keyPressEvent({key})")
         if key == Qt.Key_Space:
             self.setMode(not self._processed)
+        else:
+            super().keyPressEvent(event)

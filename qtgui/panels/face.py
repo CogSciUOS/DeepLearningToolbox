@@ -7,10 +7,11 @@ Graphical interface for face detection and recognition.
 """
 
 from tools.face.detector import (Detector, DetectorController)
-from ..utils import QImageView, QObserver
+from ..utils import QImageView, QObserver, QBusyWidget
 
 import numpy as np
 
+from PyQt5.QtCore import QRect
 from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel, QVBoxLayout)
 
 class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
@@ -53,6 +54,7 @@ class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
         layout = QVBoxLayout()
         layout.addWidget(self._view)
         layout.addWidget(self._label)
+        layout.addWidget(QBusyWidget())
         layout.addStretch(3)
         self.setLayout(layout)
         self.setCheckable(True)
@@ -73,7 +75,10 @@ class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
                          change: Detector.Change) -> None:
         if change.detection_finished:
             self._view.setImage(detector.canvas)
-            self._label.setText(f"{detector.duration:.3f}s")
+            for rect in self._detectorController.rects:
+                self._view.addMark(QRect(*rect))
+            self._label.setText(f"{len(self._detectorController.rects)} "
+                                f"detected in {detector.duration:.3f}s")
 
     def setImage(self, image: np.ndarray):
         if self._detectorController is None or not self._detectorController:

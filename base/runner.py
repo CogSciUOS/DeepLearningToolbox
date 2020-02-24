@@ -116,3 +116,13 @@ class AsyncRunner(Runner):
         """Determine the maximal number of threads that can run.
         """
         return self._executor._max_workers
+
+
+    def quit(self):
+        """Quit this runner.
+        """
+        if self._executor is not None:
+            print("AsyncRunner: Shutting down the executor ...")
+            self._executor.shutdown()
+            print("AsyncRunner: ... executor finished.")
+            self._executor = None

@@ -29,6 +29,7 @@ class Detector(Observable, method='detector_changed',
         self._image = None
         self._canvas = None
         self._duration = 0
+        self._rects = []
 
     def _add_requirement(self, name, what, *data):
         self._requirements[name] = (what,) + data
@@ -109,12 +110,13 @@ class Detector(Observable, method='detector_changed',
         self.change(image_changed=True)
 
         start = time.time()
-        rects = self.detect(gray)
+        self._rects = self.detect(gray)
+        print(self._rects)
         end = time.time()
         self._duration = end - start
 
-        if canvas is not None:
-            self.paint_detect(canvas, rects)
+        #if canvas is not None:
+        #    self.paint_detect(canvas, self._rects)
 
         self._canvas = canvas
         self.change(detection_finished=True)
@@ -129,6 +131,13 @@ class Detector(Observable, method='detector_changed',
 
     @property
     def rects(self):
+        """Bounding boxes are stored as quadruples
+        (x,y,w,h).
+
+        FIXME[question]: is this int or do we allow float for subpixel accuracy?
+        FIXME[todo]: currently they are also sometimes stored as
+        dlib.rectangle
+        """
         return self._rects
     
     @property

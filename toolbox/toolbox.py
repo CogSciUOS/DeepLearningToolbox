@@ -86,7 +86,7 @@ from network import Network
 
 from datasources import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
-
+from datasources import Loop
 
 class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
@@ -241,6 +241,21 @@ class Toolbox(BusyObservable, Datasource.Observer,
     def quit(self):
         """Quit this toolbox.
         """
+        # FIXME[problem]: some things seem to block the exit process.
+        # - if the webcam is looping, the program will not exit
+
+        # FIXME[todo]: we need a more general solution to abort all
+        # operations running in the background
+        if (self._datasource_controller is not None and
+            self._datasource_controller.isinstance(Loop) and
+            self._datasource_controller.looping):
+            # stop the loop
+            print("Toolbox: stopping the datasource loop")
+            self._datasource_controller.stop_loop()
+
+        if self._runner is not None:
+            self._runner.quit()
+        
         if self._gui is not None:
             # This will stop the main event loop.
             print("Toolbox: Now stopping GUI main event loop.")

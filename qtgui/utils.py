@@ -260,7 +260,7 @@ import numpy as np
 from util.image import imresize
 
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
-from PyQt5.QtGui import QImage, QPainter, QPen
+from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy
 
 
@@ -278,12 +278,12 @@ class QImageView(QWidget):
     _show_raw: bool
         A flag indicating whether this QImageView will show
         the raw input data, or the data acutally fed to the network.
-    _imageRect: 
     """
     _image: QImage = None
     _overlay: QImage = None
     _show_raw: bool = False
     _contextMenu: QMenu = None
+    _keepAspect: bool = True
 
     def __init__(self, parent: QWidget=None):
         """Construct a new :py:class:`QImageView`.
@@ -292,13 +292,21 @@ class QImageView(QWidget):
 
         self._raw: np.ndarray = None
         self._image: QImage = None
-        self._rect: QRect = None
+        self._marks: list = None
         self._overlay: QImage = None
-        self._imageRect = None
 
+        #
         # Prepare the context Menu
+        #
         self._contextMenu = QMenu(self)
         self._contextMenu.addAction(QAction('Info', self))
+
+        aspectAction = QAction('Keep Aspect Ratio', self)
+        aspectAction.setCheckable(True)
+        aspectAction.setChecked(self._keepAspect)
+        aspectAction.setStatusTip('Keep original aspect ratio of the image')
+        aspectAction.toggled.connect(self.onAspectClicked)
+        self._contextMenu.addAction(aspectAction)
         self._contextMenu.addSeparator()
         self._contextMenu.addAction(QAction('Save image', self))
         self._contextMenu.addAction(QAction('Save image as ...', self))
@@ -312,10 +320,31 @@ class QImageView(QWidget):
         #sizePolicy.setHeightForWidth(self.assetsListWidget.sizePolicy().hasHeightForWidth())
         self.setSizePolicy(sizePolicy)
 
+        # By default, a QWidget does not accept the keyboard focus, so
+        # we need to enable it explicitly: Qt.StrongFocus means to
+        # get focus by 'Tab' key as well as by mouse click.
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    #@pyqtSlot(QPoint)
     def onContextMenu(self, point):
         # show context menu
+        print(type(point))
         self._contextMenu.exec_(self.mapToGlobal(point))
 
+    #@pyqtSlot(bool)
+    def onAspectClicked(self, checked):
+        self.keepAspectRatio = checked
+
+    @property
+    def keepAspectRatio(self) -> bool:
+        return self._keepAspect
+
+    @keepAspectRatio.setter
+    def keepAspectRatio(self, flag: bool) -> None:
+        if self._keepAspect != flag:
+            self._keepAspect = flag
+            self.update()
+        
     def getImage(self) -> np.ndarray:
         return self._raw
 
@@ -323,6 +352,7 @@ class QImageView(QWidget):
         """Set the image to display.
         """
         self._raw = image
+        self._marks = []
         if image is not None:
             # To construct an 8-bit monochrome QImage, we need a
             # 2-dimensional, uint8 numpy array
@@ -391,10 +421,12 @@ class QImageView(QWidget):
             painter.end()
         self.update()
 
-    def setRect(self, rect: QRect):
-        self._rect = rect
-        self.update()
-        
+    def addMark(self, rect: QRect):
+        """Mark a rectangle in the image.
+        The rectangle provides the image coordinates to mark.
+        """
+        self._marks.append(rect)
+
     def paintEvent(self, event):
         """Process the paint event by repainting this Widget.
 
@@ -404,15 +436,29 @@ class QImageView(QWidget):
         """
         painter = QPainter()
         painter.begin(self)
+
+        # Compute the transformation
+        if self._image is not None:
+            w = self._image.width()
+            h = self._image.height()
+            # scale maximally while maintaining aspect ratio
+            w_ratio = self.width() / w
+            h_ratio = self.height() / h
+            if self._keepAspect:
+                w_ratio = min(w_ratio, h_ratio)
+                h_ratio = w_ratio
+            # the rect is created such that it is centered on the current widget
+            # pane both horizontally and vertically
+            x = (self.width() - w * w_ratio) // 2
+            y = (self.height() - h * h_ratio) // 2
+            transform = QTransform()
+            transform.translate(x, y)
+            transform.scale(w_ratio, h_ratio)
+            painter.setTransform(transform)
+        
         self._drawImage(painter)
         self._drawMask(painter)
-        if self._rect is not None:
-            pen_width = 4
-            pen_color = Qt.green
-            pen = QPen(pen_color)
-            pen.setWidth(pen_width)
-            painter.setPen(pen)
-            painter.drawRect(self._rect)
+        self._drawMarks(painter)
         painter.end()
 
     def _drawImage(self, painter: QPainter):
@@ -423,18 +469,7 @@ class QImageView(QWidget):
         painter :   QPainter
         """
         if self._image is not None:
-            w = self._image.width()
-            h = self._image.height()
-            # scale maximally while maintaining aspect ratio
-            w_ratio = self.width() / w
-            h_ratio = self.height() / h
-            ratio = min(w_ratio, h_ratio)
-            # the rect is created such that it is centered on the current widget
-            # pane both horizontally and vertically
-            self._imageRect = QRect((self.width() - w * ratio) // 2,
-                                    (self.height() - h * ratio) // 2,
-                                    w * ratio, h * ratio)
-            painter.drawImage(self._imageRect, self._image)
+            painter.drawImage(QPoint(0,0), self._image)
 
     def _drawMask(self, painter: QPainter):
         """Display the given image.
@@ -444,7 +479,33 @@ class QImageView(QWidget):
         painter :   QPainter
         """
         if self._image is not None and self._overlay is not None:
-            painter.drawImage(self._imageRect, self._overlay)
+            painter.drawImage(QPoint(0, 0), self._overlay)
+
+    def _drawMarks(self, painter: QPainter):
+        """Draw marks on current image into this ``QImageView``.
+
+        Parameters
+        ----------
+        painter :   QPainter
+        """
+        for mark in self._marks:
+            if isinstance(mark, QRect):
+                pen_width = 4
+                pen_color = Qt.green
+                pen = QPen(pen_color)
+                pen.setWidth(pen_width)
+                painter.setPen(pen)
+                painter.drawRect(mark)
+        
+    def keyPressEvent(self, event):
+        """Process key events. The :py:class:`QImageView` supports
+        the following keys:
+
+        r: toggle the keepAspectRatio flag
+        """
+        key = event.key()
+        if key == Qt.Key_R:
+            self.keepAspectRatio = not self.keepAspectRatio
 
 
 from PyQt5 import QtCore
@@ -509,3 +570,24 @@ class QLogHandler(QPlainTextEdit, logging.Handler):
             #print(f"  signal: {self._message_signal}")
             pass
 
+import os
+from PyQt5.QtWidgets import QLabel
+from PyQt5.QtGui import QMovie
+
+class QBusyWidget(QLabel):
+    """A widget indicating a that some component is busy.
+    """
+    _label: QLabel = None
+    _movie: QMovie = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Animated gifs can be obtained from
+        # http://www.ajaxload.info/#preview
+        self._movie = QMovie(os.path.join('assets', 'busy.gif'))
+        self.setMovie(self._movie)
+        self._movie.start()
+
+    def __del__(self):
+        self._movie.stop()
+        del self._movie
