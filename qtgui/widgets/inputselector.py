@@ -1,6 +1,6 @@
 
 
-from datasources import (Datasource, DataArray, Random, Indexed,
+from datasources import (Datasource, Random, Indexed,
                          Controller as DatasourceController)
 
 from ..utils import QObserver, protect
@@ -21,31 +21,31 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
     _controller: DatasourceController = None
 
     # prepare or unprepare the Datasource
-    prepareButton = None
+    _prepareButton = None
 
     # select the first entry in the Datasource (Indexed)
-    firstButton = None
+    _firstButton = None
     # select last entry in the Datasource (Indexed)
-    firstButton = None
+    _lastButton = None
 
     # select previous entry in the Datasource (Indexed)
-    prevButton = None
+    _prevButton = None
     # select next entry in the Datasource (Indexed)
-    nextButton = None
+    _nextButton = None
 
     # select specific index in the Datasource (Indexed)
     _indexField = None
+    # a label for information to be shown together with the _indexField
+    _indexLabel = None
 
     # select random entry from the Datasource (Random)
-    randomButton = None
+    _randomButton = None
 
     # start/stop looping the Datasource (Loop)
-    loopButton = None
+    _loopButton = None
 
     #
     infoDataset = None
-    # 
-    infoLabel = None
     
     # display the state of the Datasource:
     # "none" / "unprepared" / "busy" / "ready"
@@ -74,14 +74,14 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         #
         # Navigation in indexed data source
         #
-        self.firstButton = self._newNavigationButton('|<', 'go-first')
-        self.prevButton = self._newNavigationButton('<<', 'go-previous')
-        self.nextButton = self._newNavigationButton('>>', 'go-next')
-        self.lastButton = self._newNavigationButton('>|', 'go-last')
-        self.prepareButton = self._newNavigationButton('prepare')
-        self.prepareButton.setCheckable(True)
-        self.randomButton = self._newNavigationButton('random')
-        self.loopButton = QLoopButton('loop')
+        self._firstButton = self._newNavigationButton('|<', 'go-first')
+        self._prevButton = self._newNavigationButton('<<', 'go-previous')
+        self._nextButton = self._newNavigationButton('>>', 'go-next')
+        self._lastButton = self._newNavigationButton('>|', 'go-last')
+        self._prepareButton = self._newNavigationButton('prepare')
+        self._prepareButton.setCheckable(True)
+        self._randomButton = self._newNavigationButton('random')
+        self._loopButton = QLoopButton('loop')
 
         # _indexField: A text field to manually enter the index of
         # desired input.
@@ -96,69 +96,77 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         self._indexField.setMinimumWidth(
             QFontMetrics(self.font()).width('8') * 8)
 
-        self.infoLabel = QLabel()
-        self.infoLabel.setMinimumWidth(
+        self._indexLabel = QLabel()
+        self._indexLabel.setMinimumWidth(
             QFontMetrics(self.font()).width('8') * 8)
-        self.infoLabel.setSizePolicy(
+        self._indexLabel.setSizePolicy(
             QSizePolicy.Maximum, QSizePolicy.Expanding)
 
         self.infoDataset = QLabel()
         self._stateLabel = QLabel()
         self._layout = None
-
-        self._buttonList = [
-            self.firstButton, self.prevButton,
-            #self._indexField, self.infoLabel,
-            self.nextButton, self.lastButton #, self.randomButton
-        ]
-
         
     def _layoutUI(self):
-        if self._layout is None:
-            # We have no Layout yet: create initial Layout
-            self._layout = QVBoxLayout()
-            self._layout.addWidget(self.infoDataset)
-            self._layout.addWidget(self._stateLabel)
-            buttons2 = QHBoxLayout()
-            buttons2.addWidget(self.prepareButton)
-            buttons2.addStretch()
-            buttons2.addWidget(self.randomButton)
-            buttons2.addWidget(self.loopButton)
-            buttons3 = QHBoxLayout()
-            buttons3.addWidget(self._indexField)
-            buttons3.addWidget(self.infoLabel)
-            buttons3.addStretch()
-            self._layout.addLayout(buttons2)
-            self._layout.addLayout(buttons3)
-            self._buttons = None
-            self.setLayout(self._layout)
+        """The layout of the :py:class:`QInputNavigator` may change
+        depending on the :py:class:`Datasource` it controls.
 
-        if self._controller is None or not self._controller:
-            # no datasource controller or no datasource: remove buttons
-            if self._buttons is not None:
-                for button in self._buttonList:
-                    button.setParent(None)
-                self._layout.removeItem(self._buttons)
-                self._buttons = None
-        else:
-            # we have a datasource: add the buttons
-            if self._buttons is None:
-                self._buttons = QHBoxLayout()
-                for button in self._buttonList:
-                    self._buttons.addWidget(button)
-                self._layout.addLayout(self._buttons)
+        """
+        # FIXME[todo]: we may also add some configuration options
+        
+        # We have no Layout yet: create initial Layout
+        layout = QVBoxLayout()
+        layout.addWidget(self.infoDataset)
+        layout.addWidget(self._stateLabel)
+
+        # buttons 2:
+        buttons2 = QHBoxLayout()
+        buttons2.addWidget(self._prepareButton)
+        buttons2.addStretch()
+        layout.addLayout(buttons2)
+
+        # buttons 3:
+        buttons3 = QHBoxLayout()
+        buttons3.addWidget(self._firstButton)
+        buttons3.addWidget(self._prevButton)
+        buttons3.addWidget(self._indexField)
+        buttons3.addWidget(self._indexLabel)
+        buttons3.addWidget(self._nextButton)
+        buttons3.addWidget(self._lastButton)
+        buttons3.addStretch()
+        buttons3.addWidget(self._randomButton)
+        buttons3.addWidget(self._loopButton)
+        layout.addLayout(buttons3)
+
+        self.setLayout(layout)
+            
+        #if self._controller is None or not self._controller:
+        #    # no datasource controller or no datasource: remove buttons
+        #    if self._buttons is not None:
+        #        for button in self._buttonList:
+        #            button.setParent(None)
+        #        self._layout.removeItem(self._buttons)
+        #        self._buttons = None
+        #else:
+        #    # we have a datasource: add the buttons
+        #    if self._buttons is None:
+        #        self._buttons = QHBoxLayout()
+        #        for button in self._buttonList:
+        #            self._buttons.addWidget(button)
+        #        self._layout.addLayout(self._buttons)
 
     def _enableUI(self):
         enabled = bool(self._controller)
-        self.prepareButton.setEnabled(bool(self._controller))
+        self._prepareButton.setEnabled(bool(self._controller))
         enabled = enabled and self._controller.prepared
-        for button in self._buttonList + [self.randomButton,
-                                          self._indexField, self.infoLabel]:
+        for button in (self._firstButton, self._prevButton,
+                       self._nextButton, self._lastButton,
+                       self._randomButton,
+                       self._indexField, self._indexLabel):
             button.setEnabled(enabled)
         enabled = enabled and self._controller.isinstance(Random)
-        self.randomButton.setEnabled(enabled)
+        self._randomButton.setEnabled(enabled)
         if self._controller:
-            self.prepareButton.setChecked(self._controller.prepared)
+            self._prepareButton.setChecked(self._controller.prepared)
 
 
     def _newNavigationButton(self, label: str, icon: str=None):
@@ -185,17 +193,17 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         '''Callback for clicking the 'next' and 'prev' sample button.'''
         if self._controller is None:
             return
-        if self.sender() == self.firstButton:
+        if self.sender() == self._firstButton:
             self._controller.rewind()
-        elif self.sender() == self.prevButton:
+        elif self.sender() == self._prevButton:
             self._controller.rewind_one()
-        elif self.sender() == self.nextButton:
+        elif self.sender() == self._nextButton:
             self._controller.advance_one()
-        elif self.sender() == self.lastButton:
+        elif self.sender() == self._lastButton:
             self._controller.advance()
-        elif self.sender() == self.randomButton:
+        elif self.sender() == self._randomButton:
             self._controller.random()
-        elif self.sender() == self.prepareButton:
+        elif self.sender() == self._prepareButton:
             if checked:
                 self._controller.prepare()
             else:
@@ -206,7 +214,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         interests = Datasource.Change('observable_changed', 'busy_changed',
                                       'state_changed', 'data_changed')
         self._exchangeView('_controller', datasource, interests=interests)
-        self.loopButton.setDatasourceController(datasource)
+        self._loopButton.setDatasourceController(datasource)
 
     def datasource_changed(self, datasource: Datasource, info) -> None:
         """React to chanes in the datasource. Changes of interest are:
@@ -219,7 +227,8 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
             reflect the selection in our controls.
         """
         if info.observable_changed:
-            self._layoutUI()
+            self._updateState()
+            self._enableUI()
 
         if info.observable_changed or info.state_changed:
             self._updateDescription(datasource)
@@ -234,17 +243,17 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
                 index = self._controller.index or 0
                 self._indexField.setText(str(index))
                 enabled = bool(self._controller) and self._controller.prepared
-                self.firstButton.setEnabled(enabled and index > 0)
-                self.prevButton.setEnabled(enabled and index > 0)
-                self.nextButton.setEnabled(enabled and index+1 < n_elems)
-                self.lastButton.setEnabled(enabled and index+1 < n_elems)
+                self._firstButton.setEnabled(enabled and index > 0)
+                self._prevButton.setEnabled(enabled and index > 0)
+                self._nextButton.setEnabled(enabled and index+1 < n_elems)
+                self._lastButton.setEnabled(enabled and index+1 < n_elems)
 
 
     def _updateDescription(self, datasource):
         info = ''
         if datasource:
             text = datasource.get_description()
-            if self._controller and self._controller.isinstance(DataArray):
+            if self._controller and self._controller.isinstance(Indexed):
                 elements = len(datasource)
                 if elements:
                     self._indexField.setValidator(QIntValidator(0, elements))
@@ -252,7 +261,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         else:
             text = "No datasource"
         self.infoDataset.setText(text)
-        self.infoLabel.setText(info)
+        self._indexLabel.setText(info)
     
     def _updateState(self):
         if not self._controller:
@@ -471,6 +480,7 @@ class QInputInfoBox(QWidget, QObserver, Datasource.Observer, Toolbox.Observer,
 
     def datasource_changed(self, datasource, change):
         if change.data_changed:
+            # the data provided by the Datasource has changed
             if self._datasource:
                 data, label = datasource.data
                 self._showInfo(data=data, label=label)

@@ -3,29 +3,23 @@ import tensorflow as tf
 import os.path
 import sys
 
-#if tf.test.gpu_device_name():
-#    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-#else:
-#    print("Please install GPU version of TF")
+if tf.test.gpu_device_name():
+    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
+else:
+    print("Please install GPU version of TF")
 #print(tf.list_devices())
-#print(tf.test.is_built_with_cuda())
+print(tf.test.is_built_with_cuda())
 
-model_path = os.getenv('ALEXNET_MODEL', '.')
-checkpoint = os.path.join(model_path, 'bvlc_alexnet.ckpt')
-
+checkpoint = 'bvlc_alexnet.ckpt'
+checkpoint = os.path.join('models', 'example_tf_alexnet',
+                           'bvlc_alexnet.ckpt')
 loaded_network = TensorFlowNetwork(checkpoint=checkpoint)
-print("network input shape: {}".format(loaded_network.get_input_shape()))
 
-for id in loaded_network.layer_dict:
-    print(id)
-
-#print("Operations in graph:")
-#for op in loaded_network._sess.graph.get_operations():
-#    print(" op: {} ({})".format(op.name, op.type))
-
+#print(loaded_network._sess.graph.get_operations())
+print(loaded_network.layer_dict)
 
 import numpy as np
-from util.image import imread, imresize
+from scipy.misc import imread
 # "laska.png", "poodle.png"
 images = []
 for arg in sys.argv[1:]:
@@ -34,24 +28,9 @@ for arg in sys.argv[1:]:
     im[:, :, 0], im[:, :, 2] = im[:, :, 2], im[:, :, 0]
     images.append(im)
 
-
-import os, random
-prefix = os.path.join(os.getenv('IMAGENET_DATA', '.'),'train')
-for i in range(3):
-    img_dir = os.path.join(prefix, random.choice(os.listdir(prefix)))
-    img_file = os.path.join(img_dir, random.choice(os.listdir(img_dir)))
-    print(img_file)
-    im = (imread(img_file)[:,:,:3]).astype(np.float32)
-    im = imresize(im, (227,227))
-    im = im - im.mean()
-    im[:, :, 0], im[:, :, 2] = im[:, :, 2], im[:, :, 0]
-    images.append(im)
-
-
 # Assuming the first op is the input.
 network_input_tensor = loaded_network._sess.graph.get_operations()[0].outputs[0]
 network_output_tensor = loaded_network.layer_dict['dense_3'].activation_tensor
-
 
 from imagenet_classes import class_names
 
@@ -62,8 +41,8 @@ if images:
     for op in loaded_network._sess.graph.get_operations():
         #print(op.type)
         if op.type == 'Placeholder':
-            network_input_tensor = op.outputs[0];
-            print("Heureka: in! ({})".format(network_input_tensor))
+            in_op = op;
+            print("Heureka: in!")
         if op.type == 'Softmax':
             out_op = op;
             print("Heureka: out!")

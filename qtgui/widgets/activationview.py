@@ -235,12 +235,14 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
             # For fully connected (i.e., dense) layers, the axes are:
             # (units,)
             activation = self._activations
-            self._units = activation.shape[0]
-            self._unitSize = QSize(activation.shape[2], activation.shape[1])
             self._isConvolution = (activation.ndim == 3)
+            self._units = activation.shape[0]
+
             if self._isConvolution:
+                self._unitSize = QSize(activation.shape[2], activation.shape[1])
                 unitRatio = self._unitSize.width() / self._unitSize.height()
             else:
+                self._unitSize = QSize(1, 1)
                 unitRatio = 1
 
             # FIXME: implement better computation!
@@ -290,7 +292,8 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         '''
         if unit is None or self._unitDisplaySize is None:
             return None
-        rect = QRect(self._getUnitDisplayCorner(unit), self._unitDisplaySize)
+        rect = QRect(self._getUnitDisplayCorner(unit, self._padding),
+                     self._unitDisplaySize)
         if padding:
             rect -= QMargins(padding, padding, padding, padding)
         return rect
@@ -386,7 +389,7 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
 
         '''
         for unit in range(self._units):
-            rect = self._getUnitDisplayRect(unit)
+            rect = self._getUnitDisplayRect(unit, self._padding)
             if rect is not None:
                 image = QImage(self._activations[unit],
                                self._unitSize.width(), self._unitSize.height(),
@@ -402,7 +405,7 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
         qp: QPainter
         '''
         for unit, value in enumerate(self._activations):
-            qp.fillRect(self._getUnitDisplayRect(unit),
+            qp.fillRect(self._getUnitDisplayRect(unit, self._padding),
                         QBrush(QColor(value, value, value)))
 
     def _drawSelection(self, qp):

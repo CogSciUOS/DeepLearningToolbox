@@ -313,8 +313,12 @@ class QImageView(QWidget):
         aspectAction.setStatusTip('Keep original aspect ratio of the image')
         aspectAction.toggled.connect(self.onAspectClicked)
         self._contextMenu.addAction(aspectAction)
+        
         self._contextMenu.addSeparator()
-        self._contextMenu.addAction(QAction('Save image', self))
+        saveAction = QAction('Save image', self)
+        saveAction.setStatusTip('save the current image')
+        saveAction.triggered.connect(self.onSaveClicked)
+        self._contextMenu.addAction(saveAction)
         self._contextMenu.addAction(QAction('Save image as ...', self))
 
         # set button context menu policy
@@ -332,14 +336,25 @@ class QImageView(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
 
     #@pyqtSlot(QPoint)
+    @protect
     def onContextMenu(self, point):
         # show context menu
         print(type(point))
         self._contextMenu.exec_(self.mapToGlobal(point))
 
     #@pyqtSlot(bool)
+    @protect
     def onAspectClicked(self, checked):
         self.keepAspectRatio = checked
+
+    @protect
+    def onSaveClicked(self, checked):
+        if (self._raw is not None and
+            self._metadata is not None and
+            self._metadata.has_attribute('basename')):
+            # write the file
+            from imageio import imwrite
+            imwrite(self._metadata.get_attribute('basename'), self._raw)
 
     @property
     def keepAspectRatio(self) -> bool:
@@ -560,6 +575,7 @@ class QImageView(QWidget):
 
 from datasources import Metadata
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QLabel
 
 
@@ -572,6 +588,7 @@ class QMetadataView(QLabel):
     def __init__(self, metadata: Metadata=None, **kwargs):
         super().__init__(**kwargs)
         self._attributes = []
+        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.setMetadata(metadata)
 
     def addAttribute(self, attribute):
@@ -585,12 +602,14 @@ class QMetadataView(QLabel):
             text = ("No description" if metadata.description is None
                     else metadata.description)
             for attribute in self._attributes:
-                if attribute == 'regions':
+                if not metadata.has_attribute(attribute):
+                    text += f"\n{attribute}: None"
+                elif attribute == 'regions':
                     text += f"\n{len(metadata.regions)} regions"
                 elif attribute == 'image':
                     text += (f"\n{metadata.image.shape}, "
                              f"dtype={metadata.image.dtype}")
-                elif metadata.has_attribute(attribute):
+                else:
                     value = metadata.get_attribute(attribute)
                     text += f"\n{attribute}: {value}"
             self.setText(text)
@@ -686,8 +705,8 @@ class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
     # FIXME[hack]: we should have a callback busy_changed!
     def detector_changed(self, busyBody: BusyObservable,
                          change: BusyObservable.Change) -> None:
-        print(f"QBusyWidght: busy changed: {change} ({busyBody.busy})")
         self._movie.setPaused(not busyBody.busy)
+        self.setVisible(busyBody.busy)
 
     def __del__(self):
         self._movie.stop()

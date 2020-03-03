@@ -3,10 +3,13 @@ import random
 from glob import glob
 import numpy as np
 
-from . import Datasource, DataDirectory, Predefined, Metadata
+from . import Datasource, DataDirectory, Predefined, Imagesource
 from util.image import imread, Landmarks
 
-class Helen(DataDirectory, Predefined):
+import logging
+logger = logging.getLogger(__name__)
+
+class Helen(DataDirectory, Predefined, Imagesource):
     """A face landmarking dataset consisting of 2330 higher resolution
     face images, annotated with 194 points facial landmarks.
 
@@ -100,20 +103,45 @@ class Helen(DataDirectory, Predefined):
         Notice: the file 'annotations.txt' is not part of the HELEN dataset,
         but has to be manually constructed.
 
+        Raises
+        ------
+        FileNotFoundError:
+            The 'annotation' subdirectory does not exist.
         """
-        self._annotations = {}
-        with open(os.path.join(self.directory, filename)) as file:
-            for line in file:
-                image, annotation = line.rstrip().split()
-                self._annotations[image] = annotation
+        abs_annotation_dir = os.path.join(self.directory, 'annotation')
+        if not os.path.isdir(abs_annotation_dir):
+            raise FileNotFoundError("The 'annotation' directory of the HELEN "
+                                    "facial landmark dataset is missing.")
 
         if load is not None:
             self._load_annotations = load
 
-        if self._load_annotations:
-            for image, name in self._annotations.items():
-                filename = os.path.join(self.directory, 'annotation', name)
-                self._annotations[image] = self._load_annotation(filename)
+        self._annotations = {}
+        abs_filename = os.path.join(self.directory, filename)
+        if os.path.isfile(abs_filename):
+            # we have a file mapping image names to annotation files
+            with open(abs_filename) as file:
+                for line in file:
+                    image, annotation_file = line.rstrip().split()
+                    self._annotations[image] = annotation_file
+            if self._load_annotations:
+                for image, name in self._annotations.items():
+                    abs_annotation = os.path.join(abs_annotation_dir, name)
+                    _, self._annotations[image] = \
+                        self._load_annotation(abs_annotation)
+        else:
+            # we have no file mapping image names to annotation files
+            # -> create the mapping by iterating over the annotation directory
+            for name in os.listdir(abs_annotation_dir):
+                abs_annotation = os.path.join(abs_annotation_dir, name)
+                image_name, landmarks = self._load_annotation(abs_annotation)
+                self._annotations[image_name] = \
+                    landmarks if self._load_annotations else name
+            # FIXME[todo]:
+            # 1. in case we created the annotations mapping,
+            #    we may store them in a cache file ...
+            # 2. in case we loaded all annotations, we may
+            #    store them in a cache file
 
     def _load_annotation(self, filename: str) -> None:
         """Load annotation (facial landmark information) from a file.
@@ -126,41 +154,37 @@ class Helen(DataDirectory, Predefined):
         Arguments
         ---------
         filename: str
-            The name of the annotation file.
+            The absolute name of the annotation file.
         """
         with open(filename) as file:
             # Ignore the first line (image name)
-            image_name = file.readline()
+            image_name = file.readline().rstrip()
             points = np.ndarray((194,2))
             for i, line in enumerate(file):
                 x, y = line.split(' , ')
                 points[i] = float(x), float(y)
-        return Landmarks(points)
+        return image_name, Landmarks(points)
 
     def _fetch(self, **kwargs):
-
         # Step 1: provide the image
         super()._fetch(**kwargs)
 
-        # Step 2: provide the metadata
-        image_file = self._filenames[self._index]
-        image_base = os.path.basename(image_file)
-        metadata = Metadata(description="HELEN Image",
-                            directory=os.path.dirname(image_file),
-                            file=image_base)
-        if image_base.endswith('.jpg'):
-            image_base = image_base[:-len('.jpg')]
-        if self._load_annotations:
-            landmarks = self._annotations[image_base]
-        else:
-            filename = os.path.join(self.directory, 'annotation',
+        # Step 2: provide the metadata (landmarks)
+        if self._metadata is not None:
+            image_base = self._metadata.get_attribute('basename')
+            if image_base.endswith('.jpg'):
+                image_base = image_base[:-len('.jpg')]
+            if self._load_annotations:
+                landmarks = self._annotations[image_base]
+            else:
+                filename = os.path.join(self.directory, 'annotation',
                                     self._annotations[image_base])
-            landmarks = self._load_annotation(filename)
+                _, landmarks = self._load_annotation(filename)
 
-        metadata.add_region(landmarks)
-        metadata.set_attribute('image', self._image)
-        self._metadata = metadata
+            self._metadata.set_attribute('name', image_base)
+            self._metadata.add_region(landmarks)
 
     def __str__(self):
         return 'Helen'
+
 

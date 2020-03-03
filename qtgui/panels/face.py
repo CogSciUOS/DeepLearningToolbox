@@ -220,7 +220,10 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
         # QModelImageView: a widget to display the input data
         self._inputView = QModelImageView()
         self._metadataView = QMetadataView()
+        self._metadataView.addAttribute('filename')
+        self._metadataView.addAttribute('basename')
         self._metadataView.addAttribute('directory')
+        self._metadataView.addAttribute('path')
         self._metadataView.addAttribute('regions')
         self._metadataView.addAttribute('image')
 

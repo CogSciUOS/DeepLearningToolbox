@@ -102,7 +102,9 @@ class PointsBasedLocation:
 
 class Landmarks(PointsBasedLocation):
 
-    pass
+    def __len__(self) -> int:
+        return 0 if self._points is None else len(self._points) 
+
 
 class BoundingBox(PointsBasedLocation):
 

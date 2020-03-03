@@ -1,7 +1,10 @@
+from .meta import Metadata
 from base import BusyObservable, change
+from util.image import imread
 
-from collections import namedtuple
+import os
 import random
+from collections import namedtuple
 from typing import Dict, List, Sequence, Union
 import numpy as np
 
@@ -110,6 +113,7 @@ class Datasource(BusyObservable, method='datasource_changed',
             property.
         """
         if self.prepared:
+            self._metadata = Metadata(description=f"Metadata for {self}")
             self._fetch(**kwargs)
             self.change('data_changed')
             
@@ -132,7 +136,8 @@ class Datasource(BusyObservable, method='datasource_changed',
         before by calling :py:meth:`fetch`
         """
         if not self.fetched:
-            raise RuntimeException("No data has been fetched.")
+            raise RuntimeException("No data has been fetched on Datasource "
+                                   f"{self.__class__.__name}")
         return self._get_data()
 
     def _get_data(self) -> np.ndarray:
@@ -165,6 +170,11 @@ class Datasource(BusyObservable, method='datasource_changed',
     
     @property
     def metadata(self):
+        """Metadata for the currently selected data.
+        """
+        if not self.fetched:
+            raise RuntimeException("No (meta)data has been fetched "
+                                   f"on Datasource {self.__class__.__name}")
         return self._metadata
 
     @property
@@ -187,6 +197,45 @@ class Datasource(BusyObservable, method='datasource_changed',
         """
         return self._description
 
+    def load_datapoint_from_file(self, filename: str):
+        """Load a single datapoint from a file.
+        This method should be implemented by subclasses.
+
+        Arguments
+        ---------
+        filename: str
+            The absolute filename from which the data should be loaded.
+
+        Result
+        ------
+        datapoint
+            The datapoint loaded from file.
+        """
+        raise NotImplementedError(f"The datasource {self.__class__.__name__} "
+                                  "does not implement a method to load a "
+                                  f"datapoint from file '{filename}'")
+
+class Imagesource(Datasource):
+
+    def load_datapoint_from_file(self, filename) -> np.ndarray:
+        """Load a single datapoint, that is an image, from a file.
+
+        Arguments
+        ---------
+        filename: str
+            The absolute image filename. The file may be in any format
+            supported by :py:meth:`imread`.
+
+        Result
+        ------
+        image
+            The image loaded from file.
+        """
+        return imread(filename)
+
+    @property
+    def image(self):
+        return self.data
 
 class Labeled(Datasource):
     """A :py:class:`Datasource` that provides labels for its data.
@@ -208,13 +257,21 @@ class Labeled(Datasource):
     ----------
     _label_formats: Mapping[str, Union[np.ndarray,list]]
         A mapping of supported container formats. Each format identifier
-        is mapped to some lookup table.    
+        is mapped to some lookup table.
+    _label_reverse: Mapping[str, Union[np.ndarray,list]]
+        A mapping of supported container formats. A format identifier
+        is mapped to some reverse lookup table.  Not all reverse
+        lookup tables may initially exist, but they are created
+        on the fly in :py:meth:`format_labels` the first time they
+        are needed.
     """
-    _label_formats: dict = {}
-    _label_reverse: dict = {}
+    _label_formats: dict = None
+    _label_reverse: dict = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._label_formats = {}
+        self._label_reverse = {}
 
     @property
     def number_of_labels(self) -> int:
@@ -361,12 +418,20 @@ class Labeled(Datasource):
         if labels is None:
             return None
 
+        # Step 1: convert labels into internal format
         if origin is not None:
+            # labels are in some custom (not the internal) format
+            # -> we will transform them into the internal format first
+
+            # Step 1a: check if we know the label format
             if not origin in self._label_formats:
                 raise ValueError(f"Format {origin} is not supported by "
                                  f"{self.__class__.__name__}. Known formats "
                                  f"are: {self._label_formats.keys()}")
+
+            # Step 1b: check if we have a reverse lookup table
             if not origin in self._label_reverse:
+                # if no such table exists yet, create a new one
                 table = self._label_formats[origin]
                 if isinstance(table, np.ndarray):
                     # FIXME[hack]: assume 0-based labels with no "gaps"
@@ -377,21 +442,32 @@ class Labeled(Datasource):
             else:
                 reverse_table = self._label_reverse[origin]
 
+            # Step 1c: do the conversion
             if isinstance(labels, int) or isinstance(labels, str):
+                # an individual label
                 labels = reverse_table[labels]
-            elif  isinstance(reverse_table, np.ndarray):
+            elif isinstance(reverse_table, np.ndarray):
+                # multiple labels with numpy reverse loopup table
                 labels = reverse_table[labels]
             else:
+                # multiple labels with another form of reverse loopup table
                 labels = [reverse_table[label] for label in labels]
-        
+
+        # Step 2: convert labels into target format
         if format is None:
-            return labels
+            return labels  # nothing to do ...
 
         if format in self._label_formats:
             table = self._label_formats[format]
-            if isinstance(labels, int) or isinstance(table, np.ndarray):
+            if isinstance(labels, int) or isinstance(labels, str):
+                # an individual label
                 return table[labels]
-            return [table[label] for label in labels]
+            elif isinstance(table, np.ndarray):
+                # multiple labels with a numpy lookup table
+                return table[labels]
+            else:
+                # multiple labels with another form of lookup table
+                return [table[label] for label in labels]
         else:
             raise ValueError(f"Format {format} is not supported by "
                              f"{self.__class__.__name__}. Known formats "
@@ -513,20 +589,20 @@ class Labeled(Datasource):
                 if self.fetched:
                     label = self._get_label()
                     description += f": {label}"
-                    if label is not None: # FIXME[bug] should never be the case
+                    if label is not None: # FIXME[bug]: it should never happen that label is None - repair and than remove the if statement ...
                         for format in self._label_formats.keys():
                             formated_label = self.format_labels(label, format)
                             description2 += f", {format}: {formated_label}"
         return description
 
 
-class Random:
+class Random(Datasource):
     """An abstract base class for datasources that allow to fetch
     random datapoints and/or batches. Subclasses of this class should
     implement :py:meth:`_fetch_random()`.
     """
 
-    def fetch(self, random: bool=False, **kwargs) -> None:
+    def _fetch(self, random: bool=False, **kwargs) -> None:
         """A version of :py:meth:`fetch` that allows for an
         additional argument `random`.
 
@@ -553,7 +629,7 @@ class Random:
                                   "implement the '_fetch_random' method.")
 
 
-class Indexed: # '(Random):
+class Indexed(Random):
     """Instances of this class can be indexed.
     """
 
@@ -561,7 +637,7 @@ class Indexed: # '(Random):
         self.fetch_index(index=index)
         return self.get_data()
 
-    def fetch(self, index=None, **kwargs) -> None:
+    def _fetch(self, index=None, **kwargs):
         """A version of :py:meth:`fetch` that allows for an
         additional argument `random`.
 
@@ -572,10 +648,9 @@ class Indexed: # '(Random):
             :py:class:`Datasource`.
         """
         if index is not None:
-            self._fetch_index(index=index, **kwargs)
-            self.change('data_changed')
+            self._fetch_index(index, **kwargs)
         else:
-            super().fetch(**kwargs)
+            self._fetch_random(**kwargs)
 
     def _fetch_index(self, index, **kwargs) -> None:
         """This method should be implemented by subclasses that claim
@@ -587,9 +662,11 @@ class Indexed: # '(Random):
                                   "a 'Random' datasource, but it does not "
                                   "implement the '_fetch_random' method.")
 
-    def _fetch_random(self, **kwargs):
-        # provide a random image
-        self._fetch(index=random.randrange(len(self)), **kwargs)
+    def _fetch_random(self, **kwargs) -> None:
+        """Fetch a random image. In a :py:class:`Indexed` datasource
+        we can simply choose a random index and fetch that index.
+        """
+        self._fetch_index(index=random.randrange(len(self)), **kwargs)
 
 
     @property
@@ -604,6 +681,11 @@ class Indexed: # '(Random):
                                   "should implement 'len', but "
                                   f"{self.__class__.__name__} doesn't do that.")
 
+    def get_description(self, index=None, **kwargs) -> str:
+        description = super().get_description(**kwargs)
+        if index is not None:
+            description += f", index={index}"
+        return description
 
 class Predefined(Datasource):
     """An abstract base class for predefined data sources.
@@ -663,7 +745,7 @@ class Predefined(Datasource):
 from threading import Event
 
 
-class Loop:
+class Loop(Datasource):
     """The :py:class:`Loop` class provides a loop logic.
 
     Notice: the methods of this class are not intended to be
@@ -715,7 +797,7 @@ class Loop:
         self._loopEvent = None
 
 
-class Snapshot:
+class Snapshot(Datasource):
     """Instances of this class are able to provide a snapshot.
     """
 

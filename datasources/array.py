@@ -1,10 +1,10 @@
-from . import Datasource, Random, Labeled, Indexed, InputData
+from . import Datasource, Labeled, Indexed, InputData, Metadata
 
 from random import randint
 import numpy as np
 
 
-class DataArray(Random, Indexed):
+class DataArray(Indexed):
     """A ``DataArray`` stores all entries in an array (like the MNIST
     character data). That means that all entries will have the same sizes.
 
@@ -75,15 +75,15 @@ class DataArray(Random, Indexed):
         self._index = (self._index + batch_size) % len(self)
         self.change('batch_changed')
 
-    def _fetch(self, index: int=None) -> None:
+    def _fetch_index(self, index: int=None,
+                     metadata: Metadata=None) -> None:
         if index is not None:
             self._index = index 
         elif self._index is None:
             self._index = 0
+        if metadata is not None:
+            metadata.set_attribute('index', self._index)
         # print(f"Array:fetch({self._index})")
-
-    def _fetch_random(self, **kwargs):
-        self._index = randint(0, len(self))
 
     @property
     def fetched(self):

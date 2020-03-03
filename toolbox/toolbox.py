@@ -470,7 +470,9 @@ class Toolbox(BusyObservable, Datasource.Observer,
         Arguments
         ---------
         datasource: Datasource
-            The current datasource that has changed.
+            The current datasource that has changed. In case of
+            a change of datasource (observable_changed), this will
+            be the new datasource.
         change: Datasource.Change
             The change that occured. We are interested in a change
             of the datasource itself (observable_changed) and a

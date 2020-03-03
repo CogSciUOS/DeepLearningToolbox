@@ -52,7 +52,7 @@ class Controller(View, BaseController):
         kwargs = {}
         if self.isinstance(Labeled):
             kwargs['with_label'] = True
-        if self.isinstance(DataArray):
+        if self.isinstance(Indexed):
             kwargs['index'] = self._datasource.index
         return self._datasource.get_description(**kwargs) if self else "No data"
 

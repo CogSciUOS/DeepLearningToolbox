@@ -53,6 +53,10 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
 
     @protect
     def onItemClicked(self, item: QListWidgetItem):
+        """Respond to a click in the datasource list.
+        Assign the corresponding :py:class:`Datasource`
+        to our :py:class:`DatatasourceController`.
+        """
         self._datasource(item.data(Qt.UserRole))
 
 

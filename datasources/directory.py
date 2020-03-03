@@ -1,13 +1,11 @@
-from datasources import Datasource, InputData, Indexed
-from util.image import imread
+from datasources import Indexed, InputData, Metadata
 
-from os.path import join, isdir, isfile
-from os import listdir
+import os
 from glob import glob
 import random
 
 
-class DataDirectory(Datasource, Indexed):
+class DataDirectory(Indexed):
     """A data directory contains data entries (e.g., images), in
     individual files. Each file is only read when accessed.
 
@@ -55,7 +53,7 @@ class DataDirectory(Datasource, Indexed):
             The directory does not exist.
         """
         
-        if dirname and not isdir(dirname):
+        if dirname and not os.path.isdir(dirname):
             FileNotFoundError(f"No such directory: {dirname}")
         if self._dirname != dirname:
             self._dirname = dirname
@@ -85,29 +83,24 @@ class DataDirectory(Datasource, Indexed):
         directory. Subclasses may implement alternative methods to
         collect filenames.
         """
-        # self._filenames = [f for f in listdir(self._dirname)
-        #                    if isfile(join(self._dirname, f))]
-        self._filenames = glob(join(self._dirname, "**", "*.*"),
+        # self._filenames = [f for f in os.listdir(self._dirname)
+        #                    if os.path.isfile(os.path.join(self._dirname, f))]
+        self._filenames = glob(os.path.join(self._dirname, "**", "*.*"),
                                recursive=True)
 
     def __len__(self):
+        """The length of a :py:class:`DataDirectory` is the number
+        of files in the directory.
+        """
         return self.prepared and len(self._filenames) or 0
 
     def __str__(self):
         return f'<DataDirectory "{self._dirname}">'
 
-    def _fetch(self, index=None, **kwargs):
-        if index is None:
-            self._fetch_random(**kwargs)
-        else:
-            image_file = self._filenames[index]
-            self._image = imread(image_file)
-            self._index = index
-
 
     @property
     def fetched(self):
-        return self._image is not None
+        return self._data is not None
 
     def _get_data(self):
         """The actual implementation of the :py:meth:`data` property
@@ -116,7 +109,7 @@ class DataDirectory(Datasource, Indexed):
         It can be assumed that a data point has been fetched when this
         method is invoked.
         """
-        return self._image
+        return self._data
 
     def _fetch_index(self, index, **kwargs) -> None:
         if isinstance(index, int):
@@ -126,12 +119,16 @@ class DataDirectory(Datasource, Indexed):
             filename = index
             index = self._filenames.index(filename)
 
-        self._data = self.load_data(filename)
+        abs_filename = os.path.join(self._dirname, filename)
+        self._data = self.load_datapoint_from_file(abs_filename)
         self._index = index
+        if self._metadata is not None:
+            self._metadata.set_attribute('filename', filename)
+            self._metadata.set_attribute('basename', os.path.basename(filename))
+            self._metadata.set_attribute('path', abs_filename)
+            self._metadata.set_attribute('index', index)
+            self._metadata.set_attribute('image', self._data)
 
-    def load_data(self, filename):
-        return imread(join(self._dirname, filename))
-        
     # numerical index of the currently selected file
     _index: int = 0
 

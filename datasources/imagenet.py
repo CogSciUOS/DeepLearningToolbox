@@ -1,4 +1,4 @@
-from . import DataSource, Labeled, DataDirectory, InputData, Predefined
+from . import Imagesource, Labeled, DataDirectory, InputData, Predefined
 
 # FIXME[todo]: this module datasources.imagenet_classes provides textual
 # class names for the 1000 ImageNet classes. The same information is
@@ -29,7 +29,7 @@ import pickle
 
 
 
-class ImageNet(DataDirectory, Labeled, Predefined):
+class ImageNet(DataDirectory, Imagesource, Labeled, Predefined):
     """An interface to the ILSVRC2012 dataset.
 
     Labels
@@ -360,13 +360,6 @@ class ImageNet(DataDirectory, Labeled, Predefined):
         category = self._category_for_filename(filename)
         return InputData(data, category)
 
-    def _fetch(self, **kwargs) -> None:
-        """Fetch an image from this ImageNet datasource. After fetching,
-        the image can be obtained by calling :py:meth:get_data() and the
-        the label by calling :py:meth:get_label().
-        """
-        self._fetch_random(**kwargs)
-
     def _fetch_random(self, **kwargs) -> None:
         """Randomly fetch an image from this ImageNet datasource.  After
         fetching, the image can be obtained by calling
@@ -378,25 +371,15 @@ class ImageNet(DataDirectory, Labeled, Predefined):
             img_dir = os.path.join(self.directory, self._synsets[category])
             filename = random.choice(os.listdir(img_dir))
             img_file = os.path.join(img_dir, filename)
+            self._data = self.load_datapoint_from_file(abs_filename)
+            # FIXME[todo]: determine index!
+            #self._index = index
         elif self._section == 'val':
-            filename = random.choice(self._filenames)
-            img_file = os.path.join(self.directory, filename)
+            super()._fetch_random(**kwargs)
+            filename = self._metadata.get_attribute('filename')
 
-        self._image = imread(img_file)
         self._label = self._label_for_filename(filename)
 
-    @property
-    def fetched(self):
-        """Check if an image has been fetched.
-        """
-        return self._image is not None
-
-    def _get_data(self):
-        """The actual implementation of the :py:meth:`data` property for the
-        ImageNet datasource.  It can be assumed that a data point has
-        been fetched when this method is invoked.
-        """
-        return self._image
 
     def _get_label(self):
         """The actual implementation of the :py:meth:`get_label` method for

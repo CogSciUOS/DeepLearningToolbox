@@ -1,41 +1,25 @@
-###############################################################################
-# Based on code by Michael Guerzhoy and Davi Frossard
+################################################################################
+# Base on code by Michael Guerzhoy and Davi Frossard
 # "AlexNet implementation in TensorFlow, with weights""
 # http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/
 #
 # Weights are available from here:
 #  http://www.cs.toronto.edu/%7Eguerzhoy/tf_alexnet/bvlc_alexnet.npy
-###############################################################################
-
-import sys
-import os
-import os.path
-import urllib
-
-flag_download = False
-flag_save = True
-
-model_data_url = "http://www.cs.toronto.edu/%7Eguerzhoy/tf_alexnet/bvlc_alexnet.npy"
-
-model_path = os.getenv('ALEXNET_MODEL', '.')
-model_data = os.path.join(model_path, 'bvlc_alexnet.npy')
-
-if not os.path.isfile(model_data):
-    if flag_download:
-        urllib.urlretrieve(model_data_url, model_data)
-    else:
-        print("error: datafile (bvlc_alexnet.npy) not found.", file=sys.stderr)
-        sys.exit(1)
-
-
-###############################################################################
+################################################################################
 
 import numpy as np
+from numpy import *
 import tensorflow as tf
+
 
 xdim = (227,227,3)
 ydim = 1000
 
+import os.path
+model_data = os.path.join('models', 'example_tf_alexnet', 'bvlc_alexnet.npy')
+
+
+################################################################################
 
 # (self.feed('data')
 #         .conv(11, 11, 96, 4, 4, padding='VALID', name='conv1')
@@ -53,8 +37,8 @@ ydim = 1000
 #         .softmax(name='prob'))
 
 #In Python 3.5, change this to:
-net_data = np.load(open(model_data, "rb"), encoding="latin1").item()
-#net_data = np.load(model_data).item()
+net_data = load(open(model_data, "rb"), encoding="latin1").item()
+#net_data = load(model_data).item()
 
 def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group=1):
     '''From https://github.com/ethereon/caffe-tensorflow
@@ -159,8 +143,7 @@ maxpool5 = tf.nn.max_pool(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1
 #fc(4096, name='fc6')
 fc6W = tf.Variable(net_data["fc6"][0])
 fc6b = tf.Variable(net_data["fc6"][1])
-units = int(np.prod(maxpool5.get_shape()[1:]))
-fc6 = tf.nn.relu_layer(tf.reshape(maxpool5, [-1, units]), fc6W, fc6b)
+fc6 = tf.nn.relu_layer(tf.reshape(maxpool5, [-1, int(prod(maxpool5.get_shape()[1:]))]), fc6W, fc6b)
 
 #fc7
 #fc(4096, name='fc7')
@@ -179,11 +162,9 @@ fc8 = tf.nn.xw_plus_b(fc7, fc8W, fc8b)
 #softmax(name='prob'))
 prob = tf.nn.softmax(fc8)
 
-###############################################################################
-
-if flag_save:
-    init = tf.global_variables_initializer()
-    saver = tf.train.Saver()
-    with tf.Session() as sess:
-        sess.run(init)
-        save_path = saver.save(sess, "bvlc_alexnet.ckpt")
+################################################################################
+init = tf.global_variables_initializer()
+saver = tf.train.Saver()
+with tf.Session() as sess:
+    sess.run(init)
+    save_path = saver.save(sess, "bvlc_alexnet.ckpt")

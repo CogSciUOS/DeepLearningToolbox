@@ -21,7 +21,7 @@ Datasources can have different
 """
 from .meta import Metadata
 from .source import (Datasource, InputData, Predefined, Labeled, Random,
-                     Loop, Snapshot, Indexed)
+                     Loop, Snapshot, Indexed, Imagesource)
 from .source import Datasource as DataSource
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
