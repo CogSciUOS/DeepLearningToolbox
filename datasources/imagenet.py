@@ -1,4 +1,4 @@
-from . import DataSource, Labeled, Random, DataDirectory, InputData, Predefined
+from . import DataSource, Labeled, DataDirectory, InputData, Predefined
 
 # FIXME[todo]: this module datasources.imagenet_classes provides textual
 # class names for the 1000 ImageNet classes. The same information is
@@ -29,7 +29,7 @@ import pickle
 
 
 
-class ImageNet(DataDirectory, Random, Labeled, Predefined):
+class ImageNet(DataDirectory, Labeled, Predefined):
     """An interface to the ILSVRC2012 dataset.
 
     Labels

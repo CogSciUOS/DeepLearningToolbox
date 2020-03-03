@@ -257,7 +257,8 @@ class QObserver:
 
 
 import numpy as np
-from util.image import imresize
+from datasources import Metadata
+from util.image import imresize, BoundingBox, PointsBasedLocation
 
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
 from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
@@ -278,13 +279,16 @@ class QImageView(QWidget):
     _show_raw: bool
         A flag indicating whether this QImageView will show
         the raw input data, or the data acutally fed to the network.
+    _showMetadata: bool
+        A flag indicating if metadata should be shown if available.
     """
     _image: QImage = None
     _overlay: QImage = None
     _show_raw: bool = False
     _contextMenu: QMenu = None
     _keepAspect: bool = True
-
+    _showMetadata: bool = True
+    
     def __init__(self, parent: QWidget=None):
         """Construct a new :py:class:`QImageView`.
         """
@@ -294,6 +298,8 @@ class QImageView(QWidget):
         self._image: QImage = None
         self._marks: list = None
         self._overlay: QImage = None
+        self._metadata: Metadata = None
+        self._metadata2: Metadata = None
 
         #
         # Prepare the context Menu
@@ -344,7 +350,17 @@ class QImageView(QWidget):
         if self._keepAspect != flag:
             self._keepAspect = flag
             self.update()
-        
+
+    @property
+    def showMetadata(self) -> bool:
+        return self._showMetadata
+
+    @showMetadata.setter
+    def showMetadata(self, flag: bool) -> None:
+        if self._showMetadata != flag:
+            self._showMetadata = flag
+            self.update()
+
     def getImage(self) -> np.ndarray:
         return self._raw
 
@@ -427,6 +443,13 @@ class QImageView(QWidget):
         """
         self._marks.append(rect)
 
+    def setMetadata(self, metadata: Metadata, metadata2: Metadata=None):
+        """Set metadata to be displayed in this View.
+        """
+        self._metadata = metadata
+        self._metadata2 = metadata2
+        self.update()
+
     def paintEvent(self, event):
         """Process the paint event by repainting this Widget.
 
@@ -459,6 +482,9 @@ class QImageView(QWidget):
         self._drawImage(painter)
         self._drawMask(painter)
         self._drawMarks(painter)
+        if self.showMetadata:
+            self._drawMetadata(painter, self._metadata, color=Qt.green)
+            self._drawMetadata(painter, self._metadata2, color=Qt.red)
         painter.end()
 
     def _drawImage(self, painter: QPainter):
@@ -488,6 +514,9 @@ class QImageView(QWidget):
         ----------
         painter :   QPainter
         """
+        if not self._marks:
+            return
+
         for mark in self._marks:
             if isinstance(mark, QRect):
                 pen_width = 4
@@ -496,6 +525,26 @@ class QImageView(QWidget):
                 pen.setWidth(pen_width)
                 painter.setPen(pen)
                 painter.drawRect(mark)
+
+    def _drawMetadata(self, painter: QPainter, metadata: Metadata,
+                      pen: QPen=None, line_width=4, color=Qt.green):
+        if metadata is None or not metadata.has_regions():
+            return
+
+        for region in metadata.regions:
+            if pen is None:
+                pen = QPen(color)
+                pen.setWidth(line_width * (1+max(self._image.width(),
+                                                 self._image.height())//400))
+            painter.setPen(pen)
+            if isinstance(region.location, BoundingBox):
+                l = region.location
+                painter.drawRect(l.x, l.y, l.width, l.height)
+            elif isinstance(region.location, PointsBasedLocation):
+                for p in region.location.points:
+                    painter.drawPoint(p[0], p[1])
+
+
         
     def keyPressEvent(self, event):
         """Process key events. The :py:class:`QImageView` supports
@@ -506,6 +555,45 @@ class QImageView(QWidget):
         key = event.key()
         if key == Qt.Key_R:
             self.keepAspectRatio = not self.keepAspectRatio
+        elif key == Qt.Key_M:
+            self.showMetadata = not self.showMetadata
+
+from datasources import Metadata
+
+from PyQt5.QtWidgets import QWidget, QLabel
+
+
+class QMetadataView(QLabel):
+    """A :py:class:`QWidget` to display :py:class:`Metadata` information.
+    """
+
+    _metadata: Metadata
+
+    def __init__(self, metadata: Metadata=None, **kwargs):
+        super().__init__(**kwargs)
+        self._attributes = []
+        self.setMetadata(metadata)
+
+    def addAttribute(self, attribute):
+        self._attributes.append(attribute)
+
+    def setMetadata(self, metadata: Metadata) -> None:
+        self._metadata = metadata
+        if metadata is None:
+            self.setText(None)
+        else:
+            text = ("No description" if metadata.description is None
+                    else metadata.description)
+            for attribute in self._attributes:
+                if attribute == 'regions':
+                    text += f"\n{len(metadata.regions)} regions"
+                elif attribute == 'image':
+                    text += (f"\n{metadata.image.shape}, "
+                             f"dtype={metadata.image.dtype}")
+                elif metadata.has_attribute(attribute):
+                    value = metadata.get_attribute(attribute)
+                    text += f"\n{attribute}: {value}"
+            self.setText(text)
 
 
 from PyQt5 import QtCore
@@ -574,11 +662,14 @@ import os
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtGui import QMovie
 
-class QBusyWidget(QLabel):
+from base.observer import BusyObservable
+
+class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
     """A widget indicating a that some component is busy.
     """
     _label: QLabel = None
     _movie: QMovie = None
+    _busy = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -587,6 +678,16 @@ class QBusyWidget(QLabel):
         self._movie = QMovie(os.path.join('assets', 'busy.gif'))
         self.setMovie(self._movie)
         self._movie.start()
+
+    def setView(self, busyView):
+        interests = BusyObservable.Change('busy_changed')
+        self._exchangeView('_busy', busyView, interests=interests)
+
+    # FIXME[hack]: we should have a callback busy_changed!
+    def detector_changed(self, busyBody: BusyObservable,
+                         change: BusyObservable.Change) -> None:
+        print(f"QBusyWidght: busy changed: {change} ({busyBody.busy})")
+        self._movie.setPaused(not busyBody.busy)
 
     def __del__(self):
         self._movie.stop()

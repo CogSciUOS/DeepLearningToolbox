@@ -1,6 +1,6 @@
 
 
-from datasources import (Datasource, DataArray, Random,
+from datasources import (Datasource, DataArray, Random, Indexed,
                          Controller as DatasourceController)
 
 from ..utils import QObserver, protect
@@ -13,12 +13,43 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
 
 
 class QInputNavigator(QWidget, QObserver, Datasource.Observer):
-    """
-    A QInputNavigator displays widgets to navigate in the Datasource.
-    The actual set of widgets depends on the type of Datasource and
-    will be adapated when the Datasource is changed.
+    """A :py:class:`QInputNavigator` displays widgets to navigate in the
+    Datasource.  The actual set of widgets depends on the type of
+    Datasource and will be adapated when the Datasource is changed.
+
     """
     _controller: DatasourceController = None
+
+    # prepare or unprepare the Datasource
+    prepareButton = None
+
+    # select the first entry in the Datasource (Indexed)
+    firstButton = None
+    # select last entry in the Datasource (Indexed)
+    firstButton = None
+
+    # select previous entry in the Datasource (Indexed)
+    prevButton = None
+    # select next entry in the Datasource (Indexed)
+    nextButton = None
+
+    # select specific index in the Datasource (Indexed)
+    _indexField = None
+
+    # select random entry from the Datasource (Random)
+    randomButton = None
+
+    # start/stop looping the Datasource (Loop)
+    loopButton = None
+
+    #
+    infoDataset = None
+    # 
+    infoLabel = None
+    
+    # display the state of the Datasource:
+    # "none" / "unprepared" / "busy" / "ready"
+    _stateLabel = None
 
     def __init__(self, datasource: DatasourceController=None, parent=None):
         '''Initialization of the QInputNavigator.
@@ -173,7 +204,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
     def setDatasourceController(self,
                                 datasource: DatasourceController) -> None:
         interests = Datasource.Change('observable_changed', 'busy_changed',
-                                      'state_changed')
+                                      'state_changed', 'data_changed')
         self._exchangeView('_controller', datasource, interests=interests)
         self.loopButton.setDatasourceController(datasource)
 
@@ -198,7 +229,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
             self._enableUI()
 
         if info.data_changed:
-            if self._controller and self._controller.isinstance(DataArray):
+            if self._controller and self._controller.isinstance(Indexed):
                 n_elems = 0 if datasource is None else len(datasource)
                 index = self._controller.index or 0
                 self._indexField.setText(str(index))

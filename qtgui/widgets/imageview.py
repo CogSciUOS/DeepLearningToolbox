@@ -142,6 +142,7 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
             image = self._activation.raw_input_data
             
         self.setImage(image)
+        self.setMetadata(self._toolbox.input_metadata)
 
 
     @pyqtSlot(bool)

@@ -19,8 +19,10 @@ Datasources can have different
 * sequential: data is read from some stream (movie, webcam)
 
 """
-from .source import Datasource, InputData, Predefined
-from .source import Datasource as DataSource, Labeled, Random, Loop, Snapshot
+from .meta import Metadata
+from .source import (Datasource, InputData, Predefined, Labeled, Random,
+                     Loop, Snapshot, Indexed)
+from .source import Datasource as DataSource
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
@@ -32,6 +34,7 @@ from .keras import KerasDatasource
 from .imagenet import ImageNet
 from .dogsandcats import DogsAndCats
 from .widerface import WiderFace
+from .helen import Helen
 from .noise import DataNoise
 
 import logging
@@ -55,6 +58,7 @@ ImageNet(section='val')
 DataNoise(shape=(100,100,3))
 DogsAndCats()
 WiderFace()
+Helen()
 
 if DataWebcam.check_availability():
     DataWebcam()

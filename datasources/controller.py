@@ -1,5 +1,5 @@
 from base import View as BaseView, Controller as BaseController, change, run
-from .source import Datasource, Labeled, Loop
+from .source import Datasource, Labeled, Loop, Indexed
 from .array import DataArray
 from .directory import DataDirectory
 from .file import DataFile
@@ -66,7 +66,7 @@ class Controller(View, BaseController):
             The current index of this
             :py:class:`DatasourceController`.
         """
-        if not self.isinstance(DataArray):
+        if not self.isinstance(Indexed):
             raise TypeError("No index available for datasource of type "
                             f"{type(self._datasource)}")
         return self._datasource.index
@@ -101,24 +101,24 @@ class Controller(View, BaseController):
 
     def advance(self):
         """Advance data index to end."""
-        if self.isinstance(DataArray) and self.prepared:
+        if self.isinstance(Indexed) and self.prepared:
             n_elems = len(self)
             self.set_index(n_elems - 1)
 
     def advance_one(self):
         """Advance data index by one."""
-        if self.isinstance(DataArray) and self.prepared:
+        if self.isinstance(Indexed) and self.prepared:
             n_elems = len(self)
             self.set_index(min(self._datasource.index + 1, n_elems))
 
     def rewind(self):
         """Reset data index to zero."""
-        if self.isinstance(DataArray) and self.prepared:
+        if self.isinstance(Indexed) and self.prepared:
             self.set_index(0)
 
     def rewind_one(self):
         """Rewind data index by one."""
-        if self.isinstance(DataArray) and self.prepared:
+        if self.isinstance(Indexed) and self.prepared:
             self.set_index(max(0, self._datasource.index - 1))
 
     def edit_index(self, index):

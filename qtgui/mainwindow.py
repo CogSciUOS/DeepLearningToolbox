@@ -204,12 +204,14 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         toolbox: ToolboxController
             The ToolboxController.
         """
-        interests = Toolbox.Change('datasources_changed')
+        interests = Toolbox.Change('datasources_changed', 'datasource_changed')
         self._exchangeView('_toolbox', toolbox, interests=interests)
         # FIXME[todo]: also inform the Panels that the toolbox was changed.
 
     def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
         if info.datasources_changed and self._datasourceMenu is not None:
+            self._updateDatasourceMenu()
+        elif info.datasource_changed and self._datasourceMenu is not None:
             self._updateDatasourceMenu()
 
     def _updateDatasourceMenu(self) -> None:
@@ -231,9 +233,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             return protect(set_datasource)
 
         for datasource in self._toolbox.datasources:
-            self._datasources[str(datasource)] = datasource
-            label = str(datasource)
             id = str(datasource)
+            label = str(datasource)
+            self._datasources[id] = datasource
             action = QAction(label, self)
             action.triggered.connect(slot(id))
             self._datasourceMenu.addAction(action)

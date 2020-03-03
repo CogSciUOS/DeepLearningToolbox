@@ -1,6 +1,6 @@
-from . import Datasource, DataDirectory, Labeled, Random, Predefined
+from . import Datasource, DataDirectory, Labeled, Predefined, Metadata
 
-from util.image import imread
+from util.image import imread, BoundingBox, Region
 
 
 import os
@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class WiderFace(DataDirectory, Random, Labeled, Predefined):
+class WiderFace(DataDirectory, Labeled, Predefined):
     """
     http://shuoyang1213.me/WIDERFACE/
 
@@ -55,6 +55,7 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
                                       'WIDER_' + self._section, 'images')
         self._available = os.path.isdir(self.directory)
         self._image = None
+        self._annotations = None
         self._initialize_filenames()
 
     def _initialize_filenames(self, widerface_data: str=None) ->None:
@@ -156,12 +157,19 @@ class WiderFace(DataDirectory, Random, Labeled, Predefined):
     def _fetch_random(self, **kwargs):
         img_file = random.choice(list(self._annotations.keys()))
         self._image = imread(os.path.join(self.directory, img_file))
-        for x1, y1, w, h, blur, expression, illumination, invalid, occlusion, pose in self._annotations[img_file]:
-            self._image[y1:y1+h,x1:x1+4,:] = 0
-            self._image[y1:y1+h,x1+w-4:x1+w,:] = 0
-            self._image[y1:y1+4,x1:x1+w,:] = 0
-            self._image[y1+h-4:y1+h,x1:x1+w,:] = 0
-        self._label = "f{img_file}"
+        metadata = Metadata(description="Wider Face Image",
+                            directory=os.path.dirname(img_file),
+                            file=os.path.basename(img_file))
+        for (x, y, w, h, blur, expression, illumination,
+             invalid, occlusion, pose) in self._annotations[img_file]:
+            metadata.add_region(BoundingBox(x=x, y=y, width=w, height=h),
+                                blur=blur, expression=expression,
+                                illumination=illumination,
+                                invalid=invalid, occlusion=occlusion,
+                                pose=pose)
+        metadata.set_attribute('image', self._image)
+        self._metadata = metadata
+        self._label = f"{img_file}"
 
     @property
     def fetched(self):

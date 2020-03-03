@@ -1,10 +1,10 @@
-from . import Datasource, Random, Labeled, InputData
+from . import Datasource, Random, Labeled, Indexed, InputData
 
 from random import randint
 import numpy as np
 
 
-class DataArray(Random):
+class DataArray(Random, Indexed):
     """A ``DataArray`` stores all entries in an array (like the MNIST
     character data). That means that all entries will have the same sizes.
 

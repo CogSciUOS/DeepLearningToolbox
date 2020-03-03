@@ -5,6 +5,8 @@ import numpy as np
 
 from .detector import Detector
 
+from datasources import Metadata
+from util.image import BoundingBox
 
 class DetectorHaar(Detector):
     """ The OpenCV Haar cascade face detector.
@@ -66,17 +68,59 @@ class DetectorHaar(Detector):
     def prepared(self):
         return self._detector is not None
 
-    def detect(self, image: np.ndarray):
-        if not self.prepared():
-            raise RuntimeError("Running unprepared detector.")
-        
+    def _detect(self, image: np.ndarray):
+
+        # The OpenCV CascadeClassifier expects the input image to
+        # be of type CV_8U (meaning unsigned 8-bit, gray scale image
+        # with pixel values from 0 to 255). If not given as in this
+        # format, we will try to convert it.
         if image.ndim == 3 and image.shape[2] == 3:
-            # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        else:
+        elif image.ndim == 3 and image.shape[2] == 1:
+            gray = image[:,:,0].copy()
+        elif image.ndim == 2:
             gray = image.copy()
+        else:
+            raise ValueError("The image provided has an illegal format: "
+                             f"shape={image.shape}, dtype={image.dtype}")
+
+
+        # There seem to be two Python interfaces to the CascadeClassifier:
+        #
+        # detectMultiScale(image[,
+        #                  scaleFactor[, minNeighbors[, flags[,
+        #                  minSize[, maxSize]]]]])
+        # detectMultiScale(image, rejectLevels, levelWeights[,
+        #                  scaleFactor[, minNeighbors[, flags[,
+        #                  minSize[, maxSize[, outputRejectLevels]]]]]])
+        #
+        # The meaning of the arguments are:
+        # 
+        # scaleFactor – Parameter specifying how much the image size
+        #               is reduced at each image scale.
+        #
+        # minNeighbors – Parameter specifying how many neighbors each
+        #                candidate rectangle should have to retain it.
+        #
+        # flags (old) – Parameter with the same meaning for an old cascade
+        #               as in the function cvHaarDetectObjects.
+        #               It is not used for a new cascade.
+        #
+        # minSize - Minimum possible object size.
+        #           Objects smaller than that are ignored.
+        # maxSize - Maximum possible object size.
+        #           Objects larger than that are ignored.
+        #
+        # rejectLevels, levelWeights, outputRejectLevels: ?
         rects = self._detector.detectMultiScale(gray)
-        return rects
+
+        detections = Metadata(description=
+                              'Detections by the OpenCV CascadeClassifier')
+        for rect in rects:
+            detections.add_region(BoundingBox(x=rect[0], y=rect[1],
+                                              width=rect[2], height=rect[3]))
+        return detections
+
 
 
 class DetectorSSD(Detector):
@@ -102,9 +146,6 @@ class DetectorSSD(Detector):
     """
     
     _detector = None
-    _canvas = None
-    _duration = None
-    _rects = None
 
     _dnn: str = None
     _model_file: str = None
@@ -150,7 +191,7 @@ class DetectorSSD(Detector):
     def prepared(self):
         return self._detector is not None
 
-    def detect(self, image):
+    def _detect(self, image):
         """Use the OpenCV
         """
 
@@ -160,20 +201,20 @@ class DetectorSSD(Detector):
         elif image.shape[2] == 1:
             image = np.repeat(image, 3, axis=2)
 
-        conf_threshold = 1 # FIXME[hack]
         # the image is converted to a blob
         blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300),
                                      [104, 117, 123], False, False)
 
         # the blob passed through the network using the forward() function.
         self._detector.setInput(blob)
-        detections = self._detector.forward()
-
-        # The output detections is a 4-D matrix, where
+        result = self._detector.forward()
+        # The result is a 4-D matrix, shape = (1, 1, detections, 7), where
         #  * the 3rd dimension iterates over the detected faces.
         #    (i is the iterator over the number of faces)
         #  * the fourth dimension contains information about the
         #    bounding box and score for each face.
+        #    - detections[0,0,i,0] ?
+        #    - detections[0,0,i,1] ?
         #    - detections[0,0,i,2] gives the confidence score
         #    - detections[0,0,i,3:6] give the bounding box
         #
@@ -181,12 +222,28 @@ class DetectorSSD(Detector):
         # between [0,1]. Thus the coordinates should be multiplied by
         # the height and width of the original image to get the
         # correct bounding box on the image.
-        bboxes = []
-        for i in range(detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-            if confidence > conf_threshold:
-                x1 = int(detections[0, 0, i, 3] * frameWidth)
-                y1 = int(detections[0, 0, i, 4] * frameHeight)
-                x2 = int(detections[0, 0, i, 5] * frameWidth)
-                y2 = int(detections[0, 0, i, 6] * frameHeight)
-        return bboxes
+        #
+        # The results are sorted according to the confidence score,
+        # that is once we reached our threshold we can stop searching
+        # for more detections.
+
+        conf_threshold = .1 # FIXME[hack]
+        #frameWidth, frameHeight = 300, 300
+        frameWidth, frameHeight = image.shape[1], image.shape[0]
+        #print(image.shape)
+
+        detections = Metadata(description=
+                              'Detections by the OpenCV Deep Neural Network')
+
+        for i in range(result.shape[2]):
+            #print(f"{i}: {result[0, 0, i, :]}")
+            confidence = result[0, 0, i, 2]
+            if confidence < conf_threshold:
+                break
+            x1 = int(result[0, 0, i, 3] * frameWidth)
+            y1 = int(result[0, 0, i, 4] * frameHeight)
+            x2 = int(result[0, 0, i, 5] * frameWidth)
+            y2 = int(result[0, 0, i, 6] * frameHeight)
+            detections.add_region(BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
+                                  confidence=confidence)
+        return detections

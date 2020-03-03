@@ -6,36 +6,42 @@ Email: krumnack@uni-osnabrueck.de
 Graphical interface for face detection and recognition.
 """
 
-from tools.face.detector import (Detector, DetectorController)
-from ..utils import QImageView, QObserver, QBusyWidget
+from tools.face.detector import (Detector as FaceDetector,
+                                 Controller as FaceController)
+from tools.face.landmarks import (Detector as LandmarkDetector,
+                                  Controller as LandmarkController)
+from datasources import Metadata
+from ..utils import QImageView, QObserver, QBusyWidget, protect
 
 import numpy as np
 
-from PyQt5.QtCore import QRect
 from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel, QVBoxLayout)
 
-class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
+class DetectorWidget(QGroupBox, QObserver, FaceDetector.Observer):
     """A detector widget displays the output of a Detector.
     """
 
-    _detectorController: DetectorController = None
+    _faceController: FaceController = None
     _view: QImageView = None
     _label: QLabel = None
+    _trueMetadata: Metadata = None
 
-    def __init__(self, detector: DetectorController=None, **kwargs):
+    def __init__(self, detector: FaceController=None, **kwargs):
         """Initialization of the FacePanel.
 
         Parameters
         ----------
-        decector: DetectorController
+        decector: FaceController
             The face detector providing data.
         parent: QWidget
             The parent argument is sent to the QWidget constructor.
         """
         super().__init__(**kwargs)
+        self._trueMetadata = None
         self._initUI()
         self._layoutUI()
-        self.setDetectorController(detector)
+        self.setFaceController(detector)
+        self.toggled.connect(self.onToggled)
 
     def _initUI(self):
         """Initialize the user interface
@@ -49,49 +55,77 @@ class DetectorWidget(QGroupBox, QObserver, Detector.Observer):
         """
         self._view = QImageView()
         self._label = QLabel()
+        self._busy = QBusyWidget()
 
     def _layoutUI(self):
         layout = QVBoxLayout()
         layout.addWidget(self._view)
         layout.addWidget(self._label)
-        layout.addWidget(QBusyWidget())
+        layout.addWidget(self._busy)
         layout.addStretch(3)
         self.setLayout(layout)
         self.setCheckable(True)
 
-    def setDetectorController(self, detector: DetectorController) -> None:
-        """Set a new :py:class:`DetectorController`.
+    def setFaceController(self, detector: FaceController) -> None:
+        """Set a new :py:class:`FaceController`.
         The face Controller will inform us whenever new faces where
         detected by one of the detectors.
         """
-        interests = Detector.Change('detection_finished')
-        self._exchangeView('_detectorController', detector,
+        interests = FaceDetector.Change('detection_finished')
+        self._exchangeView('_faceController', detector,
                            interests=interests)
-        self.setTitle("None" if self._detectorController is None else
-                      (self._detectorController._detector.__class__.__name__
-                       if self._detectorController else "Off"))  # FIXME[hack]
+        self._busy.setView(detector)
+        self.setTitle("None" if self._faceController is None else
+                      (self._faceController._detector.__class__.__name__
+                       if self._faceController else "Off"))  # FIXME[hack]
 
-    def detector_changed(self, detector: Detector,
-                         change: Detector.Change) -> None:
+    def detector_changed(self, detector: FaceDetector,
+                         change: FaceDetector.Change) -> None:
         if change.detection_finished:
-            self._view.setImage(detector.canvas)
-            for rect in self._detectorController.rects:
-                self._view.addMark(QRect(*rect))
-            self._label.setText(f"{len(self._detectorController.rects)} "
-                                f"detected in {detector.duration:.3f}s")
+            self.update()
 
-    def setImage(self, image: np.ndarray):
-        if self._detectorController is None or not self._detectorController:
+    def setImage(self, image: np.ndarray, metadata: Metadata=None):
+        self._trueMetadata = metadata
+        if self._faceController is not None and bool(self._faceController):
+            self._faceController.process(image)        
+        self.update()
+
+    def update(self):
+        if (self._faceController is None or not self._faceController or
+            not self.isChecked()):
             self._view.setImage(None)
+            self._view.setMetadata(None)
+            self._label.setText("Off.")
         else:
-            self._detectorController.process(image)
+            image = self._faceController.image
+            detections = self._faceController.detections
+
+            if detections is not None:
+                self._view.setImage(image)            
+                self._view.setMetadata(self._trueMetadata, detections)
+                if detections.has_regions():
+                    self._label.setText(f"{len(detections.regions)} detected "
+                                        f"in {detections.duration:.3f}s")
+                else:
+                    self._label.setText(f"Nothing detected"
+                                        f"in {detections.duration:.3f}s")
+            else:
+                self._label.setText("No detections.")
+
+    @protect
+    def onToggled(self, on: bool) -> None:
+        """We want to update this DetectorWidget when it gets
+        (de)activated.
+        """
+        self.update()
+
 
 from toolbox import Toolbox, Controller as ToolboxController
 from datasources import Datasource, Controller as DatasourceController
-from tools.face.detector import Detector, create_detector
+from tools.face.detector import Detector as FaceDetector
 
 from .panel import Panel
-from ..utils import QImageView, QObserver
+from ..utils import QImageView, QMetadataView, QObserver
 from ..widgets import QModelImageView
 from ..widgets.datasource import QLoopButton, QSnapshotButton, QRandomButton
 
@@ -120,6 +154,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
     _detectors: list = None
     _detectorViews: list = None
     _inputView: QModelImageView = None
+    _metadataView: QMetadataView = None
 
     _inputCounter: QLabel = None
     _processCounter: QLabel = None
@@ -146,11 +181,19 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
 
         self._detectors = []
         self._detectorViews = []
-        for name in 'haar', 'ssd':
-            detector = create_detector(name, prepare=True)
-            controller = DetectorController(engine=detector)
+        for name in 'haar', 'ssd', 'hog': # , 'cnn'
+            # FIXME[todo]: 'cnn' runs really slow on CPU and
+            # blocks the GUI! - we may think of doing
+            # real multiprocessing!
+            # https://stackoverflow.com/questions/7542957/is-python-capable-of-running-on-multiple-cores
+            # https://stackoverflow.com/questions/47368904/control-python-code-to-run-on-different-core
+            # https://docs.python.org/3/library/multiprocessing.html
+            # https://stackoverflow.com/questions/10721915/shared-memory-objects-in-multiprocessing
+            detector = FaceDetector.create(name, prepare=False)
+            controller = FaceController(engine=detector)
             if toolbox is not None:
                 controller.runner = toolbox.runner  # FIXME[hack]
+            controller.prepare()
             self._detectors.append(controller)
 
         self._initUI()
@@ -176,6 +219,10 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
 
         # QModelImageView: a widget to display the input data
         self._inputView = QModelImageView()
+        self._metadataView = QMetadataView()
+        self._metadataView.addAttribute('directory')
+        self._metadataView.addAttribute('regions')
+        self._metadataView.addAttribute('image')
 
         self._inputCounter = QLabel("0")
         self._processCounter = QLabel("0")
@@ -194,6 +241,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
 
         layout2 = QVBoxLayout()
         layout2.addWidget(self._inputView)
+        layout2.addWidget(self._metadataView)
         row = QHBoxLayout()
         row.addWidget(self._processCounter)
         row.addWidget(QLabel("/"))
@@ -244,9 +292,12 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
         """
         if change.input_changed:
             image = toolbox.input_data if toolbox is not None else None
+            metadata = toolbox.input_metadata if toolbox is not None else None
+            self._inputView.setMetadata(metadata)
+            self._metadataView.setMetadata(metadata)
             for detectorView in self._detectorViews:
                 if detectorView.isChecked():
-                    detectorView.setImage(image)
+                    detectorView.setImage(image, metadata)
             self._inputCounter.setText(str(int(self._inputCounter.text())+1))
 
     def setDatasourceController(self, datasource: DatasourceController) -> None:

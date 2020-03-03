@@ -79,9 +79,14 @@ class AsyncRunner(Runner):
         kwargs  :   dict
                     keyword args to ``fn``
         """
-        future = self._executor.submit(fn, *args, **kwargs)
-        future.add_done_callback(self.onCompletion)
-        self._submitted += 1
+        # FIXME[hack]: shutdown does not work smoothly yet -
+        # it seems the executor is deleted too early ..
+        if self._executor is not None:
+            future = self._executor.submit(fn, *args, **kwargs)
+            future.add_done_callback(self.onCompletion)
+            self._submitted += 1
+        else:
+            fn(*args, **kwargs)
 
     def onCompletion(self, result):
         # FIXME[old]: explain what is done now!
@@ -123,6 +128,6 @@ class AsyncRunner(Runner):
         """
         if self._executor is not None:
             print("AsyncRunner: Shutting down the executor ...")
-            self._executor.shutdown()
+            self._executor.shutdown(wait=True)
             print("AsyncRunner: ... executor finished.")
             self._executor = None

@@ -86,7 +86,7 @@ from network import Network
 
 from datasources import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
-from datasources import Loop
+from datasources import Loop, Metadata
 
 class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
@@ -165,6 +165,14 @@ class Toolbox(BusyObservable, Datasource.Observer,
     _gui:
         The GUI associated with the :py:class:`Toolbox` or None
         if no GUI is used.
+
+    _datasources: list
+        A list of :py:class`Datasource`s available to this :py:class:`Toolbox`.
+    _input_data: np.ndarray
+        Current input data of this :py:class:`Toolbox`. Tools can observe
+        the Toolbox and get informed whenever the input data change.
+    _input_meta: dict
+        Metadata describing the current input data.
     """
     _toolbox_controller: BaseController = None  # 'ToolboxController'
     _runner: Runner = None
@@ -175,9 +183,12 @@ class Toolbox(BusyObservable, Datasource.Observer,
     _tools: dict = None
 
     _input_data: np.ndarray = None
+    _input_meta: dict = None
+    # FIXME[old]
     _input_label = None
     _input_datasource = None
     _input_description = None
+    _input_metadata = None
 
     _gui = None
 
@@ -435,10 +446,15 @@ class Toolbox(BusyObservable, Datasource.Observer,
     ###                            Datasources                              ###
     ###########################################################################
 
-    def _initialize_datasources(self):
+    def _initialize_datasources(self) -> None:
+        """Initialized the datasources managed by this :py:class:`Toolbox`.
+        """
         self._datasources = []
+
+        # Create a DatasourceController for the currently selected Datasource.
         self._datasource_controller = DatasourceController(runner=self._runner)
-        # observe the new DatasourceController and add new datasources
+
+        # Observe the new DatasourceController and add new datasources
         # reported by that controller to the list of known datasources
         my_interests = Datasource.Change('observable_changed', 'data_changed')
         self._datasource_controller.add_observer(self, interests=my_interests)
@@ -449,6 +465,17 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
+        """React to a change of the observed :py:class:`Datasource`.
+
+        Arguments
+        ---------
+        datasource: Datasource
+            The current datasource that has changed.
+        change: Datasource.Change
+            The change that occured. We are interested in a change
+            of the datasource itself (observable_changed) and a
+            change of the current data.
+        """
         if change.observable_changed:
             if datasource is not None and datasource not in self._datasources:
                 self.add_datasource(datasource)
@@ -465,8 +492,9 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 else:
                     label = None
                 description = self._datasource_controller.description
+                metadata = self._datasource_controller.metadata
                 self.set_input(data=data, label=label, datasource=datasource,
-                               description=description)
+                               description=description, metadata=metadata)
             else:
                 self.set_input(data=None, label=None, description="No input")
 
@@ -566,12 +594,18 @@ class Toolbox(BusyObservable, Datasource.Observer,
     def input_description(self) -> np.ndarray:
         return self._input_description
 
+    @property
+    def input_metadata(self) -> Metadata:
+        return self._input_metadata
+
     def set_input(self, data: np.ndarray, label=None,
-                  datasource: Datasource=None, description: str=None):
+                  datasource: Datasource=None, description: str=None,
+                  metadata: Metadata=None):
         self._input_data = data
         self._input_label = label
         self._input_datasource = datasource
         self._input_description = description
+        self._input_metadata = metadata
         self.change('input_changed')
 
     ###########################################################################
@@ -727,8 +761,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
                             ' (experimental!)',
                             action=addons.UseAddon, default=False)
         parser.add_argument('--internals',
-                            help='Open the internals panel'
-                            ' (experimental!)',
+                            help='Open the internals panel (experimental!)',
+                            action='store_true', default=False)
+        parser.add_argument('--face',
+                            help='Open the face module (experimental!)',
                             action='store_true', default=False)
 
     def process_command_line_arguments(self, args):
@@ -801,6 +837,11 @@ class Toolbox(BusyObservable, Datasource.Observer,
             # Initialise the "Activation Maximization" panel.
             #if addons.use('maximization'):
             #    panels.append('maximization')
+            if args.face:
+                panels.append('face')
+                #wider_faces = Predefined.get_data_source('wider-faces-train')
+                #datasources.append(wider_faces)
+                #self._datasource_controller(wider_faces)
 
             #panels.append('resources')
             #panels.append('activations')

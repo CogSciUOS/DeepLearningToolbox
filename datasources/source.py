@@ -1,8 +1,10 @@
 from base import BusyObservable, change
 
 from collections import namedtuple
+import random
 from typing import Dict, List, Sequence, Union
 import numpy as np
+
 
 InputData = namedtuple('Data', ['data', 'name'])
 
@@ -40,6 +42,8 @@ class Datasource(BusyObservable, method='datasource_changed',
     metadata_changed:
     
     """
+
+    _metadata = None
 
     def __init__(self, description: str=None, **kwargs):
         """Create a new Datasource.
@@ -159,6 +163,10 @@ class Datasource(BusyObservable, method='datasource_changed',
                                   "a Datasource, but it does not "
                                   "implement the '_get_batch_data' method")
     
+    @property
+    def metadata(self):
+        return self._metadata
+
     @property
     def description(self) -> str:
         return self.get_description()
@@ -512,7 +520,7 @@ class Labeled(Datasource):
         return description
 
 
-class Random(Datasource):
+class Random:
     """An abstract base class for datasources that allow to fetch
     random datapoints and/or batches. Subclasses of this class should
     implement :py:meth:`_fetch_random()`.
@@ -543,6 +551,58 @@ class Random(Datasource):
         raise NotImplementedError(f"{self.__class__.__name__} claims to be "
                                   "a 'Random' datasource, but it does not "
                                   "implement the '_fetch_random' method.")
+
+
+class Indexed: # '(Random):
+    """Instances of this class can be indexed.
+    """
+
+    def __getitem__(self, index):
+        self.fetch_index(index=index)
+        return self.get_data()
+
+    def fetch(self, index=None, **kwargs) -> None:
+        """A version of :py:meth:`fetch` that allows for an
+        additional argument `random`.
+
+        Arguments
+        ---------
+        random: bool
+            If set, a random element is fetched from this
+            :py:class:`Datasource`.
+        """
+        if index is not None:
+            self._fetch_index(index=index, **kwargs)
+            self.change('data_changed')
+        else:
+            super().fetch(**kwargs)
+
+    def _fetch_index(self, index, **kwargs) -> None:
+        """This method should be implemented by subclasses that claim
+        to be a py:meth:`Random` datasource.
+        It should perform whatever is necessary to fetch a random
+        element from the dataset.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} claims to be "
+                                  "a 'Random' datasource, but it does not "
+                                  "implement the '_fetch_random' method.")
+
+    def _fetch_random(self, **kwargs):
+        # provide a random image
+        self._fetch(index=random.randrange(len(self)), **kwargs)
+
+
+    @property
+    def index(self) -> int:
+        raise NotImplementedError(f"Subclasses of {Indexed.__name__} "
+                                  "should implement property 'index', but "
+                                  f"{self.__class__.__name__} doesn't do that.")
+
+
+    def __len__(self) -> int:
+        raise NotImplementedError(f"Subclasses of {Indexed.__name__} "
+                                  "should implement 'len', but "
+                                  f"{self.__class__.__name__} doesn't do that.")
 
 
 class Predefined(Datasource):
