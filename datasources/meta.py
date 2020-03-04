@@ -1,5 +1,8 @@
 from util.image import Region
 
+import os
+import numpy as np
+
 class Metadata:
     """Metadata for a datum from a Datasource.
     """
@@ -48,7 +51,6 @@ class Metadata:
     def label(self):
         return self._label
 
-
     def has_attribute(self, name) -> bool:
         return name in self.__dict__
 
@@ -57,3 +59,13 @@ class Metadata:
 
     def get_attribute(self, name):
         return self.__dict__[name]
+
+    def __str__(self):
+        s = "Metadata:"
+        for name, value in self.__dict__.items():
+            s += os.linesep + "  " + name + ": "
+            if isinstance(value, np.ndarray):
+                s += f"Array({value.shape}, dtype={value.dtype})"
+            else:
+                s += str(value)
+        return s

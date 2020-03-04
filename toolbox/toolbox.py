@@ -279,63 +279,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
             print("Toolbox: Quitting the toolbox.")
             sys.exit(0)
     
-    def _run_gui(self, gui="qt", panels=[], **kwargs):
-        """Create a graphical user interface for this :py:class:`Toolbox`
-        and run the main event loop.
-        """
-        #
-        # create the actual application
-        #
-
-        # FIXME[hack]: do not use local imports
-        # We use the local import here to avoid circular imports
-        # (qtgui.mainwindow imports toolbox.ToolboxController)
-        from qtgui import create_gui
-        self._gui = create_gui(sys.argv, self._toolbox_controller)
-
-        # FIXME[hack]: we need a better solution here!
-        self.set_runner(self._gui.getRunner())
-
-        #
-        # Initialise the panels.
-        #
-        for panel in panels:
-            self._gui.panel(panel, create=True)
-
-        # FIXME[old]
-        if self.contains_tool('activation'):
-            self._gui.setActivationEngine()
-
-        #
-        # redirect logging
-        #
-        self._gui.activateLogging(root_logger, logRecorder, True)      
-
-        #
-        # Setup handling of KeyboardInterrupt (Ctrl-C)
-        #
-        import signal
-        signal.signal(signal.SIGINT, self._interrupt_handler)
-        # There may be a problem when this is done in the context of
-        # PyQT: the main event loop is run in C++ core of Qt and is
-        # not aware of the Python interpreter. The interrupt handler
-        # will only be called after a (Python) event is emitted by the
-        # GUI that is handled by the (Python) interpreter.
-        # An ad hoc solution is to use a QTimer to periodically run some
-        # (dummy) Python code to make sure the signal handler gets a
-        # chance to be executed. 
-        #
-        # This should not be a problem for us, as the GUI should start a
-        # background timer to periodically update the user interface.
-
-        try:
-            # This will enter the main event loop.
-            # It will only return once the main event loop exits.
-            logger.info("Toolbox: running the GUI main event loop")
-            return self._gui.run(**kwargs)
-        finally:
-            print("Toolbox: finally stopping the timer ...")
-            self._gui.stop_timer()
 
     def setup(self, tools=[], networks=[], datasources=[]):
         """Initialize the Toolbox, by importing required classes,
@@ -844,13 +787,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if args.shell:
             gui = None
         else:
-            # we need the GUI first to get the runner ...
-            spec = importlib.util.find_spec('PyQt5')
-            if spec is not None:
-                gui = 'qt'
-            else:
-                logging.fatal("No GUI library (PyQt5) was found.")
-                gui = None
+            gui = 'qt'
 
         if gui is not None:
             panels = []
@@ -871,8 +808,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
             #panels.append('resources')
             #panels.append('activations')
-
-            rc = self._run_gui(gui=gui, panels=panels, tools=tools,
+            rc= self.start_gui(panels=panels, tools=tools,
                                networks=networks, datasources=datasources)
         else:
             self.setup(tools=tools, networks=networks, datasources=datasources)
@@ -881,6 +817,118 @@ class Toolbox(BusyObservable, Datasource.Observer,
             rc = 0
         return rc
 
+    ###########################################################################
+    ###                               GUI                                   ###
+    ###########################################################################
+
+    def _run_gui(self, gui="qt", panels=[], tools=[], networks=[],
+                 datasources=[], **kwargs):
+        """Create a graphical user interface for this :py:class:`Toolbox`
+        and run the main event loop.
+        """
+        #
+        # create the actual application
+        #
+
+        # FIXME[hack]: do not use local imports
+        # We use the local import here to avoid circular imports
+        # (qtgui.mainwindow imports toolbox.ToolboxController)
+        from qtgui import create_gui
+        self._gui = create_gui(sys.argv, self._toolbox_controller, **kwargs)
+
+        # FIXME[hack]: we need a better solution here!
+        self.set_runner(self._gui.getRunner())
+
+        #
+        # Initialise the panels.
+        #
+        for panel in panels:
+            self._gui.panel(panel, create=True)
+
+        # FIXME[old]
+        if self.contains_tool('activation'):
+            self._gui.setActivationEngine()
+
+        #
+        # redirect logging
+        #
+        self._gui.activateLogging(root_logger, logRecorder, True)      
+
+        try:
+            # This will enter the main event loop and will only return
+            # once the main event loop exits.
+            # Before entering the main event loop, it will start the
+            # exectuion of self.setup() in a QtAsyncRunner background
+            # thread, passing the arguments provided to gui.run().
+            # -> This will ensure that the GUI can show up quickly,
+            # even if completing the setup procedure may take some time.
+            logger.info("Toolbox: running the GUI main event loop")
+            rc = self._gui.run(tools=tools, networks=networks,
+                               datasources=datasources)
+            logger.info(f"Toolbox: GUI main event loop finished (rc={rc})")
+            if self._gui.isVisible():
+                self._gui.close()
+            print(f"Toolbox: GUI main event loop finished (rc={rc}, visible={self._gui.isVisible()})")
+        finally:
+            print("Toolbox: finally stopping the timer ...")
+            self._gui.stop_timer()
+            self._gui = None
+        return rc
+
+    def start_gui(self, gui='qt', threaded: bool=False, **kwargs):
+        # we need the GUI first to get the runner ...
+
+        #
+        # Step 1: determine the GUI to use
+        #
+        spec = importlib.util.find_spec('PyQt5')
+        if spec is not None:
+            gui = 'qt'
+        else:
+            logging.fatal("No GUI library (PyQt5) was found.")
+            gui = None
+            raise RuntimeError("No GUI is supported by your environment.")
+        
+        #
+        # Step 2: preparations
+        #
+        
+        # Setup handling of KeyboardInterrupt (Ctrl-C)
+        # Notice that this has to be done in the main thread.
+        import signal
+        signal.signal(signal.SIGINT, self._interrupt_handler)
+        # There may be a problem when this is done in the context of
+        # PyQT: the main event loop is run in C++ core of Qt and is
+        # not aware of the Python interpreter. The interrupt handler
+        # will only be called after a (Python) event is emitted by the
+        # GUI that is handled by the (Python) interpreter.
+        # An ad hoc solution is to use a QTimer to periodically run some
+        # (dummy) Python code to make sure the signal handler gets a
+        # chance to be executed. 
+        #
+        # This should not be a problem for us, as the GUI should start a
+        # background timer to periodically update the user interface.
+
+        #
+        # Step 3: run the GUI
+        #
+        if threaded:
+            import threading
+            thread = threading.Thread(target=self._run_gui, name="gui-thread",
+                                      kwargs=kwargs)
+            thread.start()
+            # thread.join()
+        else:
+            rc = self._run_gui(gui=gui, **kwargs)
+
+    @property
+    def gui(self):
+        return self._gui
+
+    ###########################################################################
+    ###                          Miscallenous                               ###
+    ###########################################################################
+    
     def __str__(self):
         """String representation of this :py:class:`Toolbox`.
         """

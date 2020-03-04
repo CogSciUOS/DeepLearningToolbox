@@ -28,8 +28,8 @@ class QtAsyncRunner(AsyncRunner, QObject):
     in the main thread will actually update the GUI.
 
     Another point is that there seems to be a difference between
-    python threads and Qt threads. When interacting with Qt always
-    use Qt threads.
+    python threads and Qt threads (QThread). When interacting with Qt,
+    always use QThreads.
 
     Attributes
     ----------

@@ -1,6 +1,6 @@
 from . import Datasource, DataDirectory, Labeled, Predefined, Metadata
 
-from util.image import imread, BoundingBox, Region
+from util.image import imread, BoundingBox, Region, Landmarks
 
 
 import os
@@ -199,3 +199,46 @@ class WiderFace(DataDirectory, Labeled, Predefined):
             True if the DataSource can be prepared, False otherwise.
         """
         return self._annotations_filename is not None
+
+class W300(DataDirectory, Predefined):
+    """The 300 Faces In-the-Wild Challenge (300-W), form the ICCV 2013.
+    The challenge targets facial landmark detection, using a 68 point
+    annotation scheme.
+    
+    Besides 300-W, there are several other datasets annotated in the
+    same scheme: AFW, FRGC, HELEN, IBUG, LPFW, and XM2VTS.
+
+    For more information visit:
+    https://ibug.doc.ic.ac.uk/resources/facial-point-annotations/
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+
+    def _load_annotation(self, filename: str) -> Landmarks:
+        """Parse the landmark annotation file.  Each image of the dataset is
+        accompanied by a file with the same name und the suffix '.pts'
+        providing the positions of the 68 points.
+
+        """
+        # The file has the following format:
+        #
+        #    version: 1
+        #    n_points:  68
+        #    {
+        #    403.167108 479.842932
+        #    407.333804 542.927159
+        #    ...
+        #    625.877482 717.615332
+        #    }
+        #
+        with open(filename) as file:
+            version = file.readline().split(':')[1]
+            n_points = int(file.readline().split(':')[1])
+            points = np.ndarray((n_points,2))
+            start = file.readline()
+            for i in range(n_points):
+                x,y = file.readline.rstrip().split(' ')
+                ponts[i] = float(x), float(y)
+        return Landmarks(points)

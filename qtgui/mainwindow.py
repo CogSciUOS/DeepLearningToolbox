@@ -32,7 +32,7 @@ from util import resources, addons
 from datasources import Datasource, Controller as DatasourceController
 
 # Qt imports
-from PyQt5.QtCore import Qt, QTimer, QCoreApplication
+from PyQt5.QtCore import Qt, QTimer, QCoreApplication, QThread, pyqtSignal
 from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
                          QCloseEvent)
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
@@ -119,13 +119,20 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     _toolbox: ToolboxController = None
     _datasourceMenu = None
 
+    # Signal emitted once the computation is done.
+    # The signal is connected to :py:meth:`panel` which will be run
+    # in the main thread by the Qt magic.
+    panel_signal: pyqtSignal = pyqtSignal(str, bool, bool)
+
+    
     # FIXME[problem]: currently this prints the following message
     # (when calling MainWindow.setWindowIcon('assets/logo.png')):
     # "libpng warning: iCCP: extra compressed data"
     # probably due to some problem with the file 'logo.png'
     #icon = 'assets/logo.png'
     def __init__(self, application: QApplication, toolbox: ToolboxController,
-                 title: str='QtPyVis', icon: str='assets/logo.png') -> None:
+                 title: str='QtPyVis', icon: str='assets/logo.png',
+                 focus: bool=True) -> None:
         """Initialize the main window.
 
         Parameters
@@ -134,6 +141,10 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             Window title.
         icon: str
             (Filename of) the Window icon.
+        focus: bool
+            A flag indicating if the GUI (MainWindow) should "steal"
+            the focus. This is the default behaviour, but may be
+            undesirable if there is a shell continuing to accepting input.
         """
         super().__init__()
         self._app = application
@@ -142,6 +153,16 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         self.setToolbox(toolbox)
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
+
+        if not focus:
+            # Starting from Qt 4.4.0, the attribute
+            # Qt.WA_ShowWithoutActivating forces the window not to
+            # become activate (even if the Qt.WindowStaysOnTopHint
+            # flag is set.
+            self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+        # signals
+        self.panel_signal.connect(self.panel)
 
     def run(self, **kwargs):
         self.start_timer()
@@ -215,6 +236,8 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             self._updateDatasourceMenu()
 
     def _updateDatasourceMenu(self) -> None:
+        """Update the "Datasource" menu.
+        """
         # self._datasourceMenu is of type PyQt5.QtWidgets.QMenu'
         self._datasources = {}
         if self._toolbox is None:
@@ -232,11 +255,14 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                 datasource.prepare()
             return protect(set_datasource)
 
+        # Add all datasources to the menu
         for datasource in self._toolbox.datasources:
             id = str(datasource)
             label = str(datasource)
             self._datasources[id] = datasource
             action = QAction(label, self)
+            if True: # datasource == self._toolbox.datasource:
+                action.font().setBold(True)  # FIXME[bug]: seems to have no effect
             action.triggered.connect(slot(id))
             self._datasourceMenu.addAction(action)
 
@@ -274,6 +300,16 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         ValueError:
             The given panel identifier is not known.
         """
+        if not any(m.id == panel_id for m in self._panelMetas):
+            raise KeyError(f"There is no panel with id '{panel_id}' "
+                           "in DeepVisMainWindow.")
+        
+        if QThread.currentThread() != self.thread():
+            # method was called from different thread
+            # emit signal to run in main thread
+            self.panel_signal.emit(panel_id, create, show)
+            return
+        
         meta = self._meta(panel_id)
         panel = None
         if create:
