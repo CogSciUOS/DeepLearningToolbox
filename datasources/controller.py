@@ -136,7 +136,7 @@ class Controller(View, BaseController):
                 if index < 0:
                     raise ValueError('Index out of range')
             except ValueError:
-                index = self._index
+                index = self._datasource.index
         self.set_index(index)
 
     def set_data_array(self, data: np.ndarray=None):

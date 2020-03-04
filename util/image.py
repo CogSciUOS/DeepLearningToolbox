@@ -2,13 +2,13 @@ import sys
 import logging
 
 try:
-    from imageio import imread
+    from imageio import imread, imwrite
 except ImportError:
     try:
-        from scipy.misc import imread
+        from scipy.misc import imread, imsave as imwrite
     except ImportError:
         try:
-            from matplotlib.pyplot import imread
+            from matplotlib.pyplot import imread, imsave as imwrite
         except ImportError:
             # FIXME[hack]: better strategy to inform on missing modules
             explanation = ("Could not find any module providing 'imread'. "

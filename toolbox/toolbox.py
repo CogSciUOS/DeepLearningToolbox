@@ -47,6 +47,7 @@ Concepts:
 import os
 import sys
 
+from argparse import ArgumentParser
 import importlib.util
 
 import logging
@@ -353,8 +354,9 @@ class Toolbox(BusyObservable, Datasource.Observer,
             for tool in tools:
                 self.add_tool(tool)
 
-            self._toolbox_controller.hack_load_mnist()
+            # self._toolbox_controller.hack_load_mnist()
             for datasource in datasources:
+                print(f"Toolbox: prepare datasource {datasource}")
                 datasource.prepare()
             if len(datasources) > 0:
                 self._datasource_controller(datasources[-1])
@@ -431,7 +433,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         
         # FIXME[hack]: we need a better mechanism to refer to Datasources
         from datasources.imagenet import Predefined
-        imagenet = Predefined.get_data_source('imagenet-val')
+        imagenet = Predefined['imagenet-val']
         network.set_labels(imagenet, format='caffe')
         logger.debug("alexnet: Done")
 
@@ -516,7 +518,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
             self.change('datasources_changed')
 
     def hack_load_mnist(self):
-
         """Initialize the dataset.
         This will set the self._x_train, self._y_train, self._x_test, and
         self._y_test variables. Although the actual autoencoder only
@@ -551,14 +552,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #             self.get_labels(dtype=np.float32, test=False),
         #             self.get_inputs(dtype=np.float32, flat=True, test=True),
         #             self.get_labels(dtype=np.float32, test=True))
-
-        
-
-    def hack_load_imagenet(self):
-        from datasources import Predefined
-        imagenet = Predefined.get_data_source('imagenet-val')
-        imagenet.prepare()
-        return imagenet
 
     @property
     def data(self):
@@ -727,11 +720,39 @@ class Toolbox(BusyObservable, Datasource.Observer,
     ###########################################################################
 
 
-    def add_command_line_arguments(self, parser):
+    def add_command_line_arguments(self, parser: ArgumentParser) -> None:
+        """Add arguments to the ArgumentParser.
+        """
+
+        #
+        # General options
+        #
+        parser.add_argument('--cpu', help='Do not attempt to use GPUs',
+                            action='store_true', default=False)
+        parser.add_argument('--framework', help='The framework to use.',
+                            choices=['keras-tensorflow', 'keras-theano',
+                                     'torch'],
+                            default='keras-tensorflow')
+        parser.add_argument('--shell', help='Run the toolbox shell',
+                            action='store_true', default=False)
+
+        #
+        # Models
+        #
         parser.add_argument('--model', help='Filename of model to use',
                             default='models/example_keras_mnist_model.h5')
+        parser.add_argument('--alexnet', help='Load the AlexNet model',
+                            action='store_true', default=False)
+        parser.add_argument('--autoencoder',
+                            help='Load the autoencoder module (experimental!)',
+                            action=addons.UseAddon, default=False)
+
+        #
+        # Data
+        #
         parser.add_argument('--data', help='filename of dataset to visualize')
-        parser.add_argument('--datadir', help='directory containing input images')
+        parser.add_argument('--datadir',
+                            help='directory containing input images')
 
         #
         # Datasources
@@ -743,21 +764,13 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
         if (len(datasets) > 0):
             parser.add_argument('--dataset', help='name of a dataset',
-                                choices=datasets, default=datasets[0])
+                                choices=datasets)  # , default=datasets[0])
         parser.add_argument('--imagenet', help='Load the ImageNet dataset',
                             action='store_true', default=False)
 
-        parser.add_argument('--framework', help='The framework to use.',
-                            choices=['keras-tensorflow', 'keras-theano',
-                                     'torch'],
-                            default='keras-tensorflow')
-        parser.add_argument('--cpu', help='Do not attempt to use GPUs',
-                            action='store_true', default=False)
-        parser.add_argument('--alexnet', help='Load the AlexNet model',
-                            action='store_true', default=False)
-        parser.add_argument('--autoencoder',
-                            help='Load the autoencoder module (experimental!)',
-                            action=addons.UseAddon, default=False)
+        #
+        # Modules
+        #
         parser.add_argument('--advexample',
                             help='Load the adversarial example module'
                             ' (experimental!)',
@@ -769,7 +782,9 @@ class Toolbox(BusyObservable, Datasource.Observer,
                             help='Open the face module (experimental!)',
                             action='store_true', default=False)
 
-    def process_command_line_arguments(self, args):
+    def process_command_line_arguments(self, args) -> None:
+        """Process the arguments given to the :py:class:`ArgumentParser`.
+        """
         util.use_cpu = args.cpu
 
 
@@ -786,16 +801,19 @@ class Toolbox(BusyObservable, Datasource.Observer,
         datasources = []
 
         from datasources import DataDirectory, Predefined
-        for id in Predefined.get_data_source_ids():
-            datasource = Predefined.get_data_source(id)
-            self.add_datasource(datasource)
+        #for id in Predefined.get_data_source_ids():
+        #    print(f"predefined id: {id}")
+        #    datasource = Predefined.get_data_source(id)
+        #    self.add_datasource(datasource)
+        for id in 'Webcam', 'Noise', 'Helen':
+            self.add_datasource(Predefined[id])
 
         if args is not None:
             datasource = None
             if args.data:
-                datasource = Predefined.get_data_source(args.data)
+                datasource = Predefined[args.data]
             elif args.dataset:
-                datasource = Predefined.get_data_source(args.dataset)
+                datasource = Predefined[args.dataset]
             elif args.datadir:
                 datasource = DataDirectory(args.datadir)
             if datasource is not None:
@@ -803,7 +821,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 datasources.append(datasource)
 
             if args.imagenet:
-                datasources.append(Predefined.get_data_source('imagenet-val'))
+                datasources.append(Predefined['imagenet-val'])
 
         #
         # Networks
@@ -820,13 +838,19 @@ class Toolbox(BusyObservable, Datasource.Observer,
             elif args.framework == 'torch':
                 networks.append('torch-network')
 
-        # we need the GUI first to get the runner ...
-        spec = importlib.util.find_spec('PyQt5')
-        if spec is not None:
-            gui = 'qt'
-        else:
-            logging.fatal("No GUI library (PyQt5) was found.")
+        #
+        # User Interface
+        #
+        if args.shell:
             gui = None
+        else:
+            # we need the GUI first to get the runner ...
+            spec = importlib.util.find_spec('PyQt5')
+            if spec is not None:
+                gui = 'qt'
+            else:
+                logging.fatal("No GUI library (PyQt5) was found.")
+                gui = None
 
         if gui is not None:
             panels = []
@@ -852,8 +876,48 @@ class Toolbox(BusyObservable, Datasource.Observer,
                                networks=networks, datasources=datasources)
         else:
             self.setup(tools=tools, networks=networks, datasources=datasources)
+            from .shell import ToolboxShell
+            ToolboxShell(self).cmdloop()
             rc = 0
         return rc
 
+    def __str__(self):
+        """String representation of this :py:class:`Toolbox`.
+        """
+        result = f"GUI: {self._gui is not None}"
+        result += "\nTools:"
+        if self._tools is None:
+            result += " None"
+        else:
+            for tool in self._tools:
+                result += f"\n  - {tool}"
+
+        result += "\nNetworks:"
+        if self._networks is None:
+            result += " None"
+        else:
+            for network in self._networks:
+                result += f"\n  - {network}"
+
+        result += "\nDatasources:"
+        if self._datasources is None:
+            result += " None"
+        else:
+            for datasource in self._datasources:
+                if datasource == self.datasource:
+                    mark = '*'
+                elif datasource.prepared:
+                    mark = '+'
+                else:
+                    mark = '-'
+                    
+                result += f"\n  {mark} {datasource}"
+
+
+        from datasources import Predefined
+        result += "\nPredefined data sources: "
+        result += f"{Predefined.get_data_source_ids()}"
+
+        return result + "\n"
 
 from .controller import Controller as ToolboxController

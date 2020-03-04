@@ -20,29 +20,39 @@ Datasources can have different
 
 """
 from .meta import Metadata
-from .source import (Datasource, InputData, Predefined, Labeled, Random,
+from .source import (Datasource, InputData, Labeled, Random,
                      Loop, Snapshot, Indexed, Imagesource)
 from .source import Datasource as DataSource
+from .predefined import Predefined
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
 from .files import DataFiles
 from .directory import DataDirectory
-from .webcam import DataWebcam
 from .video import DataVideo
-from .keras import KerasDatasource
-from .imagenet import ImageNet
-from .dogsandcats import DogsAndCats
-from .widerface import WiderFace
-from .helen import Helen
-from .noise import DataNoise
+from .webcam import DataWebcam
 
 import logging
 logger = logging.getLogger(__name__)
 del logging
 
-import sys
+Predefined.register_id('mnist-train', 'datasources.keras',
+                       'KerasDatasource', name='mnist', section='train')
+Predefined.register_id('mnist-test', 'datasources.keras',
+                       'KerasDatasource', name='mnist', section='test')
+Predefined.register_id('imagenet-val', 'datasources.imagenet',
+                       'ImageNet', section='val')  # section='train'
+Predefined.register_id('dogsandcats', 'datasources.dogsandcats',
+                       'DogsAndCats')
+Predefined.register_id('widerface', 'datasources.widerface', 'WiderFace')
+Predefined.register_id('Helen', 'datasources.helen', 'Helen')
+Predefined.register_id('Noise', 'datasources.noise', 'DataNoise',
+                       shape=(100,100,3))
+Predefined.register_id('Webcam', 'datasources.webcam', 'DataWebcam')
 
+
+# FIXME[old]: may be used at some other place ...
+import sys
 if False:
     for d in KerasDatasource.KERAS_IDS:
         try:
@@ -50,18 +60,6 @@ if False:
         except ValueError as err:
             print(f"Error instantiating keras data source '{d}': {err}",
                   file=sys.stderr)
-KerasDatasource('mnist', section='train')
-KerasDatasource('mnist', section='test')
-
-#ImageNet(section='train')
-ImageNet(section='val')
-DataNoise(shape=(100,100,3))
-DogsAndCats()
-WiderFace()
-Helen()
-
-if DataWebcam.check_availability():
-    DataWebcam()
 
 logger.info(f"Predefined data sources: {Predefined.get_data_source_ids()}")
 

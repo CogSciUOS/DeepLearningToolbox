@@ -353,7 +353,7 @@ class QImageView(QWidget):
             self._metadata is not None and
             self._metadata.has_attribute('basename')):
             # write the file
-            from imageio import imwrite
+            from util.image import imwrite
             imwrite(self._metadata.get_attribute('basename'), self._raw)
 
     @property
