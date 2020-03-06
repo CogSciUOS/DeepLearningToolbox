@@ -1,11 +1,11 @@
-from . import Predefined, InputData, Loop, Snapshot
+from . import Datasource, InputData, Loop, Snapshot
 
 import sys
 import time
 import importlib
 import numpy as np
 
-class DataWebcam(Predefined, Loop, Snapshot):
+class DataWebcam(Loop, Snapshot):
     """A data source fetching images from the webcam.
 
     Attributes
@@ -14,7 +14,7 @@ class DataWebcam(Predefined, Loop, Snapshot):
         A capture object
     """
     _device: int = 0
-    _capture = None # cv2.Capture
+    _capture = None  # cv2.Capture
     _frame: np.ndarray = None
 
     @staticmethod

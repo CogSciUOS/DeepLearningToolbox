@@ -29,6 +29,8 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         """
         super().__init__(interest='datasources_changed', **kwargs)
         self.setDatasourceView(datasource)
+        # FIXME[todo]: toggle between name and id display (not implemented yet)
+        self._showNames = True
 
     def setToolboxView(self, toolbox: ToolboxView,
                        datasource: DatasourceView=None) -> None:
@@ -51,6 +53,17 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         if change.observable_changed:
             self._updateCurrent(datasource)
 
+    @property
+    def showNames(self) -> bool:
+        return self._showNames
+
+    @showNames.setter
+    def showNames(self, flag: bool) -> None:
+        if self._showNames != flag:
+            print(f"QDatasourceList: name mode changed ({flag})")
+            self._showNames = flag
+            self.update()
+
     @protect
     def onItemClicked(self, item: QListWidgetItem):
         """Respond to a click in the datasource list.
@@ -59,6 +72,19 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         """
         self._datasource(item.data(Qt.UserRole))
 
+    @protect
+    def keyPressEvent(self, event):
+        """Process key events. The :py:class:`QImageView` supports
+        the following keys:
+
+        r: toggle the keepAspectRatio flag
+        """
+        key = event.key()
+        print(f"QDatasourceList: key pressed: {key}")
+        if key == Qt.Key_N:
+            self.showNames = not self.showNames
+        # FIXME[todo]: Additional ideas:
+        # only show prepared/unprepared datasources
 
     class ViewObserver(QToolboxViewList.ViewObserver, Datasource.Observer):
         interests = Datasource.Change('state_changed', 'metadata_changed')
@@ -80,7 +106,7 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
 
 
 from datasources import (Datasource, DataArray, DataFile, DataDirectory,
-                         DataWebcam, DataVideo, Predefined,
+                         DataWebcam, DataVideo,
                          Controller as DatasourceController)
 from toolbox import Toolbox, ToolboxController
 from qtgui.utils import QObserver, protect
@@ -144,7 +170,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         #
         # A list of predefined datasources
         #
-        dataset_names = Predefined.get_data_source_ids()
+        dataset_names = list(Datasource.keys())
         self._datasetDropdown = QComboBox()
         self._datasetDropdown.addItems(dataset_names)
         self._datasetDropdown.currentIndexChanged.\
@@ -186,7 +212,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
             self._setDatasource(datasource)
 
     def _setDatasource(self, datasource: Datasource):
-        if isinstance(datasource, Predefined):
+        if isinstance(datasource, Datasource):
             self._radioButtons['Name'].setChecked(True)
             id = datasource.id
             index = self._datasetDropdown.findText(id)
@@ -257,7 +283,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
 
             #self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
-            datasource = Predefined.get_data_source(name)
+            datasource = Datasource[name]
 
         elif self._radioButtons['Filesystem'].isChecked():
             # CAUTION: I've converted the C++ from here
@@ -323,7 +349,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         if self._radioButtons['Name'].isChecked():
             self._datasetDropdown.setVisible(True)
             name = self._datasetDropdown.currentText()
-            datasource = Predefined.get_data_source(name)
+            datasource = Datasource[name]
 
             if self._datasource is not None:
                 self._datasource(datasource)

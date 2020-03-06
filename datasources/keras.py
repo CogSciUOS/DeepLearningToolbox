@@ -1,4 +1,4 @@
-from datasources import LabeledArray, Predefined
+from datasources import LabeledArray
 
 import os
 import os.path
@@ -6,7 +6,7 @@ import importlib
 import importlib.util
 
 
-class KerasDatasource(LabeledArray, Predefined):
+class KerasDatasource(LabeledArray):
     """Data source for Keras builtin datasets.
 
     Keras provides some methods to access standard datasets via its

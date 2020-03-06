@@ -1,4 +1,4 @@
-from . import Datasource, DataDirectory, Labeled, Predefined, Metadata
+from . import Datasource, DataDirectory, Labeled, Metadata
 
 from util.image import imread, BoundingBox, Region, Landmarks
 
@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class WiderFace(DataDirectory, Labeled, Predefined):
+class WiderFace(DataDirectory, Labeled):
     """
     http://shuoyang1213.me/WIDERFACE/
 
@@ -200,7 +200,7 @@ class WiderFace(DataDirectory, Labeled, Predefined):
         """
         return self._annotations_filename is not None
 
-class W300(DataDirectory, Predefined):
+class W300(DataDirectory):
     """The 300 Faces In-the-Wild Challenge (300-W), form the ICCV 2013.
     The challenge targets facial landmark detection, using a 68 point
     annotation scheme.

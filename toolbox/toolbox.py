@@ -374,9 +374,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         network._online()
         logger.debug("alexnet: Load Class Names")
         
-        # FIXME[hack]: we need a better mechanism to refer to Datasources
-        from datasources.imagenet import Predefined
-        imagenet = Predefined['imagenet-val']
+        imagenet = Datasource['imagenet-val']
         network.set_labels(imagenet, format='caffe')
         logger.debug("alexnet: Done")
 
@@ -701,8 +699,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         # Datasources
         #
         logging.debug("importing datasources")
-        from datasources import Predefined
-        datasets = Predefined.get_data_source_ids()
+        datasets = [Datasource.keys()]
         logging.debug(f"got datesets: {datasets}")
 
         if (len(datasets) > 0):
@@ -743,20 +740,20 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #
         datasources = []
 
-        from datasources import DataDirectory, Predefined
-        #for id in Predefined.get_data_source_ids():
+        from datasources import DataDirectory
+        #for id in Datasource.keys():
         #    print(f"predefined id: {id}")
-        #    datasource = Predefined.get_data_source(id)
+        #    datasource = Datasource[id]
         #    self.add_datasource(datasource)
         for id in 'Webcam', 'Noise', 'Helen':
-            self.add_datasource(Predefined[id])
+            self.add_datasource(Datasource[id])
 
         if args is not None:
             datasource = None
             if args.data:
-                datasource = Predefined[args.data]
+                datasource = Datasource[args.data]
             elif args.dataset:
-                datasource = Predefined[args.dataset]
+                datasource = Datasource[args.dataset]
             elif args.datadir:
                 datasource = DataDirectory(args.datadir)
             if datasource is not None:
@@ -764,7 +761,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 datasources.append(datasource)
 
             if args.imagenet:
-                datasources.append(Predefined['imagenet-val'])
+                datasources.append(Datasource['imagenet-val'])
 
         #
         # Networks
@@ -802,7 +799,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
             #    panels.append('maximization')
             if args.face:
                 panels.append('face')
-                #wider_faces = Predefined.get_data_source('wider-faces-train')
+                #wider_faces = Datasource['wider-faces-train']
                 #datasources.append(wider_faces)
                 #self._datasource_controller(wider_faces)
 
@@ -962,9 +959,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 result += f"\n  {mark} {datasource}"
 
 
-        from datasources import Predefined
         result += "\nPredefined data sources: "
-        result += f"{Predefined.get_data_source_ids()}"
+        result += f"{list(Datasource.keys())}"
 
         return result + "\n"
 

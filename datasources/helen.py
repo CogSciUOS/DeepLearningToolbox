@@ -3,13 +3,13 @@ import random
 from glob import glob
 import numpy as np
 
-from . import Datasource, DataDirectory, Predefined, Imagesource
+from . import Datasource, DataDirectory, Imagesource
 from util.image import imread, Landmarks
 
 import logging
 logger = logging.getLogger(__name__)
 
-class Helen(DataDirectory, Predefined, Imagesource):
+class Helen(DataDirectory, Imagesource):
     """A face landmarking dataset consisting of 2330 higher resolution
     face images, annotated with 194 points facial landmarks.
 

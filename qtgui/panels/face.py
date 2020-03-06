@@ -181,7 +181,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
 
         self._detectors = []
         self._detectorViews = []
-        for name in 'haar', 'ssd', 'hog': # , 'cnn'
+        for name in 'haar', 'mtcnn': # 'ssd', 'hog': # , 'cnn'
             # FIXME[todo]: 'cnn' runs really slow on CPU and
             # blocks the GUI! - we may think of doing
             # real multiprocessing!
@@ -189,7 +189,7 @@ class FacePanel(Panel, QObserver, Toolbox.Observer):
             # https://stackoverflow.com/questions/47368904/control-python-code-to-run-on-different-core
             # https://docs.python.org/3/library/multiprocessing.html
             # https://stackoverflow.com/questions/10721915/shared-memory-objects-in-multiprocessing
-            detector = FaceDetector.create(name, prepare=False)
+            detector = FaceDetector[name] # .create(name, prepare=False)
             controller = FaceController(engine=detector)
             if toolbox is not None:
                 controller.runner = toolbox.runner  # FIXME[hack]

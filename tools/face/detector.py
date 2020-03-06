@@ -4,11 +4,13 @@ import numpy as np
 
 from util.image import imresize, BoundingBox
 from base.observer import Observable, change
+from base.register import RegisterMetaclass
 from datasources import Metadata
 from tools.detector import (ImageDetector as BaseDetector,
                             ImageController as Controller)
 
-class Detector(BaseDetector):
+
+class Detector(BaseDetector, metaclass=RegisterMetaclass):
     """Base class for face detectors.
     """
 
@@ -73,3 +75,9 @@ class Detector(BaseDetector):
                     bX, bY, bW, bH = rect
                 cv2.rectangle(canvas, (bX, bY), (bX + bW, bY + bH), color, 1)
 
+
+Detector.register('haar', 'tools.face.opencv', 'DetectorHaar')
+Detector.register('ssd', 'tools.face.opencv', 'DetectorSSD')
+Detector.register('hog', 'tools.face.dlib', 'DetectorHOG')
+Detector.register('cnn', 'tools.face.dlib', 'DetectorCNN')
+Detector.register('mtcnn', 'tools.face.mtcnn', 'DetectorMTCNN')

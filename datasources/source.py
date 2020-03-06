@@ -11,11 +11,13 @@ import numpy as np
 
 InputData = namedtuple('Data', ['data', 'name'])
 
+from base.register import RegisterMetaclass
 
 
 class Datasource(BusyObservable, method='datasource_changed',
                  changes=['state_changed', 'metadata_changed',
-                          'data_changed', 'batch_changed']):
+                          'data_changed', 'batch_changed'],
+                 metaclass=RegisterMetaclass):
     """.. :py:class:: Datasource
 
     An abstract base class for different types of data sources.
@@ -46,9 +48,10 @@ class Datasource(BusyObservable, method='datasource_changed',
     
     """
 
+    _id: str = None
     _metadata = None
 
-    def __init__(self, description: str=None, **kwargs):
+    def __init__(self, id: str=None, description: str=None, **kwargs):
         """Create a new Datasource.
 
         Parameters
@@ -59,6 +62,29 @@ class Datasource(BusyObservable, method='datasource_changed',
         super().__init__(**kwargs)
         self._description = (self.__class__.__name__ if description is None
                              else description)
+
+        # FIXME[hack]: we need a way to integrate this
+        # into the RegisterMetaclass
+        if id is None:
+            id = self.__class__.__name__ + "-" + str(len(self._item_lookup_table))
+        self._id = id
+        self._item_lookup_table[id] = self
+
+    @property
+    def id(self):
+        """Get the "public" ID that is used to identify this Datasource.  Only
+        predefined Datasource should have such an ID, other
+        datasources should provide None.
+        """
+        return self._id
+        # FIXME[todo]: resolve the key/id conflict - just use one term!
+
+    @property
+    def name(self):
+        """Get the name of this :py:class:`Datasource` to be
+        presented to the user.
+        """
+        return f"{self._id}"
 
     @property
     def prepared(self) -> bool:
@@ -214,6 +240,26 @@ class Datasource(BusyObservable, method='datasource_changed',
         raise NotImplementedError(f"The datasource {self.__class__.__name__} "
                                   "does not implement a method to load a "
                                   f"datapoint from file '{filename}'")
+
+
+    #
+    # FIXME[old]: stuff from the now obsolote "Predefined" class
+    # -> probably, this can be removed or realized in other ways ...
+    #
+
+    def check_availability(self) -> None:
+        """Check if this Datasource is available.
+
+        Returns
+        -------
+        True if the Datasource can be instantiated, False otherwise.
+        """
+        return False
+
+    def download(self):
+        raise NotImplementedError("Downloading this datasource is "
+                                  "not implemented yet.")
+
 
 class Imagesource(Datasource):
 

@@ -1,4 +1,4 @@
-from . import Datasource, Labeled, Random, Predefined
+from . import Datasource, Labeled, Random
 
 from util.image import imread
 
@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class DogsAndCats(Random, Labeled, Predefined):
+class DogsAndCats(Random, Labeled):
     """An interface to the Cats & Dogs dataset.
 
     The training archive contains 25,000 images of dogs and

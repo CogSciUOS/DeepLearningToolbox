@@ -28,7 +28,6 @@ from .meta import Metadata
 from .source import (Datasource, InputData, Labeled, Random,
                      Loop, Snapshot, Indexed, Imagesource)
 from .source import Datasource as DataSource
-from .predefined import Predefined
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
@@ -47,20 +46,9 @@ import logging
 logger = logging.getLogger(__name__)
 del logging
 
-Predefined.register_id('mnist-train', 'datasources.keras',
-                       'KerasDatasource', name='mnist', section='train')
-Predefined.register_id('mnist-test', 'datasources.keras',
-                       'KerasDatasource', name='mnist', section='test')
-Predefined.register_id('imagenet-val', 'datasources.imagenet',
-                       'ImageNet', section='val')  # section='train'
-Predefined.register_id('dogsandcats', 'datasources.dogsandcats',
-                       'DogsAndCats')
-Predefined.register_id('widerface', 'datasources.widerface', 'WiderFace')
-Predefined.register_id('Helen', 'datasources.helen', 'Helen')
-Predefined.register_id('Noise', 'datasources.noise', 'DataNoise',
-                       shape=(100,100,3))
-Predefined.register_id('Webcam', 'datasources.webcam', 'DataWebcam')
+import datasources.predefined
 
+logger.info(f"Predefined data sources: {list(Datasource.keys())}")
 
 # FIXME[old]: may be used at some other place ...
 import sys
@@ -72,5 +60,4 @@ if False:
             print(f"Error instantiating keras data source '{d}': {err}",
                   file=sys.stderr)
 
-logger.info(f"Predefined data sources: {Predefined.get_data_source_ids()}")
 

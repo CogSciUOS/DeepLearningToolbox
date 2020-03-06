@@ -14,6 +14,10 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
     selecting an object from the list will set the observed
     object of the View, and vice versa, i.e. changing the
     observed object will change the current item in the list.
+
+    The list will show the names of the observables. In addition
+    it will for each item store a reference to the observable and
+    its id (by calling item.setData(Qt.UserRole, observable)).
     """
     _toolbox: ToolboxView=None
     _toolboxInterest: Toolbox.Change=None
@@ -83,7 +87,7 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
     class ViewObserver(QObserver):
         """This auxiliary class is provided to avoid problems due to
         multiple observation of an observable by an QToolboxViewList
-        object. These problems arise, as all list entry is observed,
+        object. These problems arise, as all list entries are observed,
         and in addition the viewed object (which can be one of the
         list entries) is observed for an `observable_change` event.
         The observable does not count the observers, and then multiple
