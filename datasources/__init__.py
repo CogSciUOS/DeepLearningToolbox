@@ -19,6 +19,11 @@ Datasources can have different
 * sequential: data is read from some stream (movie, webcam)
 
 """
+
+# FIXME[todo]: lazy import
+#from util.lazy import lazy_begin, lazy_end
+
+
 from .meta import Metadata
 from .source import (Datasource, InputData, Labeled, Random,
                      Loop, Snapshot, Indexed, Imagesource)
@@ -29,8 +34,14 @@ from .array import DataArray, LabeledArray
 from .file import DataFile
 from .files import DataFiles
 from .directory import DataDirectory
+
+#lazy_begin(): lazy import
 from .video import DataVideo
 from .webcam import DataWebcam
+#lazy_end(): lazy import
+# FIXME[todo]
+#lazy_import('datasources.webcam', 'DataWebcam')
+#lazy_import('datasources.video', 'DataVideo')
 
 import logging
 logger = logging.getLogger(__name__)

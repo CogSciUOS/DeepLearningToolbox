@@ -35,6 +35,7 @@ class Detector(BaseDetector):
         return detector
 
 
+    
     # FIXME[old]
     def paint_detect(self, canvas: np.ndarray, rects, color=(255, 0, 0)):
         """Mark detected faces in an image.

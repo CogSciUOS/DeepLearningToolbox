@@ -131,3 +131,86 @@ class AsyncRunner(Runner):
             self._executor.shutdown(wait=True)
             print("AsyncRunner: ... executor finished.")
             self._executor = None
+
+
+#
+# FIXME[experimental]
+#
+
+# - probably a better way to go is to implement an additional
+#   class Parallelizable
+#   - allow additional parameter 'parallel: bool' to the prepare
+#     method, which then prepares the object in another process
+#   - automatically defer all (or some) methods to that process
+#   - unprepare will stop the other process
+
+# - probably even better would be to have a ProcessRunner
+
+import multiprocessing
+
+class ProcessRunner(Runner):
+    """
+
+    The main difference between as ProcessRunner and a ThreadRunner
+    is that in the ProcessRunner all computed data live in another
+    process and can not be directly accessed from the main process,
+    but only via some inter process communication mechanism.
+    """
+
+    # FIXME[todo]: implementation
+    pass
+
+class ProcessObservable: # (Observable):
+
+    def __init__(name: str, prepare: bool=True):
+        self._name = name
+        self._prepare = prepare
+
+    def prepare(self):
+        self._queue = multiprocessing.Queue()
+        self._task = multiprocessing.Event()
+        self._ready = multiprocessing.Event()
+        self._process = multiprocessing.Process(target=self._process_loop)
+        self._process.start()
+
+    def unprepare(self):
+        self._process.terminate()
+
+
+    def _process_loop(self, detector=None):
+        if detector is None:
+            self._detector = Detector.create(self._name, self._prepare)
+        while True:
+            self._task.wait()
+            method, args, kwargs = self._queue.get()
+            self._task.clear()
+            print(method, args, kwargs)
+            # func = getattr(self, method)
+            # result = func(*args, **kwargs)
+            result = "the result"
+            self._ready.set()
+            self._queue.put(result)
+            
+
+    @property
+    def busy(self):
+        return not self._ready.is_set()
+            
+    def detect(self, data, **kwargs):
+        if self.busy:
+            raise RuntimeException("Object is not ready.")
+        ## we are beginning a new task - hence we are not ready for other tasks
+        self._ready.clear()
+
+        ## signal the other process that a new task will start
+        self._task.set()
+
+        ## queue the task information
+        self._queue.put(['detect', (data, ), kwargs])
+
+        ## make this an synchronous call - wait for the process to finish
+        self._ready.wait()
+
+        detections = self._queue.get()
+        # FIXME[todo]: receive the result from the queue
+        return detections

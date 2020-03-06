@@ -173,11 +173,12 @@ class DetectorController(DetectorView, BaseController):
         """
         self._next_data = data
         if not self._detector.busy:
+            self._detector.busy = True  # FIXME[todo]: better API
             self._process()
 
     @run
     def _process(self):
-        self._detector.busy = True
+        #self._detector.busy = True
         while self._next_data is not None:
 
             self._data = self._next_data

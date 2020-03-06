@@ -74,6 +74,9 @@ class DetectorHaar(Detector):
         # be of type CV_8U (meaning unsigned 8-bit, gray scale image
         # with pixel values from 0 to 255). If not given as in this
         # format, we will try to convert it.
+        if issubclass(image.dtype.type, np.float):
+            image = (image*256).astype(np.uint8)
+
         if image.ndim == 3 and image.shape[2] == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         elif image.ndim == 3 and image.shape[2] == 1:
