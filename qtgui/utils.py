@@ -2,7 +2,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 from base import Observable, AsyncRunner
 import util
-from util.error import protect
+from util.error import protect, handle_exception
 
 import logging
 logger = logging.getLogger(__name__)
@@ -47,14 +47,17 @@ class QtAsyncRunner(AsyncRunner, QObject):
         therefore can notify the Qt GUI.
         """
         self._completed += 1
-        result = future.result()
-        if result is not None:
-            observable, info = result
-            import threading
-            me = threading.current_thread().name
-            logger.debug(f"{self.__class__.__name__}.onCompletion():{info}")
-            if isinstance(info, Observable.Change):
-                self._completion_signal.emit(observable, info)
+        try:
+            result = future.result()
+            if result is not None:
+                observable, info = result
+                import threading
+                me = threading.current_thread().name
+                logger.debug(f"{self.__class__.__name__}.onCompletion():{info}")
+                if isinstance(info, Observable.Change):
+                    self._completion_signal.emit(observable, info)
+        except BaseException as exception:
+            handle_exception(exception)
 
     def _notifyObservers(self, observable, info):
         """The method is intended as a receiver of the pyqtSignal.
@@ -635,7 +638,7 @@ class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
     def detector_changed(self, busyBody: BusyObservable,
                          change: BusyObservable.Change) -> None:
         self._movie.setPaused(not busyBody.busy)
-        self.setVisible(busyBody.busy)
+        #self.setVisible(busyBody.busy)
 
     def __del__(self):
         self._movie.stop()

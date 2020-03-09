@@ -123,7 +123,7 @@ from types import ModuleType
 import util.resources
 import util
 
-from ..utils import protect
+from util.error import protect
 
 
 
@@ -171,12 +171,14 @@ class InternalsPanel(Panel):
         self.setLayout(self._layout)
 
     @QtCore.pyqtSlot()
+    @protect
     def _onInfo(self):
         sender = self.sender()
         resource = ResourceController(Resource[sender.ID])
         self.showInfo(ModuleInfo(resource=resource))
 
     @QtCore.pyqtSlot()
+    @protect
     def _onUpdateModules(self):
         self._updateModules()
 

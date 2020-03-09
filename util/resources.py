@@ -448,6 +448,15 @@ class ModuleResource(Resource):
     def available(self) -> bool:
         """Check if this :py:class:`ModuleResource` is installed.
         """
+        # It may happen that a module is loaded (in sys.modules), but
+        # does not provide a __spec__ attribute, or that this
+        # attribute is None. I these cases, importlib.util.find_spec
+        # raises a ValueError. Hence we check beforhand, if the module
+        # is loaded, which is sufficient for us (we do not need the
+        # module spec) und only refer to importlib in case it is not
+        # loaded.
+        if self.module in sys.modules:
+            return sys.modules[self.module] is not None
         return importlib.util.find_spec(self.module) is not None
 
     @property

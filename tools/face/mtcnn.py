@@ -78,7 +78,25 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector):
         """
 
         print(f"MTCNN[{threading.currentThread().getName()}]: detecting face ...")
-        faces = self._detector.detect_faces(image)
+        try:
+            faces = self._detector.detect_faces(image)
+        except BaseException:  # InternalError
+            # 2 root error(s) found.
+            #  (0) Internal: Blas GEMM launch failed : a.shape=(32, 576), b.shape=(576, 128), m=32, n=128, k=576
+            #	 [[{{node dense_1/MatMul}}]]
+            #  (1) Internal: Blas GEMM launch failed : a.shape=(32, 576), b.shape=(576, 128), m=32, n=128, k=576
+            #	 [[{{node dense_1/MatMul}}]]
+            #	 [[softmax_2/Softmax/_315]]
+            # 0 successful operations.
+            #
+            # * Make sure you have no other processes using the GPU running.
+            #   Run nvidia-smi to check this.
+            #
+            # [1] https://stackoverflow.com/a/52132383
+            #     A proposed fix is to add a line
+            #        config.gpu_options.allow_growth = True
+            #     in the keras/tensorflow_backend.py file
+            # 
         print(f"MTCNN[{threading.currentThread().getName()}]: ... detected {len(faces)} faces.")
 
         detections = Metadata(description=

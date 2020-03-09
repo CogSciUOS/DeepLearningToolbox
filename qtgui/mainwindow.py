@@ -67,7 +67,9 @@ from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
 # Currently I have no idea where this problem originates, or how it
 # may be fixed - no suitable references found on the internet.
 #
-# Analysis: the bug only occurs when my firefox (73.0.1, 64-bit) is running.
+# Analysis: the bug only occurs when my firefox (73.0.1, 64-bit on an
+# Ubuntu 18.04 on my home system) is running - it does not occur with
+# the same version of firefox running under Ubuntu 16.04 at the university).
 #  * if no Firefox is is not running the problem does not occur
 #  * if my Firefox (with many tabs) is running, the full problem occurs
 #  * if running a Firefox private browsing window (with one tab),

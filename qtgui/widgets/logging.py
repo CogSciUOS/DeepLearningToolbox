@@ -96,9 +96,9 @@ import traceback
 import util.debugging
 
 class QExceptionView(QPlainTextEdit):
-    """A view for Python exceptions.
-    This is basically a text field in which an exception can be
-    displayed.
+    """A view for Python exceptions.  This is basically a text field in
+    which a :py:class:`BaseException` can be displayed, including its
+    stack trace.
 
     """
 
@@ -106,8 +106,13 @@ class QExceptionView(QPlainTextEdit):
         super().__init__(**kwargs)
         self.setReadOnly(True)
         self._exception = None
+        self._traceback = None
 
     def setException(self, exception: BaseException) -> None:
+        """Set the :py:class:`BaseException` to be displayed in this
+        :py:class:`QExceptionView`
+
+        """
         self._exception = exception
         self._traceback = traceback.extract_tb(exception.__traceback__)
         # _traceback is basicall a list of traceback.FrameSummary,
@@ -123,20 +128,31 @@ class QExceptionView(QPlainTextEdit):
         self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
 
     @protect
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event) -> None:
+        """Handle a mouse release event. When pressed on a frame in the stack
+        trace, open the correspoding code line in an external editor.
+
+        """
         cursor = self.cursorForPosition(event.pos())
         frame_number = cursor.blockNumber() // 2
 
-        if frame_number < len(self._traceback):
-            frame = self._traceback[frame_number]
-            logger.info(f"Trying to open file {frame.filename}, "
-                        f"line {frame.lineno}, in an external editor.")
-            try:
-                retcode = util.debugging.edit(frame.filename, frame.lineno)
-                if retcode < 0:
-                    logger.error("Edit command was terminated by signal "
-                                 f"{-retcode}")
-                else:
-                    logger.info(f"Edit command returned: {retcode}")
-            except OSError as error:
-                logger.error(f"Edit command failed: {error}")
+        if self._traceback is not None and frame_number < len(self._traceback):
+            self.editFrame(self._traceback[frame_number])
+
+    def editFrame(self, frame: traceback.FrameSummary):
+        """Edit the the code file described by the given stack frame in an
+        external editor.
+
+        """
+        logger.info(f"Trying to open file {frame.filename}, "
+                    f"line {frame.lineno}, in an external editor.")
+        try:
+            retcode = util.debugging.edit(frame.filename, frame.lineno)
+            if retcode < 0:
+                logger.error("Edit command was terminated by signal "
+                             f"{-retcode}")
+            else:
+                logger.info(f"Edit command returned: {retcode}"
+                            f"({'error' if retcode else 'success'})")
+        except OSError as error:
+            logger.error(f"Edit command failed: {error}")
