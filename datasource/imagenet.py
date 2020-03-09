@@ -1,12 +1,12 @@
 from . import Imagesource, Labeled, DataDirectory, InputData
 
-# FIXME[todo]: this module datasources.imagenet_classes provides textual
+# FIXME[todo]: this module datasource.imagenet_classes provides textual
 # class names for the 1000 ImageNet classes. The same information is
 # is extracted from the ImageNet database by the class ImageNet defined
 # in this module.
 # We may want to integrate this into the class to
 # avoid redundancies or even inconsistencies
-from datasources.imagenet_classes import class_names
+from datasource.imagenet_classes import class_names
 from util.image import imread
 
 import os
@@ -22,8 +22,8 @@ import pickle
 
 
 # FIXME[todo]: this is currently just a hack, not a full-fleshed
-# DataSource!
-#  - implement the standard DataSource API
+# Datasource!
+#  - implement the standard Datasource API
 #  - allow for all "sections" (train/valid/test)
 #  - automatically provide teh ImageNet class labels
 
@@ -417,7 +417,7 @@ class ImageNet(DataDirectory, Imagesource, Labeled):
         Returns
         -------
         available: bool
-            True if the DataSource can be instantiated, False otherwise.
+            True if the Datasource can be instantiated, False otherwise.
         """
         return self.directory is not None
 

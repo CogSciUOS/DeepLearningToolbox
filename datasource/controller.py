@@ -1,5 +1,5 @@
 from base import View as BaseView, Controller as BaseController, change, run
-from .source import Datasource, Labeled, Loop, Indexed
+from .datasource import Datasource, Labeled, Loop, Indexed
 from .array import DataArray
 from .directory import DataDirectory
 from .file import DataFile
@@ -15,7 +15,7 @@ class View(BaseView, view_type=Datasource):
     Attributes
     ----------
     _datasource : Datasource
-        The current :py:class:`datasources.Datasource`
+        The current :py:class:`datasource.Datasource`
     """
     _logger = logging.getLogger(__name__)
 

@@ -95,9 +95,9 @@ class View:
         # transfer all observers added via this View from tho old to
         # the new observable:
         observable = new_observable or old_observable
-        self._logger.debug(f"TRANSFER ({self}) of {len(self._observers)} "
-                           f"observers from old={old_observable} "
-                           f"to new={new_observable}")
+        self._logger.debug(f"TRANSFER ({repr(self)}) of {len(self._observers)} "
+                           f"observers from old={repr(old_observable)} "
+                           f"to new={repr(new_observable)}")
         for observer, interests in self._observers.items():
             self._logger.debug(f"  -> observer={observer}")
             if old_observable is not None:
@@ -107,9 +107,20 @@ class View:
             observable.notify(observer, observable.Change.all())
         self._logger.debug(f"TRANSFER completed.")
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str):
+        """Accessing attributes of the :py:class:`View`.  This is essentially
+        a wrapper around the :py:class:`Observable`, allowing to use
+        its class and attributes. However, it will block access to
+        private members (i.e., names starting with underscore '_').
+
+        Arguments
+        ---------
+        attr: str
+            The name of the attribute.
+
+        """
         if attr == type(self)._view_attribute:
-            return None  # avoid RecursionError
+            return None  # avoid RecursionError (if view_attribute is not set)
         observable = getattr(self, type(self)._view_attribute, None)
         if observable is None:
             raise AttributeError(f"Cannot access attribute '{attr}' in "
@@ -170,12 +181,12 @@ class View:
             raise RuntimeError(f"Adding observer {observer} twice to {self}.")
         self._observers[observer] = interests
         observable = getattr(self, self._view_attribute, None)
-        self._logger.debug(f"ADD: {self}.add_observer({observer}) "
-                           f"observable={observable}")
+        self._logger.debug(f"ADD: {repr(self)}.add_observer({repr(observer)}) "
+                           f"observable={repr(observable)}")
         if observable is not None:
             observer.observe(observable, interests)
-            self._logger.debug(f"  =>{observable}.notify({observer}, "
-                               f"{observable.Change.all()})")
+            self._logger.debug(f"  =>{repr(observable)}.notify({repr(observer)}"
+                               f", {observable.Change.all()})")
             # Send a Change.all() notification to the new Observer, to
             # initiate a complete update
             observable.notify(observer, observable.Change.all())
@@ -185,8 +196,9 @@ class View:
             change = self._view_type.Change.all()
             notify = getattr(observer, self._view_type._change_method, None)
             if notify is None:
-                raise NotImplementedError(f"{observer} wants to observe "
-                                          f"{self} of type {self._view_type} "
+                raise NotImplementedError(f"{repr(observer)} wants to observe "
+                                          f"{repr(self)} "
+                                          f"of type {self._view_type} "
                                           "but does not implement "
                                           f"'{self._view_type._change_method}'")
             else:

@@ -1,5 +1,5 @@
 from toolbox import Toolbox
-from datasources import Datasource
+from datasource import Datasource
 
 from typing import Dict, Iterable, Tuple
 

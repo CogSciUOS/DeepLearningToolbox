@@ -29,14 +29,61 @@ from util import resources, addons
 
 #from tools.am import Engine as MaximizationEngine  # FIXME[old]: check if we still need this ...
 #from tools.am import Controller as MaximizationController # FIXME[old]: check if we still need this ...
-from datasources import Datasource, Controller as DatasourceController
+from datasource import Datasource, Controller as DatasourceController
 
 # Qt imports
 from PyQt5.QtCore import Qt, QTimer, QCoreApplication, QThread, pyqtSignal
 from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
                          QCloseEvent)
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
-                             QWidget, QLabel, QApplication)
+                             QWidget, QLabel, QApplication, QDesktopWidget)
+# FIXME[bug]: statusBar-bug:
+# There seems to be a problem with QStatusBar: creating a QStatusBar
+# will cause the CPU load to go up to 100% on all CPUs!  (strange
+# enough, atop reports that firefox uses all this CPU%).
+#
+# How to reproduce: start ipython and type
+#
+#   from PyQt5.QtWidgets import QStatusBar, QApplication
+#   app = QApplication([])
+#   bar = QStatusBar()     # <- after this CPU load will go up
+#
+# The same effect can be observed when obtaining a statusBar from
+# QMainWindow.statusBar(). However, the same also happens when commenting
+# out all invocations of self.statusBar() in DeepVisMainWindow, but
+# then it does not occur upon construction, but when calling mainWindow.show()
+#
+#    from qtgui import create_gui
+#    gui = create_gui([], None)   # <- invocation of self.statusBar() commented
+#    gui.show()                   # <- after this CPU load will go up
+#
+# but showing a QMainWindow (without Menu) does NOT cause the problem:
+#
+#   from PyQt5.QtWidgets import QMainWindow, QApplication
+#   app = QApplication([])
+#   gui = QMainWindow()
+#   gui.show()                    # <- no problem here
+#
+# Currently I have no idea where this problem originates, or how it
+# may be fixed - no suitable references found on the internet.
+#
+# Analysis: the bug only occurs when my firefox (73.0.1, 64-bit) is running.
+#  * if no Firefox is is not running the problem does not occur
+#  * if my Firefox (with many tabs) is running, the full problem occurs
+#  * if running a Firefox private browsing window (with one tab),
+#    the problem occurs at reduced scale (3 of 4 CPUs get 100% load)
+#  * if running in Safe mode (with many tabs) the problem occurs
+#    at full scale.
+#  * if creating and running a new (fresh) Firefox profile, the problem
+#    occurs at full scale.
+#
+# Set the following flag (BUG) to True, if the bug occurs: it will avoid
+# all GUI features (menu, statusBar), that result in using up all CPU.
+# However, some graphical features will be missing ...
+#
+# from qtgui import mainwindow
+# mainwindow.BUG = True
+BUG = False
 
 class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     """The main window of the Deep Visualization Toolbox. The window
@@ -165,15 +212,32 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         self.panel_signal.connect(self.panel)
 
     def run(self, **kwargs):
+        """Run the apllication by starting its main event loop.  This function
+        will only return once that event loop is finished (usually as
+        a result of calling :py:meth:`stop`).
+
+        """
+        # FIXME[bug]: the following line will cause the statusBar-bug
+        # (but only if the menu was installed via self._createMenu()).
+        # However, it seems that no QStatusBar is involved (at least
+        # self.statusBar() seems not to be invoked)
+        self.show()
+
+        # create a timer that regularly updates the status bar.
         self.start_timer()
 
         # Initialize the Toolbox in the background, while the (event
         # loop of the) GUI is already started in the foreground.
-        self._runner.runTask(self._toolbox.setup, **kwargs)
+        if self._toolbox is not None:
+            self._runner.runTask(self._toolbox.setup, **kwargs)
 
         # This function will only return once the main event loop is
         # finished.
-        return self._app.exec_()
+        result = self._app.exec_()
+
+        self.hide()
+        return result
+    
 
     def stop(self):
         """Quit the application.
@@ -239,14 +303,14 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         """Update the "Datasource" menu.
         """
         # self._datasourceMenu is of type PyQt5.QtWidgets.QMenu'
-        self._datasources = {}
+        self._datasource = {}
         if self._toolbox is None:
             return  # FIXME[todo]: erase all Datasources from the menu
 
         def slot(id):
             def set_datasource(checked):
                 print(f"qtgui.MainWindow.set_datasource({checked}): {id}")
-                datasource = self._datasources[id]
+                datasource = self._datasource[id]
                 print(f"qtgui.MainWindow.set_datasource: {type(datasource)}")
                 # We first set the Datasource in the toolbox
                 # and then prepare it, in order to get a smooth
@@ -255,11 +319,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                 datasource.prepare()
             return protect(set_datasource)
 
-        # Add all datasources to the menu
+        # Add all datasource to the menu
         for datasource in self._toolbox.datasources:
             id = str(datasource)
             label = str(datasource)
-            self._datasources[id] = datasource
+            self._datasource[id] = datasource
             action = QAction(label, self)
             if True: # datasource == self._toolbox.datasource:
                 action.font().setBold(True)  # FIXME[bug]: seems to have no effect
@@ -335,19 +399,15 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             self._tabs.setCurrentIndex(index)
         return panel
 
-    def activateLogging(self, logger: logging.Logger,
-                        recorder: util.RecorderHandler=None,
-                        show: bool=False) -> None:
-        logging = self.panel('logging', create=True, show=True)
-        if logging is not None:  # can only fail if create=False
-            if recorder is not None:
-                logging.setLoggingRecorder(recorder)
-            logging.addLogger(logger)
-
     ###########################################################################
     #                           Initialization                                #
     ###########################################################################
 
+    # FIXME[bug]: debug the statusBar-Bug (see above)
+    def statusBar(self):
+        print("DeepVisMainWindow[debug]: statusBar() was invoked.")
+        return super().statusBar()
+    
     def _initUI(self, title: str, icon: str) -> None:
         """Initialize the graphical components of this user interface."""
         #
@@ -356,6 +416,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         self.setWindowTitle(title)
         self.setWindowIcon(QIcon(icon))
         self.setAcceptDrops(True)
+
+        desktop = self._app.desktop()  # of type QDesktopWidget
+        screenGeometry = desktop.screenGeometry()  # of type QRect
+        self.setMinimumSize(screenGeometry.width() // 2,
+                            screenGeometry.height() // 2)
 
         #
         # Initialize the Tabs
@@ -367,13 +432,19 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         #
         # Create the menu
         #
-        self._createMenu()
-        
+        # FIXME[bug]: with the following line the statusBar-bug (see above)
+        # occurs when calling self.show()
+        if not BUG:
+            self._createMenu()
+
         #
         # Initialize the status bar
         #
         self._statusResources = QLabel()
-        self.statusBar().addWidget(self._statusResources)
+        # FIXME[bug]: the following line directly causes the
+        # statusBar-bug (see above)
+        if not BUG:
+            self.statusBar().addWidget(self._statusResources)
 
     def _createMenu(self):
         menubar = self.menuBar()
@@ -438,8 +509,17 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         """Callback for saving any application state inb4 quitting."""
         pass
 
-    def showStatusMessage(self, message):
-        self.statusBar().showMessage(message, 2000)
+    def showStatusMessage(self, message, timeout: int=2000):
+        """Hide the normal status indications and display the given message in
+        the statusbar for the specified number of milli-seconds .
+
+        """
+        # If timeout is 0 (default), the message remains displayed
+        # until the clearMessage() slot is called or until the
+        # showMessage() slot is called again to change the message.
+        # FIXME[bug]: commented out due to the statusBar-bug (see above)
+        if not BUG:
+            self.statusBar().showMessage(message, timeout)
 
     @protect
     def showStatusResources(self):
@@ -479,7 +559,14 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
         """
         print("MainWindow: Menu/exit -> exiting the main window now ...")
-        self._toolbox.quit()
+        if self._toolbox is None:
+            self.stop()
+        else:
+            # FIXME[concept]: this branch seems unnecessary:
+            # It should be enough to just stop the
+            # Qt main event loop and let run() return to its caller,
+            # which may then do remaining cleanup
+            self._toolbox.quit()
         print("MainWindow: toolbox.quit() returned ...")
 
     @protect
@@ -583,6 +670,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         """Initialise the log panel.
 
         """
+        loggingPanel.setToolbox(self._toolbox)
         loggingPanel.addLogger(logging.getLogger())
 
     def _newResourcesPanel(self, ResourcesPanel: type) -> Panel:

@@ -7,7 +7,7 @@ Github: https://github.com/krumnack
 
 from toolbox import Toolbox, Controller as ToolboxController
 from network import Network, Controller as NetworkController
-from datasources import Datasource, Controller as DatasourceController
+from datasource import Datasource, Controller as DatasourceController
 
 from .panel import Panel
 from ..utils import QObserver, protect

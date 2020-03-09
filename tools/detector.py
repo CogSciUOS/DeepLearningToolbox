@@ -7,7 +7,7 @@ import imutils
 
 from base.observer import BusyObservable, change, busy
 from base import View as BaseView, Controller as BaseController, run
-from datasources import Metadata
+from datasource import Metadata
 
 class Detector(BusyObservable, method='detector_changed',
                changes=['data_changed', 'detection_finished']):

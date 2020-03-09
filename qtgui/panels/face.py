@@ -10,7 +10,7 @@ from tools.face.detector import (Detector as FaceDetector,
                                  Controller as FaceController)
 from tools.face.landmarks import (Detector as LandmarkDetector,
                                   Controller as LandmarkController)
-from datasources import Metadata
+from datasource import Metadata
 from ..utils import QImageView, QObserver, QBusyWidget, protect
 
 import numpy as np
@@ -121,7 +121,7 @@ class DetectorWidget(QGroupBox, QObserver, FaceDetector.Observer):
 
 
 from toolbox import Toolbox, Controller as ToolboxController
-from datasources import Datasource, Controller as DatasourceController
+from datasource import Datasource, Controller as DatasourceController
 from tools.face.detector import Detector as FaceDetector
 
 from .panel import Panel

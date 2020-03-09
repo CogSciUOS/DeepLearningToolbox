@@ -1,4 +1,4 @@
-from datasources import DataSource, InputData
+from datasource import Datasource, InputData
 from util.image import imread
 
 from os.path import join
@@ -8,7 +8,7 @@ import numpy as np
 # common features, like prefetching, caching, etc.
 
 
-class DataFiles(DataSource):
+class DataFiles(Datasource):
     """Data source for reading from a collection of files.
 
     Attributes

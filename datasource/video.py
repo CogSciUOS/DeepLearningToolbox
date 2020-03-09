@@ -1,9 +1,9 @@
 import importlib.util
 
-from datasources import DataSource, InputData
+from datasource import Datasource, InputData
 
 
-class DataVideo(DataSource):
+class DataVideo(Datasource):
     """A data source fetching frames from a video.
 
     Attributes

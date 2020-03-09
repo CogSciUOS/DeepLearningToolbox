@@ -71,9 +71,10 @@ class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
         return self._toolbox.get_data_shape()
 
     def _initUI(self):
-        """Add the UI elements
-
-            * The ``QLogHandler`` showing the log messages
+        """Initialize the UI elements. This will create the
+        QWidgets of this :py:class:`AutoencoderPanel`, but it
+        will not arange them. This will be done by
+        :py:meth:`_layoutComponents`.
 
         """
         #
@@ -128,10 +129,8 @@ class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
         self._pltOut = QMatplotlib()
 
     def _layoutComponents(self):
-        """Layout the UI elements.
-
-            * The ``QLogHandler`` displaying the log messages
-
+        """Layout the graphical components of this
+        :py:class:`AutoencoderPanel`.
         """
         plotBar = QHBoxLayout()
         plotBar.addWidget(self._trainingBox)

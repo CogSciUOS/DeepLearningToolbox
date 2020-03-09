@@ -196,7 +196,7 @@ class WiderFace(DataDirectory, Labeled):
         Returns
         -------
         available: bool
-            True if the DataSource can be prepared, False otherwise.
+            True if the Datasource can be prepared, False otherwise.
         """
         return self._annotations_filename is not None
 

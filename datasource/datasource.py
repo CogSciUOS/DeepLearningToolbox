@@ -38,7 +38,7 @@ class Datasource(BusyObservable, method='datasource_changed',
     Changes
     -------
     state_changed:
-        The state of the DataSource has changed (e.g. data were downloaded,
+        The state of the Datasource has changed (e.g. data were downloaded,
         loaded/unloaded, unprepared/prepared, etc.)
     data_changed:
         The data have changed (e.g. by invoking some fetch ... method).
@@ -742,7 +742,7 @@ class Loop(Datasource):
 
     Notice: the methods of this class are not intended to be
     called directly, but they are engaged via the
-    :py:meth:`loop` method of the :py:class:`datasources.Controller`
+    :py:meth:`loop` method of the :py:class:`datasource.Controller`
     class.
     """
 

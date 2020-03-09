@@ -7,7 +7,7 @@ import dlib
 
 from .detector import Detector as FaceDetector
 from .landmarks import Detector as LandmarkDetector
-from datasources import Metadata
+from datasource import Metadata
 from util.image import BoundingBox
 
 

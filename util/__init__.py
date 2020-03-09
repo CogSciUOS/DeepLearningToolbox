@@ -1,50 +1,26 @@
 """
-.. moduleauthor:: Rasmus Diederichsen
+.. moduleauthor:: Rasmus Diederichsen, Ulf Krumnack
 
 .. module:: util
 
 This module collects miscellaneous utilities.
+
+
+Internal requirements: just submodules:
+ - util.check
+ - util.error
+ - util.logging
+
+External requirements:
+ - packaging (via .check)
+ - frozendict (via .check)
 """
 
 import sys
 import logging
 from . import check, error
-
-
-def debug(func):
-    """A decorator to output exceptions raised in a function.
-    """
-    def closure(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except BaseException as exception:
-            error.handle_exception(exception)
-            raise exception
-    return closure
-
-
-def grayscaleNormalized(array):
-    """Convert a float array to 8bit grayscale
-
-    Parameters
-    ----------
-    array: np.ndarray
-        Array of 2/3 dimensions and numeric dtype.
-        In case of 3 dimensions, the image set is normalized globally.
-
-    Returns
-    -------
-    np.ndarray
-        Array mapped to [0,255]
-
-    """
-    import numpy as np
-
-    # normalization (values should be between 0 and 1)
-    min_value = array.min()
-    max_value = array.max()
-    div = max(max_value - min_value, 1)
-    return (((array - min_value) / div) * 255).astype(np.uint8)
+from .logging import RecorderHandler
+from .debugging import debug
 
 
 class Identifiable:
@@ -130,36 +106,3 @@ def add_timer_callback(callback):
 
 # Should we use CPU (even if GPU is available)?
 use_cpu = True
-
-
-
-#
-# Logging
-#
-import logging
-
-# FIXME[bug]: with python 3.7, I get the following error here:
-#   TypeError: unhashable type: 'RecorderHandler'
-class RecorderHandler(logging.Handler, list):
-    """A RecorderHandler store :py:class:logging.LogEvent, allowing to
-    replay the log history. Similar to a logging.BufferingHandler, but
-    allowing multiple replays.
-    """
-
-    def __init__(self):
-        logging.Handler.__init__(self)
-        list.__init__(self)
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """
-        Handle a signal Remove the specified handler from this Recorder.
-        """
-        self.append(record)
-
-    def replay(self, handler: logging.Handler) -> None:
-        """
-        Replay all records stored in this Recorder.
-        """
-        for record in self:
-            handler.handle(record)
-

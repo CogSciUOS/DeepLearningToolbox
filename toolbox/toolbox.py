@@ -31,7 +31,6 @@ Concepts:
 #
 # Current methods we access in the GUI:
 #   - self._gui.getRunner()
-#   - self._gui.activateLogging
 #   - self._gui.showStatusResources
 #   - self._gui.safe_timer
 #   - self._gui.stop_timer()
@@ -51,26 +50,18 @@ from argparse import ArgumentParser
 import importlib.util
 
 import logging
-#logging.basicConfig(level=logging.DEBUG)
 
-# local loggger
+# The local Toolbox loggger
 logger = logging.getLogger(__name__)
-logger.info(f"Effective debug level: {logger.getEffectiveLevel()}")
+logger.info(f"Effective log level for logger '{__name__}': {logger.getEffectiveLevel()}")
 
-# silencing the matplotlib logger
-mpl_logger = logging.getLogger('matplotlib')
-mpl_logger.setLevel(logging.WARNING)
+# FIXME[hack]: silencing the matplotlib logger.
+# The 'matplotlib' plotter seems to be set on `logging.DEBUG`, causing
+# the `matplotlib` module upon import to emit a lot of messages.
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 import util
 from util import addons
-
-
-if True: # FIXME[todo]: cannot be False ...
-    logger.info("!!!!!!!!!!!!!!!! Changing global logging Handler !!!!!!!!!!!!!!!!!!!!")
-    root_logger = logging.getLogger()
-    root_logger.handlers = []
-    logRecorder = util.RecorderHandler()
-    root_logger.addHandler(logRecorder)
 
 import numpy as np
 
@@ -85,9 +76,9 @@ from network import Network
 #from network.examples import keras, torch
 
 
-from datasources import (Datasource, Labeled as LabeledDatasource,
+from datasource import (Datasource, Labeled as LabeledDatasource,
                          Controller as DatasourceController)
-from datasources import Loop, Metadata
+from datasource import Loop, Metadata
 
 class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
@@ -142,6 +133,21 @@ class Toolbox(BusyObservable, Datasource.Observer,
     input_changed:
         The current input has changed. The new value can be read out
         from the :py:meth:`input` property.
+
+    Logging and error handling
+    --------------------------
+    The logging behaviour of the :py:class:`Toolbox` can be altered
+    by setting :py:class:`logging.Handler`. The Toolbox basically
+    provides two Handlers which can be activated or deactivated
+    independently: The console handler and the GUI handler.
+    The GUI handler will be used when a GUI is started that provides
+    a handler. The console handler is used, when no GUI handler
+    is active, or when a shell is running.
+
+    Both can be altered by setting gui_logging and/or console_logging.
+    The handler can be accessed and configured via the properties
+    gui_logging_handler and console_logging_handler.
+
 
     Usage
     -----
@@ -211,6 +217,9 @@ class Toolbox(BusyObservable, Datasource.Observer,
         _initialize_toolbox().
         """
         super().__init__()
+        
+        self._initialize_logging()
+        self._initialize_exception_handler()
 
         # provide access to this Toolbox via a ToolboxController
         self._toolbox_controller = ToolboxController(self)
@@ -278,7 +287,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
         else:
             print("Toolbox: Quitting the toolbox.")
             sys.exit(0)
-    
 
     def setup(self, tools=[], networks=[], datasources=[]):
         """Initialize the Toolbox, by importing required classes,
@@ -722,6 +730,13 @@ class Toolbox(BusyObservable, Datasource.Observer,
                             help='Open the face module (experimental!)',
                             action='store_true', default=False)
 
+        #
+        # Bugs
+        #
+        parser.add_argument('--firefox-bug', help='avoid the firefox bug',
+                            action='store_true', default=False)
+        
+
     def process_command_line_arguments(self, args) -> None:
         """Process the arguments given to the :py:class:`ArgumentParser`.
         """
@@ -740,7 +755,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #
         datasources = []
 
-        from datasources import DataDirectory
+        from datasource import DataDirectory
         #for id in Datasource.keys():
         #    print(f"predefined id: {id}")
         #    datasource = Datasource[id]
@@ -805,6 +820,11 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
             #panels.append('resources')
             #panels.append('activations')
+
+            if args.firefox_bug:
+                from qtgui import mainwindow
+                mainwindow.BUG = True
+            
             rc= self.start_gui(panels=panels, tools=tools,
                                networks=networks, datasources=datasources)
         else:
@@ -846,10 +866,21 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if self.contains_tool('activation'):
             self._gui.setActivationEngine()
 
+        # Show the logging panel.
         #
-        # redirect logging
+        # FIXME[concept]: think about initialization of panels
+        #  - panels should only be initialized on demand
+        #    -> no explicit instantiation here
+        #  - toolbox should have no knowledge on panel internals
+        #    -> the panel should request necessary information
+        #       (logger, logging_recorder, ...) from the Toolbox
         #
-        self._gui.activateLogging(root_logger, logRecorder, True)      
+        logging_panel = self._gui.panel('logging', create=True, show=True)
+        if logging_panel is not None:  # can only fail if create=False
+            if self.logging_recorder is not None:
+                logging_panel.setLoggingRecorder(self.logging_recorder)
+            # add the root logger to the logging panels
+            logging_panel.addLogger(logging.getLogger())
 
         try:
             # This will enter the main event loop and will only return
@@ -923,9 +954,130 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return self._gui
 
     ###########################################################################
+    ###                    Logging and error handling                       ###
+    ###########################################################################
+
+    def _initialize_logging(self, record: bool=True,
+                            level=logging.DEBUG) -> None:
+        """Initialize logging by this :py:class:`Toolbox`.  This is based on
+        the infrastructure provided by Python's `logging` module,
+        consisting of :py:class:`logging.Logger`s and
+        :py:class:`logging.Handler`s.
+
+        The :py:class:`Toolbox` class
+        
+        Each module of the toolbox should define its own
+        :py:class:`logging.Logger` by calling `logger =
+        logging.get_logger(__name__)` to allow for individual
+        configuration.
+        """
+
+        # The the basic logging level
+        logging.basicConfig(level=level)
+
+        if record:
+            logger.info("Changing global logging Handler to RecorderHandler.")
+
+            # remove all current handlers from the root logger.
+            original_handlers = logging.getLogger().handlers.copy()
+            for handler in original_handlers:
+                self.remove_logging_handler(handler)
+
+            # use a util.RecorderHandler
+            self.record_logging()
+
+    def add_logging_handler(self, handler: logging.Handler) -> None:
+        logger.info(f"Adding log handler: {handler}")
+        root_logger = logging.getLogger()
+        root_logger.addHandler(handler)
+
+    def remove_logging_handler(self, handler: logging.Handler) -> None:
+        logger.info(f"Removing log handler: {handler}")
+        root_logger = logging.getLogger()
+        root_logger.addHandler(handler)
+
+    @property
+    def logging_recorder(self) -> util.RecorderHandler:
+        """The logging RecorderHandler. May be None if the
+        :py:class:`Toolbox` was not instructed to record
+        :py:class:`LogRecord`s.
+        """
+        return getattr(self, '_logging_recorder', None)
+
+    def record_logging(self, flag: bool=True) -> None:
+        if flag == hasattr(self, '_logging_recorder'):
+            return  # nothing to do
+        if flag:
+            self._logging_recorder = util.RecorderHandler() 
+            self.add_logging_handler(self._logging_recorder)
+        else:
+            self.remove_logging_handler(self._logging_recorder)
+            del self._logging_recorder
+            
+    
+    def _initialize_exception_handler(self, record: bool=True) -> None:
+        """Initialize exception handling by this Toolbox.
+        This will register als the global exception handler, that is
+        calls to :py:func:`util.error.handle_exception` will be
+        consumed by this :py:class:`Toolbox`.
+
+        Arguments
+        ---------
+        record: bool
+            A flag indicating if exceptions should be recorded for
+            later inspection.  If true, the list of exceptions reported
+            can be obtained via the property exceptions.
+        """
+        self._exception_handlers = set()
+        self.add_exception_handler(util.error.print_exception)
+        if record:  # record exceptions
+            self._exceptions = []
+            self.add_exception_handler(self._record_exception)
+        util.error.set_exception_handler(self.handle_exception)
+
+    def handle_exception(self, exception: BaseException) -> None:
+        """Handle an exceptoin
+        """
+        for handler in self._exception_handlers:
+            handler(exception)
+
+    def add_exception_handler(self, handler):
+        """Add an exception handler to this Toolbox.
+        """
+        self._exception_handlers.add(handler)
+
+    def remove_exception_handler(self, handler):
+        """Remove an exception handler from this Toolbox.
+        """
+        self._exception_handlers.remove(handler)
+
+    def _record_exception(self, exception: BaseException) -> None:
+        """An exception handler to record exceptions. Exceptions recorded will
+        be accessible via the property :py:meth:`exceptions`.
+
+        Arguments
+        ---------
+        exception:
+            The exception to record.
+        """
+        self._exceptions.append(exception)
+
+    @property
+    def exceptions(self):
+        """A list of exceptions recorded by this Toolbox.
+        """
+        if not hasattr(self, '_exceptions'):
+            RuntimeError("Recording of exceptions has not been activated "
+                         "at this Toolbox.")
+        return self._exceptions
+
+    ###########################################################################
     ###                          Miscallenous                               ###
     ###########################################################################
-    
+
+    def __repr__(self):
+        return f"<Toolbox GUI: {self._gui is not None}>"
+
     def __str__(self):
         """String representation of this :py:class:`Toolbox`.
         """

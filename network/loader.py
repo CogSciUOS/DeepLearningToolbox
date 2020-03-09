@@ -15,7 +15,7 @@ def load_alexnet() -> Network:
     from .tensorflow import Model as TensorflowNetwork
     network = TensorflowNetwork(checkpoint=checkpoint)
     
-    from datasources.imagenet_classes import class_names
+    from datasource.imagenet_classes import class_names
     network.set_output_labels(class_names)
     return network
 

@@ -19,12 +19,25 @@ class RegisterMetaclass(type):
             # to deal with such situations.
             module_name, class_name, args, kwargs = item
             module = importlib.import_module(module_name)
-            new_cls = getattr(module, class_name)
-            new_instance = new_cls(*args, **kwargs)
-        except ModuleNotFoundError:
-            raise
+        except ModuleNotFoundError as error:
+            print(f"Preparation of '{key}' of class {cls.__name__}: "
+                  f"import of {module_name} failed: ", error)
+            raise error
         except:
-            raise
+            print(f"Preparation of '{key}' of class {cls.__name__}: "
+                  f"import of {module_name} failed: ", error)
+            raise error
+
+        new_cls = getattr(module, class_name)
+        try:
+            # FIXME[todo]: instantiation may fail - we need a concept
+            # to deal with such situations.
+            new_instance = new_cls(*args, **kwargs)
+        except:
+            print(f"Instantiation of {new_cls.__name__} to obtain "
+                  f"'{key}' of class {cls.__name__} failed: ", error)
+            raise error
+
         #cls._item_lookup_table[key] = new_instance
         return new_instance
         

@@ -10,7 +10,7 @@ import numpy as np
 
 # for type hints
 from typing import Union, Tuple
-import datasources
+import datasource
 
 class View(BaseView, view_type=Engine):
     """Viewer for :py:class:`Engine`.
@@ -111,7 +111,7 @@ class Controller(View, BaseController, Network.Observer):
         Parameters
         ----------
         raw: np.ndarray
-            Raw input data provided by the :py:class:`datasources.DataSource`
+            Raw input data provided by the :py:class:`datasource.Datasource`
         fitted: np.ndarray
             Input data fit to the network input layer
         description: str

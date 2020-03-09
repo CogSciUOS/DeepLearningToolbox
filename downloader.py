@@ -18,9 +18,9 @@ import argparse
 import urllib.request
 import urllib.parse
 
-import datasources
+import datasource
 
-datasets = datasources.datasources
+datasets = datasource.datasources
 models = ['alexnet', 'resnet']
 
 

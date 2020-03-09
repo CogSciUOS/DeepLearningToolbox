@@ -1,6 +1,6 @@
 
 from toolbox import Toolbox, View as ToolboxView
-from datasources import Datasource, View as DatasourceView
+from datasource import Datasource, View as DatasourceView
 
 from ..utils import QObserver, protect
 from .helper import QToolboxViewList
@@ -84,13 +84,13 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         if key == Qt.Key_N:
             self.showNames = not self.showNames
         # FIXME[todo]: Additional ideas:
-        # only show prepared/unprepared datasources
+        # only show prepared/unprepared datasource
 
     class ViewObserver(QToolboxViewList.ViewObserver, Datasource.Observer):
         interests = Datasource.Change('state_changed', 'metadata_changed')
         
         def data(self, toolbox: ToolboxView):
-            return toolbox.datasources
+            return toolbox.datasource
 
         def formatItem(self, item:QListWidgetItem) -> None:
             if item is not None:
@@ -105,7 +105,7 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
 
 
 
-from datasources import (Datasource, DataArray, DataFile, DataDirectory,
+from datasource import (Datasource, DataArray, DataFile, DataDirectory,
                          DataWebcam, DataVideo,
                          Controller as DatasourceController)
 from toolbox import Toolbox, ToolboxController
@@ -341,7 +341,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
             if self._toolbox:
                 # Set the datasource of the Toolbox.
                 # This will also insert the dataset in the Toolbox's list
-                # if datasources, if it is not already in there.
+                # if datasource, if it is not already in there.
                 self._toolbox.datasource_controller(datasource)
 
     @protect
@@ -371,12 +371,12 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
 
 from PyQt5.QtWidgets import QWidget, QPushButton
 
-from datasources import (Datasource, Loop,
+from datasource import (Datasource, Loop,
                          Controller as DatasourceController)
 
 class QLoopButton(QPushButton, QObserver, Datasource.Observer):
     """A Button to control a :py:class:`Datasource` of type
-    :py:class:`Loop`. Such datasources can be in a loop mode, meaning
+    :py:class:`Loop`. Such datasource can be in a loop mode, meaning
     that they continously produce new data (e.g., webcam, movies,
     etc.).
 
@@ -407,7 +407,7 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
-        """Callback for a change of the DataSource.
+        """Callback for a change of the Datasource.
         We are interested when the Datasource itself has changed and
         when its state (looping/pause) has changed.
         """
@@ -434,7 +434,7 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
 
 from PyQt5.QtWidgets import QWidget, QPushButton
 
-from datasources import (Datasource, Loop, Snapshot,
+from datasource import (Datasource, Loop, Snapshot,
                          Controller as DatasourceController)
 
 class QSnapshotButton(QPushButton, QObserver, Datasource.Observer):
@@ -474,7 +474,7 @@ class QSnapshotButton(QPushButton, QObserver, Datasource.Observer):
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
-        """Callback for a change of the DataSource.
+        """Callback for a change of the Datasource.
         We are interested when the Datasource itself has changed and
         when its state (looping/pause) has changed.
         """
@@ -502,12 +502,12 @@ class QSnapshotButton(QPushButton, QObserver, Datasource.Observer):
 
 from PyQt5.QtWidgets import QWidget, QPushButton
 
-from datasources import (Datasource, Loop, Random,
+from datasource import (Datasource, Loop, Random,
                          Controller as DatasourceController)
 
 class QRandomButton(QPushButton, QObserver, Datasource.Observer):
     """A Button to control a :py:class:`Datasource` of type
-    :py:class:`datasources.Random`. Pressing this button will
+    :py:class:`datasource.Random`. Pressing this button will
     obtain a entry from the datasource.
 
     The :py:class:`QRandomButton` can observe a :py:class:`Datasource`
@@ -540,7 +540,7 @@ class QRandomButton(QPushButton, QObserver, Datasource.Observer):
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
-        """Callback for a change of the DataSource.
+        """Callback for a change of the Datasource.
         We are interested when the Datasource itself has changed and
         when its state (looping/pause) has changed.
         """

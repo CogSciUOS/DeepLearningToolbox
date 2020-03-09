@@ -1,6 +1,6 @@
 import numpy as np
 
-from datasources import Metadata
+from datasource import Metadata
 from util.image import Landmarks, BoundingBox
 from base import run
 from tools.detector import (ImageDetector as BaseDetector,

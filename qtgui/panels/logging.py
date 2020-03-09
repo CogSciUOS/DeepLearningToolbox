@@ -12,11 +12,16 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QListWidget,
                              QVBoxLayout, QHBoxLayout, QGroupBox,
                              QSplitter, QComboBox)
 
-from qtgui.utils import QLogHandler
+from qtgui.widgets.logging import QLogHandler, QExceptionView
 from .panel import Panel
 
 import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 import util
+from util.error import protect
+from toolbox import Toolbox
 
 class LoggingPanel(Panel):
     """A panel containing elements to log messages.
@@ -35,7 +40,7 @@ class LoggingPanel(Panel):
         "Debug": logging.DEBUG
     }
 
-    def __init__(self, parent=None):
+    def __init__(self, toolbox: Toolbox=None, **kwargs):
         """Initialization of the LoggingPael.
 
         Parameters
@@ -43,9 +48,11 @@ class LoggingPanel(Panel):
         parent  :   QWidget
                     The parent argument is sent to the QWidget constructor.
         """
-        super().__init__(parent)
+        super().__init__(**kwargs)
         self._loggingRecorder = None
+        self._toolbox = None
         self._initUI()
+        self.setToolbox(toolbox)
 
     def _initUI(self):
         """Add the UI elements
@@ -107,6 +114,8 @@ class LoggingPanel(Panel):
             self._rootLoggerLevel.addItem(name, level)
         self._rootLoggerLevel.currentIndexChanged.connect(self._onRootLevelChanged)
 
+        self._exceptionPanel = QExceptionPanel()
+        
         self._updateLoggerList()
         self._layoutComponents()
 
@@ -118,9 +127,11 @@ class LoggingPanel(Panel):
         """
 
         layout = QVBoxLayout()
-        layout.addWidget(self._log_handler)
-
-
+        row = QHBoxLayout()
+        row.addWidget(self._log_handler)
+        row.addWidget(self._exceptionPanel)
+        layout.addLayout(row)
+        
         row = QHBoxLayout()
         text = QHBoxLayout()
         text.addWidget(QLabel("Messages: "))
@@ -172,6 +183,9 @@ class LoggingPanel(Panel):
         layout.addLayout(row)
         
         self.setLayout(layout)
+
+    def setToolbox(self, toolbox: Toolbox=None) -> None:
+        self._exceptionPanel.setToolbox(toolbox)
 
     def addLogger(self, logger):
         """Add a logger to this :py:class:LoggingPanel.
@@ -338,3 +352,60 @@ class LoggingPanel(Panel):
         if level <= logging.ERROR: return Qt.red
         if level <= logging.FATAL: return Qt.magenta
         return Qt.black
+
+
+from PyQt5.QtWidgets import QPlainTextEdit, QListWidget, QPushButton
+
+
+class QExceptionPanel(QWidget):
+    """
+    """
+
+    def __init__(self, toolbox: Toolbox=None, **kwargs):
+        super().__init__(**kwargs)
+        self._toolbox = None
+        self._initUI()
+        self._layoutComponents()
+        
+    def _initUI(self):
+        self._exceptionList = QListWidget()
+        self._exceptionList.currentItemChanged.\
+            connect(self._onCurrentExceptionChanged)
+        
+        self._exceptionView = QExceptionView()
+        
+        self._exceptionButton = QPushButton("Raise Test Exception")
+        self._exceptionButton.clicked.connect(self._onButtonClicked)
+
+    def _layoutComponents(self):
+        row = QHBoxLayout()
+        column = QVBoxLayout()
+        column.addWidget(self._exceptionList)
+        column.addWidget(self._exceptionButton)
+        row.addLayout(column)
+        row.addWidget(self._exceptionView)
+        self.setLayout(row)
+
+    def setToolbox(self, toolbox: Toolbox=None) -> None:
+        if self._toolbox is not None:
+            self._toolbox.remove_exception_handler(self.handleException)
+        self._toolbox = toolbox
+        if self._toolbox is not None:
+            self._toolbox.add_exception_handler(self.handleException)
+
+    def handleException(self, exception: BaseException) -> None:
+        self._exceptionView.setException(exception)
+
+    @protect
+    def _onCurrentExceptionChanged(self, item: QListWidgetItem,
+                                   previous: QListWidgetItem) -> None:
+        """An exception was selected in the exception list.
+        """
+        print(f"FIXME[todo]: exception changed: {item}, {previous}")
+
+    @protect
+    def _onButtonClicked(self, checked: bool) -> None:
+        """The raise exceptoin button was pressed.
+        """
+        raise RuntimeError("Just a test error.")
+

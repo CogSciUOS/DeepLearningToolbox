@@ -1,6 +1,6 @@
 """.. moduleauthor:: Rasmus Diederichsen, Ulf Krumnack
 
-.. module:: datasources
+.. module:: datasource
 
 This module includes the various ways in which data can be
 loaded. This includes loading individual files (e.g. images) from a
@@ -11,7 +11,7 @@ The module also has some knowledge of a small collection of predefined
 data sets (like "mnist", "keras", "imagenet", ...) more to be added.
 For these datasets, it (should) know how to download the dataset, how
 to locate it (e.g., by means of environment variables or some standard
-locations), and how access it (i.e., which DataSource class to use).
+locations), and how access it (i.e., which Datasource class to use).
 
 Datasources can have different
 * memory: the complete data is in memory
@@ -25,9 +25,9 @@ Datasources can have different
 
 
 from .meta import Metadata
-from .source import (Datasource, InputData, Labeled, Random,
+from .datasource import (Datasource, InputData, Labeled, Random,
                      Loop, Snapshot, Indexed, Imagesource)
-from .source import Datasource as DataSource
+from .datasource import Datasource as Datasource
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
@@ -39,14 +39,14 @@ from .video import DataVideo
 from .webcam import DataWebcam
 #lazy_end(): lazy import
 # FIXME[todo]
-#lazy_import('datasources.webcam', 'DataWebcam')
-#lazy_import('datasources.video', 'DataVideo')
+#lazy_import('datasource.webcam', 'DataWebcam')
+#lazy_import('datasource.video', 'DataVideo')
 
 import logging
 logger = logging.getLogger(__name__)
 del logging
 
-import datasources.predefined
+import datasource.predefined
 
 logger.info(f"Predefined data sources: {list(Datasource.keys())}")
 

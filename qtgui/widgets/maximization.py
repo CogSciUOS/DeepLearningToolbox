@@ -28,9 +28,10 @@ from tools.am import (Config as MaximizationConfig,
                       Engine as MaximizationEngine,
                       Controller as MaximizationController)
  
-from ..utils import QImageView, QLogHandler, QObserver, protect
+from ..utils import QImageView, QObserver, protect
 from .networkview import QNetworkSelector
 from .matplotlib import QMatplotlib
+from .logging import QLogHandler
 
 
 from PyQt5.QtCore import Qt
@@ -880,6 +881,9 @@ class QMaximizationControls(QWidget, QObserver,
         Reference to an external component (of type
         :py:class:`QMaximizationDisplay`) that can store and display the
         current state of the engine. Can be None
+
+    _logWindow: QLogHandler
+        A log window to display logging messages from the engine.
     """
     _network: NetworkController = None
     _maximization: MaximizationController = None

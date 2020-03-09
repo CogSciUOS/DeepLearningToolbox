@@ -1,6 +1,6 @@
 
 
-from datasources import (Datasource, Random, Indexed,
+from datasource import (Datasource, Random, Indexed,
                          Controller as DatasourceController)
 
 from ..utils import QObserver, protect
@@ -275,7 +275,7 @@ class QInputNavigator(QWidget, QObserver, Datasource.Observer):
         self._stateLabel.setText("State: " + text)
 
 
-from datasources import Datasource, Controller as DatasourceController
+from datasource import Datasource, Controller as DatasourceController
 
 from ..utils import QObserver
 from ..widgets.datasource import QDatasourceSelectionBox
@@ -289,9 +289,9 @@ class QInputSelector(QWidget, QObserver, Datasource.Observer):
 
     This Widget consists of two subwidgets:
     1. a :py:class:`QDatasourceSelectionBox` to select a
-       :py:class:`DataSource` and
+       :py:class:`Datasource` and
     2. a :py:class:`QInputNavigator` to navigate in the
-       :py:class:`DataSource`.
+       :py:class:`Datasource`.
 
     There are different modes of selection: from an array, from a file,
     from a directory or from some predefined data source.
@@ -386,7 +386,7 @@ class QInputSelector(QWidget, QObserver, Datasource.Observer):
 
 
 from toolbox import Toolbox, View as ToolboxView
-from datasources import Datasource, View as DatasourceView
+from datasource import Datasource, View as DatasourceView
 from tools.activation import (Engine as ActivationEngine,
                               View as ActivationView)
 

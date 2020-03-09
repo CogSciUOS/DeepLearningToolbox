@@ -2,7 +2,7 @@ from typing import Iterable
 from base import View as BaseView
 from .toolbox import Toolbox
 from network import Network
-from datasources import Datasource
+from datasource import Datasource
 
 class View(BaseView, view_type=Toolbox):
 
@@ -50,7 +50,7 @@ import util
 from .toolbox import Toolbox
 from base import Controller as BaseController
 from network import Network, AutoencoderController
-from datasources import Datasource, Controller as DatasourceController
+from datasource import Datasource, Controller as DatasourceController
 from tools.train import TrainingController
 
 import numpy as np

@@ -1,4 +1,4 @@
-from datasources import Datasource, Loop, InputData
+from datasource import Datasource, Loop, InputData
 
 import numpy as np
 

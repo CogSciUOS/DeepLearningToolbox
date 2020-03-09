@@ -9,8 +9,8 @@ class BaseController:
 
     Attributes
     ----------
-    _datasource : DataSource
-        The current :py:class:`datasources.DataSource`
+    _datasource : Datasource
+        The current :py:class:`datasource.Datasource`
     """
     def __init__(self, runner: 'AsyncRunner'=None):
         self._runner = runner

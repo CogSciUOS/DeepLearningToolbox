@@ -5,7 +5,7 @@ import numpy as np
 from util.image import imresize, BoundingBox
 from base.observer import Observable, change
 from base.register import RegisterMetaclass
-from datasources import Metadata
+from datasource import Metadata
 from tools.detector import (ImageDetector as BaseDetector,
                             ImageController as Controller)
 

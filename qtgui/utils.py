@@ -2,21 +2,11 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 from base import Observable, AsyncRunner
 import util
+from util.error import protect
 
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-def protect(function):
-    """A decorator to protect a function (usually an event handler)
-    from crashing the program due to unhandled exceptions.
-    """
-    def closure(self, *args, **kwargs):
-        try:
-            function(self, *args, **kwargs)
-        except BaseException as exception:
-            util.error.handle_exception(exception)
-    return closure
 
 
 class QtAsyncRunner(AsyncRunner, QObject):
@@ -257,8 +247,9 @@ class QObserver:
 
 
 import numpy as np
-from datasources import Metadata
-from util.image import imresize, BoundingBox, PointsBasedLocation
+from datasource import Metadata
+from util.image import imresize, imwrite, BoundingBox, PointsBasedLocation
+
 
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
 from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
@@ -353,7 +344,6 @@ class QImageView(QWidget):
             self._metadata is not None and
             self._metadata.has_attribute('basename')):
             # write the file
-            from util.image import imwrite
             imwrite(self._metadata.get_attribute('basename'), self._raw)
 
     @property
@@ -573,7 +563,7 @@ class QImageView(QWidget):
         elif key == Qt.Key_M:
             self.showMetadata = not self.showMetadata
 
-from datasources import Metadata
+from datasource import Metadata
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QLabel
@@ -615,67 +605,6 @@ class QMetadataView(QLabel):
             self.setText(text)
 
 
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import QPlainTextEdit
-import threading
-import logging
-
-from collections import deque
-
-class QLogHandler(QPlainTextEdit, logging.Handler):
-    """A log handler that displays log messages in a QWidget.
-    """
-
-    _message_signal = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        QPlainTextEdit.__init__(self, parent)
-        logging.Handler.__init__(self)
-        self.setReadOnly(True)
-        self._counter = 1
-        self._message_signal.connect(self.appendMessage)
-        self._message_signal.emit("Log view initialized")
-
-    def __len__(self):
-        """The number of lines in this QLogHandler.
-        """
-        return self._counter
-
-    def clear(self):
-        """Clear this :py:class:QLogHandler.
-        """
-        super().clear()
-        self._counter = 1
-        self._message_signal.emit("Log view cleared")
-
-    @QtCore.pyqtSlot(str)
-    def appendMessage(self, message: str):
-        self.appendPlainText(message)
-        self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
-
-    def emit(self, record):
-        """Handle a :py:class:logging.logRecord.
-        """
-        # Here we have to be careful: adding the text directly to the
-        # widget from another thread causes problems: The program
-        # crashes with the following message:
-        #   QObject::connect: Cannot queue arguments of type 'QTextBlock'
-        #   (Make sure 'QTextBlock' is registered using qRegisterMetaType().)
-        # Hence we are doing this via a signal now.        
-        self._counter += 1
-        try:
-            self._message_signal.emit(self.format(record))
-        except AttributeError as error:
-            # FIXME[bug/problem]
-            # When quitting the program while running some background
-            # thread (e.g. camera loop), we get the following exception:
-            # AttributeError: 'QLogHandler' does not have a signal with
-            #                 the signature _message_signal(QString)
-            #print(error)
-            #print(f"  type of record: {type(record)}")
-            #print(f"  record: {record}")
-            #print(f"  signal: {self._message_signal}")
-            pass
 
 import os
 from PyQt5.QtWidgets import QLabel

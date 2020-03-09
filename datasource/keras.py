@@ -1,4 +1,4 @@
-from datasources import LabeledArray
+from datasource import LabeledArray
 
 import os
 import os.path

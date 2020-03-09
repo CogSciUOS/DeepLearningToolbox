@@ -6,7 +6,7 @@ Github: https://github.com/themightyoarfish
 """
 from toolbox import Controller as ToolboxController
 from network import Controller as NetworkController
-from datasources import Controller as DatasourceController
+from datasource import Controller as DatasourceController
 from controller import ActivationsController
 from tools.activation import (Engine as ActivationEngine,
                               View as ActivationView,

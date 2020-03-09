@@ -30,7 +30,7 @@ from network.loader import load_alexnet
 #print(tf.list_devices())
 #print(tf.test.is_built_with_cuda())
 
-from datasources import DataFiles, ImageNet
+from datasource import DataFiles, ImageNet
 
 
 # FIXME[hack]: instead of prepare_input_image use the network.resize

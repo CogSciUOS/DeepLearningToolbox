@@ -5,7 +5,7 @@ import numpy as np
 
 from .detector import Detector
 
-from datasources import Metadata
+from datasource import Metadata
 from util.image import BoundingBox
 
 class DetectorHaar(Detector):

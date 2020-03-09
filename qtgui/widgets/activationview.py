@@ -156,7 +156,7 @@ class QActivationView(QWidget, QObserver, ActivationEngine.Observer):
                     # (width, height, output_channels)
                     activation = activation.transpose([2, 0, 1])
 
-                from util import grayscaleNormalized
+                from util.image import grayscaleNormalized
                 # a contiguous array is important for display with Qt
                 activation = \
                     np.ascontiguousarray(grayscaleNormalized(activation))

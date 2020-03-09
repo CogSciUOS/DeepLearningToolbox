@@ -2,11 +2,14 @@
 import os
 import numpy as np
 
+import threading
+print(f"MTCNN[{threading.currentThread().getName()}]: importing mtcnn ...")
 import mtcnn
+print(f"MTCNN[{threading.currentThread().getName()}]:   ... impored!")
 
 from .detector import Detector as FaceDetector
 from .landmarks import Detector as LandmarkDetector, FacialLandmarks
-from datasources import Metadata
+from datasource import Metadata
 from util.image import BoundingBox
 
 class FacialLandmarksMTCNN(FacialLandmarks):
@@ -16,10 +19,10 @@ class FacialLandmarksMTCNN(FacialLandmarks):
     
     def __init__(self, keypoints=None, points=None, **kwargs):
         if keypoints is not None:
-            points = np.ndarray((len(self._points,2)))
+            points = np.ndarray((len(self.keypoint_names),2))
             for i, name in enumerate(self.keypoint_names):
                 points[i] = keypoints[name]
-        super.__init__(points, **kwargs)
+        super().__init__(points, **kwargs)
 
 
 class DetectorMTCNN(FaceDetector, LandmarkDetector):
@@ -56,7 +59,9 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector):
     def _prepare(self) -> None:
         """Prepare this DetectorMTCNN by loading the model data.
         """
+        print(f"MTCNN[{threading.currentThread().getName()}]: preparing mtcnn ...")
         self._detector = mtcnn.MTCNN()
+        print(f"MTCNN[{threading.currentThread().getName()}]: ... prepared.")
 
     def prepared(self) -> bool:
         """The DetectorMTCNN is prepared, once the model data
@@ -72,7 +77,9 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector):
         image:
         """
 
+        print(f"MTCNN[{threading.currentThread().getName()}]: detecting face ...")
         faces = self._detector.detect_faces(image)
+        print(f"MTCNN[{threading.currentThread().getName()}]: ... detected {len(faces)} faces.")
 
         detections = Metadata(description=
                               'Detections by the DLib HOG detector')
@@ -83,10 +90,7 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector):
             detections.add_region(BoundingBox(x=x, y=y, width=w, height=h),
                                   confidence=confidence, id=id)
 
-            keypoints = face['keypoints']
-            detections.add_region(FacialLandmarksMTCNN(points),
+            detections.add_region(FacialLandmarksMTCNN(face['keypoints']),
                                   confidence=confidence, id=id)        
-
-        rects = self._detector(image, 2)
 
         return detections

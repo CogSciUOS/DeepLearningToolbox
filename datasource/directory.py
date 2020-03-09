@@ -1,4 +1,4 @@
-from datasources import Indexed, InputData, Metadata
+from datasource import Indexed, InputData, Metadata
 
 import os
 from glob import glob

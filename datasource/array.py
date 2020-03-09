@@ -51,7 +51,7 @@ class DataArray(Indexed):
         self._array = None
 
     def set_data_array(self, array, description='array'):
-        """Set the array of this DataSource.
+        """Set the array of this Datasource.
 
         Parameters
         ----------

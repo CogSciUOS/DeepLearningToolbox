@@ -114,7 +114,7 @@ class QModelImageView(QImageView, QObserver, Toolbox.Observer,
             if (activation is not None and unit is not None and
                 activation.ndim > 1):
                 # exclude dense layers
-                from util import grayscaleNormalized
+                from util.image import grayscaleNormalized
                 activation_mask = grayscaleNormalized(activation[..., unit])
                 self.setMask(activation_mask)
                 field = engine.receptive_field
