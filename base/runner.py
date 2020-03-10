@@ -27,6 +27,7 @@ class Runner:
         function(*args, **kwargs)
 
 
+# concurrent.futures is new in Python 3.2.
 from concurrent.futures import ThreadPoolExecutor, Future
 
 class AsyncRunner(Runner):
@@ -128,7 +129,32 @@ class AsyncRunner(Runner):
         """
         if self._executor is not None:
             print("AsyncRunner: Shutting down the executor ...")
+
+            # shutdown: Signal the executor that it should free any
+            # resources that it is using when the currently pending
+            # futures are done executing.
+            #
+            # If wait is True then this method will not return until
+            # all the pending futures are done executing and the
+            # resources associated with the executor have been freed.
+            #
+            # If wait is False then this method will return
+            # immediately and the resources associated with the
+            # executor will be freed when all pending futures are done
+            # executing.
+            #
+            # But: Regardless of the value of wait, the entire Python
+            # program will not exit until all pending futures are done
+            # executing.
+            #
+            # FIXME[problem]: this can be a problem, if some runner is
+            # waiting for another Thread to set some Event, but that
+            # other Thread will never set this Event (e.g., because it
+            # has crashed). We need some strategy to deal with such
+            # cases (otherwise the progam may block and not exit
+            # gracefully).
             self._executor.shutdown(wait=True)
+
             print("AsyncRunner: ... executor finished.")
             self._executor = None
 
@@ -214,3 +240,103 @@ class ProcessObservable: # (Observable):
         detections = self._queue.get()
         # FIXME[todo]: receive the result from the queue
         return detections
+
+
+    
+# FIXME[new]: the following code is not used really used now - but
+# may be interesting in the context of multiprocessing: Start a
+# loop in some thread/process. This loop waits for Events, which
+# will trigger the execution of certain operations in the
+# thread/process. The code as it is worked as part of the
+# DetectorMTCNN class, but needs some adaptation to be usable in a
+# more general context.
+#
+# FIXME[old]: originally designed to run the MTCNN detector in its
+# own Thread. This was motivated to some strange
+# Keras/Tensorflow/MTCNN behaviour, which was actually due to
+# neglecting TensorFlow's Graph and Sessions, which has now been
+# repaired.
+class NEWBackgroundRunner:
+
+    def _threadLoop(self):
+        """Run a processing loop.
+        
+        This method is intended to be run in a separate thread. It
+        initializes the MTCNN detector and then waits for images that
+        it can process with that detector.  Availability of an image
+        is signaled by the `_thread_new_task` :py:class:`Event` and
+        completion will be signaled by setting the `_thread_finished`
+        :py:class:`Event`.
+
+        """
+        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+              "preparing the MTCNN detector.")
+        try:
+            self._prepare2()
+        except BaseException as error:
+            print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+                  f"preparation failed ({error}).")
+            handle_exception(error)
+                
+        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+              f" ... preparation finished ({self.prepared()}).")
+
+        self._thread_finished.set()
+
+        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+              "Starting the processing loop ...")
+        while True:
+            self._thread_new_task.wait()
+            self._thread_new_task.clear()
+            if self._thread_stop:
+                print(f"MTCNN[{threading.currentThread().getName()}]: "
+                      "_threadLoop: received a stop signal.")
+                break
+            print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+                  "detecting faces with the MTCNN detector "
+                  f"{self._thread_image.shape}")
+            self._thread_metadata = self._detect2(self._thread_image)
+            self._thread_finished.set()
+        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+              " ... processing loop finished.")
+
+    def _prepare2(self) -> None:
+        """Create a Thread and start a processing loop
+        (:py:meth:`_threadLoop`). Initialization and prediction will be
+        done by that loop.
+        """
+        print(f"MTCNN[{threading.currentThread().getName()}]: _prepare: "
+              "preparing mtcnn ...")
+        self._thread_new_task = threading.Event()
+        self._thread_finished = threading.Event()
+        self._thread = threading.Thread(target=self._threadLoop,
+                                        name="MTCNN-Thread")
+        self._thread_stop = False
+        self._thread.start()
+        print(f"MTCNN[{threading.currentThread().getName()}]: _prepare: "
+              "... waiting for background task to finish ....")
+        self._thread_finished.wait()
+        self._thread_finished.clear()
+        print(f"MTCNN[{threading.currentThread().getName()}]: _prepare: "
+              "... prepared [{self.prepared()}].")
+
+    def _unprepare2(self) -> bool:
+        """The DetectorMTCNN is prepared, once the model data
+        have been loaded.
+        """
+        self._thread_stop = True
+        self._thread_new_task.set()
+        self._thread.join()
+        self._thread_new_task = None
+        self._thread_finished = None
+        self._thread = None
+
+    def _detect2(self, image): #  -> Metadata
+        """Running detect in a separate Thread.
+        """
+        self._thread_image = image
+        self._thread_new_task.set()
+        self._thread_finished.wait()
+        self._thread_finished.clear()
+        return self._thread_metadata
+

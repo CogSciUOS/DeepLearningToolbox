@@ -33,9 +33,9 @@ class RegisterMetaclass(type):
             # FIXME[todo]: instantiation may fail - we need a concept
             # to deal with such situations.
             new_instance = new_cls(*args, **kwargs)
-        except:
+        except BaseException as exception:
             print(f"Instantiation of {new_cls.__name__} to obtain "
-                  f"'{key}' of class {cls.__name__} failed: ", error)
+                  f"'{key}' of class {cls.__name__} failed: {exception}")
             raise error
 
         #cls._item_lookup_table[key] = new_instance
