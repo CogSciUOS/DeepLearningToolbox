@@ -1,4 +1,6 @@
+from typing import Iterable
 
+from base import Observable
 from toolbox import Toolbox, View as ToolboxView
 from datasource import Datasource, View as DatasourceView
 
@@ -89,8 +91,10 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
     class ViewObserver(QToolboxViewList.ViewObserver, Datasource.Observer):
         interests = Datasource.Change('state_changed', 'metadata_changed')
         
-        def data(self, toolbox: ToolboxView):
-            return toolbox.datasource
+        def data(self, toolbox: ToolboxView) -> Iterable[Observable]:
+            """Return an iterator for the datasources of th to be listed.
+            """
+            return toolbox.datasources or []
 
         def formatItem(self, item:QListWidgetItem) -> None:
             if item is not None:

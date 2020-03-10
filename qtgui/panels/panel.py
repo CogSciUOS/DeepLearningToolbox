@@ -26,7 +26,7 @@ class Panel(QWidget):
         """Indicate that this panel may need some attention.
 
         FIXME[hack]: this is just a first quick-and-dirty implementation.
-        Do something nicer once there ist time ...
+        Do something nicer once there is time ...
         """
         parent = self.parentWidget()
         if parent is None:

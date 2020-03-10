@@ -1,3 +1,5 @@
+from typing import Iterable
+
 from base import Observable
 from toolbox import Toolbox, View as ToolboxView
 from base import View
@@ -98,7 +100,19 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
         def __init__(self, listWidget):
             self._listWidget = listWidget
 
-        def data(self, toolbox: ToolboxView):
+        def data(self, toolbox: ToolboxView) -> Iterable[Observable]:
+            """Return an iterator for the data to be listed.
+            
+            The intended use is that the item provided by this
+            iterator are included in the list, using its
+            stringifictaion (via `str`) as label and the observable
+            as `Qt.UserRole` data.
+
+            Result
+            ------
+            An iterator. If no data are available, this should be
+            an empty iterator, not None.
+            """
             return []  # to be implemented by subclasses
 
         def formatItem(self, item:QListWidgetItem) -> None:

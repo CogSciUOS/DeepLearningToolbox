@@ -99,7 +99,7 @@ class View:
                            f"observers from old={repr(old_observable)} "
                            f"to new={repr(new_observable)}")
         for observer, interests in self._observers.items():
-            self._logger.debug(f"  -> observer={observer}")
+            self._logger.debug(f"  -> observer={repr(observer)}")
             if old_observable is not None:
                 observer.unobserve(old_observable)
             if new_observable is not None:
@@ -217,8 +217,8 @@ class View:
         """
         del self._observers[observer]
         observable = getattr(self, self._view_attribute, None)
-        self._logger.debug(f"ADD: {self}.remove_observer({observer}) "
-                           f"observable={observable}")
+        self._logger.debug(f"REMOVE: {{repr(self)}}.remove_observer({repr(observer)}) "
+                           f"observable={repr(observable)}")
         if observable is not None:
             observer.unobserve(observable)
             change = self._view_type.Change.all()
@@ -290,7 +290,7 @@ class Controller(View):
         out_notify: Change
             notify observers that the task was done.
         """
-        self._logger.debug(f"{self}: Runing with runner {self._runner}"
+        self._logger.debug(f"{{repr(self)}}: Runing with runner {self._runner}"
                            f"{function}")  # "({args}, {kwargs})")
         if self._runner is None:
             return self._run(function, *args, **kwargs)

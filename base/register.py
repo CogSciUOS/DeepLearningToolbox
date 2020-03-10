@@ -23,10 +23,10 @@ class RegisterMetaclass(type):
             print(f"Preparation of '{key}' of class {cls.__name__}: "
                   f"import of {module_name} failed: ", error)
             raise error
-        except:
+        except BaseException as exception:
             print(f"Preparation of '{key}' of class {cls.__name__}: "
-                  f"import of {module_name} failed: ", error)
-            raise error
+                  f"import of {module_name} failed: ", exception)
+            raise exception
 
         new_cls = getattr(module, class_name)
         try:

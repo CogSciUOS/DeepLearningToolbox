@@ -610,6 +610,7 @@ class QMetadataView(QLabel):
 
 
 import os
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtGui import QMovie
 
@@ -628,6 +629,7 @@ class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
         # http://www.ajaxload.info/#preview
         self._movie = QMovie(os.path.join('assets', 'busy.gif'))
         self.setMovie(self._movie)
+        self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self._movie.start()
 
     def setView(self, busyView):

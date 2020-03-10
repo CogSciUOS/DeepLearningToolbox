@@ -9,7 +9,6 @@ This module contains definitions for observer functionality
 import threading
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def change(function):
     """A decorator that indicates methods that can change the state of

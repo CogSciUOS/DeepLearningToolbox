@@ -11,6 +11,7 @@ from .detector import Detector as FaceDetector
 from .landmarks import Detector as LandmarkDetector, FacialLandmarks
 from datasource import Metadata
 from util.image import BoundingBox
+from util.error import handle_exception
 
 class FacialLandmarksMTCNN(FacialLandmarks):
 
@@ -80,7 +81,7 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector):
         print(f"MTCNN[{threading.currentThread().getName()}]: detecting face ...")
         try:
             faces = self._detector.detect_faces(image)
-        except BaseException:  # InternalError
+        except BaseException as exception:  # InternalError
             # 2 root error(s) found.
             #  (0) Internal: Blas GEMM launch failed : a.shape=(32, 576), b.shape=(576, 128), m=32, n=128, k=576
             #	 [[{{node dense_1/MatMul}}]]
@@ -96,7 +97,9 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector):
             #     A proposed fix is to add a line
             #        config.gpu_options.allow_growth = True
             #     in the keras/tensorflow_backend.py file
-            # 
+            #
+            handle_exception(exception)
+            raise RuntimeError("Detecting faces with the MTCNN detector failed.")
         print(f"MTCNN[{threading.currentThread().getName()}]: ... detected {len(faces)} faces.")
 
         detections = Metadata(description=

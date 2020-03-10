@@ -958,7 +958,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
     ###########################################################################
 
     def _initialize_logging(self, record: bool=True,
-                            level=logging.DEBUG) -> None:
+                            level: int=logging.DEBUG) -> None:
         """Initialize logging by this :py:class:`Toolbox`.  This is based on
         the infrastructure provided by Python's `logging` module,
         consisting of :py:class:`logging.Logger`s and
@@ -970,6 +970,14 @@ class Toolbox(BusyObservable, Datasource.Observer,
         :py:class:`logging.Logger` by calling `logger =
         logging.get_logger(__name__)` to allow for individual
         configuration.
+        
+        Arguments
+        ---------
+        record: bool
+            A flag indicating if :py:class:`util.RecorderHandler` should
+            be added to this :py:class:`Toolbox`.
+        level: int
+            The basic log level to be set.
         """
 
         # The the basic logging level
@@ -984,17 +992,32 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 self.remove_logging_handler(handler)
 
             # use a util.RecorderHandler
-            self.record_logging()
+            if record:
+                self.record_logging()
 
     def add_logging_handler(self, handler: logging.Handler) -> None:
+        """Add a new logging handler to this :py:class:`Toolbox`.
+
+        Arguments
+        ---------
+        handler:
+            The :py:class:`logging.Handler` to be added.
+        """
         logger.info(f"Adding log handler: {handler}")
         root_logger = logging.getLogger()
         root_logger.addHandler(handler)
 
     def remove_logging_handler(self, handler: logging.Handler) -> None:
+        """Remove a logging handler to this :py:class:`Toolbox`.
+
+        Arguments
+        ---------
+        handler:
+            The :py:class:`logging.Handler` to be removed.
+        """
         logger.info(f"Removing log handler: {handler}")
         root_logger = logging.getLogger()
-        root_logger.addHandler(handler)
+        root_logger.removeHandler(handler)
 
     @property
     def logging_recorder(self) -> util.RecorderHandler:
@@ -1005,6 +1028,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return getattr(self, '_logging_recorder', None)
 
     def record_logging(self, flag: bool=True) -> None:
+        """Determine if a logging recorder should be used in this
+        :py:class:`Toolbox`. A logging record will record all
+        log records emitted, so they can be inspected later on.
+        """
         if flag == hasattr(self, '_logging_recorder'):
             return  # nothing to do
         if flag:

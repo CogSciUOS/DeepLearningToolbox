@@ -56,7 +56,7 @@ class QNetworkList(QToolboxViewList, Network.Observer):
         interests = Network.Change('busy_changed')
 
         def data(self, toolbox: ToolboxView):
-            return toolbox.networks
+            return toolbox.networks or []
 
         def formatItem(self, item:QListWidgetItem) -> None:
             if item is not None:

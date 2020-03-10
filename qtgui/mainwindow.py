@@ -7,10 +7,16 @@ Github: https://github.com/krumnack
 
 
 # Generic imports
+import sys
 import time
 import logging
 import collections
 import importlib
+from typing import Tuple
+
+import logging
+logger = logging.getLogger(__name__)
+
 
 # Toolbox imports
 from base import Runner
@@ -18,8 +24,9 @@ from toolbox import Toolbox, ToolboxController
 
 
 # Toolbox GUI imports
-from qtgui.utils import QtAsyncRunner, QObserver, protect
+from qtgui.utils import QtAsyncRunner, QObserver, protect, QBusyWidget
 from qtgui.panels import Panel
+
 
 # FIXME[old]: this should not be needed for the MainWindow
 import util
@@ -32,7 +39,8 @@ from util import resources, addons
 from datasource import Datasource, Controller as DatasourceController
 
 # Qt imports
-from PyQt5.QtCore import Qt, QTimer, QCoreApplication, QThread, pyqtSignal
+from PyQt5.QtCore import (Qt, QTimer, QCoreApplication, QThread,
+                          pyqtSignal, pyqtSlot)
 from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
                          QCloseEvent)
 from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
@@ -168,11 +176,20 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     _toolbox: ToolboxController = None
     _datasourceMenu = None
 
+    #
+    # Signals
+    #
+
+    # signals must be declared outside the constructor, for some weird reason
+
     # Signal emitted once the computation is done.
     # The signal is connected to :py:meth:`panel` which will be run
     # in the main thread by the Qt magic.
     panel_signal: pyqtSignal = pyqtSignal(str, bool, bool)
 
+    # Signal is emitted once the import of a (Panel) module has
+    # finished and the Panel is ready for instatiation.
+    _panel_import_signal = pyqtSignal(str)  # panel_id
     
     # FIXME[problem]: currently this prints the following message
     # (when calling MainWindow.setWindowIcon('assets/logo.png')):
@@ -212,6 +229,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
         # signals
         self.panel_signal.connect(self.panel)
+        self._panel_import_signal.connect(self._onPanelImported)
 
     def run(self, **kwargs):
         """Run the apllication by starting its main event loop.  This function
@@ -344,6 +362,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         """
         return self._runner
 
+        
     def panel(self, panel_id: str,
               create: bool=False, show: bool=False) -> Panel:
         """Get the panel for a given panel identifier. Optionally
@@ -376,7 +395,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             self.panel_signal.emit(panel_id, create, show)
             return
         
-        meta = self._meta(panel_id)
+        meta = self._panelMeta(panel_id)
         panel = None
         if create:
             index = 0
@@ -386,17 +405,15 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                     panel = self._tabs.widget(index)
                     break
                 if m.id == meta.id:
-                    panel = self._newPanel(meta)
-                    self._tabs.insertTab(index, panel, m.label)
+                    self._newPanel(meta, index, m.label, show)
+                    panel = None  # FIXME[hack]: panel creation is asynchronous and hence does not really fit in this synchronous function! API should be changed accordingly!
                     break
                 if label == m.label:
                     index += 1
                     label = self._tabs.tabText(index)
         else:
-            for index in range(self._tabs.count()):
-                if self._tabs.tabText(index) == meta.label:
-                    panel = self._tabs.widget(index)
-                    break
+            index = self._panelIndex(panel_id)
+            panel = self._tabs.widget(index)
         if show and panel is not None:
             self._tabs.setCurrentIndex(index)
         return panel
@@ -505,7 +522,10 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             Index of the newly selected panel.
         """
         panel = self._tabs.widget(index)
-        panel.attention(False)
+        if isinstance(panel, Panel):
+            # FIXME[hack]: during initialization the panel can be some
+            # dummy widget ... maybe we can make the dummy panel a real panel
+            panel.attention(False)
 
     def _saveState(self) -> None:
         """Callback for saving any application state inb4 quitting."""
@@ -622,28 +642,97 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     #                               Panels                                    #
     ###########################################################################
 
-    def _meta(self, panel_id: str):
+    def _panelIndex(self, panel_id: str) -> int:
+        """
+        """
+        meta = self._panelMeta(panel_id)
+        for index in range(self._tabs.count()):
+            if self._tabs.tabText(index) == meta.label:
+                return index
+        raise KeyError(f"Panel with id '{panel_id}' has not been created yet.")
+
+    def _panelMeta(self, panel_id: str) -> PanelMeta:
         try:
             return next(filter(lambda m: m.id == panel_id, self._panelMetas))
         except StopIteration:
             raise ValueError(f"'{self}' does not know a panel identified "
-                             f"by '{panel_id}'. Known panels are: '" +
-                             "', '".join([m.id for m in self._panelMetas]) +
-                             "'")
+                             f"by '{panel_id}'. Known panels are: " +
+                             ", ".join([f"'{m.id}'" for m in self._panelMetas]))
 
-    def _newPanel(self, meta):
-        package, name = meta.cls.rsplit('.', 1)
-        if package[0] == '.':  # relative import
-            package = __name__.rsplit('.', 1)[0] + package
-        module = importlib.import_module(package)
-        cls = getattr(module, name)
-        if hasattr(type(self), '_new' + name):
-            panel = getattr(type(self), '_new' + name)(self, cls)
+    def _panelModuleAndClass(self, panel_id: str) -> Tuple[str, str]:
+        """Get module name and class name for the Panel with the given panel
+        identifier.  These information will be obtained from the panel
+        metadata register.
+        """
+        meta = self._panelMeta(panel_id)
+        module_name, class_name = meta.cls.rsplit('.', 1)
+        if module_name[0] == '.':  # relative import
+            module_name = __name__.rsplit('.', 1)[0] + module_name
+        return module_name, class_name
+
+    def _newPanel(self, meta, index, label, show: bool=True):
+        """Create a new panel from panel metadata.
+
+        The creation will be split into multiple phases to allow for a
+        smooth user experience:
+        (0) Adding a new "dummy" tab  for new the Panel. This
+            should happen quickly (and has to be done in the main thread)
+            for responsive GUI behaviour. The dummy widget may display
+            some progress notification to the user.
+        (1) Import of the Panel's module. This may take some time,
+            as it may imply the import of other (external) modules.
+            This can be done in a background thread.
+        (2) Instantiation of the new panel class. This has to be done
+            in the main thread. After instantiation, the dummy tab
+            can be replace by the actual panel.
+        (3) Set observables of the panel.
+
+        """
+        logger.info(f"Inserting new Panel '{meta.id}' at index {index}.")
+        dummy = QBusyWidget()
+        self._tabs.insertTab(index, dummy, label)
+        if show:
+            self._tabs.setCurrentIndex(index)
+
+        logger.debug(f"Running import {meta.cls} for Panel '{meta.id}'.")
+        self._runner.runTask(self._importPanel, meta.id)
+        
+    def _importPanel(self, panel_id: str) -> None:
+        module_name, class_name = self._panelModuleAndClass(panel_id)
+        logger.debug(f"Importing module {module_name} for panel '{panel_id}'.")
+        module = importlib.import_module(module_name)
+        logger.debug(f"Signaling sucessful imports for panel '{panel_id}'.")
+        self._panel_import_signal.emit(panel_id)
+
+    @pyqtSlot(str)
+    @protect
+    def _onPanelImported(self, panel_id: str):
+        module_name, class_name = self._panelModuleAndClass(panel_id)
+        logger.debug(f"Instantiating class {class_name} "
+                     f"from module {module_name} for panel '{panel_id}'")
+        module = sys.modules[module_name]
+        cls = getattr(module, class_name)
+        if hasattr(type(self), '_new' + class_name):
+            panel = getattr(type(self), '_new' + class_name)(self, cls)
         else:
             panel = cls()
-            if hasattr(type(self), '_init' + name):
-                getattr(type(self), '_init' + name)(self, panel)
-        return panel
+            if hasattr(type(self), '_init' + class_name):
+                getattr(type(self), '_init' + class_name)(self, panel)
+
+        # replace the dummy content by the actual pane
+        logger.debug(f"Setting new instance of {class_name} "
+                     f"as content for panel '{panel_id}'.")
+        index = self._panelIndex(panel_id)
+        meta = self._panelMeta(panel_id)
+        dummy = self._tabs.widget(index)
+        #self._tabs.replaceWidget(dummy, panel)
+        currentIndex = self._tabs.currentIndex()
+        self._tabs.removeTab(index)
+        self._tabs.insertTab(index, panel, meta.label)
+        self._tabs.setCurrentIndex(currentIndex)
+        dummy.deleteLater()
+        logger.debug(f"Creation of panel '{panel_id}' "
+                     f"(index={index}) finished.")
 
     def _newAutoencoderPanel(self, AutoencoderPanel: type) -> Panel:
         autoencoder = self._toolbox.autoencoder_controller
