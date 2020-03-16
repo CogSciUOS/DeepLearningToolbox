@@ -161,7 +161,19 @@ class Controller(View, BaseController):
     def datasource_controller(self) -> DatasourceController:
         return getattr(self._toolbox, '_datasource_controller', None)
 
-    def add_datasource(self, datasource: Datasource) -> None:
+    def add_datasource(self, datasource) -> None:
+        """Add a new Datasource to this Toolbox.
+
+        Arguments
+        ---------
+        datasource:
+            Either a :py:class:`Datasource` or a key (str) identifying
+            a datasource.  In the latter case the datasource will
+            be instantiated if it doesn't exist yet'.
+        """
+        if isinstance(datasource, str):
+            # FIXME[todo]: this may be done asynchrously
+            datasource = Datasource[datasource]
         self._toolbox.add_datasource(datasource)
         self.set_datasource(datasource)
 

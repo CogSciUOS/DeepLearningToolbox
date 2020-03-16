@@ -456,7 +456,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return (self._datasource_controller._datasource  # FIXME[hack]: private
                 if self._datasource_controller else None)
 
-    def add_datasource(self, datasource: Datasource):
+    def add_datasource(self, datasource: Datasource) -> None:
         if datasource is not None and datasource not in self._datasources:
             self._datasources.append(datasource)
             self.change('datasources_changed')

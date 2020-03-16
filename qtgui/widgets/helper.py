@@ -52,24 +52,67 @@ class QToolboxViewList(QListWidget, QObserver, Toolbox.Observer):
         # selecting items in QDatasourceList.
         #print(f"QToolboxViewList.toolbox_changed({self}, {toolbox}, {change})")
         if self._toolboxInterest in change:
-            self._updateList()
+            self._updateListFromToolbox(toolbox)
 
-    def _updateList(self):
-        # First remove all items from the list ...
+    def addItem(self, item: QListWidgetItem) -> None:
+        """Inserts the item at the end of the list widget.
+
+        This adapts the :py:meth:`addItem` method of the superclass
+        by taking care that observables are observed.
+        """
+        data = item.data(Qt.UserRole)
+        if isinstance(data, Observable):
+            data.add_observer(self._viewObserver,
+                              interests=self._viewObserver.interests)
+        super().addItem(item)
+
+    def clear(self) -> None:
+        """Removes all items and selections in the view.
+
+        This adapts the :py:meth:`clear` method of the superclass
+        by taking care that observers are removed from items.
+        """
         for i in range(self.count()):
-            self.item(i).data(Qt.UserRole).remove_observer(self._viewObserver)
+            data = self.item(i).data(Qt.UserRole)
+            print(f"del: {self.item(i).text()}, data is of type {type(data)}.")
+            if isinstance(data, Observable):
+                data.remove_observer(self._viewObserver)
+        super().clear()
+
+    def _updateListFromToolbox(self, toolbox: Toolbox) -> None:
+        """Update the items displayed in the list.  The new list of items to
+        be displayed is provided by a :py:class:`Toolbox`.
+
+        """
+        self._updateList(toolbox=toolbox)
+
+    def _updateListFromRegister(self, register) -> None:
+        """Update the items displayed in the list.  The new list of items to
+        be displayed is obtained from a :py:class:`RegisterMetaclass`.
+        """
+        self._updateList(register=register)
+
+    def _updateList(self, toolbox: Toolbox=None, register=None) -> None:
+        # First remove all items from the list ...
         self.clear()
 
-        # ... and then rebuild the list
-        if self._toolbox:
-            interests = self._viewObserver.interests
-            for observable in self._viewObserver.data(self._toolbox):
+        if toolbox is not None:
+            for observable in self._viewObserver.data(self._toolbox): # FIXME[hack]: we need a ToolboxView, not just a Toolbox here
                 item = QListWidgetItem(str(observable))
                 item.setData(Qt.UserRole, observable)
                 self._viewObserver.formatItem(item)
                 self.addItem(item)
-                observable.add_observer(self._viewObserver,
-                                        interests=interests)
+
+        if register is not None:
+            for key in register.keys():
+                item = QListWidgetItem(key)
+                if not register.key_is_initialized(key):
+                    item.setData(Qt.UserRole, key)
+                    item.setForeground(Qt.gray)
+                elif toolbox is None:  # avoid listing items twice
+                    item.setData(Qt.UserRole, register[key])
+                    self._viewObserver.formatItem(item)
+                self.addItem(item)
 
     def _updateItem(self, observable: Observable) -> None:
         item = self._itemForObservable(observable)

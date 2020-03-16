@@ -4,7 +4,7 @@ from tools.activation import (Engine as ActivationEngine,
 
 from ..utils import QObserver
 
-from PyQt5.QtCore import Qt, QPoint, QRect, QSize, QMargins, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QRect, QSize, QMargins
 from PyQt5.QtGui import QPainter, QImage, QPen, QColor, QBrush, QMouseEvent
 from PyQt5.QtWidgets import QWidget, QToolTip
 

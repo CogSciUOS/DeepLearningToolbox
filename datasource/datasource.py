@@ -73,7 +73,7 @@ class Datasource(BusyObservable, method='datasource_changed',
     _id: str = None
     _metadata = None
 
-    def __init__(self, id: str=None, description: str=None, **kwargs):
+    def __init__(self, description: str=None, **kwargs):
         """Create a new Datasource.
 
         Parameters
@@ -84,13 +84,6 @@ class Datasource(BusyObservable, method='datasource_changed',
         super().__init__(**kwargs)
         self._description = (self.__class__.__name__ if description is None
                              else description)
-
-        # FIXME[hack]: we need a way to integrate this
-        # into the RegisterMetaclass
-        if id is None:
-            id = self.__class__.__name__ + "-" + str(len(self._item_lookup_table))
-        self._id = id
-        self._item_lookup_table[id] = self
 
     @property
     def id(self):
@@ -110,7 +103,7 @@ class Datasource(BusyObservable, method='datasource_changed',
 
     @property
     def prepared(self) -> bool:
-        """Report if this Datasource prepared for use.
+        """Report if this Datasource is prepared for use.
         A Datasource has to be prepared before it can be used.
         """
         return True  # to be implemented by subclasses

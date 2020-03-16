@@ -13,13 +13,14 @@ abstract interfaces defined in
 from typing import Iterable
 
 from base import Observable
-from toolbox import Toolbox, View as ToolboxView
+from toolbox import (Toolbox, View as ToolboxView,
+                     Controller as ToolboxController)
 from datasource import Datasource, View as DatasourceView
 
 from ..utils import QObserver, protect
 from .helper import QToolboxViewList
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QListWidgetItem
 
 
@@ -30,8 +31,39 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
     selecting a Datasource from the list will set the observed
     Datasource, and vice versa, i.e. changing the observed datasource
     will change the current item in the list.
+
+    Entries of this list can be of different nature:
+    * instances of class :py:class:`Datasource`
+    * ids (str) to identify registered (but potentially uninitialized)
+      instances of the class :py:class:`Datasource`
+    * subclasses of :py:class:`Datasource`, that allow to instantiate
+      a new  datasource (provided that sufficient initialization parameters
+      are provided).
+
+    A :py:class:`QDatasourceList` can be run in different modes:
+    * display the (initialized) datasources of a :py:class:`Toolbox`
+    * display the (potentiallly uninitialized) datasources registered
+      at class :py:class:`Datasource`
+    * display a list of subclasses of class :py:class:`Datasource`
+      that may be used to initialize a new datasource.
+
+    The list displayed by :py:class:`QDatasourceList` is intended to
+    reflect the current state of affairs, reflecting changes in the
+    mentioned lists or individual datasources.  Hence it implements
+    different observer interfaces and registers as observer whenever
+    possible (even for individual datasources displayed in the list).
+
+    A :py:class:`QDatasourceList` provides different signals that
+    correspond to the different types of entries that can be selected:
+    * keySelected:
+    * classSelected:
+    * instanceSelected: 
     """
     _datasource: DatasourceView=None
+
+    keySelected = pyqtSignal(str)
+    classSelected = pyqtSignal(type)
+    instanceSelected = pyqtSignal(object)
 
     def __init__(self, datasource: DatasourceView=None, **kwargs) -> None:
         """
@@ -45,6 +77,11 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         self.setDatasourceView(datasource)
         # FIXME[todo]: toggle between name and id display (not implemented yet)
         self._showNames = True
+        self._showPrepared = False  # only show prepared datasources
+
+        self.keySelected.connect(self.onKeySelected)
+        self.classSelected.connect(self.onClassSelected)
+        self.instanceSelected.connect(self.onInstanceSelected)
 
     def setToolboxView(self, toolbox: ToolboxView,
                        datasource: DatasourceView=None) -> None:
@@ -74,9 +111,30 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
     @showNames.setter
     def showNames(self, flag: bool) -> None:
         if self._showNames != flag:
-            print(f"QDatasourceList: name mode changed ({flag})")
             self._showNames = flag
             self.update()
+
+    @property
+    def showPrepared(self) -> bool:
+        return self._showPrepared
+
+    @showPrepared.setter
+    def showPrepared(self, flag: bool) -> None:
+        if self._showPrepared != flag:
+            self._showPrepared = flag
+            self.update()
+
+    def update(self):
+        for i in range(self.count()):
+            item = self.item(i)
+            data = item.data(Qt.UserRole)
+            text = str(data)
+            item.setText(f"[{text}]" if self._showNames else text)
+            if self._showPrepared and isinstance(data, Datasource):
+                item.setHidden(not data.prepared)
+            else:
+                item.setHidden(False)
+        super().update()
 
     @protect
     def onItemClicked(self, item: QListWidgetItem):
@@ -84,10 +142,35 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         Assign the corresponding :py:class:`Datasource`
         to our :py:class:`DatatasourceController`.
         """
-        self._datasource(item.data(Qt.UserRole))
+        data = item.data(Qt.UserRole)
+        if isinstance(data, str):
+            self.keySelected.emit(data)
+        elif isinstance(data, type):
+            self.classSelected.emit(data)
+        elif isinstance(data, Datasource):
+            self.instanceSelected.emit(data)
+        else:
+            raise ValueError("Invalid data associed with clicked item "
+                             f"'{item.text()}': {data}")
+        
+    @protect
+    def onKeySelected(self, key: str) -> None:
+        print(f"Key selected: {key}")
+        if isinstance(self._toolbox, ToolboxController):
+            self._toolbox.add_datasource(key)
 
     @protect
-    def keyPressEvent(self, event):
+    def onClassSelected(self, cls: type) -> None:
+        print(f"Class selected: {cls}")
+
+    @protect
+    def onInstanceSelected(self, datasource: Datasource) -> None:
+        print(f"Datasource selected: {datasource}")
+        if self._datasource is not None:
+            self._datasource(datasource)
+
+    @protect
+    def keyPressEvent(self, event) -> None:
         """Process key events. The :py:class:`QImageView` supports
         the following keys:
 
@@ -97,14 +180,23 @@ class QDatasourceList(QToolboxViewList, QObserver, Datasource.Observer):
         print(f"QDatasourceList: key pressed: {key}")
         if key == Qt.Key_N:
             self.showNames = not self.showNames
-        # FIXME[todo]: Additional ideas:
-        # only show prepared/unprepared datasource
+        elif key == Qt.Key_P:
+            self.showPrepared = not self.showPrepared
+        elif key == Qt.Key_R:
+            self._updateListFromRegister(Datasource)
+        elif key == Qt.Key_T:
+            self._updateListFromToolbox(self._toolbox)
+        else:
+            super().keyPressEvent(event)
+            
 
     class ViewObserver(QToolboxViewList.ViewObserver, Datasource.Observer):
         interests = Datasource.Change('state_changed', 'metadata_changed')
         
         def data(self, toolbox: ToolboxView) -> Iterable[Observable]:
-            """Return an iterator for the datasources of th to be listed.
+            """Return an iterator for the
+            :py:class:`Datasource`s of the
+            :py:class:`Toolbox` to be listed.
             """
             return toolbox.datasources or []
 
@@ -136,7 +228,7 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QRadioButton, QGroupBox,
 # QInputSourceSelector
 class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
                               Datasource.Observer):
-    """The QDatasourceSelectionBox provides a controls to select a data
+    """The QDatasourceSelectionBox provides a control to select a data
     source. It is mainly a graphical user interface to the datasource
     module, adding some additional logic.
 
