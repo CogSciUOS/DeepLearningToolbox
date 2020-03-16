@@ -760,7 +760,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #    print(f"predefined id: {id}")
         #    datasource = Datasource[id]
         #    self.add_datasource(datasource)
-        for id in 'Webcam', 'Noise', 'Helen':
+        for id in 'Webcam', 'Noise', 'Helen', 'Movie':
             self.add_datasource(Datasource[id])
 
         if args is not None:

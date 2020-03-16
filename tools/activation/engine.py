@@ -206,7 +206,7 @@ class Engine(Observable, Toolbox.Observer, method='activation_changed',
             A description of the input data.
 
         """
-        logger.info(f"Activation: set_input_data({data is not None and data.shape},{label},{description})")
+        logger.info(f"Activation: set_input_data({type(data)}, {data is not None and hasattr(data,'shape') and data.shape}, {label}, {description})")
         #
         # do some sanity checks and corrections
         #

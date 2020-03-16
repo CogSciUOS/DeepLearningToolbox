@@ -132,6 +132,5 @@ class DataDirectory(Indexed):
     # numerical index of the currently selected file
     _index: int = 0
 
-    @property
-    def index(self):
+    def _get_index(self):
         return self._index

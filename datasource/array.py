@@ -64,8 +64,7 @@ class DataArray(Indexed):
         self._description = description
         self.change('data_changed')
 
-    @property
-    def index(self) -> int:
+    def _get_index(self) -> int:
         return self._index
 
     # FIXME[old]!

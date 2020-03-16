@@ -36,7 +36,7 @@ class RegisterMetaclass(type):
         except BaseException as exception:
             print(f"Instantiation of {new_cls.__name__} to obtain "
                   f"'{key}' of class {cls.__name__} failed: {exception}")
-            raise error
+            raise exception
 
         #cls._item_lookup_table[key] = new_instance
         return new_instance

@@ -1,3 +1,15 @@
+"""
+.. moduleauthor:: Ulf Krumnack
+
+.. module:: qtgui.widgets.datasource
+
+This module contains widgets for viewing and controlling
+:py:class:`Datasource`s. It aims at providing support for all
+abstract interfaces defined in 
+`datasource.datasource`.
+"""
+
+
 from typing import Iterable
 
 from base import Observable
@@ -142,7 +154,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
     # FIXME[old]:
     _datasource: DatasourceController=None
     
-    def __init__(self, toolbox: ToolboxController=None, parent=None):
+    def __init__(self, toolbox: ToolboxController=None, **kwargs):
         """Initialization of the :py:class:`QDatasourceSelectionBox`.
 
         Parameters
@@ -150,7 +162,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
         parent: QWidget
             The parent argument is sent to the QWidget constructor.
         """
-        super().__init__(parent)
+        super().__init__(**kwargs)
         self._initUI()
         self._layoutUI()
         self.setToolboxController(toolbox)
@@ -375,10 +387,44 @@ class QDatasourceSelectionBox(QWidget, QObserver, Toolbox.Observer,
 
 from PyQt5.QtWidgets import QWidget, QPushButton
 
-from datasource import (Datasource, Loop,
-                         Controller as DatasourceController)
+from datasource import (Datasource, Loop, Indexed,
+                        Controller as DatasourceController)
 
-class QLoopButton(QPushButton, QObserver, Datasource.Observer):
+class QDatasourceObserver(QObserver, Datasource.Observer):
+    """
+    Attributes
+    ----------
+    _datasourceController: DatasourceController
+        A datasource controller used by this Button to control the
+        (loop mode) of the Datasource.
+    """
+    _datasourceController: DatasourceController = None
+    _datasource: Datasource = None
+    _interests: Datasource.Change = None
+
+    def __init__(self, datasource: DatasourceController=None,
+                 interests: Datasource.Change=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._interests = interests or \
+            Datasource.Change('observable_changed', 'busy_changed',
+                              'state_changed')
+        self.setDatasourceController(datasource)
+
+    def setDatasourceController(self, datasource: DatasourceController) -> None:
+        self._exchangeView('_datasourceController', datasource,
+                           interests=self._interests)
+
+    def datasource_changed(self, datasource: Datasource,
+                           change: Datasource.Change) -> None:
+        """Callback for a change of the Datasource.
+        We are interested when the Datasource itself has changed and
+        when its state (looping/pause) has changed.
+        """
+        if change.observable_changed:
+            self._datasource = datasource
+        self.update()
+
+class QLoopButton(QPushButton, QDatasourceObserver):
     """A Button to control a :py:class:`Datasource` of type
     :py:class:`Loop`. Such datasource can be in a loop mode, meaning
     that they continously produce new data (e.g., webcam, movies,
@@ -388,34 +434,12 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
     and adapt its appearance and function based on the state of the
     datasource.
 
-    Attributes
-    ----------
-    _datasourceController: DatasourceController
-        A datasource controller used by this Button to control the
-        (loop mode) of the Datasource.
     """
 
-    _datasourceController: DatasourceController = None
-
-    def __init__(self, text: str='Loop', datasource: DatasourceController=None,
-                 parent: QWidget=None) -> None:
-        super().__init__(text, parent)
+    def __init__(self, text: str='Loop', **kwargs) -> None:
+        super().__init__(text, **kwargs)
         self.setCheckable(True)
-        self.setDatasourceController(datasource)
         self.toggled.connect(self.onToggled)
-
-    def setDatasourceController(self, datasource: DatasourceController) -> None:
-        interests = Datasource.Change('observable_changed', 'state_changed')
-        self._exchangeView('_datasourceController', datasource,
-                           interests=interests)
-
-    def datasource_changed(self, datasource: Datasource,
-                           change: Datasource.Change) -> None:
-        """Callback for a change of the Datasource.
-        We are interested when the Datasource itself has changed and
-        when its state (looping/pause) has changed.
-        """
-        self.update()
 
     def onToggled(self):
         if (self._datasourceController is not None and
@@ -428,9 +452,9 @@ class QLoopButton(QPushButton, QObserver, Datasource.Observer):
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (self._datasourceController is not None and
-                   self._datasourceController.isinstance(Loop) and
-                   self._datasourceController.prepared)
+        enabled = (isinstance(self._datasource, Loop) and
+                   self._datasource.prepared and
+                   (self._datasource.looping or not self._datasource.busy))
         checked = enabled and self._datasourceController.looping
         self.setEnabled(enabled)
         self.setChecked(checked)
@@ -441,7 +465,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton
 from datasource import (Datasource, Loop, Snapshot,
                          Controller as DatasourceController)
 
-class QSnapshotButton(QPushButton, QObserver, Datasource.Observer):
+class QSnapshotButton(QPushButton, QDatasourceObserver):
     """A Button to control a :py:class:`Datasource` of type
     :py:class:`Loop`. Pressing this button will will obtain a
     snapshot from the datasource.
@@ -455,52 +479,25 @@ class QSnapshotButton(QPushButton, QObserver, Datasource.Observer):
     :py:meth:`setDatasourceController` method and if this
     datasource is not busy (e.g., by looping).
 
-
-    Attributes
-    ----------
-    _datasourceController: DatasourceController
-        A datasource controller used by this Button to control the
-        (loop mode) of the Datasource.
     """
-    _datasourceController: DatasourceController = None
 
-    def __init__(self, text: str='Snapshot',
-                 datasource: DatasourceController=None,
-                 parent: QWidget=None) -> None:
-        super().__init__(text, parent)
-        self.setDatasourceController(datasource)
+    def __init__(self, text: str='Snapshot', **kwargs) -> None:
+        super().__init__(text, **kwargs)
         self.clicked.connect(self.onClicked)
-
-    def setDatasourceController(self, datasource: DatasourceController) -> None:
-        interests = Datasource.Change('observable_changed', 'state_changed')
-        self._exchangeView('_datasourceController', datasource,
-                           interests=interests)
-
-    def datasource_changed(self, datasource: Datasource,
-                           change: Datasource.Change) -> None:
-        """Callback for a change of the Datasource.
-        We are interested when the Datasource itself has changed and
-        when its state (looping/pause) has changed.
-        """
-        self.update()
 
     def onClicked(self):
         if (self._datasourceController is not None and
             self._datasourceController.isinstance(Snapshot)):
             #
-            self._datasourceController.snapshot()
+            self._datasourceController.fetch_snapshot()
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (self._datasourceController is not None and
-                   self._datasourceController.isinstance(Snapshot) and
-                   self._datasourceController.prepared)
-
-        if enabled and self._datasourceController.isinstance(Loop):
-            enabled = not self._datasourceController.looping
-
+        enabled = (isinstance(self._datasource, Snapshot) and
+                   self._datasource.prepared and
+                   not self._datasource.busy)
         self.setEnabled(enabled)
 
 
@@ -509,7 +506,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton
 from datasource import (Datasource, Loop, Random,
                          Controller as DatasourceController)
 
-class QRandomButton(QPushButton, QObserver, Datasource.Observer):
+class QRandomButton(QPushButton, QDatasourceObserver):
     """A Button to control a :py:class:`Datasource` of type
     :py:class:`datasource.Random`. Pressing this button will
     obtain a entry from the datasource.
@@ -520,35 +517,11 @@ class QRandomButton(QPushButton, QObserver, Datasource.Observer):
     :py:class:`Datasource` was registered with the
     :py:meth:`setDatasourceController` method and if this
     datasource is not busy (e.g., by looping).
-
-
-    Attributes
-    ----------
-    _datasourceController: DatasourceController
-        A datasource controller used by this Button to control the
-        (loop mode) of the Datasource.
     """
-    _datasourceController: DatasourceController = None
 
-    def __init__(self, text: str='Snapshot',
-                 datasource: DatasourceController=None,
-                 parent: QWidget=None) -> None:
-        super().__init__(text, parent)
-        self.setDatasourceController(datasource)
+    def __init__(self, text: str='Random', **kwargs) -> None:
+        super().__init__(text, **kwargs)
         self.clicked.connect(self.onClicked)
-
-    def setDatasourceController(self, datasource: DatasourceController) -> None:
-        interests = Datasource.Change('observable_changed', 'state_changed')
-        self._exchangeView('_datasourceController', datasource,
-                           interests=interests)
-
-    def datasource_changed(self, datasource: Datasource,
-                           change: Datasource.Change) -> None:
-        """Callback for a change of the Datasource.
-        We are interested when the Datasource itself has changed and
-        when its state (looping/pause) has changed.
-        """
-        self.update()
 
     def onClicked(self):
         if (self._datasourceController is not None and
@@ -560,11 +533,401 @@ class QRandomButton(QPushButton, QObserver, Datasource.Observer):
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (self._datasourceController is not None and
-                   self._datasourceController.isinstance(Random) and
-                   self._datasourceController.prepared)
-
-        if enabled and self._datasourceController.isinstance(Loop):
-            enabled = not self._datasourceController.looping
+        enabled = (isinstance(self._datasource, Random)
+                   and self._datasource.prepared and
+                   not self._datasource.busy)
 
         self.setEnabled(enabled)
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
+from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
+from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
+
+
+class QIndexControls(QWidget, QDatasourceObserver):
+    """A group of Widgets to control an :py:class:`Indexed`
+    :py:class:`Datasource`. The controls allow to select elements
+    from the datasource based on their index.
+
+    The :py:class:`QIndexControls` can observe a :py:class:`Datasource`
+    and adapt their appearance and function based on the state of that
+    datasource.
+
+    The :py:class:`QIndexControls` will only be enabled if a
+    :py:class:`Datasource` was registered with the
+    :py:meth:`setDatasourceController` method and if this
+    datasource is not busy (e.g., by fetching or looping).
+
+    """
+    # select the first entry in the Datasource (Indexed)
+    _firstButton = None
+    # select last entry in the Datasource (Indexed)
+    _lastButton = None
+
+    # select previous entry in the Datasource (Indexed)
+    _prevButton = None
+    # select next entry in the Datasource (Indexed)
+    _nextButton = None
+
+    # select specific index in the Datasource (Indexed)
+    _indexField = None
+    # a label for information to be shown together with the _indexField
+    _indexLabel = None
+
+    def __init__(self, **kwargs) -> None:
+        interests = Datasource.Change('observable_changed', 'state_changed',
+                                      'busy_changed', 'data_changed')
+        super().__init__(interests=interests, **kwargs)
+        self._initUI()
+        self._layoutUI()
+
+    def _initUI(self):
+        """Initialize the user interface.
+
+        """
+        #
+        # Navigation in indexed data source
+        #
+        self._firstButton = self._initButton('|<', 'go-first')
+        self._prevButton = self._initButton('<<', 'go-previous')
+        self._nextButton = self._initButton('>>', 'go-next')
+        self._lastButton = self._initButton('>|', 'go-last')
+
+        # _indexField: A text field to manually enter the index of
+        # desired input.
+        self._indexField = QLineEdit()
+        self._indexField.setMaxLength(8)
+        self._indexField.setAlignment(Qt.AlignRight)
+        self._indexField.setSizePolicy(
+            QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self._indexField.setMinimumWidth(
+            QFontMetrics(self.font()).width('8') * 8)
+        # textChanged: This signal is emitted whenever the text
+        # changes.  this signal is also emitted when the text is
+        # changed programmatically, for example, by calling setText().
+        # We will not react to this signal, since we are also setting
+        # text ourselves as a reaction to a change of the datasource.
+
+        # textEdited: This signal is emitted whenever the text is
+        # edited. This signal is not emitted when the text is changed
+        # programmatically, e.g., by setText().  The text argument is
+        # the new text.
+        self._indexField.textEdited.connect(self._editIndex)
+        
+        # editingFinished: This signal is emitted when the Return or
+        # Enter key is pressed or the line edit loses focus.
+        self._indexField.editingFinished.connect(self._editIndex)
+
+        self._indexLabel = QLabel()
+        self._indexLabel.setMinimumWidth(
+            QFontMetrics(self.font()).width('8') * 8)
+        self._indexLabel.setSizePolicy(
+            QSizePolicy.Maximum, QSizePolicy.Expanding)
+
+    def _initButton(self, label: str, icon: str=None):
+        button = QPushButton()
+        icon = QIcon.fromTheme(icon, QIcon())
+        if icon.isNull():
+            button.setText(label)
+        else:
+            button.setIcon(icon)
+        button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        button.clicked.connect(self._buttonClicked)
+        return button
+
+    def _layoutUI(self):
+        """Layout the :py:class:`IndexControls`.
+
+        """
+        layout = QHBoxLayout()
+        layout.addWidget(self._firstButton)
+        layout.addWidget(self._prevButton)
+        layout.addWidget(self._indexField)
+        layout.addWidget(QLabel('of'))
+        layout.addWidget(self._indexLabel)
+        layout.addWidget(self._nextButton)
+        layout.addWidget(self._lastButton)
+        self.setLayout(layout)
+
+    @protect
+    def _buttonClicked(self, checked: bool):
+        '''Callback for clicking the 'next' and 'prev' sample button.'''
+        if self.sender() == self._firstButton:
+            self._datasourceController.rewind()
+        elif self.sender() == self._prevButton:
+            self._datasourceController.rewind_one()
+        elif self.sender() == self._nextButton:
+            self._datasourceController.advance_one()
+        elif self.sender() == self._lastButton:
+            self._datasourceController.advance()
+        
+    @protect
+    def _editIndex(self, text):
+        '''Event handler for the edit field.'''
+        if self._controller is None:
+            return
+        self._controller.edit_index(text)
+
+    def datasource_changed(self, datasource: Datasource,
+                           info: Datasource.Change) -> None:
+        if info.state_changed:
+            if isinstance(datasource, Indexed) and datasource.prepared:
+                elements = len(datasource)
+                self._indexField.setValidator(QIntValidator(0, elements))
+            else:
+                self._indexField.setValidator(None)
+        super().datasource_changed(datasource, info)
+
+    def update(self) -> None:
+        """Update this :py:class:`IndexControls` based on the state of the
+        :py:class:`Datasource`.
+        """
+        datasource = self._datasource
+        if isinstance(datasource, Indexed) and datasource.prepared:
+            enabled = not datasource.busy
+            elements = len(datasource)           
+            index = datasource.index
+        else:
+            enabled = False
+            elements = '*'
+            index = ''
+        self._firstButton.setEnabled(enabled and index > 0)
+        self._prevButton.setEnabled(enabled and index > 0)
+        self._nextButton.setEnabled(enabled and index+1 < elements)
+        self._lastButton.setEnabled(enabled and index+1 < elements)
+
+        self._indexField.setEnabled(enabled)
+        self._indexField.setText(str(index))
+        self._indexLabel.setText(str(elements))
+
+class QDatasourceNavigator(QWidget, QObserver, Datasource.Observer):
+    
+    # controls for an indexed datasource (Indexed)
+    _indexControls: QIndexControls = None
+
+    # select random entry from the Datasource (Random)
+    _randomButton: QRandomButton = None
+
+    # Snapshot button (Snapshot)
+    _snapshotButton: QSnapshotButton = None
+
+    # start/stop looping the Datasource (Loop)
+    _loopButton: QLoopButton = None
+
+    # FIXME[old]: try to work without a DatasourceControler
+    _datasourceController: DatasourceController = None
+
+    def __init__(self, datasource: DatasourceController=None, **kwargs):
+        """Initialization of the :py:class:`QDatasourceNavigator`.
+
+        Parameters
+        ---------
+        datasource: Datasource
+            The datasource to be controlled by this
+            :py:class:`QDatasourceNavigator`
+        """
+        super().__init__(**kwargs)
+        self._initUI()
+        self._layoutUI()
+        self.setDatasourceController(datasource)
+
+    def _initUI(self):
+        """Initialize the user interface.
+
+        """
+        self._indexControls = QIndexControls()
+        self._randomButton = QRandomButton()
+        self._snapshotButton = QSnapshotButton()
+        self._loopButton = QLoopButton()
+
+    def _layoutUI(self):
+        layout = QHBoxLayout()
+        layout.addWidget(self._indexControls)
+        layout.addStretch()
+        layout.addWidget(self._randomButton)
+        layout.addWidget(self._snapshotButton)
+        layout.addWidget(self._loopButton)
+        self.setLayout(layout)
+
+    def setDatasource(self, datasource: Datasource) -> None:
+        self._indexControls.setVisible(isinstance(datasource, Indexed))
+        self._randomButton.setVisible(isinstance(datasource, Random))
+        self._snapshotButton.setVisible(isinstance(datasource, Snapshot))
+        self._loopButton.setVisible(isinstance(datasource, Loop))
+
+    #
+    # FIXME[old]: try to work without a DatasourceControler
+    #
+        
+    def setDatasourceController(self, datasource: DatasourceController) -> None:
+        interests = Datasource.Change('observable_changed')
+        self._exchangeView('_datasourceController', datasource, interests=interests)
+        self._indexControls.setDatasourceController(datasource)
+        self._randomButton.setDatasourceController(datasource)
+        self._snapshotButton.setDatasourceController(datasource)
+        self._loopButton.setDatasourceController(datasource)
+
+    def datasource_changed(self, datasource: Datasource, info) -> None:
+        """React to changes in the datasource. Changes of interest are:
+        (1) change of datasource ('observable_changed'): we may have to
+            adapt the controls to reflect the type of Datasource.
+        (2) usability of the datasource ('state_changed', 'busy_changed'):
+            we may have to disable some controls depending on the state
+            (prepared, busy).
+        (3) change of selected image (data_changed): we may want to
+            reflect the selection in our controls.
+        """
+        if info.observable_changed:
+            self.setDatasource(datasource)
+
+class QInputNavigator(QWidget, QObserver, Datasource.Observer):
+    """A :py:class:`QInputNavigator` displays widgets to navigate in the
+    Datasource.  The actual set of widgets depends on the type of
+    Datasource and will be adapated when the Datasource is changed.
+
+    """
+    _controller: DatasourceController = None
+    
+    #
+    _infoDatasource: QLabel = None
+    
+    # display the state of the Datasource:
+    # "none" / "unprepared" / "busy" / "ready"
+    _stateLabel = None
+
+    # prepare or unprepare the Datasource
+    _prepareButton = None
+
+    _navigator: QDatasourceNavigator = None
+
+    def __init__(self, datasource: DatasourceController=None, **kwargs):
+        '''Initialization of the QInputNavigator.
+
+        Parameters
+        ---------
+        datasource: DatasourceController
+            A Controller allowing to navigate in the Datasource.
+        '''
+        super().__init__(**kwargs)
+        self._initUI()
+        self._layoutUI()
+        self.setDatasourceController(datasource)
+
+    def _initUI(self):
+        """Initialize the user interface.
+
+        """
+        self._prepareButton = QPushButton('Prepare')
+        self._prepareButton.setSizePolicy(QSizePolicy.Maximum,
+                                          QSizePolicy.Maximum)
+        self._prepareButton.setCheckable(True)
+        self._prepareButton.clicked.connect(self._prepareButtonClicked)
+        
+        self._infoDatasource = QLabel()
+        self._stateLabel = QLabel()
+        
+        self._navigator = QDatasourceNavigator()
+        
+    def _layoutUI(self):
+        """The layout of the :py:class:`QInputNavigator` may change
+        depending on the :py:class:`Datasource` it controls.
+
+        """
+        # FIXME[todo]: we may also add some configuration options
+        
+        # We have no Layout yet: create initial Layout
+        layout = QVBoxLayout()
+        layout.addWidget(self._infoDatasource)
+        layout.addWidget(self._stateLabel)
+
+        # buttons 2: control the datsource
+        buttons2 = QHBoxLayout()
+        buttons2.addWidget(self._prepareButton)
+        buttons2.addStretch()
+        layout.addLayout(buttons2)
+
+        layout.addWidget(self._navigator)
+
+        self.setLayout(layout)
+            
+        #if self._controller is None or not self._controller:
+        #    # no datasource controller or no datasource: remove buttons
+        #    if self._buttons is not None:
+        #        for button in self._buttonList:
+        #            button.setParent(None)
+        #        self._layout.removeItem(self._buttons)
+        #        self._buttons = None
+        #else:
+        #    # we have a datasource: add the buttons
+        #    if self._buttons is None:
+        #        self._buttons = QHBoxLayout()
+        #        for button in self._buttonList:
+        #            self._buttons.addWidget(button)
+        #        self._layout.addLayout(self._buttons)
+
+    def _enableUI(self):
+        enabled = bool(self._controller)
+        self._prepareButton.setEnabled(bool(self._controller))
+        if bool(self._controller):
+            self._prepareButton.setChecked(self._controller.prepared)
+
+    @protect
+    def _prepareButtonClicked(self, checked: bool):
+        '''Callback for clicking the 'next' and 'prev' sample button.'''
+        if not self._controller:
+            return
+        if checked:
+            self._controller.prepare()
+        else:
+            self._controller.unprepare()
+
+    def setDatasourceController(self,
+                                datasource: DatasourceController) -> None:
+        interests = Datasource.Change('observable_changed', 'busy_changed',
+                                      'state_changed', 'data_changed')
+        self._exchangeView('_controller', datasource, interests=interests)
+        self._navigator.setDatasourceController(datasource)
+
+    def datasource_changed(self, datasource: Datasource, info) -> None:
+        """React to chanes in the datasource. Changes of interest are:
+        (1) change of datasource ('observable_changed'): we may have to
+            adapt the controls to reflect the type of Datasource.
+        (2) usability of the datasource ('state_changed', 'busy_changed'):
+            we may have to disable some controls depending on the state
+            (prepared, busy).
+        (3) change of selected image (data_changed): we may want to
+            reflect the selection in our controls.
+        """
+        if info.observable_changed:
+            self._updateState()
+            self._enableUI()
+
+        if info.observable_changed or info.state_changed:
+            self._updateDescription(datasource)
+
+        if info.state_changed or info.busy_changed:
+            self._updateState()
+            self._enableUI()
+
+    def _updateDescription(self, datasource):
+        info = ''
+        if datasource:
+            text = datasource.get_description()
+        else:
+            text = "No datasource"
+        self._infoDatasource.setText(text)
+    
+    def _updateState(self):
+        if not self._controller:
+            text = "none"
+        elif not self._controller.prepared:
+            text = "unprepared"
+        elif self._controller.busy:
+            text = "busy"
+            busy_message = self._controller.busy_message
+            if busy_message:
+                text += f" ({busy_message})"
+        else:
+            text = "ready"
+        self._stateLabel.setText("State: " + text)

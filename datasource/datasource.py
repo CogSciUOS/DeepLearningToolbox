@@ -1,3 +1,25 @@
+"""
+.. moduleauthor:: Ulf Krumnack
+
+.. module:: datasource.datasource
+
+This module contains abstract definitions of :py:class:`Datasource`s.
+All basic functionality a datasource may have should be specified in
+in this module.
+
+A :py:class:`Datasource` realizes two modes of
+obtaining data: synchronous and asynchronous. The asynchronous methods
+are prefixed by 'fetch': These methods will immediatly return, while
+running a background thread to obtain the data. Once data are available,
+observers will receive a `data_changed` notification.
+
+FIXME[todo]: currently there is no synchronous way to obtain data.
+
+Other modules implementing access to :py:class:`Datasource`s
+should rely on the APIs defined here. Such modules include.
+* qtgui.widgets.datasource
+
+"""
 from .meta import Metadata
 from base import BusyObservable, change
 from util.image import imread
@@ -144,8 +166,21 @@ class Datasource(BusyObservable, method='datasource_changed',
             self.change('data_changed')
             
     def _fetch(self, **kwargs):
-        raise NotImplementedError("_fetch() should be implemented by "
-                                  "subclasses of Datasource.")
+        """Fetch an element from the :py:class:`Datasource`. After fetching,
+        the fetched data is available via the :py:meth:`data` property.
+        The specific implementation of this mechanism should be provided
+        by subclasses.
+        """
+        self._fetch_default(**kwargs)
+        
+        
+    def _fetch_default(self, **kwargs):
+        """The default fetch action performed by a dataset. This
+        should be implemented by all subclases of :py:class:`Datasource`.
+        """
+        raise NotImplementedError("No default method for fetching data "
+                                  "provided by datasource "
+                                  "{self.__class__.__name__}.")
 
     @property
     def fetched(self) -> bool:
@@ -162,8 +197,8 @@ class Datasource(BusyObservable, method='datasource_changed',
         before by calling :py:meth:`fetch`
         """
         if not self.fetched:
-            raise RuntimeException("No data has been fetched on Datasource "
-                                   f"{self.__class__.__name}")
+            raise RuntimeError("No data has been fetched on Datasource "
+                               f"{self.__class__.__name__}")
         return self._get_data()
 
     def _get_data(self) -> np.ndarray:
@@ -199,8 +234,8 @@ class Datasource(BusyObservable, method='datasource_changed',
         """Metadata for the currently selected data.
         """
         if not self.fetched:
-            raise RuntimeException("No (meta)data has been fetched "
-                                   f"on Datasource {self.__class__.__name}")
+            raise RuntimeError("No (meta)data has been fetched "
+                               f"on Datasource {self.__class__.__name}")
         return self._metadata
 
     @property
@@ -393,9 +428,9 @@ class Labeled(Datasource):
         before by calling :py:meth:`fetch()`
         """
         if not self.labels_prepared:
-            raise RuntimeException("Labels have not been prepared yet.")
+            raise RuntimeError("Labels have not been prepared yet.")
         if not self.fetched:
-            raise RuntimeException("No data has been fetched.")
+            raise RuntimeError("No data has been fetched.")
         label = self._get_label()
         return label if format is None else self.format_label(label, format)
 
@@ -660,9 +695,8 @@ class Random(Datasource):
         """
         if random:
             self._fetch_random(**kwargs)
-            self.change('data_changed')
         else:
-            super().fetch(**kwargs)
+            super()._fetch(**kwargs)
 
     def _fetch_random(self, **kwargs) -> None:
         """This method should be implemented by subclasses that claim
@@ -674,6 +708,22 @@ class Random(Datasource):
                                   "a 'Random' datasource, but it does not "
                                   "implement the '_fetch_random' method.")
 
+    def _fetch_default(self, **kwargs) -> None:
+        """The default behaviour of an :py:class:`Random` datasource is to
+        fetch a random element (if not changed by subclasses).
+        """
+        self._fetch_random(**kwargs)
+
+    #
+    # Public interface
+    #
+
+    def fetch_random(self, **kwargs) -> None:
+        """
+        This is equivalent to calling `fetch(random=True)`.
+        """
+        return self.fetch(random=True, **kwargs)
+
 
 class Indexed(Random):
     """Instances of this class can be indexed.
@@ -683,7 +733,7 @@ class Indexed(Random):
         self.fetch_index(index=index)
         return self.get_data()
 
-    def _fetch(self, index=None, **kwargs):
+    def _fetch(self, index: int=None, **kwargs):
         """A version of :py:meth:`fetch` that allows for an
         additional argument `random`.
 
@@ -696,31 +746,36 @@ class Indexed(Random):
         if index is not None:
             self._fetch_index(index, **kwargs)
         else:
-            self._fetch_random(**kwargs)
+            super()._fetch(**kwargs)
 
-    def _fetch_index(self, index, **kwargs) -> None:
+    def _fetch_index(self, index: int, **kwargs) -> None:
         """This method should be implemented by subclasses that claim
-        to be a py:meth:`Random` datasource.
-        It should perform whatever is necessary to fetch a random
-        element from the dataset.
+        to be a py:meth:`Indexed` datasource.
+        It should perform whatever is necessary to fetch a element with
+        the given index from the dataset.
         """
         raise NotImplementedError(f"{self.__class__.__name__} claims to be "
-                                  "a 'Random' datasource, but it does not "
-                                  "implement the '_fetch_random' method.")
+                                  "a 'Indexed' datasource, but it does not "
+                                  "implement the '_fetch_index' method.")
 
     def _fetch_random(self, **kwargs) -> None:
-        """Fetch a random image. In a :py:class:`Indexed` datasource
+        """Fetch a random element. In a :py:class:`Indexed` datasource
         we can simply choose a random index and fetch that index.
         """
         self._fetch_index(index=random.randrange(len(self)), **kwargs)
 
+    def _fetch_default(self, **kwargs) -> None:
+        """The default behaviour of an :py:class:`Indexed` datasource is to
+        fetch the next image, looping at the end.
+        """
+        current_index = (self._get_index() or 0)
+        next_index = (current_index + 1) if current_index < len(self) else 0
+        self._fetch_index(index=next_index, **kwargs)
 
-    @property
-    def index(self) -> int:
+    def _get_index(self) -> int:
         raise NotImplementedError(f"Subclasses of {Indexed.__name__} "
                                   "should implement property 'index', but "
                                   f"{self.__class__.__name__} doesn't do that.")
-
 
     def __len__(self) -> int:
         raise NotImplementedError(f"Subclasses of {Indexed.__name__} "
@@ -733,9 +788,56 @@ class Indexed(Random):
             description += f", index={index}"
         return description
 
+    #
+    # Public interface (convenience functions)
+    #
 
-from threading import Event
+    @property
+    def index(self):
+        """The index of the currently fetched data item.
+        """
+        return self._get_index() if self.prepared else 0  # FIXME[hack]: unprepared datasources should raise an exception
 
+    def fetch_index(self, index: int, **kwargs) -> None:
+        """This method should be implemented by subclasses that claim
+        to be a py:meth:`Random` datasource.
+        It should perform whatever is necessary to fetch a random
+        element from the dataset.
+        """
+        self.fetch(index=next_index, **kwargs)
+
+    def fetch_next(self, loop: bool=True, **kwargs) -> None:
+        """Fetch the next entry. In a :py:class:`Indexed` datasource
+        we can simply increase the index by one.
+        """
+        current_index = (self._index or 0)
+        next_index = (current_index + 1) if current_index < len(self) else 0
+        self.fetch(index=next_index, **kwargs)
+
+    def fetch_prev(self, loop: bool=True, **kwargs) -> None:
+        """Fetch the previous entry. In a :py:class:`Indexed` datasource
+        we can simply decrease the index by one.
+        """
+        current_index = (self._index or 0)
+        next_index = (current_index - 1) if current_index > 0 else len(self)
+        self.fetch(index=next_index, **kwargs)
+
+    def fetch_first(self, **kwargs) -> None:
+        """Fetch the first entry of this :py:class:`Indexed` datasource.
+        This is equivalent to fetching index 0.
+        """
+        self.fetch(index=0, **kwargs)
+
+    def fetch_last(self, **kwargs) -> None:
+        """Fetch the last entry of this :py:class:`Indexed` datasource.
+        This is equivalent to fetching the element with index `len(self)-1`.
+        """
+        self.fetch(index=len(self)-1, **kwargs)
+
+
+
+import threading
+import time
 
 class Loop(Datasource):
     """The :py:class:`Loop` class provides a loop logic.
@@ -744,53 +846,70 @@ class Loop(Datasource):
     called directly, but they are engaged via the
     :py:meth:`loop` method of the :py:class:`datasource.Controller`
     class.
+
+    Attributes
+    ----------
+    _loop_stop_event: threading.Event
+        An Event signaling that the loop should stop.
+        If not set, this means that the loop is currently running,
+        if set, this means that the loop is currently not running (or at
+        least supposed to stop running soon).
+    _loop_interval: float
     """
 
-    # An event manages a flag that can be set to true with the set()
-    # method and reset to false with the clear() method. The wait()
-    # method blocks until the flag is true.
-    _loop_event: Event = None
-    _loop_running: bool = False
-    _loop_interval: float = None
+    # The An event manages a flag that can be set to true with the set()
+    # method and reset to false with the clear() method.
     
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._loop_running = False
-        self._loop_event = None
+        self._loop_stop_event = threading.Event()
+        self._loop_stop_event.set()
         self._loop_interval = 0.2
 
     @property
     def looping(self):
         """Check if this datasource is currently looping.
         """
-        return self._loop_running   
+        return not self._loop_stop_event.is_set()
 
     def start_loop(self):
-        if not self._loop_running:
-            self._loop_running = True
-            self._loop_event = Event()
-            self.change('state_changed')
+        """Start an asynchronous loop cycle. This method will return
+        immediately, running the loop cycle in a background thread.
+        """
+        if self._loop_stop_event.is_set():
+            self._loop_stop_event.clear()
+            self.busy = "Looping"
 
     def stop_loop(self):
-        if self._loop_running:
-            self._loop_running = False
-            self.change('state_changed')
+        """Stop a currently running loop.
+        """
+        if not self._loop_stop_event.is_set():
+            self._loop_stop_event.set()
+            self.busy = False
 
     def run_loop(self):
         """
         This method is intended to be invoked in its own Thread.
         """
         # self._logger.info("Running datasource loop")
-        while self._loop_running:
-            self.fetch(random=True)
+        while not self._loop_stop_event.is_set():
+            # Fetch a data item
+            last_time = time.time()
+            #print(f"Loop: {self._loop_stop_event.is_set()} at {last_time:.4f}")
+            self.fetch()
+
             # Now wait before fetching the next input
-            self._loop_event.clear()
-            self._loop_event.wait(timeout=self._loop_interval)
-        self._loopEvent = None
+            sleep_time = last_time + self._loop_interval - time.time()
+            if sleep_time > 0:
+                self._loop_stop_event.wait(timeout=sleep_time)
+            #else:
+            #    print(f"Loop: late for {-sleep_time:.4f}s")
 
 
 class Snapshot(Datasource):
-    """Instances of this class are able to provide a snapshot.
+    """Instances of this class are able to provide a snapshot.  Typical
+    examples of :py:class:`Snapshot` datasources are sensors and
+    cameras that obtain changing data from the environment.
     """
 
     def __init__(self, **kwargs) -> None:
@@ -798,7 +917,38 @@ class Snapshot(Datasource):
         """
         super().__init__(**kwargs)
 
-    def snapshot(self) -> None:
+    def _fetch(self, snapshot: bool=False, **kwargs):
+        """A version of :py:meth:`fetch` that allows for an
+        additional argument `random`.
+
+        Arguments
+        ---------
+        snapshot: bool
+            If set, a snapshot depicting the current state of affairs
+            is fetched from this :py:class:`Datasource`.
+        """
+        if snapshot:
+            self._fetch_snapshot(**kwargs)
+        else:
+            super()._fetch(**kwargs)
+
+    def _fetch_default(self, **kwargs) -> None:
+        """The default behaviour of an :py:class:`Random` datasource is to
+        fetch fetch a snapshot (if not changed by subclasses).
+        """
+        self._fetch_snapshot(**kwargs)
+
+    def _fetch_snapshot(self, **kwargs) -> None:
+        """Take a snapshot.
+        """
+        super()._fetch_default(**kwargs)
+
+    def fetch_snapshot(self, **kwargs) -> None:
         """Create a snapshot.
         """
-        self.fetch()
+        self.fetch(snapshot=True, **kwargs)
+
+    def snapshot(self, **kwargs) -> None:
+        """Create a snapshot.
+        """
+        self.fetch(snapshot=True, **kwargs)

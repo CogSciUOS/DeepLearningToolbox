@@ -44,7 +44,7 @@ class DataWebcam(Loop, Snapshot):
 
     @property
     def prepared(self) -> bool:
-        """Report if this Datasource prepared for use.
+        """Report if this Datasource is prepared for use.
         A Datasource has to be prepared before it can be used.
         """
         return self._capture is not None
@@ -84,21 +84,32 @@ class DataWebcam(Loop, Snapshot):
             #
             # Hence we will apply another loop logic: we read frames as
             # fast as possible and only report them at certain times.
-            last_time = time.time()
-            while self._loop_running:
+            last_time = 0
+            fetched = 0
+            ignored = 0
+            start_time = time.time()
+            while not self._loop_stop_event.is_set():
                 if time.time() - last_time > self._loop_interval:
-                    self.fetch(random=True)
+                    # enough time has passed: fetch and notify observers 
+                    last_time = time.time()
+                    self.fetch()
+                    fetched += 1
+                    total = fetched+ignored
+                    #print(f"ratio: {fetched*100/total:.1f}%, frames per second"
+                    #      f": {total/(last_time-start_time):.1f}"
+                    #      f"  (fetched={fetched}, ignored={ignored})")
                 else:
-                    ret, frame = self._capture.read()
-            self._loopEvent = None
+                    # read and ignore
+                    ret, _ = self._capture.read()
+                    ignored += 1
         else:
             super().run_loop()
 
-    def snapshot(self) -> None:
+    def _fetch_snapshot(self, **kwargs) -> None:
         """Create a snapshot.
         """
         # Hack: under linux, the av-based linux capture code is using
-        # an internal fifo (5 frames, iirc), and you cannot clean (or
+        # an internal fifo buffer (5 frames, iirc),  you cannot clean (or
         # say, flush) it.
         #
         # Hence we will skip some frames to really get the current image.
@@ -109,7 +120,7 @@ class DataWebcam(Loop, Snapshot):
                 if not ret:
                     raise RuntimeError("Snapshot: Reading an image from "
                                        "video capture failed!")
-        super().snapshot()
+        super()._fetch_snapshot(**kwargs)
 
     def _get_data(self):
         return self._frame

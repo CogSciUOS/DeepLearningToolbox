@@ -13,3 +13,6 @@ Datasource.register('Helen', 'datasource.helen', 'Helen')
 Datasource.register('Noise', 'datasource.noise', 'DataNoise',
                     shape=(100,100,3))
 Datasource.register('Webcam', 'datasource.webcam', 'DataWebcam')
+
+Datasource.register('Movie', 'datasource.video', 'DataVideo',
+                    filename='/pub/ulf/media/music/Laibach/Laibach - God is God.mp4')
