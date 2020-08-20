@@ -27,8 +27,9 @@ class QMatrixView(QWidget):
           a submatrix gets displayed. This is intended for interaction
           with some zoom element.
 
-    Implementation
-    ---------------
+    Notes
+    -----
+    
     Zoom: we have decided to include the zoom functionality into this widget.
     That is, on every change of zoom parameters (zoom factor or offset)
     we compute an image depicting the selected region and display it
@@ -54,9 +55,11 @@ class QMatrixView(QWidget):
     one pixel per matrix entry, while with a zoom factor of 10.0 each
     entry is displayed as a 10*10 square.
 
+    Attributes
+    ----------
 
-    Signals
-    -------
+    **Signals:**
+
     selected
         The "selected" signal is emitted when a new entry is selected
         or when the current entry gets unselected.

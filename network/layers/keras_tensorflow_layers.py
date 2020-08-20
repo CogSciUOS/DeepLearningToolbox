@@ -1,3 +1,6 @@
+# FIXME[old]: currently only used by
+#  - ./network/tests/test_keras_tensorflow_network.py
+
 from . import keras_layers
 
 class KerasTensorFlowLayerMixin:

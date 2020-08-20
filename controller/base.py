@@ -35,7 +35,7 @@ class BaseController:
         issued by this controller. Everyone interested in such
         notifications should register to this Observable:
 
-        Result
+        Returns
         ------
         model: Observable
             The model controlled by this ActivationsController.

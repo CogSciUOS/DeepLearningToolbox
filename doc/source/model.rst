@@ -5,7 +5,6 @@ Module contents
 ---------------
 
 .. automodule:: model
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    :special-members:
+   :members:
+   :undoc-members:
+   :show-inheritance:

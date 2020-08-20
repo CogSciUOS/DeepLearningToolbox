@@ -362,8 +362,8 @@ class _TensorflowHelper(_EngineHelper):
         """Perform one optimization step. What exactly is done depends
         on the current :py:class:Config values.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         image:
             The input image on which the activation maximization should
             be perfomed.
@@ -509,7 +509,7 @@ class _TensorflowHelper(_EngineHelper):
     def unit(self) -> (int, object):
         """Get the target unit.
 
-        Result
+        Returns
         ------
         unit_index: int
             The index of the unit (in the current layer)

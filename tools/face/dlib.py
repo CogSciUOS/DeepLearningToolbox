@@ -1,34 +1,55 @@
+"""Interface to access face detectors from the dlib library.
+"""
 
+# standard imports
 import os
-import numpy as np
 
+# third party imports
+import numpy as np
+import imutils.face_utils
 import dlib
 
-
-from .detector import Detector as FaceDetector
-from .landmarks import Detector as LandmarkDetector
+# toolbox imports
 from datasource import Metadata
 from util.image import BoundingBox
+from .detector import Detector as FaceDetector
+from .landmarks import Detector as LandmarkDetector, FacialLandmarks68
 
 
 class DetectorHOG(FaceDetector):
+    # pylint: disable=too-many-ancestors
     """The dlib HOG face detector.
+
+    Attributes
+    ----------
+    _detector: dlib.fhog_object_detector
     """
-    _detector = None
 
-
-    def _prepare(self) -> None:
-        """Prepare this DetectorHOG by loading the model data.
+    def __init__(self, **kwargs) -> None:
+        """Initialize this :py:class:`DetectorHOG`.
         """
+        super().__init__(**kwargs)
+        self._detector = None
+
+    def _prepare(self, **kwargs) -> None:
+        """Prepare this :py:class:`DetectorHOG` by loading the model data.
+        """
+        super()._prepare(**kwargs)
         self._detector = dlib.get_frontal_face_detector()
 
-    def prepared(self) -> bool:
+    def _unprepare(self):
+        """Release the resources acquired by :py:class:`DetectorHOG`.
+        """
+        self._detector = None
+        super()._unprepare()
+
+    def _prepared(self) -> bool:
         """The DetectorHOG is prepared, once the model data
         have been loaded.
         """
-        return self._detector is not None
+        return (self._detector is not None) and super()._prepared()
 
-    def _detect(self, image) -> Metadata:
+    def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
         """Apply the dlib histogram of gradients detector (HOG) to
         detect faces in the given image.
 
@@ -41,22 +62,24 @@ class DetectorHOG(FaceDetector):
 
         rects = self._detector(image, 2)
 
-        detections = Metadata(description=
-                              'Detections by the DLib HOG detector')
+        detections = Metadata(
+            description='Detections by the DLib HOG detector')
         for rect in rects:
             detections.add_region(BoundingBox(x=rect.left(), y=rect.top(),
                                               width=rect.width(),
                                               height=rect.height()))
         return detections
 
-class DetectorCNN(FaceDetector):
-    """The dlib CNN detector.
-    """
-    _model_file: str = None
-    _detector = None
 
-    def __init__(self, model_file='mmod_human_face_detector.dat',
-                 *args, **kwargs):
+class DetectorCNN(FaceDetector):
+    # pylint: disable=too-many-ancestors
+    """The dlib CNN detector.
+    _model_file: str
+    _detector: dlib.cnn_face_detection_model_v1
+    """
+
+    def __init__(self, *args, model_file='mmod_human_face_detector.dat',
+                 **kwargs) -> None:
         """The OpenCV Single Shot MultiBox Detector (SSD).
 
         Arguments
@@ -67,9 +90,13 @@ class DetectorCNN(FaceDetector):
             with Caffe, and 'TF' is a 8-bit quantized version for TensorFlow.
         """
         super().__init__(*args, **kwargs)
+        self._detector = None
+        self._model_file = None
         self.set_model_file(model_file)
 
-    def set_model_file(self, model_file):       
+    def set_model_file(self, model_file) -> None:
+        """Set the model file for this :py:class:`DetectorCNN`.
+        """
         if not os.path.isabs(model_file):
             dlib_model_directory = os.environ.get('DLIB_MODELS', '.')
             model_file = os.path.join(dlib_model_directory, model_file)
@@ -78,53 +105,74 @@ class DetectorCNN(FaceDetector):
             self._model_file = model_file
             self._add_requirement('model', 'file', model_file)
 
-    def _prepare(self):
+    def _prepare(self, **kwargs) -> None:
+        """Prepare this :py:class:`DetectorCNN`.
+        """
+        super()._prepare(**kwargs)
         self._detector = dlib.cnn_face_detection_model_v1(self._model_file)
 
-    def prepared(self):
-        return self._detector is not None
+    def _unprepare(self) -> None:
+        """Release resources acquired by this :py:class:`DetectorCNN`.
+        """
+        self._detector = None
+        super()._unprepare()
 
-    def _detect(self, image):
+    def _prepared(self) -> bool:
+        """Release resources acquired by this :py:class:`DetectorCNN`.
+        """
+        return (self._detector is not None) and super()._prepared()
+
+    def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
         """The dlib CNN face detector.
         """
-        if self._detector is None:
-            return None
-
 
         # It is also possible to pass a list of images to the
         # detector - like this:
         #   dets = detector([image # list], upsample_num, batch_size = 128)
         # In this case it will return a mmod_rectangless object. This object
         # behaves just like a list of lists and can be iterated over.
-        dets = self._detector(image, 2)
+        detections = self._detector(image, 2)
 
         # The result is of type dlib.mmod_rectangles, which is
         # basically a list of rectangles annotated with conficence
         # values.  For an individual detection d (of type
         # dlib.mmode_rectangle), the information can be accessed by
         # d.rect and d.confidence.
-        
-        detections = Metadata(description=
-                              'Detections by the dlib CNN face detector')
-        for d in dets:
-            detections.add_region(BoundingBox(x=d.rect.left(), y=d.rect.top(),
-                                              width=d.rect.width(),
-                                              height=d.rect.height()),
-                                  confidence=d.confidence)
-        return detections
+
+        result = Metadata(
+            description='Detections by the dlib CNN face detector')
+        for detection in detections:
+            rect = detection.rect
+            result.add_region(BoundingBox(x=rect.left(), y=rect.top(),
+                                          width=rect.width(),
+                                          height=rect.height()),
+                              confidence=detection.confidence)
+        return result
 
 
 class FacialLandmarkDetector(LandmarkDetector):
+    # pylint: disable=too-many-ancestors
+    # FIXME[concept]: this class first applies a face detector to find faces
+    # in a large image and then applies the landmark detector. This seems
+    # to be a commmon situation for which we should provide an API.
     """A facial landmark detector based on dlib.
 
+
+    Attributes
+    ----------
+    _detector: dlib.fhog_object_detector
+    _predictor: dlib.shape_predictor
     """
 
-    _predictor: dlib.shape_predictor = None
 
-    def __init__(self, model_file: str=None):
+    def __init__(self, model_file: str = None, **kwargs):
         # shape_predictor_5_face_landmarks.dat
         # shape_predictor_68_face_landmarks.dat
-        
+        super().__init__(**kwargs)
+        self._predictor = None
+        self._detector = None
+
+        # FIXME[question]: what is going on here?
         #
         # The dlib facial landmark detector
         #
@@ -138,24 +186,38 @@ class FacialLandmarkDetector(LandmarkDetector):
             raise ValueError(f"Dlib predictor model file ''{predictor_name}' "
                              "not found.")
 
-    def _prepare(self) -> None:
+    def _prepare(self, **kwargs) -> None:
         """Prepare this DetectorHOG by loading the model data.
         """
+        super()._prepare(**kwargs)
         self._detector = dlib.get_frontal_face_detector()
 
-    def prepared(self) -> bool:
+    def _unprepare(self):
+        """Unprepare this DetectorHOG by releasing acquired resources.
+        """
+        self._detector = None
+        super()._unprepare()
+
+    def _prepared(self) -> bool:
         """The DetectorHOG is prepared, once the model data
         have been loaded.
         """
-        return self._detector is not None
+        return (self._detector is not None) and super()._prepared()
 
-    def _detection_to_landmarks(self, detection: dlib.full_object_detection):
-        points = face_utils.shape_to_np(detection)
+    @staticmethod
+    def _detection_to_landmarks(detection: dlib.full_object_detection):
+        points = imutils.face_utils.shape_to_np(detection)
 
         # Construct a Metdata object holding the detected landmarks
         return FacialLandmarks68(points)
 
-    def _detect(self, image: np.ndarray, box: BoundingBox=None):
+    #
+    # Detection
+    #
+
+    def _detect(self, image: np.ndarray, box: BoundingBox = None,
+                **kwargs) -> Metadata:
+        # pylint: disable=arguments-differ
         """Do the actual facial landmark detection.
         Notice, that the facial detector expects to work on a single face,
         not on a complete image with multiple faces.
@@ -168,8 +230,8 @@ class FacialLandmarkDetector(LandmarkDetector):
         # landmark detector alread expects cropped image region
         # as argument, we simply set the rectangle to include the
         # whole image.
-        rect = (dlib.rectangle(0,0,image.shape[1],image.shape[0])
-                if rect is None else
+        rect = (dlib.rectangle(0, 0, image.shape[1], image.shape[0])
+                if box is None else
                 dlib.rectangle(box.x, box.y, box.width, box.height))
 
         detection = self._predictor(image, rect)
@@ -177,44 +239,8 @@ class FacialLandmarkDetector(LandmarkDetector):
         # detection is of type dlib.full_object_detection, which basically
         # is a list of N points. These can be transformed into
         # a two dimensional array of shape (N,2) for further processing.
-        metadata = Metadata(description=
-                            'Facial landmarks detectec by the dlib detctor')
+        metadata = Metadata(
+            description='Facial landmarks detectec by the dlib detctor')
         metadata.add_region(self._detection_landmarks(detection))
 
-        return detections
-
-    
-    ## FIXME[old]:
-    def predict_old(self, image, rects):
-        if self._predictor is None:
-            self._shapes = None
-            return None
-
-        self._shapes = []
-
-        
-        # loop over the face detections
-        for rect in rects:
-        
-            # determine the facial landmarks for the face region, then
-            # shape is of type <class 'dlib.full_object_detection'>
-            shape = self._predictor(image, rect)
-            self._shapes.append(shape)
-
-            if self._canvas_predict is not None:
-                # convert the facial landmark (x, y)-coordinates to a
-                # NumPy array (shape: (n, 2)), with n being 0 (no
-                # landmarks detected), 5 (for )
-                shape = imutils.face_utils.shape_to_np(shape)
-                show_numbers = len(shape) < 10
- 
-                # loop over the (x, y)-coordinates for the facial landmarks
-                # and draw each of them
-                for (i, (x, y)) in enumerate(shape):
-                    cv2.circle(self._canvas_predict,
-                               (x, y), 1, (0, 0, 255), -1)
-                    if show_numbers:
-                        cv2.putText(self._canvas_predict,
-                                    str(i + 1), (x - 10, y - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.35,
-                                    (0, 0, 255), 1)
+        return metadata

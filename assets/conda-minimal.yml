@@ -1,0 +1,25 @@
+name: dl-toolbox
+channels:
+- pytorch
+- anaconda
+- conda-forge
+- defaults
+dependencies:
+- packaging
+- frozendict
+- numpy
+- matplotlib
+- imageio
+- opencv
+- keras
+- tensorflow-gpu
+- pytorch
+- torchvision
+- mtcnn
+- pyqt
+- gtk3
+- pygobject
+- appdirs
+- imutils
+- gitpython
+- tqdm

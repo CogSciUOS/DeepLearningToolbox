@@ -1,5 +1,5 @@
 from base import View as BaseView, Controller as BaseController, change, run
-from .datasource import Datasource, Labeled, Loop, Indexed
+from .datasource import Datasource, Labeled, Indexed
 from .array import DataArray
 from .directory import DataDirectory
 from .file import DataFile
@@ -19,11 +19,10 @@ class View(BaseView, view_type=Datasource):
     """
     _logger = logging.getLogger(__name__)
 
-
-    def __init__(self, datasource: Datasource=None, **kwargs):
+    def __init__(self, datasource: Datasource = None, **kwargs):
         super().__init__(observable=datasource, **kwargs)
 
-    
+
 class Controller(View, BaseController):
     """Base controller backed by a datasource. Contains functionality for
     manipulating input data from a data source.
@@ -54,13 +53,14 @@ class Controller(View, BaseController):
             kwargs['with_label'] = True
         if self.isinstance(Indexed):
             kwargs['index'] = self._datasource.index
-        return self._datasource.get_description(**kwargs) if self else "No data"
+        return (self._datasource.get_description(**kwargs)
+                if self else "No data")
 
     @property
     def index(self) -> int:
         """Get the current index in the :py:class:`Datasource`.
 
-        Result
+        Returns
         ------
         index: int
             The current index of this
@@ -139,7 +139,7 @@ class Controller(View, BaseController):
                 index = self._datasource.index
         self.set_index(index)
 
-    def set_data_array(self, data: np.ndarray=None):
+    def set_data_array(self, data: np.ndarray = None):
         """Set the data array to be used.
 
         Parameters
@@ -154,25 +154,6 @@ class Controller(View, BaseController):
         """Set the data file to be used."""
         self(DataFile(filename))
 
-    def set_data_directory(self, dirname: str=None):
+    def set_data_directory(self, dirname: str = None):
         """Set the directory to be used for loading data."""
         self(DataDirectory(dirname))
-
-    def loop(self, looping: bool=None):
-        """Start or stop looping through the Datasource.
-        This will fetch one data point after another.
-        This is mainly intended to display live input like
-        movies or webcam, but it can also be used for other Datasources 
-        """
-        if not isinstance(self._datasource, Loop):
-            return
-        if looping is not None and (looping == self.looping):
-            return
-        
-        if self.looping:
-            self._logger.info("Stopping datasource loop")
-            self.stop_loop()
-        else:
-            self._logger.info("Starting datasource loop")
-            self.start_loop()
-            self._runner.runTask(self._datasource.run_loop)

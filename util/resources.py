@@ -229,7 +229,7 @@ class Metaclass(type):
         return len
             
 
-from base.observer import BusyObservable, busy_message, change
+from base import BusyObservable, busy, change
 
 class Resource(BusyObservable, method='resource_changed',
                changes=['status_changed'],
@@ -430,13 +430,13 @@ class ModuleResource(Resource):
         """Check, if this :py:class:`ModuleResource` was prepared,
         that is, if the module was imported.
 
-        Result
+        Returns
         ------
         True if the module was already imported, False otherwise.
         """
         return self._module in sys.modules
 
-    @busy_message("Import module")
+    @busy("Import module")
     def prepare(self):
         """Prepare this :py:class:`ModuleResource`, that is,
         import the module.
@@ -480,7 +480,7 @@ class ModuleResource(Resource):
             version = "loaded, no version"
         return version
 
-    @busy_message("Install module")
+    @busy("Install module")
     def install(self, method: str='auto', channel: str=''):
         """Install this :py:class:`ModuleResource`
 

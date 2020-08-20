@@ -1,60 +1,86 @@
+"""Utitlity image functions to be used by different parts of the Toolbox.
+This module should only depend on standard imports and third party packages
+but should not use any toolbox functionality.
+"""
+
+# standard imports
 import sys
 import logging
 
+# third party imports
 import numpy as np
+
+# logging
+LOG = logging.getLogger(__name__)
+
+
+# There are several Python packages around that provide function for
+# image I/O and image manipulation:
+#
+# * imageio:
+#   several image I/O functions, including video and webcam access
+#   Python 3.5+
+#   https://imageio.github.io/
+#   https://github.com/imageio/imageio
+#   https://imageio.readthedocs.io/en/stable/
+#   Version 2.8.0 - February 2020
+#
+# * cv2 (OpenCV):
+#   functionality for image I/O, including video and webcam access (via ffmpeg)
+#   resizing, drawing, ...
+#   https://pypi.org/project/opencv-python
+#   Version 4.2.0.32 - Februar 2020
+#
+# * scikit-image:
+#   Image processing algorithms for SciPy, including IO, morphology, filtering, warping, color manipulation, object detection, etc.
+#   https://scikit-image.org/
+#   https://pypi.org/project/scikit-image/
+#   Version 0.16.2 - October 2019
+#
+# * mahotas
+#   Computer Vision in Python. It includes many algorithms implemented
+#   in C++ for speed while operating in numpy arrays and with a very
+#   clean Python interface.
+#   https://github.com/luispedro/mahotas
+#   https://mahotas.readthedocs.io/en/latest/
+#   Version 1.4.8 - October 2019
+#
+# * imutils: (by Adrian Rosebrock from PyImageSearch)
+#   A series of convenience functions to make basic image processing
+#   functions such as translation, rotation, resizing,
+#   skeletonization, displaying Matplotlib images, sorting contours,
+#   detecting edges, and much more easier with OpenCV
+#   https://github.com/jrosebr1/imutils
+#   Version 0.5.3 - August 2019
+#
+# * Pillow/PIL
+#   Pillow is the friendly PIL fork by Alex Clark and Contributors.
+#   PIL is the Python Imaging Library by Fredrik Lundh and Contributors.
+#   https://pypi.org/project/Pillow/
+#   Version 7.1.0 - April 2020
+
+
 
 try:
     from imageio import imread, imwrite
+    LOG.info("using imread, imwrite from imageio")
 except ImportError:
     try:
         from scipy.misc import imread, imsave as imwrite
+        LOG.info("using imread, imsave as imwrite from scipy.misc")
     except ImportError:
         try:
             from matplotlib.pyplot import imread, imsave as imwrite
+            LOG.info("using imread, imsave as imwrite from matplotlib.pyplot")
         except ImportError:
             # FIXME[hack]: better strategy to inform on missing modules
             explanation = ("Could not find any module providing 'imread'. "
                            "At least one such module is required "
                            "(e.g. imageio, scipy, matplotlib).")
-            logging.fatal(explanation)
+            LOG.fatal(explanation)
             sys.exit(1)
         # maybe also cv2, but convert the colorchannels
 
-# FIXME[todo]: imresize:
-#
-# The documentation of scipy.misc.imresize says that imresize is
-# deprecated! Use skimage.transform.resize instead. But it seems
-# skimage.transform.resize gives different results from
-# scipy.misc.imresize.
-#  https://stackoverflow.com/questions/49374829/scipy-misc-imresize-deprecated-but-skimage-transform-resize-gives-different-resu
-#
-# -> Try using scipy.ndimage.interpolation.zoom()
-#
-# * cv2.resize(image,(width,height))
-# * mahotas.imresize(img, nsize, order=3)
-#   This function works in two ways: if nsize is a tuple or list of
-#   integers, then the result will be of this size; otherwise, this
-#   function behaves the same as mh.interpolate.zoom
-#
-# * mahotas.interpolate.zoom
-# * imutils.resize
-
-try:
-    # rescale, resize, downscale_local_mean
-    # image_rescaled = rescale(image, 0.25, anti_aliasing=False)
-    # image_resized = resize(image, (image.shape[0] // 4, image.shape[1] // 4), anti_aliasing=True)
-    # image_downscaled = downscale_local_mean(image, (4, 3))
-    from skimage.transform import resize as imresize
-except ImportError:
-    try:
-        from scipy.misc import imresize
-    except ImportError:
-        # FIXME[hack]: better strategy to inform on missing modules
-        explanation = ("Could not find any module providing 'imresize'. "
-                       "At least one such module is required "
-                       "(e.g. skimage, scipy, cv2).")
-        logging.fatal(explanation)
-        sys.exit(1)
 
 class Location:
 
@@ -124,6 +150,10 @@ class PointsBasedLocation:
     def points(self):
         return self._points
 
+    def __len__(self):
+        return len(self._points)
+
+    
 class Landmarks(PointsBasedLocation):
 
     def __len__(self) -> int:
@@ -225,7 +255,7 @@ class BoundingBox(PointsBasedLocation):
 
         
 class Region:
-    """A region in an image.
+    """A region in an image, optionally annotated with attributes.
 
     Attributes
     ----------

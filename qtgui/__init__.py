@@ -1,9 +1,12 @@
+from toolbox import Toolbox
+
 from . import panels
 from . import widgets
 
 from PyQt5.QtWidgets import QApplication
 
-def create_gui(argv=[], toolbox_controller=None, **kwargs):
+
+def create_gui(argv=[], toolbox: Toolbox = None, **kwargs):
     """Create the Qt based graphical user interface (GUI) for the
     Toolbox.
 
@@ -17,8 +20,10 @@ def create_gui(argv=[], toolbox_controller=None, **kwargs):
     """
     # postpone import of mainwindow for performance reasons
     from .mainwindow import DeepVisMainWindow
+    if toolbox.option('firefox_bug'):
+        mainwindow.BUG = True
 
     application = QApplication(argv)
-    mainWindow = DeepVisMainWindow(application, toolbox_controller, **kwargs)
+    mainWindow = DeepVisMainWindow(application, toolbox, **kwargs)
 
     return mainWindow

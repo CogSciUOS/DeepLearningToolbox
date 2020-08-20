@@ -11,13 +11,7 @@ class Network(KerasNetwork):
         # The only way to configure the keras backend appears to be
         # via environment variable. We thus inject one for this
         # process. Keras must be loaded after this is done
-        os.environ['KERAS_BACKEND'] = 'theano'
         super(Network, cls).import_framework()
-
-    @classmethod
-    def framework_available(cls):
-        print('Currently, only TF backend is supported', file=sys.stderr)
-        return False
 
     def __init__(self, **kwargs):
         """

@@ -1,21 +1,24 @@
+"""Base class for face detectors
+"""
+
+# third party imports
 import imutils
 import imutils.face_utils
 import numpy as np
 
-from util.image import imresize, BoundingBox
-from base.observer import Observable, change
-from base.register import RegisterMetaclass
-from datasource import Metadata
-from tools.detector import (ImageDetector as BaseDetector,
-                            ImageController as Controller)
+# toolbox imports
+from ..detector import ImageDetector as BaseDetector
 
 
-class Detector(BaseDetector, metaclass=RegisterMetaclass):
+class Detector(BaseDetector):
+    # pylint: disable=too-many-ancestors
     """Base class for face detectors.
     """
 
     @staticmethod
-    def create(name: str, prepare: bool=True):
+    def create(name: str, prepare: bool = True):
+        """Create a new face detector.
+        """
         if name == 'haar':
             from .opencv import DetectorHaar
             detector = DetectorHaar()
@@ -36,9 +39,10 @@ class Detector(BaseDetector, metaclass=RegisterMetaclass):
             detector.prepare()
         return detector
 
-
-    
+    #
     # FIXME[old]
+    #
+
     def paint_detect(self, canvas: np.ndarray, rects, color=(255, 0, 0)):
         """Mark detected faces in an image.
 
@@ -54,7 +58,10 @@ class Detector(BaseDetector, metaclass=RegisterMetaclass):
         """
         if rects is None:
             return
- 
+
+        import cv2
+        import dlib
+
         # check to see if a face was detected, and if so, draw the total
         # number of faces on the image
         if True or len(rects) > 0:
@@ -65,19 +72,14 @@ class Detector(BaseDetector, metaclass=RegisterMetaclass):
                             0.5, color, 2)
         # loop over the face detections
         if canvas is not None:
-            for rect in rects:      
+            for rect in rects:
                 # compute the bounding box of the face and draw it on the
                 # image
                 if isinstance(rect, dlib.rectangle):
-                    bX, bY, bW, bH = imutils.face_utils.rect_to_bb(rect)
+                    pos_x, pos_y, width, height = \
+                        imutils.face_utils.rect_to_bb(rect)
                     # rect is of type <class 'dlib.rectangle'>
                 else:
-                    bX, bY, bW, bH = rect
-                cv2.rectangle(canvas, (bX, bY), (bX + bW, bY + bH), color, 1)
-
-
-Detector.register('haar', 'tools.face.opencv', 'DetectorHaar')
-Detector.register('ssd', 'tools.face.opencv', 'DetectorSSD')
-Detector.register('hog', 'tools.face.dlib', 'DetectorHOG')
-Detector.register('cnn', 'tools.face.dlib', 'DetectorCNN')
-Detector.register('mtcnn', 'tools.face.mtcnn', 'DetectorMTCNN')
+                    pos_x, pos_y, width, height = rect
+                cv2.rectangle(canvas, (pos_x, pos_y),
+                              (pos_x + width, pos_y + height), color, 1)

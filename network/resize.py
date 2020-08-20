@@ -8,19 +8,19 @@ contain a resized version of the original image.
 
 .. moduleauthor:: Rasmus Diederichsen
 '''
-from datasource import Datasource, InputData
 from network import Network
 import numpy as np
 
 
 class _ResizePolicyBase(object):
-    '''Base class defining common properties of all resizing policies.
+    """Base class defining common properties of all resizing policies.
 
     Attributes
     ----------
-    _new_shape  :   tuple
-                    The shape to convert images to. Will be stripped of singular dimensions
-    '''
+    _new_shape: tuple
+        The shape to convert images to. Will be stripped of singular
+        dimensions.
+    """
     _new_shape: tuple = None
 
     def setShape(self, new_shape):
@@ -51,22 +51,26 @@ class _ResizePolicyBase(object):
         image   :   np.ndarray
                     Image to resize
         '''
-        raise NotImplementedError('Abstract base class ResizePolicy cannot be used directly.')
+        raise NotImplementedError("Abstract base class ResizePolicy "
+                                  "cannot be used directly.")
 
 
 class ResizePolicyBilinear(_ResizePolicyBase):
-    '''Resize policy which bilinearly interpolates images to the target size.'''
+    """Resize policy which bilinearly interpolates images to the target
+    size.
+
+    """
 
     def resize(self, img):
-        from util.image import imresize
+        from dltb.util.image import imresize
 
         if self._new_shape is None:
             return img
-        
+
         if self._new_shape[0:2] == img.shape[0:2]:
             return img
-        
-        #return resize(img, self._new_shape, preserve_range=True)
+
+        # return resize(img, self._new_shape, preserve_range=True)
         return imresize(img, self._new_shape[0:2])
 
 
@@ -180,7 +184,7 @@ class ResizePolicy(object):
 class ShapeAdaptor:
     '''Adaptive wrapper around a :py:class:`Datasource`'''
 
-    def __init__(self, resize_policy, network: Network=None):
+    def __init__(self, resize_policy, network: Network = None):
         '''
         Parameters
         ----------

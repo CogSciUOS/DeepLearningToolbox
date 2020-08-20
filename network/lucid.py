@@ -1,5 +1,4 @@
-from collections import OrderedDict
-from frozendict import FrozenOrderedDict
+from collections import OrderedDict  # new in version 2.7
 
 import logging
 logger = logging.getLogger(__name__)
@@ -27,19 +26,19 @@ class Network(TensorflowNetwork):
 
         (<tf.Tensor 'Placeholder:0' shape=(227, 227, 3) dtype=float32>,
           <tf.Tensor 'add:0' shape=(1, ?, ?, 3) dtype=float32>)
-          
+
     The method can be called multiple times and will each time
     create a new Placeholder.
 
     _model: LucidModel
     _name: str
-    
+
     _dataset: str
         'ImageNet'
 
     """
 
-    def __init__(self, model: LucidModel=None, name: str=None, **kwargs):
+    def __init__(self, model: LucidModel = None, name: str = None, **kwargs):
         self._model = nets.models_map[name]() if model is None else model
         self._name = name
         logger.debug(f"New LucidNetwork({name}) {self._model}")
@@ -61,7 +60,7 @@ class Network(TensorflowNetwork):
         """
         return self._name
 
-    def _create_layer_dict(self) -> FrozenOrderedDict:
+    def _create_layer_dict(self) -> OrderedDict:
         """Try to find the sequences in operations of the graph that
         match the idea of a layer.
 
@@ -100,5 +99,5 @@ class Network(TensorflowNetwork):
             logger.debug(lucid_layer)
             operation = self._graph.get_operation_by_name(lucid_layer['name'])
 
-        layer_dict = FrozenOrderedDict(layer_dict)
+        layer_dict = OrderedDict(layer_dict)
         return layer_dict

@@ -1,17 +1,26 @@
-import os
-import sys
+"""Abstract base class for detectors.
+"""
+# standard imports
 import time
-import importlib
+import logging
+
+# third party imports
 import numpy as np
 import imutils
 
-from base.observer import BusyObservable, change, busy
-from base import View as BaseView, Controller as BaseController, run
-from datasource import Metadata
+# toolbox imports
+from base import busy
+from datasource import Data, Metadata
+from .tool import Processor
 
-class Detector(BusyObservable, method='detector_changed',
+# logging
+LOG = logging.getLogger(__name__)
+
+
+class Detector(Processor, method='detector_changed',
                changes=['data_changed', 'detection_finished']):
-    """A general detector. 
+    # pylint: disable=too-many-ancestors
+    """A general detector.
 
     detector_changed:
         The input data given to the detector have changed.
@@ -20,94 +29,54 @@ class Detector(BusyObservable, method='detector_changed',
         The detection has finished. This is reported when the
         detector has finished its work.
 
-    """    
-    _requirements = None
+    Attributes
+    ----------
+    _data:
+    _next_data:
+    _detections:
+    """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._data = None
+        self._next_data = None
+        self._detections = None
 
-    def __init__(self):
-        super().__init__()
-        self._requirements = {}
+    def __str__(self) -> str:
+        return f"{type(self).__name__}[{self.key}]"
 
-    def _add_requirement(self, name, what, *data):
-        self._requirements[name] = (what,) + data
+    #
+    # Detector
+    #
 
-    def _remove_requirement(self, name):
-        self._requirements.pop(name, None)
+    @busy("detecting")
+    def detect(self, data: Data, **kwargs):
+        """Apply the detector to the given data.
 
-    def available(self, verbose=True):
-        """Check if required resources are available.
+        Detection will be run asynchronously and set the detector
+        in a busy state ('detecting').
         """
-        for name, requirement in self._requirements.items():
-            if requirement[0] == 'file':
-                if not os.path.exists(requirement[1]):
-                    if verbose:
-                        print(type(self).__name__ +
-                              f": File '{requirement[1]}' not found")
-                    return False
-            if requirement[0] == 'module':
-                if requirement[1] in sys.modules:
-                    continue
-                spec = importlib.util.find_spec(requirement[1])
-                if spec is None:
-                    print(type(self).__name__ +
-                          f": Module '{requirement[1]}' not found")
-                    return False
-        return True
-        
-    def install(self):
-        """Install the resources required for this module.
-        """
-        raise NotImplementedError("Installation of resources for '" +
-                                  type(self).__name__ +
-                                  "' is not implemented (yet).")
-
-    @busy
-    def prepare(self, install: bool=False):
-        """Load the required resources.
-        """
-        if self.prepared():
-            return
-
-        # FIXME[concept]:
-        # In some situations, one requirement has to be prepared in
-        # order to check for other requirements.
-        # Example: checking the availability of an OpenCV data file
-        # may require the 'cv2' module to be loaded in order to construct
-        # the full path to that file.
-
-        for name, requirement in self._requirements.items():
-            if requirement[0] == 'module' and requirement[1] not in globals():
-                globals()[requirement[1]] = \
-                    importlib.import_module(requirement[1])
-
-        if not self.available(verbose=True):
-            if install:
-                self.install()
-            else:
-                raise RuntimeError("Resources required to prepare '" +
-                                   type(self).__name__ +
-                                   "' are not installed.")
-        self._prepare()
-
-    def _prepare(self):
-        pass
-
-    def prepared(self):
-        return True
-
-    def detect(self, data, **kwargs):
-        if not self.prepared():
+        if not self.prepared:
             raise RuntimeError("Running unprepared detector.")
 
-        if data is None:
-            return None
-        
-        start = time.time()
-        detections = self._detect(data, **kwargs)
-        end = time.time()
+        LOG.info("Running detector '%s' on data %r", self.key, data)
 
-        if detections is not None:
+        if not data:
+            return None
+
+        detector_in = getattr(data, self.key + '_in', data.data)
+
+        try:
+            start = time.time()
+            detections = self._detect(detector_in, **kwargs)  # Metadata
+            end = time.time()
             detections.duration = end - start
+        except Exception:
+            LOG.error("MTCNN: error during detection!")
+            raise
+
+        LOG.info("Detector '%s' finished after %.4fs",
+                 self.key, detections.duration)
 
         return detections
 
@@ -122,79 +91,33 @@ class Detector(BusyObservable, method='detector_changed',
                                   type(self).__name__ +
                                   "' is not implemented (yet).")
 
+    #
+    # Processor
+    #
 
-class DetectorView(BaseView, view_type=Detector):
-    """Viewer for :py:class:`Engine`.
-
-    Attributes
-    ----------
-    _engine: Engine
-        The engine controlled by this Controller
-
-    """
-
-    def __init__(self, engine: Detector=None, **kwargs):
-        super().__init__(observable=engine, **kwargs)
-
-
-class DetectorController(DetectorView, BaseController):
-    """Controller for :py:class:`Engine`.
-    This class contains callbacks for all kinds of events which are
-    effected by the user in the ``MaximizationPanel``.
-
-    Attributes
-    ----------
-    _engine: Engine
-        The engine controlled by this Controller
-    """
-    
-    def __init__(self, engine: Detector, **kwargs) -> None:
+    def _process_data(self, next_data):
+        """Process the given data. This will run the detector on
+        the data and add the detection results as new attribute
+        'detections'.
         """
-        Parameters
-        ----------
-        engine: Engine
-        """
-        super().__init__(engine=engine, **kwargs)
-        self._data = None
-        self._next_data = None
-        self._detections = None
-
-    @run
-    def prepare(self, install: bool=False):
-        print(f"Prepare {self.__class__.__name__} for {self._detector.__class__.__name__}:")
-        start = time.time()
-        self._detector.prepare(install)
-        end = time.time()
-        print(f"Preparation of {self.__class__.__name__} for {self._detector.__class__.__name__} finished after {end-start:.4f}s")
-
-    def process(self, data):
-        """Process the given data.
-
-        """
-        self._next_data = data
-        if not self._detector.busy:
-            self._detector.busy = True  # FIXME[todo]: better API
-            self._process()
-
-    @run
-    def _process(self):
-        #self._detector.busy = True
-        while self._next_data is not None:
-
-            self._data = self._next_data
-            self._next_data = None
-            self._detector.change(data_changed=True)
-
-            print(f"Detect {self.__class__.__name__} for {self._detector.__class__.__name__}:")
-            
-            self._detections = self._detector.detect(self._data)
-            print(f"Detection of {self.__class__.__name__} for {self._detector.__class__.__name__} finished after {self._detections.duration:.4f}s")
-            self._detector.change(detection_finished=True)
-
-        self._detector.busy = False
+        detector_data = Data(data=next_data.data)
+        detector_data.add_attribute('detections', batch=True)
+        next_data.add_attribute(self.key, self._data)
+        self._data = detector_data
+        self.change(data_changed=True)
+        LOG.info("processing loop <%s> passes <%s> to detector",
+                 self, self._data)
+        detections = self.detect(self._data)
+        self._data.detections = detections
+        self.change(detection_finished=True)
 
     @property
     def data(self):
+        """The :py:class:`Data` structure used by the detector.
+        This data will contain the detections in the attribute
+        `detections`. The data also includes the `duration`
+        (in seconds).
+        """
         return self._data
 
     @property
@@ -202,16 +125,22 @@ class DetectorController(DetectorView, BaseController):
         """A metadata holding the results of the last invocation
         of the detector.
         """
-        return self._detections   
+        return getattr(self._data, 'detections', None)
 
 
 class ImageDetector(Detector):
+    # pylint: disable=too-many-ancestors
+    """A detector to be applied to image data.
+    """
 
-    
-    def detect(self, image, **kwargs):
-        if image is None:
+    def detect(self, data: Data, **kwargs) -> Metadata:
+        """Apply the detector to a given image.
+        """
+        if not data:
             return None
-        
+
+        image = data.data
+
         resize_ratio = image.shape[1]/400.0
         image = imutils.resize(image, width=400)
 
@@ -219,19 +148,17 @@ class ImageDetector(Detector):
             raise ValueError("The image provided has an illegal format: "
                              f"shape={image.shape}, dtype={image.dtype}")
 
-        detections = super().detect(image, **kwargs)
-        
+        data.add_attribute(self.key + '_in', image)
+
+        detections = super().detect(data, **kwargs)
+
         if detections is not None and resize_ratio != 1.0:
             detections.scale(resize_ratio)
 
         return detections
 
-
-# FIXME[todo]: Controller logic: deriving a Controller
-# make sure that this Controller controls an
-# ImageDetector (not any general Detector)
-class ImageController(DetectorController):
-
     @property
     def image(self):
+        """The image processed by this :py:class:`ImageDetector`.
+        """
         return self.data

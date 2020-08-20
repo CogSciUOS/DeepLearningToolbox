@@ -1,104 +1,282 @@
 # Classify input data using a network.
 #
 
-# FIXME[clean]: This code is taken from
-# "models/example_tf_alexent/test_alexnet.py". Remove that file once
-# this test script is working.
-
-
-# FIXME[todo]: we need the following in the PYTHONPATH
-#  - the project root dir (to load TensorFlowNetwork from the network package)
-
-# FIXME[todo]: we should allow for other networks than the hard coded
-# AlexNet!
 
 # FIXME[concept]: there should be a connection between network
 #   and suitable datasets/labels, i.e., AlexNet should provide
 #   class labels, even if not applied to ImageNet data
 
-import os
-import sys
+# standard imports
+from typing import Union, Tuple
+import logging
 
-from network.tensorflow import Network as TensorFlowNetwork
-from network.loader import load_alexnet
+# third party imports
+import numpy as np
 
-# import tensorflow as tf
-#if tf.test.gpu_device_name():
-#    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-#else:
-#    print("Please install GPU version of TF")
-#print(tf.list_devices())
-#print(tf.test.is_built_with_cuda())
-
-from datasource import DataFiles, ImageNet
-
+# toolbox imports
+from datasource.data import Data, ClassScheme, ClassIdentifier
 
 # FIXME[hack]: instead of prepare_input_image use the network.resize
 # API once it is finished!
-import numpy as np
-from util.image import imresize
+from dltb.util.image import imread, imresize
 
-def prepare_input_image(input_data):
-    im = (input_data[0][:,:,:3]).astype(np.float32)
-    im = imresize(im, (227,227)) # FIXME[hack]: ImageNet/AlexNet!
-    im = im - im.mean()
-    im[:, :, 0], im[:, :, 2] = im[:, :, 2], im[:, :, 0]
-    return im
+# logging
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 
-#import cv2
 
-def main():
+class Classifier:
+    """A :py:class:`Classifier` is associated with a classification
+    scheme, describing the set of classes ("labels").  Output units of
+    the network have to be mapped to the class labels.
+
+
+    Attributes
+    ----------
+
+    _scheme: ClassScheme
+        The classification scheme applied by this classifier.
+
+    _lookup: str
+        The name of the lookup table used to map network outputs to
+        classes of the classification scheme.  The classification scheme
+        has to support this lookup table.
+
+    """
+    def __init__(self, scheme: Union[ClassScheme, str],
+                 lookup: str = None, **kwargs):
+        LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
+        super().__init__(**kwargs)
+        if isinstance(scheme, str):
+            scheme = ClassScheme.register_initialize_key(scheme)
+        self._scheme = scheme
+        self._lookup = lookup
+
+    @property
+    def class_scheme(self) -> ClassScheme:
+        """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
+        """
+        return self._scheme
+
+    @property
+    def class_scheme_lookup(self) -> str:
+        """The lookup table to be used to map the (internal) results of this
+        :py:class:`Classifier` to a class from the
+        :py:class:`ClassScheme`.
+        """
+        return self._lookup
+
+    def _prepare(self, **kwargs) -> None:
+        """Prepare this :py:class:`Classifier`.
+
+        Raises
+        ------
+        ValueError
+            If the :py:class:`ClassScheme` does not fit to this
+            :py:class:`Classifier`.
+        """
+        super()._prepare()
+        self._scheme.prepare()
+
+    def preprocess(self, data: Data) -> None:
+        """Preprocess the given data to a format suitable to be processed by
+        this :py:class:`Classifier`. The actual operations to be
+        performed depend on the requirements of the
+        :py:class:`Classifier` and have to be implemented by the
+        classifier.
+
+        """
+        pass
+
+    def classify(self, inputs: np.ndarray, top: int = None):
+        """Output the top-n classes for given batch of inputs.
+
+        Arguments
+        ---------
+        inputs: np.ndarray
+            A batch of input data to classify.
+
+        Results
+        -------
+        classes:
+            A list of class-identifiers or a
+            list of tuples of class identifiers.
+        score:
+            If top is None, a one-dimensial array of confidence values or
+            otherwise a two-dimension array providing the top highest
+            confidence values for each input item.
+        """
+        raise NotImplementedError()
+
+
+class SoftClassifier(Classifier):
+
+    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+        raise NotImplementedError()
+
+    def classify(self, inputs: np.ndarray, top: int = None):
+        """Output the top-n classes for given batch of inputs.
+
+        Arguments
+        ---------
+        inputs: np.ndarray
+            A batch of input data to classify.
+
+        Results
+        -------
+        classes:
+            A list of class-identifiers or a
+            list of tuples of class identifiers.
+        score:
+            If top is None, a one-dimensial array of confidence values or
+            otherwise a two-dimension array providing the top highest
+            confidence values for each input item.
+        """
+        return self.top_classes(self.class_scores(inputs), top=top)
 
     #
-    # Load the network
+    # Utilities
     #
 
-    network = load_alexnet()
+    def top_classes(self, scores: np.ndarray,
+                    top: int = None) -> (list, np.ndarray):
+        """Get the network's top classification results for the
+        current input. The results will be sorted with highest ranked
+        class first.
 
-    # Output network information
-    print("network input shape: {}".format(network.get_input_shape()))
-    for id in network.layer_dict:
-        print(id)
+        Parameters
+        ----------
+        scores: np.ndarray
+            The class scores ("probabilities").
+        top: int
+            The number of results to report.
 
-    print(type(network._input_placeholder))
-    import tensorflow as tf
-    tensor = tf.get_default_graph().get_tensor_by_name('xw_plus_b:0')
-    print("tensor is ", tensor)
-    print("tensor[0] is ", tensor[0])
+        Returns
+        -------
+        classes:
+            The class indices.
+        scores:
+            The corresponding class scores, i.e., the output value
+            of the network for that class.
+        """
+
+        if scores is None:
+            return (None, None)  # no results
+
+        #
+        # compute the top n class scores
+        #
+
+        batch = np.arange(len(scores))
+        if top is None:
+            top_indices = np.argmax(scores, axis=-1)
+        else:
+            # Remark: here we could use np.argsort(-class_scores)[:n]
+            # but that may be slow for a large number classes,
+            # as it does a full sort. The numpy.partition provides a faster,
+            # though somewhat more complicated method.
+            top_indices_unsorted = np.argpartition(-scores, top)[batch, :top]
+            order = np.argsort((-scores)[batch, top_indices_unsorted.T].T)
+            top_indices = top_indices_unsorted[batch, order.T].T
+
+        # FIXME[hack]: best would be, if ClassIdentifier could deal with
+        # numpy.int. Until this is possible, we will use lists of int.
+        class_identifiers = []
+        for indices in top_indices:
+            if top is None:
+                identifiers = \
+                    self._scheme.identifier(indices, lookup=self._lookup)
+            else:
+                identifiers = \
+                    [self._scheme.identifier(cls, lookup=self._lookup)
+                     for cls in indices]
+            class_identifiers.append(identifiers)
+
+        return class_identifiers, scores[batch, top_indices.T].T
+
+    def class_rank(self, scores: np.ndarray,
+                   label: ClassIdentifier) -> (int, float):
+        """Check the rank (position) of a class identifier
+        in the given score table.
+
+        Arguments
+        ---------
+        scores: np.ndarray
+            An array of class scores (higher score indicating higher
+            confidence in the corresponding class).
+        label: ClassIdentifier
+            A class identifier for the class in question.
+
+        Results
+        -------
+        rank: int
+            Zero-based rank of the given class.  0 means that the
+            given class is the most likely one, while larger rank
+            indicates less confidence.
+        """
+        # FIXME[todo]: batch = np.arange(len(scores))
+        score = scores[label.label(self._lookup)]
+        rank = (scores > score).sum()
+
+        return rank, score
+
+    def print_classification(self, scores: np.ndarray, top: int = 5):
+        top_indices, top_scores = self.top_classes()
+        for i, (index, score) in enumerate(zip(top_indices, top_scores)):
+            print(f"  {i}: {index} ({score})")
 
 
-    #
-    # Load input data
-    #
-    images = []
-    if len(sys.argv) > 1:
-        # "laska.png", "poodle.png"
-        data_files = DataFiles(sys.argv[1:])
-        images.extend(map(prepare_input_image, data_files))
+class ImageClassifier(Classifier):
+    """An :py:class:`ImageClassifier` is a classifier for images.
+    """
 
-    if 'IMAGENET_DATA' in os.environ:
-        imagenet = ImageNet()
-        for i in range(3):
-            images.append(prepare_input_image(imagenet.random()))
+    def preprocess_image(self, image: np.ndarray) -> np.ndarray:
+        """Preprocess a single image to be in a format that
+        can be used as input for this :py:class:`ImageClassifier`.
+        This may include resizing the image, as well centering and
+        standardization.
+        """
+        # FIXME[todo]: concept ...
+        return image
 
-    print(len(images))
+    def _image_as_batch(self, image: Union[str, np.ndarray]) -> np.ndarray:
+        if isinstance(image, str):
+            # FIXME[todo]: general resizing/preprocessing strategy for networks
+            size = self.get_input_shape(include_batch=False,
+                                        include_channel=False)
+            image = imread(image)  # , size=size
+            image = imresize(image, size=size)
 
+        # add batch dimension
+        image = np.expand_dims(image, axis=0)
+        return image
 
-    #
-    # Classify
-    #
-    if len(images) > 0:
-        # The following requires OpenCV to be compiled against
-        # some GUI toolkit, which is not the case for a conda
-        # installation.
-        #for index, image in enumerate(images):
-        #    cv2.imshow('image' + str(index), image)
+    def classify_image(self, image: Union[str, np.ndarray],
+                       top: int = None, confidence: bool = False
+                       ) -> Union[ClassIdentifier, Tuple[ClassIdentifier]]:
+        """Classify the given image.
 
-        network.classify_top_n(images, 5)
+        Arguments
+        ---------
+        image: Union[str, np.ndarray]
+            The image to classify, either as image filename or as
+            numpy array.
+        top: int
+            Number of top classification results to report. If not provided,
+            the single best class will be returned
 
-        #cv2.waitKey(0)
-        #cv2.destroyAllWindows()
+        Result
+        ------
+        class or classes:
+            Either a single class or a tuple of the top best matches.
+        confidence(s) (optional):
+            If the confidence argument is True, the corresponding confidence
+            value (or a tuple of confidence values).
+        """
+        image_batch = self._image_as_batch(image)
+        classes, scores = self.classify(image_batch, top=top)
 
-
-if __name__ == "__main__":
-    main()
+        if confidence:
+            return classes[0], scores[0]
+        else:
+            return classes[0]

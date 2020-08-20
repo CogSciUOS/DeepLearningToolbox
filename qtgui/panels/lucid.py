@@ -10,7 +10,8 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QSpinBox,
                              QComboBox, QListWidget, QLineEdit,
                              QVBoxLayout, QHBoxLayout, QFormLayout)
 from .panel import Panel
-from ..utils import QImageView
+from ..utils import QObserver
+from ..widgets.image import QImageView
 
 import numpy as np
 import tensorflow as tf
@@ -21,7 +22,9 @@ from tools.lucid import (Engine as LucidEngine, EngineObserver, EngineChange,
                          Controller as LucidController)
 
 
-class LucidPanel(Panel, QObserver, LucidEngine.Observer):
+class LucidPanel(Panel, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        LucidEngine: LucidEngine.Change.all()):
     """A Panel displaying lucid visualizations.
 
     https://colab.research.google.com/github/tensorflow/lucid/blob/master/notebooks/tutorial.ipynb#scrollTo=8hrCwdxhcUHn
@@ -37,8 +40,8 @@ class LucidPanel(Panel, QObserver, LucidEngine.Observer):
       visualization to be robust to?
 
 
-    Objectives
-    ----------
+    Examples
+    --------
     1. Let's visualize another neuron using a more explicit objective:
         obj = objectives.channel("mixed4a_pre_relu", 465)
         
@@ -48,8 +51,7 @@ class LucidPanel(Panel, QObserver, LucidEngine.Observer):
          channel = lambda n: objectives.channel("mixed4a_pre_relu", n)
          obj = channel(476) + channel(465)
 
-    Transformation Robustness
-    -------------------------
+    **Transformation Robustness**
 
     Recomended reading: The Feature Visualization article's section
     titled The Enemy of Feature Visualization discusion of
@@ -57,11 +59,16 @@ class LucidPanel(Panel, QObserver, LucidEngine.Observer):
     diagram that allows you to easily explore how different kinds of
     transformation robustness effects visualizations.
 
-    1. No transformation robustness
+    1. No transformation robustness::
+
         transforms = []
-    2. Jitter 2
+
+    2. Jitter 2::
+
         transforms = [ transform.jitter(2) ]
-    3. Breaking out all the stops
+
+    3. Breaking out all the stops::
+
         transforms = [
            transform.pad(16),
            transform.jitter(8),
@@ -70,8 +77,7 @@ class LucidPanel(Panel, QObserver, LucidEngine.Observer):
            transform.jitter(2)
          ]
 
-    Experimenting with parameterization
-    -----------------------------------
+    **Experimenting with parameterization**
 
     Recomended reading: The Feature Visualization article's section on
     Preconditioning and Parameterization
@@ -217,7 +223,7 @@ class QLucidModelView(QWidget):
     
     Attributes
     ----------
-    _engine: Engine
+    _engine: LucidEngine
         A Lucid engine that is used as a wrapper to the actual Lucid
         classes.
 
@@ -237,7 +243,7 @@ class QLucidModelView(QWidget):
         super().__init__(parent)
         self.initUI()
 
-    def setEngine(self, engine: Engine) -> None:
+    def setEngine(self, engine: LucidEngine) -> None:
         def slot(text):
             try: engine.layer = text[:text.index(':')]
             except ValueError: engine.layer = None

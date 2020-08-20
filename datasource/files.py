@@ -1,28 +1,28 @@
-from datasource import Datasource, InputData
+from .datasource import Indexed, Data
 from util.image import imread
 
-from os.path import join
+from typing import List
+import os
 import numpy as np
+from abc import abstractmethod
 
 # FIXME[todo]: maybe combined with DataDirectory to profit from
 # common features, like prefetching, caching, etc.
 
 
-class DataFiles(Datasource):
+class DataFiles(Indexed):
     """Data source for reading from a collection of files.
 
     Attributes
     ----------
-    _filenames   :  list of str
-                    The names of the files from which the data are read.
+    filenames: List[str]
+        The names of the files from which the data are read.
+    directory: str
+        Base directory relative to which filname
     """
 
-    _dirname: str = None
-    _filenames: list = None
-    _current_index: int = 0
-    _current_data: np.ndarray = None
-
-    def __init__(self, filenames: list, dirname=None):
+    def __init__(self, filenames: List[str] = None,
+                 directory: str = None, **kwargs) -> None:
         """Create a new DataFiles data source.
 
         Parameters
@@ -30,39 +30,110 @@ class DataFiles(Datasource):
         filename    :   list of str
                         Names of the files containing the data
         """
-        super().__init__()
-        self._dirname = dirname
-        if filenames is not None:
-            self.setFilenames(filenames)
-
-    def setFilenames(self, filenames: list):
-        """Set the data file to be used.
-
-        Parameters
-        ----------
-        filename    :   list of str
-                        Name of the files containing the data
-        """
+        super().__init__(**kwargs)
+        self._directory = directory
         self._filenames = filenames
-        self._current_index = 0
-
-    def __getitem__(self, index: int):
-        """Provide access to the records in this data source."""
-        self._current_index = index
-        filename = self.getFile()
-        self._current_data = imread(filename)
-        return InputData(self._current_data, filename)
-
-    def __len__(self):
-        """Get the number of entries in this data source."""
-        return len(self._filenames)
-
-    def getFile(self) -> str:
-        """Get the underlying file name"""
-        filename = self._filenames[self._current_index]
-        if self._dirname is not None:
-            filename = join(self._dirname, filename)
-        return filename
 
     def __str__(self):
-        return f'<DataFiles "{self._filename[self._current_index]}"'
+        return f'<DataFiles with "{self.prepared and len(self)} files>'
+
+    def __len__(self):
+        """The length of a :py:class:`DataDirectory` is the number
+        of files in the directory.
+        """
+        return self.prepared and len(self._filenames) or 0
+
+    @property
+    def directory(self):
+        return self._directory
+
+    @directory.setter
+    def directory(self, directory: str):
+        if directory != self.directory:
+            self._set_directory(directory)
+
+    def _set_directory(self, directory: str):
+        self._directory = directory
+
+    ##
+    # Preparable
+    ##
+
+    def _preparable(self) -> bool:
+        return (self.directory is not None and os.path.isdir(dirname) and
+                super()._prepeparable())
+
+    def _prepared(self) -> bool:
+        """Check if this Directory has been prepared.
+        """
+        return self._filenames is not None
+
+    # FIXME[todo]: concept - provide some idea how the filelist can be
+    # prepared (including cache files)- combine this with DataDirectory
+
+    ##
+    # Data
+    ##
+
+    def _get_meta(self, data: Data, filename: str = None, **kwargs) -> None:
+        if filename is not None and not data.datasource_argument:
+            data.datasource_argument = 'filename'
+            data.datasource_value = filename
+        data.add_attribute('filename', batch=True)
+        if self._filenames is not None:
+            data.add_attribute('index', batch=True)
+        super()._get_meta(data, **kwargs)
+
+    def _get_data(self, data: Data, filename: str = None, **kwargs) -> None:
+        """
+
+        Attributes
+        ----------
+        filename: str
+            The filename (relative to this directory).
+        index: int
+            A numerical index of the file. This argument can only be
+            used, if the :py:class:`DataDirectory` has initialized
+            a filename register.
+
+        Raises
+        ------
+        ValueError:
+            If the index is present, but the :py:class:`DataDirectory`
+            has no filename register.
+        """
+        if filename and not data:
+            self._get_data_from_file(data, filename)
+        super()._get_data(data, **kwargs)
+
+    @abstractmethod
+    def _get_data_from_file(self, data: Data, filename: str):
+        """Get data from a given file.
+
+        Arguments
+        ---------
+        filename: str
+            The filename (relative to this directory).
+
+        Notes
+        -----
+        Subclasses implementing this method may utilize
+        :py:meth:`load_datapoint_from_file` to load the actual data.
+
+        """
+        abs_filename = os.path.join(self.directory, filename)
+        data.data = self.load_datapoint_from_file(abs_filename)
+        data.filename = abs_filename
+        if self._filenames is not None and not hasattr(data, 'index'):
+            # FIXME[todo]: This can be improved by reverse lookup table
+            data.index = self._filenames.index(filename)
+
+    def _get_index(self, data: Data, index: int, **kwargs) -> None:
+        """Implementation of the :py:class:`Indexed` interface. Lookup
+        up data point by its index in the file list.
+        """
+        if self._filenames is None:
+            raise ValueError(f"Access by index ({index})is disabled: "
+                             "DataDirectory has no filename register")
+        data.index = index
+        self._get_data_from_file(data, self._filenames[index])

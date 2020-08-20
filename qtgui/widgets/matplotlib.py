@@ -13,7 +13,10 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
 class QMatplotlib(FigureCanvas):
-    
+    """A Qt widget that holds a MatPlotLib :py:class:`Figure`.
+    The figure can be accessed as property `figure`.
+    """
+
     def __init__(self, parent=None, figsize=(8, 3)):
         super().__init__(Figure(figsize))
 

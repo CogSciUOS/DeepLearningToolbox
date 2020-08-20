@@ -1,4 +1,3 @@
-
 """
 
 FIXME[concept]: we need some concept to run the Toolbox
@@ -26,66 +25,73 @@ Concepts:
 
 
 #
-# FIXME[hack]: There should be no direct access to the GUI (MainWindow).
-#  All interaction should be initiated via events
+# FIXME[todo]: Direct access to the GUI (MainWindow) should be reduced
+# to a minimum. Most interaction should be initiated via events
 #
 # Current methods we access in the GUI:
-#   - self._gui.getRunner()
-#   - self._gui.showStatusResources
-#   - self._gui.safe_timer
-#   - self._gui.stop_timer()
+#   - self._gui = gui_module.create_gui()
 #   - self._gui.run()
 #   - self._gui.stop()
 #   - self._gui.panel()
+#
+# We also call the following, which should be avoided:
+#   - self._gui.getRunner()
+#
 #   - self._gui.setLucidEngine()
 #   - self._gui.setActivationEngine()
 #
 # Changing global logging Handler
 #
 
+# standard imports
 import os
 import sys
-
+import signal
+import threading
+from typing import Iterable, Union
 from argparse import ArgumentParser
 import importlib.util
-
 import logging
 
+# third party imports
+import numpy as np
+
+# toolbox imports
+import util
+from util import addons
+from base import BusyObservable, Runner, Controller as BaseController
+
+# FIXME[todo]: speed up initialization by only loading frameworks
+# that actually needed
+
+# FIXME[todo]: this will load tensorflow!
+from network import Network, AutoencoderController
+# from network.examples import keras, torch
+from datasource import Datasource, Loop, Data, DataDirectory
+from tools import Tool
+from tools.train import TrainingController
+from .process import Process
+
+# logging
+
 # The local Toolbox loggger
-logger = logging.getLogger(__name__)
-logger.info(f"Effective log level for logger '{__name__}': {logger.getEffectiveLevel()}")
+LOG = logging.getLogger(__name__)
+LOG.info("Effective log level for logger '%s': %d",
+         __name__, LOG.getEffectiveLevel())
 
 # FIXME[hack]: silencing the matplotlib logger.
 # The 'matplotlib' plotter seems to be set on `logging.DEBUG`, causing
 # the `matplotlib` module upon import to emit a lot of messages.
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
-import util
-from util import addons
-
-import numpy as np
-
-from base import (Observable, BusyObservable, busy, change,
-                  Runner, Controller as BaseController)
-
-# FIXME[todo]: speed up initialization by only loading frameworks
-# that actually needed
-
-# FIXME[todo]: this will load tensorflow!
-from network import Network
-#from network.examples import keras, torch
-
-
-from datasource import (Datasource, Labeled as LabeledDatasource,
-                         Controller as DatasourceController)
-from datasource import Loop, Metadata
 
 class Toolbox(BusyObservable, Datasource.Observer,
               method='toolbox_changed',
               changes=['networks_changed',
                        'tools_changed',
                        'datasources_changed', 'datasource_changed',
-                       'input_changed'],
+                       'input_changed', 'server_changed', 'shell_changed',
+                       'processes_changed'],
               changeables={
                   'datasource': 'datasource_changed'
               }):
@@ -94,8 +100,12 @@ class Toolbox(BusyObservable, Datasource.Observer,
     different tools. It also allows for attaching different kinds of
     user interfaces.
 
-    Datasources
-    -----------
+    Upon construction, a :py:class:`Toolbox` will be basically empty.
+    No resources are loaded, no tools are prepared and no user
+    interface is attachted to the new :py:class:`Toolbox`. Those can
+    be added by calling specific methods.
+
+    **Datasources**
     
     The :py:class:`Toolbox` maintains a list of :py:class:`Datasource`s.
 
@@ -106,22 +116,23 @@ class Toolbox(BusyObservable, Datasource.Observer,
     :py:class:`Datasource` for these components.
 
 
-    Input
-    -----
+    **Input**
 
     The :py:class:`Toolbox` provides input data for components
     interested in such data. These compoenent will be informed when
     the input data changed via an "input_changed" message.
 
 
-    Networks
-    --------
-    
+    **Networks**
 
     The :py:class:`Toolbox` is an 
 
-    Changes
-    -------
+
+    **Tools**
+
+    **Changes**
+
+    state_changed:
     networks_changed:
         The networks managed by this Toolbox were changed: this can
         mean that a network was added or removed from the Toolbox,
@@ -134,8 +145,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         The current input has changed. The new value can be read out
         from the :py:meth:`input` property.
 
-    Logging and error handling
-    --------------------------
+    **Logging and error handling**
+
     The logging behaviour of the :py:class:`Toolbox` can be altered
     by setting :py:class:`logging.Handler`. The Toolbox basically
     provides two Handlers which can be activated or deactivated
@@ -149,19 +160,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
     gui_logging_handler and console_logging_handler.
 
 
-    Usage
-    -----
-    Upon construction, a :py:class:`Toolbox` will be basically empty.
-    No resources are loaded, not tools are prepared and no user
-    interface is attachted to the new :py:class:`Toolbox`. Those can
-    be added by calling specific methods.
 
 
     Attributes
     ----------
-    _toolbox_controller:
-        A :py:class:`ToolboxController` controlling this
-        :py:class:`Toolbox`.
     _runner:
         A :py:class:`Runner` that is used to run tools in the background.
         If None, all tasks will be run in the main :py:class:`Thread`.
@@ -172,7 +174,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
     _gui:
         The GUI associated with the :py:class:`Toolbox` or None
         if no GUI is used.
-
+    
     _datasources: list
         A list of :py:class`Datasource`s available to this :py:class:`Toolbox`.
     _input_data: np.ndarray
@@ -180,27 +182,21 @@ class Toolbox(BusyObservable, Datasource.Observer,
         the Toolbox and get informed whenever the input data change.
     _input_meta: dict
         Metadata describing the current input data.
+
+    _command_line_arguments
     """
-    _toolbox_controller: BaseController = None  # 'ToolboxController'
     _runner: Runner = None
     _networks: list = None
     _datasources: list = None
-    _datasource_controller: DatasourceController = None
+    _datasource: Datasource = None
 
     _tools: dict = None
 
-    _input_data: np.ndarray = None
-    _input_meta: dict = None
-    # FIXME[old]
-    _input_label = None
-    _input_datasource = None
-    _input_description = None
-    _input_metadata = None
+    _input_data: Data = None
 
     _gui = None
 
-
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the toolbox.
 
     
@@ -217,23 +213,24 @@ class Toolbox(BusyObservable, Datasource.Observer,
         _initialize_toolbox().
         """
         super().__init__()
-        
+
         self._initialize_logging()
         self._initialize_exception_handler()
-
-        # provide access to this Toolbox via a ToolboxController
-        self._toolbox_controller = ToolboxController(self)
-
+        self._initialize_processes()
         self._initialize_tools()
         self._initialize_datasources()
         self._initialize_networks()
 
+    @property
+    def runner(self) -> Runner:
+        return self._runner
+        
     def set_runner(self, runner: Runner) -> None:
         """Set the :py:class:`Runner` to be used by this
         :py:class:`Toolbox`.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
 
         runner: Runner
             The :py:class:`Runner` to be used. None means that no
@@ -244,12 +241,11 @@ class Toolbox(BusyObservable, Datasource.Observer,
         # it in the Controller, as that is the object that should
         # actually run threads ...
         self._runner = runner
-        self._toolbox_controller.runner = self._runner
         if self._tools is not None:
             for tool in self._tools.values():
                 tool.runner = runner
-        if self._datasource_controller is not None:
-            self._datasource_controller.runner = runner
+        if self._datasource is not None:
+            self._datasource.runner = runner
 
     # FIXME[concept]: It may be better to define the interrupt handler as
     # a global function (not a method) to make sure it is not garbage
@@ -257,26 +253,37 @@ class Toolbox(BusyObservable, Datasource.Observer,
     def _interrupt_handler(self, signum, frame):
         """Handle KeyboardInterrupt: quit application."""
         print(f"Toolbox: Keyboard interrupt: signum={signum}, frame={frame}")
-        self.quit()
+        if signum == signal.SIGINT:
+            if self.shell:
+                print("Toolbox: Shell is already running.")
+            else:
+                print("Toolbox: Starting a shell")
+                self.run_shell()
+            print("Type 'quit' or press Ctrl+\ to quit the program; "
+                  "type 'bye' or press Ctrl+D to leave the shell")
+        elif signum == signal.SIGQUIT:
+            self.quit()
 
-    def quit(self):
+    def quit(self, sys_exit=False):
         """Quit this toolbox.
         """
         # FIXME[problem]: some things seem to block the exit process.
         # - if the webcam is looping, the program will not exit
-
         # FIXME[todo]: we need a more general solution to abort all
         # operations running in the background
-        if (self._datasource_controller is not None and
-            self._datasource_controller.isinstance(Loop) and
-            self._datasource_controller.looping):
-            # stop the loop
-            print("Toolbox: stopping the datasource loop")
-            self._datasource_controller.stop_loop()
+
+        
+        # unset the datasource - this will also stop loops
+        self.datasource = None
 
         if self._runner is not None:
             self._runner.quit()
-        
+
+        self._finish_processes()
+            
+        # Stop the web server if running
+        self.server = False
+            
         if self._gui is not None:
             # This will stop the main event loop.
             print("Toolbox: Now stopping GUI main event loop.")
@@ -286,6 +293,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
             print("Toolbox: Quitting now ...")
         else:
             print("Toolbox: Quitting the toolbox.")
+
+        if sys_exit:
             sys.exit(0)
 
     def setup(self, tools=[], networks=[], datasources=[]):
@@ -305,12 +314,11 @@ class Toolbox(BusyObservable, Datasource.Observer,
             for tool in tools:
                 self.add_tool(tool)
 
-            # self._toolbox_controller.hack_load_mnist()
             for datasource in datasources:
                 print(f"Toolbox: prepare datasource {datasource}")
                 datasource.prepare()
             if len(datasources) > 0:
-                self._datasource_controller(datasources[-1])
+                self.datasource = datasources[-1]
 
             for network in networks:
                 self.add_network(network)
@@ -318,43 +326,38 @@ class Toolbox(BusyObservable, Datasource.Observer,
         except Exception as exception:
             util.error.handle_exception(exception)
 
-    ###########################################################################
-    ###                            Networks                                 ###
-    ###########################################################################
+    #
+    # Networks
+    #
 
     def _initialize_networks(self):
         self._networks = []
 
-    def add_network(self, network: Network):
-        if isinstance(network, str):
-            name = network
-            if name == 'alexnet':
-                network = self.hack_load_alexnet()
-            elif name == 'keras-network':
-                # FIXME[concept]: here we really need the command line arguments!
-                #dash_idx = args.framework.find('-')
-                #backend = args.framework[dash_idx + 1:]
-                #network = keras(backend, args.cpu, model_file=args.model)
-                network = None
-            elif name == 'torch-network':
-                # FIXME[hack]: provide these parameters on the command line ...
-                #net_file = 'models/example_torch_mnist_net.py'
-                #net_class = 'Net'
-                #parameter_file = 'models/example_torch_mnist_model.pth'
-                #input_shape = (28, 28)
-                #network = torch(args.cpu, net_file, net_class,
-                #                parameter_file, input_shape)
-                network = None
-            else:
-                raise ValueError(f"Unknown network: '{name}'")
+    def add_network(self, network: Union[str, Network],
+                    prepare: bool = False) -> None:
+        """Add a network to the toolbox.
 
-        if network is None:
-            return
+        Arguments
+        ---------
+        network:
+            Either the network or a registered network name.
+        prepare: bool
+            If `True`, the network will be prepared. This may
+            take some time.
+        """
+        if isinstance(network, str):
+            try:
+                network = Network.register_initialize_key(network)
+            except KeyError:
+                raise ValueError(f"Unknown network: '{network}'")
+
         if not isinstance(network, Network):
             raise TypeError(f"Invalid type for Network {network}: "
                             f"{type(network)}")
         self._networks.append(network)
         self.change('networks_changed')
+        if prepare:
+            network.prepare()
         return network
 
     def remove_network(self, network: Network):
@@ -367,31 +370,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 return True
         return False
 
-    @busy
-    def hack_load_alexnet(self):
-        #
-        # AlexNet trained on ImageNet data (TensorFlow)
-        #
-        logger.debug("alexnet: import tensorflow")
-        from network.tensorflow import Network as TensorFlowNetwork
-        checkpoint = os.path.join('models', 'example_tf_alexnet',
-                                  'bvlc_alexnet.ckpt')
-        logger.debug("alexnet: TensorFlowNetwork")
-        network = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
-        logger.debug("alexnet: prepare")
-        network._online()
-        logger.debug("alexnet: Load Class Names")
-        
-        imagenet = Datasource['imagenet-val']
-        network.set_labels(imagenet, format='caffe')
-        logger.debug("alexnet: Done")
-
-        if self.contains_tool('activation'):
-            tool = self.get_tool('activation')
-            #tool.set_toolbox(self)
-            tool.set_network(network)
-
-        return network
+    @property
+    def networks(self) -> Iterable[Network]:
+        """Networks registered with this Toolbox."""
+        return iter(self._networks)
 
     ###########################################################################
     ###                            Datasources                              ###
@@ -402,17 +384,97 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """
         self._datasources = []
 
-        # Create a DatasourceController for the currently selected Datasource.
-        self._datasource_controller = DatasourceController(runner=self._runner)
-
-        # Observe the new DatasourceController and add new datasources
-        # reported by that controller to the list of known datasources
-        my_interests = Datasource.Change('observable_changed', 'data_changed')
-        self._datasource_controller.add_observer(self, interests=my_interests)
+        # the currently selected Datasource
+        self._datasource = None
 
         # FIXME[hack]: training - we need a better concept ...
-        self.dataset = None
-        self.data = None
+        # self.dataset = None
+        # self.data = None
+
+    def add_datasource(self, datasource: Union[str, Datasource],
+                       select: bool = False) -> None:
+        """Add a new Datasource to this Toolbox.
+
+        Arguments
+        ---------
+        datasource:
+            Either a :py:class:`Datasource` or a key (str) identifying
+            a datasource.  In the latter case the datasource will
+            be instantiated if it doesn't exist yet'.
+        select:
+            A flag indicating if the newly add Datasource should become
+            the active datasource.
+        """
+        if isinstance(datasource, str):
+            datasource = Datasource.register_initialize_key(datasource)
+
+        if datasource not in self._datasources:
+            self._datasources.append(datasource)
+            self.change('datasources_changed')
+        if select:
+            self.datasource = datasource
+
+    def remove_datasource(self, datasource: Union[str, Datasource]) -> None:
+        # unpythonic first-check-then-removal style:
+        if isinstance(datasource, str):
+            datasource = next((d for d in self._datasources
+                               if d.key == datasource), None)
+        elif datasource not in self._datasources:
+            datasource = None
+        if datasource is not None:
+            self._toolbox.remove_datasource(datasource)
+            self.change('datasources_changed')
+            if datasource is datasource:
+                self.datasource = None
+
+    @property
+    def datasources(self) -> Iterable[Datasource]:
+        """Datasources registered with this Toolbox."""
+        return iter(self._datasources)
+
+    @property
+    def datasource(self) -> Datasource:
+        return self._datasource
+
+    @datasource.setter
+    def datasource(self, datasource: Datasource) -> None:
+        print(f"Toolbox.datasource = {datasource} (was {self._datasource})")
+
+        if datasource is self._datasource:
+            return  # nothing to do
+
+        if self._datasource is not None:
+            self.unobserve(self._datasource)
+
+            # FIXME[todo] stop looping the old datasource ...
+            # The Datasource currently does not provide a
+            # useful API ...
+            if (isinstance(self._datasource, Loop) and
+                self._datasource.looping):
+                # datasource is currently looping
+                print("Toolbox: stopping the datasource loop")
+                self._datasource.stop_loop()  # FIXME[todo]: may take some time and should hence be done in background thread
+
+        self._datasource = datasource
+
+        print(f"Toolbox: setting new datasource: {datasource}")
+        if datasource is not None:
+            # Observe the new Datasource
+            interests = Datasource.Change('data_changed')
+            self.observe(datasource, interests=interests)
+
+            # Add new datasources to the list of known datasources
+            self.add_datasource(datasource)
+
+            # get input data from the new datasource (data may be None)
+            self.set_input(data=datasource.data)
+
+            # Prepare the new datasource
+            datasource.prepare()  # may run asynchronously
+
+        # Inform observers that we have a new datasource
+        self.change('datasource_changed')
+
 
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
@@ -429,128 +491,34 @@ class Toolbox(BusyObservable, Datasource.Observer,
             of the datasource itself (observable_changed) and a
             change of the current data.
         """
-        if change.observable_changed:
-            if datasource is not None and datasource not in self._datasources:
-                self.add_datasource(datasource)
 
         if change.data_changed:
-            if (self._datasource_controller and
-                self._datasource_controller.prepared):
-                # we have a datasource that can provide data
-                data = self._datasource_controller.data
-                if (self._datasource_controller.isinstance(LabeledDatasource)
-                    and self._datasource_controller.labels_prepared):
-                    # we can also provide labels
-                    label = self._datasource_controller.label
-                else:
-                    label = None
-                description = self._datasource_controller.description
-                metadata = self._datasource_controller.metadata
-                self.set_input(data=data, label=label, datasource=datasource,
-                               description=description, metadata=metadata)
-            else:
-                self.set_input(data=None, label=None, description="No input")
-
-    @property
-    def datasource(self) -> Datasource:
-        return (self._datasource_controller._datasource  # FIXME[hack]: private
-                if self._datasource_controller else None)
-
-    def add_datasource(self, datasource: Datasource) -> None:
-        if datasource is not None and datasource not in self._datasources:
-            self._datasources.append(datasource)
-            self.change('datasources_changed')
-
-    def remove_datasource(self, datasource: Datasource):
-        if datasource not in self._datasources:
-            self._datasources.remove(datasource)
-            self.change('datasources_changed')
-
-    def hack_load_mnist(self):
-        """Initialize the dataset.
-        This will set the self._x_train, self._y_train, self._x_test, and
-        self._y_test variables. Although the actual autoencoder only
-        requires the x values, for visualization the y values (labels)
-        may be interesting as well.
-
-        The data will be flattened (stored in 1D arrays), converted to
-        float32 and scaled to the range 0 to 1. 
-        """
-        if self.dataset is not None:
-            return  # already loaded
-
-        # load the MNIST dataset
-        # FIXME[hack]: Suppress messages from keras/tensorflow
-        stderr = sys.stderr
-        sys.stderr = open(os.devnull, 'w')
-        from keras.datasets import mnist
-        sys.stderr = stderr
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        
-        mnist = mnist.load_data()
-        #self.x_train, self.y_train = mnist[0]
-        #self.x_test, self.y_test = mnist[1]
-        self.dataset = mnist
-        self.data = mnist[1]  # FIXME[hack]
-
-        # FIXME[hack]: we need a better training concept ...
-        from tools.train import Training
-        self.training = Training()
-        #self.training.\
-        #    set_data(self.get_inputs(dtype=np.float32, flat=True, test=False),
-        #             self.get_labels(dtype=np.float32, test=False),
-        #             self.get_inputs(dtype=np.float32, flat=True, test=True),
-        #             self.get_labels(dtype=np.float32, test=True))
-
-    @property
-    def data(self):
-        return self._data
-
-    @data.setter
-    def data(self, data):
-        self._data = (None, None) if data is None else data 
-
-    @property
-    def inputs(self):
-        return self._data[0]
-
-    @property
-    def labels(self):
-        return self._data[1]
+            self.set_input(data=datasource.data)  # data may be None
 
     ###########################################################################
     ###                               Input                                 ###
     ###########################################################################
 
     @property
-    def input_data(self) -> np.ndarray:
+    def input_data(self) -> Data:
         return self._input_data
 
-    @property
-    def input_label(self) -> int:
-        return self._input_label
-
-    @property
-    def input_datasource(self) -> Datasource:
-        return self._input_datasource
-
-    @property
-    def input_description(self) -> np.ndarray:
-        return self._input_description
-
-    @property
-    def input_metadata(self) -> Metadata:
-        return self._input_metadata
-
-    def set_input(self, data: np.ndarray, label=None,
-                  datasource: Datasource=None, description: str=None,
-                  metadata: Metadata=None):
+    def set_input(self, data: Data):
         self._input_data = data
-        self._input_label = label
-        self._input_datasource = datasource
-        self._input_description = description
-        self._input_metadata = metadata
         self.change('input_changed')
+
+    # FIXME[todo]: we should set input_data busy
+    #@run
+    def set_input_from_file(self, filename: str, label=None,
+                            description: str=None):
+        # FIXME[todo]: we should allow for other data than images
+        image = util.imread(filename)
+        data = Data()
+        data.data = image
+        data.image = True
+        data.shape = image.shape
+        data.description = f"Image from file '{filename}'"
+        self.set_input(data)
 
     ###########################################################################
     ###                               Tools                                 ###
@@ -572,13 +540,13 @@ class Toolbox(BusyObservable, Datasource.Observer,
         (3) Toolbox observers will be informed that a new tools is
             available (via the "tools_changed" message).
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         tool:
             The new tool. Eeither an object or a string naming the
             tool. Valid tool names are "activation".
 
-        Result
+        Returns
         ------
         contains: bool
             True, if the tool is in this :py:class:`Toolbox`,
@@ -596,13 +564,12 @@ class Toolbox(BusyObservable, Datasource.Observer,
             
             if name == 'activation':
                 # FIXME[hack] ...
-                from tools.activation import (Engine as ActivationEngine,
-                                              Controller as ActivationController)
-                engine = ActivationEngine(toolbox=self)
-                tool = ActivationController(activation=engine)
-                network_controller = \
-                    self._toolbox_controller.autoencoder_controller  # FIXME[hack]
-                tool.set_network_controller(network_controller)
+                from tools.activation import Engine as ActivationEngine
+                tool = ActivationEngine(toolbox=self)
+                # FIXME[old]
+                #network_controller = \
+                #    self._toolbox_controller.autoencoder_controller  # FIXME[hack]
+                #tool.set_network_controller(network_controller)
 
             elif name == 'lucid':
                 if addons.use('lucid') and False:  # FIXME[todo]
@@ -620,7 +587,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         else:
             name = tool.name
         if isinstance(tool, str):
-            # print(f"FIXME[error]: Tool '{tool}' is a string!")
+            # print(f"Toolbox: FIXME[error]: Tool '{tool}' is a string!")
             pass
         elif tool is not None:
             self._tools[name] = tool
@@ -632,12 +599,12 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """Check whether this :py:class:`Toolbox` contains the given
         tool.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         tool
             The tool to check for.
 
-        Result
+        Returns
         ------
         contains: bool
             True, if the tool is in this :py:class:`Toolbox`,
@@ -650,12 +617,12 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """Get a tool with the given name from this :py:class:`Toolbox`.
         tool.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         name: str
             The name of the tool to fetch.
 
-        Result
+        Returns
         ------
         tool: 
             The tool or None, if no tool with this name is contained in
@@ -668,10 +635,16 @@ class Toolbox(BusyObservable, Datasource.Observer,
     ###                       Command line options                          ###
     ###########################################################################
 
+    def option(self, name, default=False) -> bool:
+        if not hasattr(self, '_command_line_arguments'):
+            return default
+        return getattr(self._command_line_arguments, name, default)
 
-    def add_command_line_arguments(self, parser: ArgumentParser) -> None:
-        """Add arguments to the ArgumentParser.
+    def _prepare_argument_parser(self) -> ArgumentParser:
+        """Prepare a Toolbox ArgumentParser.
         """
+
+        parser = ArgumentParser(description='Deep Learning Toolbox')
 
         #
         # General options
@@ -690,6 +663,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #
         parser.add_argument('--model', help='Filename of model to use',
                             default='models/example_keras_mnist_model.h5')
+        parser.add_argument('--network', help='Name of a network to use')
         parser.add_argument('--alexnet', help='Load the AlexNet model',
                             action='store_true', default=False)
         parser.add_argument('--autoencoder',
@@ -707,13 +681,15 @@ class Toolbox(BusyObservable, Datasource.Observer,
         # Datasources
         #
         logging.debug("importing datasources")
-        datasets = [Datasource.keys()]
-        logging.debug(f"got datesets: {datasets}")
+        datasources = list(Datasource.register_keys())
+        logging.debug(f"got datasources: {datasources}")
 
-        if (len(datasets) > 0):
-            parser.add_argument('--dataset', help='name of a dataset',
-                                choices=datasets)  # , default=datasets[0])
-        parser.add_argument('--imagenet', help='Load the ImageNet dataset',
+        if (len(datasources) > 0):
+            parser.add_argument('--datasource', help='name of a datasources',
+                                choices=datasources)
+        parser.add_argument('--imagenet', help='Load the ImageNet datasource',
+                            action='store_true', default=False)
+        parser.add_argument('--helen', help='Load the Helen datasource',
                             action='store_true', default=False)
 
         #
@@ -729,19 +705,66 @@ class Toolbox(BusyObservable, Datasource.Observer,
         parser.add_argument('--face',
                             help='Open the face module (experimental!)',
                             action='store_true', default=False)
+        parser.add_argument('--resources',
+                            help='Open the resources panel',
+                            action='store_true', default=False)
+        parser.add_argument('--activations',
+                            help='Open the activations panel',
+                            action='store_true', default=False)
+
+        #
+        # Debugging
+        #
+        parser.add_argument('--info', default=[], action='append',
+                            metavar='MODULE',
+                            help='Show info messages from MODULE')
+        parser.add_argument('--debug', default=[], action='append',
+                            metavar='MODULE',
+                            help='Show debug messages from MODLE')
 
         #
         # Bugs
         #
         parser.add_argument('--firefox-bug', help='avoid the firefox bug',
                             action='store_true', default=False)
-        
 
-    def process_command_line_arguments(self, args) -> None:
+        return parser
+
+    def process_command_line_arguments(self) -> None:
         """Process the arguments given to the :py:class:`ArgumentParser`.
         """
+
+        parser = self._prepare_argument_parser()
+        args = parser.parse_args()
+        self._command_line_arguments = args
+
+        #
+        # Global flags
+        #
         util.use_cpu = args.cpu
 
+        #
+        # Debugging
+        #
+        if args.info:
+            info_handler = logging.StreamHandler(sys.stderr)
+            info_handler.setLevel(logging.INFO)
+            info_handler.setFormatter(self.logging_formatter)
+            print(f"Toolbox: outputing info messages from '{args.info}' on {info_handler}")
+            for module in args.info:
+                logger = logging.getLogger(module)
+                logger.addHandler(info_handler)
+                logger.info(f"Outputing debug messages from module {module}")
+
+        if args.debug:
+            debug_handler = logging.StreamHandler(sys.stderr)
+            debug_handler.setLevel(logging.DEBUG)
+            debug_handler.setFormatter(self.logging_formatter)
+            print(f"Toolbox: outputing debug messages from '{args.debug}' on {debug_handler}")
+            for module in args.debug:
+                logger = logging.getLogger(module)
+                logger.addHandler(debug_handler)
+                logger.debug(f"Outputing debug messages from module {module}")
 
         #
         # Tools
@@ -753,114 +776,283 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #
         # Datasources
         #
-        datasources = []
-
-        from datasource import DataDirectory
-        #for id in Datasource.keys():
-        #    print(f"predefined id: {id}")
-        #    datasource = Datasource[id]
-        #    self.add_datasource(datasource)
         for id in 'Webcam', 'Noise', 'Helen', 'Movie':
-            self.add_datasource(Datasource[id])
+            self.add_datasource(Datasource.register_initialize_key(id))
 
         if args is not None:
-            datasource = None
             if args.data:
-                datasource = Datasource[args.data]
-            elif args.dataset:
-                datasource = Datasource[args.dataset]
+                self.add_datasource(args.data)
+            elif args.datasource:
+                self.add_datasource(args.datasource)
             elif args.datadir:
-                datasource = DataDirectory(args.datadir)
-            if datasource is not None:
-                self.add_datasource(datasource)
-                datasources.append(datasource)
+                self.add_datasource(DataDirectory(args.datadir))
 
             if args.imagenet:
-                datasources.append(Datasource['imagenet-val'])
+                self.add_datasource('imagenet-val', select=True)
+            if args.helen:
+                self.add_datasource('Helen', select=True)
 
         #
         # Networks
         #
-        networks = []
-        
         if args is not None:
-            if args.alexnet:
-                networks.append('alexnet')
 
+            if args.alexnet:
+                self.add_network('alexnet-tf', prepare=True)
+
+            if args.network:
+                self.add_network(args.network)
+
+            # FIXME[old]
+            networks = []
             if args.framework.startswith('keras'):
                 # "keras-tensorflow" or "keras-theano"
                 networks.append('keras-network')
             elif args.framework == 'torch':
                 networks.append('torch-network')
 
+            name = "FIXME[old]"
+            if name == 'keras-network':
+                # FIXME[concept]:
+                #   here we really need the command line arguments!
+                # dash_idx = args.framework.find('-')
+                # backend = args.framework[dash_idx + 1:]
+                # network = keras(backend, args.cpu, model_file=args.model)
+                network = None
+            elif name == 'torch-network':
+                # FIXME[hack]: provide these parameters on the command line ...
+                # net_file = 'models/example_torch_mnist_net.py'
+                # net_class = 'Net'
+                # parameter_file = 'models/example_torch_mnist_model.pth'
+                # input_shape = (28, 28)
+                # network = torch(args.cpu, net_file, net_class,
+                #                 parameter_file, input_shape)
+                network = None
+
+    def run(self) -> int:
+        #
+        # Signal handling
+        #
+
+        # Note 1: This has to be done in the main thread.
+        #
+        # Note 2: There may be a problem when this is done in the
+        # context of PyQT: the main event loop is run in the C++ core
+        # of Qt and is not aware of the Python interpreter. The
+        # interrupt handler will only be called after a (Python) event
+        # is emitted by the GUI that is handled by the (Python)
+        # interpreter.  An ad hoc solution is to use a QTimer to
+        # periodically run some (dummy) Python code to make sure the
+        # signal handler gets a chance to be executed.
+        # However, this should not be a problem for us, as the GUI
+        # should start a background timer to periodically update the
+        # user interface.
+        # FIXME[question]: why is this done here?
+
+        # Setup handling of KeyboardInterrupt (Ctrl-C)
+        signal.signal(signal.SIGINT, self._interrupt_handler)
+        # Setup handling of Quit (Ctrl-\)
+        signal.signal(signal.SIGQUIT, self._interrupt_handler)
+
         #
         # User Interface
         #
-        if args.shell:
+        if self.option('shell'):
             gui = None
         else:
-            gui = 'qt'
+            gui = 'qtgui'
 
         if gui is not None:
-            panels = []
-            if addons.use('autoencoder'):
-                panels.append('autoencoder')
-
-            if args.internals:
-                panels.append('internals')
-            #if addons.internals('internals')
-            # Initialise the "Activation Maximization" panel.
-            #if addons.use('maximization'):
-            #    panels.append('maximization')
-            if args.face:
-                panels.append('face')
-                #wider_faces = Datasource['wider-faces-train']
-                #datasources.append(wider_faces)
-                #self._datasource_controller(wider_faces)
-
-            #panels.append('resources')
-            #panels.append('activations')
-
-            if args.firefox_bug:
-                from qtgui import mainwindow
-                mainwindow.BUG = True
-            
-            rc= self.start_gui(panels=panels, tools=tools,
-                               networks=networks, datasources=datasources)
+            rc = self.start_gui(gui=gui)
         else:
             self.setup(tools=tools, networks=networks, datasources=datasources)
-            from .shell import ToolboxShell
-            ToolboxShell(self).cmdloop()
+            self.run_shell(asynchronous=False)
+            self.quit(sys_exit=False)
             rc = 0
         return rc
+        
 
+    ###########################################################################
+    ###                              Shell                                  ###
+    ###########################################################################
+
+    @property
+    def shell(self):
+        return hasattr(self, '_shell')
+            
+    def run_shell(self, asynchronous: bool = True):
+        """Run the toolbox shell.
+        """
+        if self.shell:
+            return  # shell is already running - nothing to do
+        from .shell import ToolboxShell
+        self._shell = ToolboxShell(self)
+        self.change('shell_changed')
+        
+        def run_shell_loop():
+            self._shell.cmdloop()
+            self.stop_shell()
+
+        if asynchronous:
+            self._shell_thread = threading.Thread(target=run_shell_loop)
+            # We make the shell thread a daemon thread, meaning that
+            # the program may exit even if the shell thread is still
+            # running. This is currently necessary, as we have no way
+            # to stop the shell programatically (see comment in stop_shell).
+            self._shell_thread.setDaemon(True)
+            self._shell_thread.start()            
+        else:
+            run_shell_loop()
+
+    def stop_shell(self):
+        if not self.shell:
+            return  # no shell is running - nothing to do
+
+        if hasattr(self, '_shell_thread'):
+            # FIXME[problem]: don't know how to terminate Cmd.cmdloop.
+            # That loop blocks on input() or readline() and does not
+            # seem to provide a way to stop it from the outside.
+            # Maybe we should subclass Cmd and reimplement that method.
+            if self._shell_thread is not threading.current_thread:
+                print("Toolbox: Cannot terminate Cmd.cmdloop"
+                      " - please quit the shell manually")
+                # self._shell_thread.join()
+                # del self._shell_thread
+            else:
+                self._shell_thread = None
+                del self._shell_thread
+
+        del self._shell
+        self.change('shell_changed')
+
+        
     ###########################################################################
     ###                               GUI                                   ###
     ###########################################################################
 
-    def _run_gui(self, gui="qt", panels=[], tools=[], networks=[],
+    @property
+    def gui(self):
+        return self._gui
+
+    def start_gui(self, gui: str='qtgui', threaded: bool=None, **kwargs):
+        """Start the graphical user interface.
+
+        Arguments
+        ---------
+        gui: str
+            The graphical user interface to use. Currently supported
+            are 'qtgui' and 'gtkgui'.
+        threaded: bool
+            Run the GUI in its own thread.
+        """
+        
+        # we need the GUI first to get the runner ...
+
+        #
+        # Step 1: determine the GUI to use
+        #
+        valid_guis = {
+            'qtgui': 'PyQt5',
+            'gtkgui': 'gi'
+        }
+
+        if not gui in valid_guis:
+            raise ValueError(f"Invalid gui module '{gui}'. "
+                             f"Valid values are {valid_guis.keys()}")
+        for name, module in valid_guis.items():
+            if gui is not None and gui != name:
+                continue
+            spec = importlib.util.find_spec(module)
+            if spec is not None:
+                gui = name
+                break
+            elif gui is not None:
+                message = f"GUI library ({module}) was not found."
+                logging.fatal(message)
+                raise RuntimeError(message)
+        if gui is None:
+            raise RuntimeError("No GUI is supported by your environment.")
+
+        #
+        # Step 2: select the panels to display
+        #
+        panels = kwargs.get('panels', [])
+        if addons.use('autoencoder'):
+            panels.append('autoencoder')
+
+        if self.option('internals'):
+            panels.append('internals')
+        #if addons.internals('internals')
+        # Initialise the "Activation Maximization" panel.
+        #if addons.use('maximization'):
+        #    panels.append('maximization')
+        if self.option('face'):
+            panels.append('face')
+            #wider_faces = Datasource['wider-faces-train']
+            #datasources.append(wider_faces)
+            #self._datasource(wider_faces)
+
+        if self.option('resources'):
+            panels.append('resources')
+
+        if self.option('activations'):
+            panels.append('activations')
+
+        kwargs['panels'] = panels
+
+        #
+        # Step 3: run the GUI
+        #
+        if threaded is None:
+            # Automatically determine if to run GUI in a separate Thread:
+            # In an interactive interpreter, we want to return to
+            # input mode an hence rund the GUI in its own Thread.
+            # If not running interactively, we can use the current Thread
+            # as GUI event loop.
+            #
+            # To test if we run in an interactive interpreter we can
+            # check the existence of sys.ps1 and sys.ps2, which are
+            # only defined in interactive mode. (An alternative would
+            # be to check if the module __main__ has the attribute
+            # __file__, which shouldn't exist in interactive mode:
+            #   import __main__ as main
+            #   threaded = not hasattr(main, '__file__')
+            threaded = hasattr(sys, 'ps1')
+
+        if threaded:
+            thread = threading.Thread(target=self._run_gui, name="gui-thread",
+                                      args=(gui,), kwargs=kwargs)
+            thread.start()
+            self._gui_thread = thread
+        else:
+            rc = self._run_gui(gui=gui, **kwargs)
+
+    def _run_gui(self, gui, panels=[], tools=[], networks=[],
                  datasources=[], **kwargs):
         """Create a graphical user interface for this :py:class:`Toolbox`
         and run the main event loop.
         """
+
         #
         # create the actual application
         #
 
-        # FIXME[hack]: do not use local imports
         # We use the local import here to avoid circular imports
-        # (qtgui.mainwindow imports toolbox.ToolboxController)
-        from qtgui import create_gui
-        self._gui = create_gui(sys.argv, self._toolbox_controller, **kwargs)
+        # (the gui_module may import toolbox.Toolbox)
+        gui_module = importlib.import_module(gui)
+        self._gui = gui_module.create_gui(sys.argv, self, **kwargs)
 
         # FIXME[hack]: we need a better solution here!
         self.set_runner(self._gui.getRunner())
 
         #
-        # Initialise the panels.
+        # Initialize the panels.
         #
+        panel = None
         for panel in panels:
             self._gui.panel(panel, create=True)
+        if panel is not None:  # show the last panel
+            self._gui.panel(panel, show=True)
 
         # FIXME[old]
         if self.contains_tool('activation'):
@@ -875,7 +1067,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #    -> the panel should request necessary information
         #       (logger, logging_recorder, ...) from the Toolbox
         #
-        logging_panel = self._gui.panel('logging', create=True, show=True)
+        logging_panel = self._gui.panel('logging', create=True, show=False)
         if logging_panel is not None:  # can only fail if create=False
             if self.logging_recorder is not None:
                 logging_panel.setLoggingRecorder(self.logging_recorder)
@@ -886,91 +1078,47 @@ class Toolbox(BusyObservable, Datasource.Observer,
             # This will enter the main event loop and will only return
             # once the main event loop exits.
             # Before entering the main event loop, it will start the
-            # exectuion of self.setup() in a QtAsyncRunner background
+            # execution of self.setup() in a QtAsyncRunner background
             # thread, passing the arguments provided to gui.run().
             # -> This will ensure that the GUI can show up quickly,
             # even if completing the setup procedure may take some time.
-            logger.info("Toolbox: running the GUI main event loop")
+            LOG.info("Toolbox: running the GUI main event loop")
+            # FIXME[hack]: we need a better way to determine if a thread
+            # is a GUI event loop
+            import threading
+            threading.current_thread().GUI_event_loop = True
             rc = self._gui.run(tools=tools, networks=networks,
                                datasources=datasources)
-            logger.info(f"Toolbox: GUI main event loop finished (rc={rc})")
+            LOG.info("Toolbox: GUI main event loop finished (rc=%d)", rc)
             if self._gui.isVisible():
                 self._gui.close()
-            print(f"Toolbox: GUI main event loop finished (rc={rc}, visible={self._gui.isVisible()})")
+            print("Toolbox: GUI main event loop finished"
+                  f" (rc={rc}, visible={self._gui.isVisible()})")
         finally:
-            print("Toolbox: finally stopping the timer ...")
-            self._gui.stop_timer()
+            # FIXME[old] ...
+            # print("Toolbox: finally stopping the timer ...")
+            # self._gui.stop_timer()
             self._gui = None
         return rc
 
-    def start_gui(self, gui='qt', threaded: bool=False, **kwargs):
-        # we need the GUI first to get the runner ...
+    #
+    # Logging and error handling
+    #
 
-        #
-        # Step 1: determine the GUI to use
-        #
-        spec = importlib.util.find_spec('PyQt5')
-        if spec is not None:
-            gui = 'qt'
-        else:
-            logging.fatal("No GUI library (PyQt5) was found.")
-            gui = None
-            raise RuntimeError("No GUI is supported by your environment.")
-        
-        #
-        # Step 2: preparations
-        #
-        
-        # Setup handling of KeyboardInterrupt (Ctrl-C)
-        # Notice that this has to be done in the main thread.
-        import signal
-        signal.signal(signal.SIGINT, self._interrupt_handler)
-        # There may be a problem when this is done in the context of
-        # PyQT: the main event loop is run in C++ core of Qt and is
-        # not aware of the Python interpreter. The interrupt handler
-        # will only be called after a (Python) event is emitted by the
-        # GUI that is handled by the (Python) interpreter.
-        # An ad hoc solution is to use a QTimer to periodically run some
-        # (dummy) Python code to make sure the signal handler gets a
-        # chance to be executed. 
-        #
-        # This should not be a problem for us, as the GUI should start a
-        # background timer to periodically update the user interface.
-
-        #
-        # Step 3: run the GUI
-        #
-        if threaded:
-            import threading
-            thread = threading.Thread(target=self._run_gui, name="gui-thread",
-                                      kwargs=kwargs)
-            thread.start()
-            # thread.join()
-        else:
-            rc = self._run_gui(gui=gui, **kwargs)
-
-    @property
-    def gui(self):
-        return self._gui
-
-    ###########################################################################
-    ###                    Logging and error handling                       ###
-    ###########################################################################
-
-    def _initialize_logging(self, record: bool=True,
-                            level: int=logging.DEBUG) -> None:
+    def _initialize_logging(self, record: bool = True,
+                            level: int = logging.DEBUG) -> None:
         """Initialize logging by this :py:class:`Toolbox`.  This is based on
         the infrastructure provided by Python's `logging` module,
         consisting of :py:class:`logging.Logger`s and
         :py:class:`logging.Handler`s.
 
         The :py:class:`Toolbox` class
-        
+
         Each module of the toolbox should define its own
         :py:class:`logging.Logger` by calling `logger =
         logging.get_logger(__name__)` to allow for individual
         configuration.
-        
+
         Arguments
         ---------
         record: bool
@@ -984,7 +1132,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         logging.basicConfig(level=level)
 
         if record:
-            logger.info("Changing global logging Handler to RecorderHandler.")
+            LOG.info("Changing global logging Handler to RecorderHandler.")
 
             # remove all current handlers from the root logger.
             original_handlers = logging.getLogger().handlers.copy()
@@ -1003,7 +1151,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         handler:
             The :py:class:`logging.Handler` to be added.
         """
-        logger.info(f"Adding log handler: {handler}")
+        LOG.info("Adding log handler: %r", handler)
         root_logger = logging.getLogger()
         root_logger.addHandler(handler)
 
@@ -1015,7 +1163,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         handler:
             The :py:class:`logging.Handler` to be removed.
         """
-        logger.info(f"Removing log handler: {handler}")
+        LOG.info("Removing log handler: %r", handler)
         root_logger = logging.getLogger()
         root_logger.removeHandler(handler)
 
@@ -1040,7 +1188,20 @@ class Toolbox(BusyObservable, Datasource.Observer,
         else:
             self.remove_logging_handler(self._logging_recorder)
             del self._logging_recorder
-            
+
+    @property
+    def logging_formatter(self) -> logging.Formatter:
+        if not hasattr(self, '_logging_formatter'):
+            # format='%(relativeCreated)6d %(threadName)s %(message)s'
+            # format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+            # format='%(relativeCreated)6d %(threadName)s %(message)s'
+            # format='%(relativeCreated)5d %(name)-15s %(levelname)-8s %(message)s')
+            # format='%(levelname)s %(name)s %(message)s'
+            # format='%(asctime)-15s %(name)-5s %(levelname)-8s IP: %(ip)-15s User: %(user)-8s %(message)s')
+            #format = f"{args.info}[%(threadName)s]: %(levelname)-8s %(message)s"
+            format = f"[%(threadName)s]: %(levelname)-8s %(message)s"
+            self._logging_formatter = logging.Formatter(format)
+        return self._logging_formatter
     
     def _initialize_exception_handler(self, record: bool=True) -> None:
         """Initialize exception handling by this Toolbox.
@@ -1099,13 +1260,83 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return self._exceptions
 
     ###########################################################################
+    ###                             Server                                  ###
+    ###########################################################################
+
+    @property
+    def server(self) -> bool:
+        return hasattr(self, '_server')
+
+    @server.setter
+    def server(self, state: bool):
+        if state == self.server:
+            return
+        if state:
+            from .http import Server
+            self._server = Server()
+            self._server.serve()
+        else:
+            self._server.stop()
+            del self._server
+        self.change('server_changed')
+
+    @property
+    def server_url(self) -> str:
+        return self._server.url() if self.server else None
+
+    @property
+    def server_status_message(self) -> str:
+        """A string describing the current server status.
+        """
+        return (f"Serving at {self.server_url}" if self.server else
+                "Server is down")
+
+    def server_open(self) -> None:
+        if self.server:
+            import webbrowser
+            webbrowser.open(self.server_url)
+
+    #
+    # Processes
+    #
+
+    def _initialize_processes(self) -> None:
+        print("Toolbox: Initializing process")
+        self._process = Process(name='test')
+        print("Toolbox: Starting process")
+        self._process.start()
+        print("Toolbox: Process is running")
+        self.notify_process("Hallo")
+
+    def get_process(self, name: str) -> Process:
+        return self._process
+
+    def notify_process(self, message: str) -> None:
+        self._process.send(message)
+
+    def _finish_processes(self) -> None:
+        if self._process is not None:
+            print("Toolbox: Terminating process")
+            self._process.terminate()
+            print("Toolbox: Joining process")
+            self._process.join()
+            print("Toolbox: Finished process")
+            self._process = None
+            
+    ###########################################################################
     ###                          Miscallenous                               ###
     ###########################################################################
 
     def __repr__(self):
-        return f"<Toolbox GUI: {self._gui is not None}>"
+        return f"<Toolbox: {self._gui is not None}>"
 
     def __str__(self):
+        return ("Toolbox with "
+                f"{len(self._datasources or '')}/{len(Datasource)} datasources, "
+                f"{len(self._networks or '')}/{len(Network)} networks, "
+                f"{len(Tool)} tools.")
+
+    def old__str__(self):
         """String representation of this :py:class:`Toolbox`.
         """
         result = f"GUI: {self._gui is not None}"
@@ -1139,8 +1370,189 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
 
         result += "\nPredefined data sources: "
-        result += f"{list(Datasource.keys())}"
+        result += f"{list(Datasource.register_keys())}"
 
         return result + "\n"
 
-from .controller import Controller as ToolboxController
+    def old__str__2(self):
+        self = self._toolbox # FIXME[hack]
+        result = f"GUI: {self._gui is not None}"
+        result += "\nTools:"
+        if self._tools is None:
+            result += " None"
+        else:
+            for tool in self._tools:
+                result += f"\n  - {tool}"
+
+        result += "\nNetworks:"
+        if self._networks is None:
+            result += " None"
+        else:
+            for network in self._networks:
+                result += f"\n  - {network}"
+
+        result += "\nDatasources:"
+        if self._datasources is None:
+            result += " None"
+        else:
+            for datasource in self._datasources:
+                result += f"\n  - {datasource}"
+
+        return result + "\n"
+
+    @staticmethod
+    def debug_register():
+        from datasource import Datasource
+        Datasource.debug_register()
+
+        from network import Network
+        Network.debug_register()
+
+        from tools import Tool
+        Tool.debug_register()
+        print("\n")
+
+    #
+    # FIXME[hack/old]
+    #
+
+    @property
+    def autoencoder_controller(self) -> AutoencoderController:
+        controller = getattr(self, '_autoencoder_controller', None)
+        if controller is None:
+            controller = AutoencoderController(runner=self._runner)
+            self._autoencoder_controller = controller
+        return controller
+
+    @property
+    def training_controller(self) -> TrainingController:
+        controller = getattr(self, '_training_controller', None)
+        if controller is None:
+            controller = TrainingController(runner=self._runner)
+            self._training_controller = controller
+        return controller
+
+    @property
+    def activation_controller(self) -> BaseController:
+        # -> tools.activation.Controller
+        """Get the Controller for the activation engine.
+        """
+        return self.get_tool('activation')
+
+    @property
+    def maximization_engine(self) -> BaseController:  # -> tools.am.Controller
+        """Get the Controller for the activation maximization engine. May
+        create a new Controller (and Engine) if none exists yet.
+        """
+        engine_controller = getattr(self, '_am_engine', None)
+        if engine_controller is None:
+            from tools.am import (Engine as MaximizationEngine,
+                                  Config as MaximizationConfig,
+                                  Controller as MaximizationController)
+            engine = MaximizationEngine(config=MaximizationConfig())
+            engine_controller = \
+                MaximizationController(engine, runner=self._runner)
+            self._am_engine = engine_controller
+        return engine_controller
+
+
+    def hack_load_mnist(self):
+        # FIXME[old]: seems not to be used anymore
+        """Initialize the dataset.
+        This will set the self._x_train, self._y_train, self._x_test, and
+        self._y_test variables. Although the actual autoencoder only
+        requires the x values, for visualization the y values (labels)
+        may be interesting as well.
+
+        The data will be flattened (stored in 1D arrays), converted to
+        float32 and scaled to the range 0 to 1. 
+        """
+        if self.dataset is not None:
+            return  # already loaded
+
+        # load the MNIST dataset
+        # FIXME[hack]: Suppress messages from keras/tensorflow
+        stderr = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
+        from keras.datasets import mnist
+        sys.stderr = stderr
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        
+        mnist = mnist.load_data()
+        #self.x_train, self.y_train = mnist[0]
+        #self.x_test, self.y_test = mnist[1]
+        self.dataset = mnist
+        self.data = mnist[1]  # FIXME[hack]
+
+        # FIXME[hack]: we need a better training concept ...
+        from tools.train import Training
+        self.training = Training()
+        #self.training.\
+        #    set_data(self.get_inputs(dtype=np.float32, flat=True, test=False),
+        #             self.get_labels(dtype=np.float32, test=False),
+        #             self.get_inputs(dtype=np.float32, flat=True, test=True),
+        #             self.get_labels(dtype=np.float32, test=True))
+
+
+    @property
+    def data(self):
+        # FIXME[old]: seems not to be used anymore
+        print("FIXME[old]: Toolbox.data should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.data getter should not be used anymore")
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        # FIXME[old]: seems not to be used anymore
+        print("FIXME[old]: Toolbox.data should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.data setter should not be used anymore")
+        self._data = (None, None) if data is None else data 
+
+    @property
+    def inputs(self):
+        # FIXME[old]: seems not to be used anymore
+        print("FIXME[old]: Toolbox.inputs should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.inputs getter should not be used anymore")
+        return self._data[0]
+
+    @property
+    def labels(self):
+        # FIXME[old]: used in ./qtgui/panels/autoencoder.py
+        print("FIXME[old]: Toolbox.labels should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.labels getter should not be used anymore")
+        return self._data[1]
+
+    #
+    # FIXME[old] old stuff from the controller
+    #  
+
+    # FIXME[old]: seems not to be used anymore ...
+    def set_network(self, network: Network):
+        for attribute in '_autoencoder_controller':
+            if getattr(self, attribute, None) is not None:
+                setattr(self, attribute, network)
+
+    ###########################################################################
+    ###                            Datasources                              ###
+    ###########################################################################
+
+    def get_inputs(self, dtype=np.float32, flat=True, test=False):
+        inputs = self.dataset[1 if test else 0][0]
+        if (np.issubdtype(inputs.dtype, np.integer) and
+            np.issubdtype(dtype, np.floating)):
+            # conversion from int to float will also scale to the interval
+            # [0,1].
+            inputs = inputs.astype(dtype)/256
+        if flat:
+            inputs = np.reshape(inputs, (-1, inputs[0].size))
+        return inputs
+            
+    def get_labels(self, dtype=np.float32, one_hot=True, test=False):
+        labels = self.dataset[1 if test else 0][1]
+        if not one_hot:
+            labels = labels.argmax(axis=1)
+        return labels
+
+    def get_data_shape(self):
+        return self.dataset[0][0][0].shape
+

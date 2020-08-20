@@ -1,25 +1,32 @@
+"""Interface to access face detectors from the OpenCV library.
+"""
 
+# standard imports
 import os
+
+# third party imports
 import cv2
 import numpy as np
 
-from .detector import Detector
-
+# toolbox imports
 from datasource import Metadata
 from util.image import BoundingBox
+from .detector import Detector
+
 
 class DetectorHaar(Detector):
+    # pylint: disable=too-many-ancestors
     """ The OpenCV Haar cascade face detector.
-    
+
     _model_file: str
         Absolute path to the model file.
+    _detector: cv2.CascadeClassifier
+        The OpenCV CascadeClassifier
     """
 
-    _model_file: str = None
-    _detector = None
-
-    def __init__(self, model_file='haarcascade_frontalface_default.xml',
-                 *args, **kwargs):
+    def __init__(self, *args,
+                 model_file='haarcascade_frontalface_default.xml',
+                 **kwargs) -> None:
         """The OpenCV Haar cascade face detector.
 
         Arguments
@@ -28,9 +35,12 @@ class DetectorHaar(Detector):
             The path to the pretrained model file.
         """
         super().__init__(*args, **kwargs)
+        self._detector = None
+        self._model_file = None
         self.set_model_file(model_file)
 
-    def _get_cascade_dir(self):
+    @staticmethod
+    def _get_cascade_dir() -> str:
         """Get the default directory in which the files for the
         cascade classifiers are located."""
         cascade_path = cv2.__file__
@@ -38,7 +48,7 @@ class DetectorHaar(Detector):
             cascade_path, _ = os.path.split(cascade_path)
         if os.path.basename(cascade_path) == 'lib':
             cascade_path, _ = os.path.split(cascade_path)
-    
+
         if os.path.isdir(os.path.join(cascade_path, 'share', 'OpenCV',
                                       'haarcascades')):
             cascade_path = os.path.join(cascade_path, 'share', 'OpenCV',
@@ -49,7 +59,9 @@ class DetectorHaar(Detector):
                                         'haarcascades')
         return cascade_path
 
-    def set_model_file(self, model_file):       
+    def set_model_file(self, model_file) -> None:
+        """Set the model file to be used with this :py:class:`DetectorHaar`.
+        """
         if not os.path.isabs(model_file):
             opencv_data = self._get_cascade_dir()
             model_file = os.path.join(opencv_data, model_file)
@@ -58,18 +70,34 @@ class DetectorHaar(Detector):
             self._model_file = model_file
             self._add_requirement('model_file', 'file', model_file)
 
-    def _prepare(self):
+    def _prepare(self, **kwargs) -> None:
+        """Prepare this :py:class:`DetectorHaar`.
+        """
+        super()._prepare(**kwargs)
         self._detector = cv2.CascadeClassifier(self._model_file)
 
         if self._detector.empty():
             self._detector = None
             raise RuntimeError("Haar detector is empty")
 
-    def prepared(self):
-        return self._detector is not None
+    def _unprepare(self) -> None:
+        """Free resources occupied by this :py:class:`DetectorHaar`.
+        """
+        self._detector = None
+        super()._unprepare()
 
-    def _detect(self, image: np.ndarray):
+    def _prepared(self) -> bool:
+        """Check if this :py:class:`DetectorHaar` is prepared.
+        """
+        return (self._detector is not None) and super()._prepared()
 
+    #
+    # Detection
+    #
+
+    def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
+        """Detect faces using this :py:class:`DetectorHaar` detector.
+        """
         # The OpenCV CascadeClassifier expects the input image to
         # be of type CV_8U (meaning unsigned 8-bit, gray scale image
         # with pixel values from 0 to 255). If not given as in this
@@ -80,13 +108,12 @@ class DetectorHaar(Detector):
         if image.ndim == 3 and image.shape[2] == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         elif image.ndim == 3 and image.shape[2] == 1:
-            gray = image[:,:,0].copy()
+            gray = image[:, :, 0].copy()
         elif image.ndim == 2:
             gray = image.copy()
         else:
             raise ValueError("The image provided has an illegal format: "
                              f"shape={image.shape}, dtype={image.dtype}")
-
 
         # There seem to be two Python interfaces to the CascadeClassifier:
         #
@@ -98,7 +125,7 @@ class DetectorHaar(Detector):
         #                  minSize[, maxSize[, outputRejectLevels]]]]]])
         #
         # The meaning of the arguments are:
-        # 
+        #
         # scaleFactor – Parameter specifying how much the image size
         #               is reduced at each image scale.
         #
@@ -117,18 +144,18 @@ class DetectorHaar(Detector):
         # rejectLevels, levelWeights, outputRejectLevels: ?
         rects = self._detector.detectMultiScale(gray)
 
-        detections = Metadata(description=
-                              'Detections by the OpenCV CascadeClassifier')
+        detections = Metadata(
+            description='Detections by the OpenCV CascadeClassifier')
         for rect in rects:
             detections.add_region(BoundingBox(x=rect[0], y=rect[1],
                                               width=rect[2], height=rect[3]))
         return detections
 
 
-
 class DetectorSSD(Detector):
+    # pylint: disable=too-many-ancestors
     """The OpenCV Single Shot MultiBox Face Detector (SSD).
-        
+
     This model was included in OpenCV from version 3.3.
     It uses ResNet-10 Architecture as backbone.
 
@@ -147,14 +174,14 @@ class DetectorSSD(Detector):
 
         # in the current working directory (where the toolbox was started).
     """
-    
+
     _detector = None
 
     _dnn: str = None
     _model_file: str = None
     _config_file: str = None
 
-    def __init__(self, dnn='TF', *args, **kwargs):
+    def __init__(self, *args, dnn='TF', **kwargs) -> None:
         """The OpenCV Single Shot MultiBox Detector (SSD).
 
         Arguments
@@ -169,7 +196,10 @@ class DetectorSSD(Detector):
         self.set_model_file()
         self._add_requirement('cv2', 'module', 'cv2')
 
-    def set_model_file(self, model_file: str=None, config_file: str=None):
+    def set_model_file(self, model_file: str = None,
+                       config_file: str = None) -> None:
+        """Set the model file to be used by this :py:class:`DetectorSSD`.
+        """
         if self._dnn == 'CAFFE':
             model_file = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
             config_file = "deploy.prototxt"
@@ -183,7 +213,11 @@ class DetectorSSD(Detector):
             self._add_requirement('model_file', 'file', model_file)
             self._add_requirement('config_file', 'file', config_file)
 
-    def _prepare(self):
+    def _prepare(self, **kwargs) -> None:
+        """Prepare this :py:class:`DetectorSSD`.
+        This will load the model data from file.
+        """
+        super()._prepare(**kwargs)
         if self._dnn == 'CAFFE':
             constructor = cv2.dnn.readNetFromCaffe
         else:
@@ -191,16 +225,29 @@ class DetectorSSD(Detector):
 
         self._detector = constructor(self._model_file, self._config_file)
 
-    def prepared(self):
-        return self._detector is not None
+    def _unprepare(self) -> None:
+        """Release resources acquired by this :py:class:`DetectorSSD`.
+        This will delete the actual OpenCV model.
+        """
+        self._detector = None
+        super()._unprepare()
 
-    def _detect(self, image):
-        """Use the OpenCV
+    def _prepared(self) -> bool:
+        """Check if this :py:class:`DetectorSSD` is prepared.
+        """
+        return (self._detector is not None) and super()._prepared()
+
+    #
+    # Detection
+    #
+
+    def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
+        """Detect faces with this :py:class:`DetectorSSD`.
         """
 
         # The detector expects 3-channel images (BGR!)
         if image.ndim < 3:
-            image = np.repeat(image[:,:,np.newaxis], 3, axis=2)
+            image = np.repeat(image[:, :, np.newaxis], 3, axis=2)
         elif image.shape[2] == 1:
             image = np.repeat(image, 3, axis=2)
 
@@ -230,23 +277,24 @@ class DetectorSSD(Detector):
         # that is once we reached our threshold we can stop searching
         # for more detections.
 
-        conf_threshold = .1 # FIXME[hack]
+        conf_threshold = .1  # FIXME[hack]
         #frameWidth, frameHeight = 300, 300
-        frameWidth, frameHeight = image.shape[1], image.shape[0]
-        #print(image.shape)
+        frame_width, frame_height = image.shape[1], image.shape[0]
+        # print(image.shape)
 
-        detections = Metadata(description=
-                              'Detections by the OpenCV Deep Neural Network')
+        detections = Metadata(
+            description='Detections by the OpenCV Deep Neural Network')
 
         for i in range(result.shape[2]):
             #print(f"{i}: {result[0, 0, i, :]}")
             confidence = result[0, 0, i, 2]
             if confidence < conf_threshold:
                 break
-            x1 = int(result[0, 0, i, 3] * frameWidth)
-            y1 = int(result[0, 0, i, 4] * frameHeight)
-            x2 = int(result[0, 0, i, 5] * frameWidth)
-            y2 = int(result[0, 0, i, 6] * frameHeight)
-            detections.add_region(BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
+            pos_x1 = int(result[0, 0, i, 3] * frame_width)
+            pos_y1 = int(result[0, 0, i, 4] * frame_height)
+            pos_x2 = int(result[0, 0, i, 5] * frame_width)
+            pos_y2 = int(result[0, 0, i, 6] * frame_height)
+            detections.add_region(BoundingBox(x1=pos_x1, y1=pos_y1,
+                                              x2=pos_x2, y2=pos_y2),
                                   confidence=confidence)
         return detections

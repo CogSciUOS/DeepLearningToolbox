@@ -15,8 +15,7 @@
 #  - the Training will hold all this together
 
 
-from base.observer import BusyObservable
-from base import Controller as BaseController, View as BaseView
+from base import BusyObservable, Controller as BaseController, View as BaseView
 
 
 class Training(BusyObservable, method='training_changed',
@@ -82,13 +81,14 @@ class Training(BusyObservable, method='training_changed',
 
     def start(self):
         self.running = True
-        self._network.busy = True
+        self._network.busy_start("training")  # FIXME[old]: check the busy concept
+
         self._network.change('weights_changed')
 
     def stop(self):
-        self._network.busy = False
+        self._network.busy_stop("training")  # FIXME[old]: check the busy concept
         self.running = False
-        
+
     @property
     def running(self):
         """The training is currently ongoing. It may be stopped by calling

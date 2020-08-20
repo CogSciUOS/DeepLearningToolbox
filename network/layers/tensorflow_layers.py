@@ -15,10 +15,10 @@ class TensorFlowLayer(layers.Layer):
     """
     _type = None
 
-    def __init__(self, network, ops):
+    def __init__(self, network, ops, **kwargs):
         """Create a new TensorFlow layer
         """
-        super().__init__(network)
+        super().__init__(network, **kwargs)
         self._ops = ops
 
     @property

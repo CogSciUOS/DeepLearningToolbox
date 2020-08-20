@@ -3,12 +3,14 @@ from util.image import Region
 import os
 import numpy as np
 
+
 class Metadata:
     """Metadata for a datum from a Datasource.
     """
     _regions = None
 
-    def __init__(self, description: str=None, label: str=None, **attributes):
+    def __init__(self, description: str = None, label: str = None,
+                 **attributes) -> None:
         if description is not None:
             self._description = description
         if label is not None:

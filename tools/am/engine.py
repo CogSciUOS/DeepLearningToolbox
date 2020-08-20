@@ -372,7 +372,7 @@ class Engine(Observable, method='maximization_changed',
             Possible values are:
         iteration: int
 
-        Result
+        Returns
         ------
         The method will return None, is snapshots are not supported
         by this Engine.

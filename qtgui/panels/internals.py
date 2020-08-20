@@ -1,22 +1,37 @@
-'''
+"""
 File: internals.py
 Author: Ulf Krumnack
 Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
-'''
+"""
 
 import sys
 from util.resources import (Resource, ModuleResource,
-                            View as ResourceView,
                             Controller as ResourceController)
-from ..utils import QObserver
+from ..utils import QObserver, QAttribute
 
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QWidget, QGroupBox, QLabel, QPushButton,
-                             QHBoxLayout, QVBoxLayout)
+from PyQt5.QtWidgets import (QWidget, QGroupBox, QLabel, QPushButton)
+from PyQt5.QtWidgets import (QGridLayout, QHBoxLayout, QVBoxLayout,
+                             QPlainTextEdit, QComboBox)
+from PyQt5.QtGui import QFontDatabase
+
+from .panel import Panel
+
+import importlib
+
+import os
+import re
+import util.resources
+import util
+
+from util.error import protect
+from toolbox import Toolbox
 
 
-class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
+class ModuleInfo(QGroupBox, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        Resource: Resource.Change.all()}):
     """A Widget providing information about a module.
 
     The Widget observes the :py:class:`ModuleResource` associated
@@ -25,8 +40,8 @@ class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
     the information will be updated.
     """
     _resource: ResourceController = None
-    
-    def __init__(self, resource: ResourceController=None, **kwargs) -> None:
+
+    def __init__(self, resource: ResourceController = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._initGui()
         self.setResource(resource)
@@ -34,7 +49,7 @@ class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
     def __del__(self):
         self.setResource(None)
         super().__del__()
-        
+
     def setResource(self, resource: ResourceController) -> None:
         interests = Resource.Change('status_changed')
         self._exchangeView('_resource', resource, interests=interests)
@@ -78,7 +93,7 @@ class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
     @QtCore.pyqtSlot()
     def _onInstallButtonClicked(self):
         self._resource.install()
-        
+
     def update(self):
         haveResource = self._resource is not None and bool(self._resource)
         self.setTitle(self._resource.label if haveResource else "None")
@@ -87,7 +102,7 @@ class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
         self._importButton.setVisible(haveResource and
                                       self._resource.available and
                                       not self._resource.prepared)
-            
+
         if not haveResource:
             self._nameLabel.setText("No module")
             self._versionLabel.setText("")
@@ -98,37 +113,41 @@ class ModuleInfo(QGroupBox, QObserver, Resource.Observer):
             self._descriptionLabel.setText(self._resource.description)
             if self._resource.prepared:
                 module = sys.modules[self._resource.module]
-                self._versionLabel.setText("Version: " + self._resource.version)
-                self._libraryLabel.setText("Library: " + module.__file__)
+                self._versionLabel.setText("Version: " +
+                                           self._resource.version)
+                self._libraryLabel.setText("Library: " +
+                                           module.__file__)
             else:
                 self._versionLabel.setText("")
                 self._libraryLabel.setText("")
 
 
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QGroupBox,
-                             QGridLayout, QHBoxLayout, QVBoxLayout,
-                             QPlainTextEdit, QComboBox)
-from PyQt5.QtGui import QFontDatabase
+class QProcessInfo(QWidget, QObserver, qobservables={
+        Toolbox: {'processes_changed'}}):
 
-from .panel import Panel
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._initUI()
 
-import numpy as np
-import importlib
+    def _initUI(self) -> None:
+        self._button = QPushButton("Test")
+        self._button.clicked.connect(self._onButtonClicked)
 
-import sys
-import os
-import re
-from types import ModuleType
-import util.resources
-import util
+        layout = QVBoxLayout()
+        layout.addWidget(self._button)
+        self.setLayout(layout)
 
-from util.error import protect
+    @QtCore.pyqtSlot()
+    @protect
+    def _onButtonClicked(self):
+        self._toolbox.notify_process("Test")
+
+    def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
+        pass  # FIXME[todo]: implementation
 
 
-
-class InternalsPanel(Panel):
-    '''A Panel displaying system internals.
+class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
+    """A Panel displaying system internals.
     May be of interest during development.
 
     Attributes
@@ -141,33 +160,35 @@ class InternalsPanel(Panel):
         is initialized and updated by the method
         :py:meth:_updateModules.
 
+    _moduleName: str = None
+
     Graphical elements
     ------------------
     _grid: QGridLayout
-    '''
-
-
-    _grid: QGridLayout = None
     _moduleGrid: QGridLayout = None
+    """
 
-    _moduleName: str = None
-
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._modules = {}
-        
+        self._moduleName = None
+
         self.initUI()
-    
+
     def initUI(self):
         self._layout = QVBoxLayout()
         self._grid = QGridLayout()
-        self._grid.addWidget(self.modulesInfo(), 0,0)
-        self._grid.addLayout(self.systemInfo(), 0,1)
+        self._grid.addWidget(self.modulesInfo(), 0, 0)
+        self._grid.addLayout(self.systemInfo(), 0, 1)
 
         self._layout.addLayout(self._grid)
         self._info = QLabel("Info")
         self._layout.addWidget(self._info)
+
+        self._processInfo = QProcessInfo()
+        self.addAttributePropagation(Toolbox, self._processInfo)
+        self._layout.addWidget(self._processInfo)
+
         self.setLayout(self._layout)
 
     @QtCore.pyqtSlot()
@@ -202,7 +223,7 @@ class InternalsPanel(Panel):
         second column version (if loaded) or availability.
         Modules are listed in the order given by :py:meth:modules.
 
-        Result
+        Returns
         ------
         box: QGroupBox
             A QWidget displaying the module information.
@@ -521,10 +542,10 @@ class QNvmlInfo(QWidget):
             self._deviceCount = self.nvml.nvmlDeviceGetCount()
             self._handle = None
             self._initUI()
-        except ModuleNotFoundError as e:
+        except ModuleNotFoundError:
             self.nvml = None
             layout = QVBoxLayout()
-            layout.add(QLabel("NVIDIA Management Library not available"))
+            layout.addWidget(QLabel("NVIDIA Management Library not available"))
             self.setLayout(layout)
 
     def __del__(self):

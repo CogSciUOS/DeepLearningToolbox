@@ -1,14 +1,22 @@
-from tools.activation import (Engine as ActivationEngine,
-                              View as ActivationView)
+"""Widgets related to classifiers.
+"""
 
-from ..utils import QObserver
-
+# Qt imports
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox,
                              QGridLayout, QVBoxLayout)
 
+# toolbox imports
+from tools.activation import Engine as ActivationEngine
+from network import Classifier
 
-class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
+# GUI imports
+from ..utils import QObserver
+
+
+class QClassesView(QWidget, QObserver, qobservables={
+        ActivationEngine: {'network_changed', 'input_changed',
+                           'activation_changed'}}):
     """Visualization of classification results.
 
     Attributes
@@ -28,13 +36,13 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
     --------------------
     _classes: List[QLabel]
     _scores: List[QLabel]
-    
+
     _targetLabel: QLabel
     """
 
-    _activation: ActivationView = None
-    
-    def __init__(self, parent: QWidget=None, top_n=5):
+    _activation: ActivationEngine = None
+
+    def __init__(self, parent: QWidget = None, top_n=5):
         """Initialization of the QActivationView.
 
         Parameters
@@ -49,7 +57,7 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
         self._datasource = None
         self._label_format = None
         self._output_format = None
-        
+
         self._classes = []
         self._scores = []
         self._initUI()
@@ -82,11 +90,6 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
     def changeEvent(self, event):
         super().changeEvent(event)
 
-    def setActivationView(self, activation: ActivationView) -> None:
-        interests = ActivationEngine.\
-            Change('network_changed', 'input_changed', 'activation_changed')
-        self._exchangeView('_activation', activation, interests=interests)
-
     def activation_changed(self, activation: ActivationEngine,
                            info: ActivationEngine.Change) -> None:
         """The QClassesView is only interested if the classification result
@@ -96,18 +99,17 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
             return
 
         if info.network_changed:
-            network = activation.network
-            self._datasource = network.datasource if network else None
-            self._label_format = network.label_format if network and \
-                self._datasource and \
-                network.label_format in self._datasource.label_formats \
-                else None
-            self._output_format = 'text' if self._datasource and \
-                'text' in self._datasource.label_formats else None
+            if isinstance(activation.network, Classifier):
+                scheme = activation.network.class_scheme
+                self._output_format = ('text' if scheme.has_label('text') else
+                                       'default')
+                if activation.network.prepared:
+                    activation.add_layer(activation.network.score_layer)
 
         if info.input_changed:
             if self._datasource is None:
-                self._target = activation.input_label
+                # self._target = activation.input_label # FIXME[old]
+                self._target = '?'
                 label_text = f'"{self._target}"'
             elif self._datasource == activation.input_datasource:
                 try:
@@ -136,7 +138,7 @@ class QClassesView(QWidget, QObserver, ActivationEngine.Observer):
         if self._activation is None:
             return
 
-        classes, scores = self._activation.top_n_classifications(self._top_n)
+        classes, scores = self._activation.top_classes(self._top_n)
         labels = classes
         target = self._target
 

@@ -5,7 +5,7 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-
+from base import Runner
 from toolbox import Toolbox
 
 from .panel import Panel
@@ -18,7 +18,9 @@ from PyQt5.QtWidgets import (QPushButton, QSpinBox,
                              QVBoxLayout, QHBoxLayout)
 
 
-class AdversarialExamplePanel(Panel, QObserver, Toolbox.Observer):
+class AdversarialExamplePanel(Panel, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        Toolbox: Toolbox.Change.all()}):
     """A panel displaying adversarial examples.
 
     Attributes
@@ -165,9 +167,16 @@ print(f"keras: {keras.__version__} (backend: {keras.backend.backend()}, dim_orde
 assert keras.backend.image_data_format() == 'channels_last', "this tutorial requires keras to be configured to channels_last format"
 
 
-from network.keras import KerasClassifier
+from network.keras import Network as KerasNetwork
+from network import Classifier
+
+# FIXME[hack]: is the following really needed?
+class KerasClassifier(KerasNetwork, Classifier): pass
+
+
 # FIXME[hack]
 from models.example_keras_advex_mnist import KerasMnistClassifier
+
 
 
 class AdversarialExampleController(Observable,

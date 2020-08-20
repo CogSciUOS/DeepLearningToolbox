@@ -5,7 +5,7 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-from toolbox import Toolbox, Controller as ToolboxController
+from toolbox import Toolbox
 from network import Network, Controller as NetworkController
 from tools.am import (Engine as MaximizationEngine,
                       Controller as MaximizationController)
@@ -21,7 +21,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QSplitter)
 
 
-class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
+class MaximizationPanel(Panel, QObserver, qobservables={
+        # FIXME[todo]: old uses of QObserver: update to new scheme
+        MaximizationEngine: MaximizationEngine.Change.all()}):
     """A panel containing elements to configure and run activation
     maximization and to display results.
 
@@ -47,7 +49,7 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
     # be included in this MaximizationPanel
     with_display: bool = False
     
-    def __init__(self, toolbox: ToolboxController=None,
+    def __init__(self, toolbox: Toolbox=None,
                  maximization: MaximizationController=None,
                  network: NetworkController=None, **kwargs):
         """Initialization of the ActivationsPael.
@@ -60,7 +62,7 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
         super().__init__(**kwargs)
         self._initUI()
         self._layoutUI()
-        self.setToolboxController(toolbox)
+        self.setToolbox(toolbox)
         self.setMaximizationController(maximization)
         self.setNetworkController(network)
 
@@ -123,9 +125,9 @@ class MaximizationPanel(Panel, QObserver, MaximizationEngine.Observer):
 
         self.setLayout(layout)
 
-    def setToolboxController(self, toolbox: ToolboxController) -> None:
-        self._maximization_config_view.setToolboxController(toolbox)
-        self._maximization_controls.setToolboxController(toolbox)
+    def setToolbox(self, toolbox: Toolbox) -> None:
+        self._maximization_config_view.setToolbox(toolbox)
+        self._maximization_controls.setToolbox(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
         self._maximization_config_view.setNetworkController(network)

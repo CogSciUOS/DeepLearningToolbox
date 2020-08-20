@@ -2,10 +2,10 @@ import numpy as np
 
 from datasource import Metadata
 from util.image import Landmarks, BoundingBox
-from base import run
-from tools.detector import (ImageDetector as BaseDetector,
-                            ImageController as BaseController)
+from base import run, busy
+from tools.detector import ImageDetector as BaseDetector
 from .detector import Detector as FaceDetector
+
 
 class FacialLandmarks(Landmarks):
 
@@ -15,10 +15,10 @@ class FacialLandmarks(Landmarks):
     def mouth(self):
         not NotImplementedError()
 
+
 class FacialLandmarks68(FacialLandmarks):
 
     pass
-
 
 
 class Detector(BaseDetector):
@@ -27,9 +27,8 @@ class Detector(BaseDetector):
     """
     _face_detector: FaceDetector = None
 
-
     @staticmethod
-    def create(name: str, prepare: bool=True):
+    def create(name: str, prepare: bool = True):
         if name == 'dlib':
             from .dlib import FacialLandmarkDetector
             detector = FacialLandmarkDetector()
@@ -40,7 +39,7 @@ class Detector(BaseDetector):
             detector.prepare()
         return detector
 
-    def __init__(self, face_detector: FaceDetector=None, **kwargs) -> None:
+    def __init__(self, face_detector: FaceDetector = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.face_detector = face_detector
 
@@ -52,19 +51,18 @@ class Detector(BaseDetector):
     def face_detector(self, face_detector):
         self._face_detector = face_detector
 
-
     def _detect_regions(self, image: np.ndarray, regions):
-        metadata = Metadata(description=
-                            'Facial landmarks detectec by the dlib detctor')
+        metadata = Metadata(
+            description='Facial landmarks detectec by the dlib detctor')
         for region in regions:
             # FIXME[hack]: suppose region.location is a BoundingBox
             detection = self._predictor(image, region.location)
             metadata.add_region(self._detection_landmarks(detection))
 
         return metadata
-        
+
     def _detect_all(self, image: np.ndarray,
-                    face_detector: FaceDetector=None) -> Metadata:
+                    face_detector: FaceDetector = None) -> Metadata:
         if face_detector is None:
             face_detector = self._face_detector
         if face_detector is None:
@@ -73,27 +71,25 @@ class Detector(BaseDetector):
         faces = face_detector.detect(image)
         return self._detect_all(image, faces.regions)
 
-
-class Controller(BaseController):
+    #
+    # Precessing
+    #
 
     def process_all(self, data):
         """Process the given data.
 
         """
         self._next_data = data
-        if not self._detector.busy:
+        if not self.busy:
             self._process()
 
-    @run
+    @busy("processing")
     def _process_all(self):
-        self._detector.busy = True
         while self._next_data is not None:
 
             self._data = self._next_data
             self._next_data = None
-            self._detector.change(data_changed=True)
-            
-            self._detections = self._detector.detect_all(self._data)
-            self._detector.change(detection_finished=True)
+            self.change(data_changed=True)
 
-        self._detector.busy = False
+            self._detections = self.detect_all(self._data)
+            self.change(detection_finished=True)

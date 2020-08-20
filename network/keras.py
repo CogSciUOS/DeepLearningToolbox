@@ -1,14 +1,111 @@
+
+# standard imports
 from __future__ import absolute_import
 from typing import List
-
-import numpy as np
 from collections import OrderedDict
-from frozendict import FrozenOrderedDict
+
+# third party imports
+
+# toolbox imports
+from . import Network as BaseNetwork, Classifier as BaseClassifier
+from .exceptions import ParsingError
+from . import layers
+from dltb.thirdparty.keras import keras
 
 
-import importlib
+class Layer(layers.Layer):
+    """A keras :py:class:`Layer` implements the abstract layer class
+    based on keras layer object.
 
-from . import Network as BaseNetwork
+    A `py:class:`Layer` may bundle multiple keras layer objects of the
+    unterlying Keras model, e.g., when convolution and activation
+    function are realized be separate Keras layers.
+    """
+
+    def __init__(self, network: BaseNetwork,
+                 keras_layer_objs: List[keras.layers.Layer]) -> None:
+        super().__init__(network)
+        if len(keras_layer_objs) > 6:  # FIXME[hack]: was 2 not 6
+            raise ValueError('A layer should at most contain 2 keras layer'
+                             'objects: normal plus activation')
+        self._keras_layer_objs = keras_layer_objs
+
+    @property
+    def input_shape(self):
+        """The input shape is obtained from the first Keras layer bundled
+        in this `py:class:`Layer`.
+        """
+        return self._keras_layer_objs[0].input_shape
+
+    @property
+    def output_shape(self):
+        """The output shape is obtained from the last Keras layer bundled
+        in this `py:class:`Layer`.
+        """
+        return self._keras_layer_objs[-1].output_shape
+
+
+class NeuralLayer(Layer, layers.NeuralLayer):
+    """A keras `NeuralLayer` consists of one or two keras.layers.Layer
+    objects.
+    """
+
+    @property
+    def parameters(self):
+        return self._keras_layer_objs[0].get_weights()
+
+    @property
+    def num_parameters(self):
+        return self._keras_layer_objs[0].count_params()
+
+    @property
+    def weights(self):
+        return self._keras_layer_objs[0].get_weights()[0]
+
+    @property
+    def bias(self):
+        return self._keras_layer_objs[0].get_weights()[1]
+
+
+class StridingLayer(Layer, layers.StridingLayer):
+
+    @property
+    def strides(self):
+        return self._keras_layer_objs[0].strides
+
+    @property
+    def padding(self):
+        return self._keras_layer_objs[0].padding
+
+
+class Dense(NeuralLayer, layers.Dense):
+    pass
+
+
+class Conv2D(NeuralLayer, StridingLayer, layers.Conv2D):
+
+    @property
+    def kernel_size(self):
+        return self._keras_layer_objs[0].kernel_size
+
+    @property
+    def filters(self):
+        return self._keras_layer_objs[0].filters
+
+
+class MaxPooling2D(StridingLayer, layers.MaxPooling2D):
+
+    @property
+    def pool_size(self):
+        return self._keras_layer_objs[0].pool_size
+
+
+class Dropout(Layer, layers.Dropout):
+    pass
+
+
+class Flatten(Layer, layers.Flatten):
+    pass
 
 
 class Network(BaseNetwork):
@@ -17,22 +114,8 @@ class Network(BaseNetwork):
     Implements only the functionality that can be efficiently
     implemented in pure Keras.
     """
-    
-    @classmethod
-    def framework_available(cls):
-        spec = importlib.util.find_spec("keras")
-        return spec is not None
 
-    @classmethod
-    def import_framework(cls):
-        global keras
-        # This unconditionally outputs a message "Using [...] backend."
-        # to sys.stderr (in keras/__init__.py).
-        keras = importlib.import_module('keras')
-        from keras.models import load_model
-
-
-    def __init__(self, **kwargs):
+    def __init__(self, *args, model_file: str = None, model=None, **kwargs):
         """
         Load Keras model.
         Parameters
@@ -40,21 +123,68 @@ class Network(BaseNetwork):
         model_file
             Path to the .h5 model file.
         """
-        
-        
+        print("**keras.Network:", kwargs)
+        kwargs['data_format'] = keras.backend.image_data_format()
+
+        super().__init__(*args, **kwargs)
+        self._model_file = model_file
+        self._model = model
+
+    def _prepare(self) -> None:
         # Set learning phase to train in case setting to test would
         # affect gradient computation.
         #
         # FIXME[todo]: Set it to test, to eliminate dropout, check for
         # gradient computation later.
         keras.backend.set_learning_phase(0)
-        if 'model_file' in kwargs.keys():
-            self._model = keras.models.load_model(kwargs.pop('model_file'))
-        elif 'model' in kwargs.keys():
-            self._model = kwargs['model']
-        # Check the data format.
-        kwargs['data_format'] = keras.backend.image_data_format()
-        super().__init__(**kwargs)
+
+        # Note: we have to load the model before calling super()._prepare(),
+        # as the model is required to provide the layers, requested
+        # by super()._prepare().
+        if self._model is None:
+            self._prepare_model()
+        else:
+            print("network.keras: INFO: model graph was already set")
+        super()._prepare()
+
+    def _prepare_model(self) -> None:
+        if self._model_file is not None:
+            self._model = keras.models.load_model(self._model_file)
+
+    def _unprepare(self) -> None:
+        if self._model_file is not None:
+            self._model = None
+        super()._unprepare()
+
+    def _prepared(self) -> bool:
+        return (self._model is not None) and super()._prepared()
+
+    #
+    # Layers
+    #
+
+    # Missing layer types:
+    # - InputLayer
+    # - ZeroPadding2D
+    # - BatchNormalization
+
+    # A mapping of keras.layer.Layer class names to
+    # network.keras.Layer class names
+    _layer_types_to_classes = {
+        'Conv2D': Conv2D,
+        'Dense': Dense,
+        'MaxPooling2D': MaxPooling2D,
+        'Dropout': Dropout,
+        'Flatten': Flatten
+    }
+
+    # Layer types that encapsulate the inner product, bias add,
+    # activation pattern.
+    _neural_layer_types = {'Dense', 'Conv2D'}
+
+    # Layer types that just map input to output without trainable
+    # parameters.
+    _transformation_layer_types = {'MaxPooling2D', 'Flatten', 'Dropout'}
 
     def _compute_layer_ids(self):
         """
@@ -63,7 +193,8 @@ class Network(BaseNetwork):
         -------
 
         """
-        # Apparently config can be sometimes a dict or simply a list of `layer_specs`.
+        # Apparently config can be sometimes a dict or
+        # simply a list of `layer_specs`.
         config = self._model.get_config()
         if isinstance(config, dict):
             layer_specs = config['layers']
@@ -73,19 +204,146 @@ class Network(BaseNetwork):
             raise ValueError('Config is neither a dict nor a list.')
         return [layer_spec['config']['name'] for layer_spec in layer_specs]
 
+    def _create_layer_dict(self) -> OrderedDict:
+        """
+        """
+
+        layer_ids = self._compute_layer_ids()
+        layer_dict = OrderedDict()
+        last_layer_id = ''
+        last_layer_type = None
+
+        # current_layers: Layers that could not be wrapped in objects
+        # yet, because they were missing the activation function.
+        current_layers = []
+
+        for i, layer_id in enumerate(layer_ids):
+            keras_layer_obj = self._model.get_layer(layer_id)
+            layer_type = keras_layer_obj.__class__.__name__
+            if (layer_type not in self._layer_types_to_classes and
+                layer_type not in self._neural_layer_types and
+                layer_type not in self._transformation_layer_types and
+                layer_type not in {'Activation', 'BatchNormalization',
+                                   'ZeroPadding2D', 'Add', 'InputLayer',
+                                   'GlobalAveragePooling2D'}):
+                print(f"({i}) {layer_id} ({layer_type})")
+        #
+        for layer_id in layer_ids:
+            keras_layer_obj = self._model.get_layer(layer_id)
+            layer_type = keras_layer_obj.__class__.__name__
+
+            # Check whether the layer type is considered a real layer.
+            if layer_type in self._layer_types_to_classes:
+
+                # Check that if the layer is a neural layer it
+                # contains an activation function.  If so the layer
+                # can be added savely.  Otherwise take the next
+                # activation function and merge the layers
+                if ((layer_type in self._neural_layer_types and
+                     keras_layer_obj.activation.__name__ != 'linear') or
+                    (layer_type in self._transformation_layer_types)):
+                    # Check that there is no unfinished layer with
+                    # missing activation function.  If not add the
+                    # layer.
+                    # FIXME[hack]: unfinished layer can be longer than 1 element
+                    if True or not current_layers:
+                        cls = self._layer_types_to_classes[layer_type]
+                        layer_dict[layer_id] = cls(self, [keras_layer_obj])
+                    else:
+                        raise ParsingError("Missing activation function: "
+                                           f"{current_layers}")
+                else:
+                    # Check that there is no other unfinished layer
+                    # before that one.
+                    # FIXME[hack]: there may be more than one layer
+                    # without activation functions, e.g.
+                    #   ZeroPadding2D
+                    #   Conv2D
+                    #   BatchNormalization
+                    #   Activation
+                    # or
+                    #   Conv2D
+                    #   Conv2D
+                    #   BatchNormalization
+                    #   BatchNormalization
+                    #   Add
+                    #   Activation
+                    # Work this out in more detail!
+                    if True or not current_layers:
+                        current_layers.append(keras_layer_obj)
+                        last_layer_id = layer_id
+                        last_layer_type = layer_type
+                    else:
+                        raise ParsingError("Two consectutive layers with no "
+                                           "activation function:"
+                                           f"{current_layers} and {layer_type}")
+
+            elif layer_type == 'Activation':
+                # Check that there was a layer before without
+                # activation function and merge.
+                if current_layers:
+                    current_layers.append(keras_layer_obj)
+                    cls = self._layer_types_to_classes[last_layer_type]
+                    layer_dict[last_layer_id] = cls(self, current_layers)
+                    current_layers = []
+                else:
+                    raise ParsingError("Two activation layers "
+                                       "after each other.")
+            elif layer_type in {'InputLayer', 'BatchNormalization',
+                                'ZeroPadding2D', 'Add', 'InputLayer',
+                                'GlobalAveragePooling2D'}:
+                # FIXME[hack]
+                current_layers.append(keras_layer_obj)
+            else:
+                raise ParsingError(f"Not sure how to deal with {layer_type} "
+                                   f"with current layers ({current_layers}).")
+
+        return OrderedDict(layer_dict)
+
+    #
+    # Trainer
+    #
+
     def get_trainer(self, training):
         return Trainer(training, self)
-        
 
-# FIXME[hack]:
-import os
-os.environ['KERAS_BACKEND'] = 'tensorflow'
+    #
+    # FIXME[old]: this was network.keras.KerasModel
+    #
+
+    def load(self, filename: str):
+        with self._graph.as_default():
+            with self._session.as_default():
+                self._vae.load_weights(filename)
+                LOG.info(f'loaded autoencoder from "{filename}"')
+
+    def save(self, filename: str):
+        with self._graph.as_default():
+            with self._session.as_default():
+                self._vae.save_weights(filename)
+                LOG.info(f'saved autoencoder to "{filename}"')
+
+    _snapshot = None
+
+    def snapshot(self):
+        """Make a snapshot of the current model state (weights).
+        """
+        self._snapshot = self._model.get_weights()
+
+    @property
+    def model(self):
+        return self._model
+
+    # plot_model requires that pydot is installed
+    #from keras.utils import plot_model
+    def plot(self):  # FIXME[hack]: plot_model allows for more parameters ...
+        plot_model(self._model)
+
 
 from .network import Trainer as BaseTrainer
 from keras.callbacks import Callback
 
 import time
-
 
 
 class Trainer(BaseTrainer, Callback):
@@ -95,8 +353,10 @@ class Trainer(BaseTrainer, Callback):
     to get some information on the training process.
 
     """
-    
+
     def __init__(self, training, network, count_mode='samples'):
+        # FIXME[question]: can we use real python multiple inheritance here?
+        # (that is just super().__init__(*args, **kwargs))
         BaseTraining.__init__(self, training, network)
         Callback.__init__(self)
         if count_mode == 'samples':
@@ -105,7 +365,6 @@ class Trainer(BaseTrainer, Callback):
             self.use_steps = True
         else:
             raise ValueError('Unknown `count_mode`: ' + str(count_mode))
-
 
     def _train(self):
 
@@ -221,7 +480,6 @@ class Trainer(BaseTrainer, Callback):
 
 
 from packaging import version
-import keras
 if version.parse(keras.__version__) >= version.parse('2.0.0'):
     from keras.layers import Conv2D
 else:
@@ -232,16 +490,15 @@ def conv_2d(filters, kernel_shape, strides, padding, input_shape=None):
     Defines the right convolutional layer according to the
     version of Keras that is installed.
     :param filters: (required integer) the dimensionality of the output
-                  space (i.e. the number output of filters in the
-                  convolution)
+        space (i.e. the number output of filters in the convolution)
     :param kernel_shape: (required tuple or list of 2 integers) specifies
-                       the strides of the convolution along the width and
-                       height.
+        the strides of the convolution along the width and
+        height.
     :param padding: (required string) can be either 'valid' (no padding around
-                  input or feature map) or 'same' (pad to ensure that the
-                  output feature map size is identical to the layer input)
+        input or feature map) or 'same' (pad to ensure that the
+        output feature map size is identical to the layer input)
     :param input_shape: (optional) give input shape if this is the first
-                      layer of the model
+        layer of the model
     :return: the Keras layer
     """
     if version.parse(keras.__version__) >= version.parse('2.0.0'):
@@ -262,72 +519,12 @@ def conv_2d(filters, kernel_shape, strides, padding, input_shape=None):
                                  subsample=strides, border_mode=padding)
 
 
-# plot_model requires that pydot is installed
-#from keras.utils import plot_model
-import tensorflow as tf
-from keras import backend as K
+# FIXME[hack]: what is this supposed to do?
+class Classifier(Network, BaseClassifier):
 
-import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-class KerasModel:  # FIXME[concept]: this is actually a Keras Tensorflow(!) Model
-
-    def __init__(self):
-        from tensorflow.python.client import device_lib
-        logger.info(device_lib.list_local_devices())
-
-        #self._session = K.get_session()
-        self._graph = tf.Graph()
-        self._session = tf.Session(graph=self._graph)
-        K.set_session(self._session)
-        
-        self._model = None
-        self._snapshot = None
-
-    def __del__(self):
-        self._session.close()
-   
-    def load(self, filename: str):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.load_weights(filename)
-                logger.info(f'loaded autoencoder from "{filename}"')
-
-    def save(self, filename: str):
-        with self._graph.as_default():
-            with self._session.as_default():
-                self._vae.save_weights(filename)
-                logger.info(f'saved autoencoder to "{filename}"')
-
-    def snapshot(self):
-        """Make a snapshot of the current model state (weights).
-        """
-        self._snapshot = self._model.get_weights()
-
-    def reset(self):
-        """Reset the model parameters (weights) to the last snapshot.
-        """
-        if self._snapshot is not None:
-            self._keras_model.set_weights(self._snapshot)
-            self._sess.run(tf.global_variables_initializer())
-
-    @property
-    def graph(self):
-        return self._graph
-
-    @property
-    def session(self):
-        return self._session
-
-    @property
-    def model(self):
-        return self._model
-
-class KerasClassifier(KerasModel):  # FIXME[concept]: this is actually a Keras Tensorflow(!) Classifier
-
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        print("**keras_tensorflow.Classifier:", kwargs, self.__class__.__mro__)
+        super().__init__(**kwargs)
         self._input_placeholder = None
         self._label_placeholder = None
         self._predictions = None
@@ -343,4 +540,3 @@ class KerasClassifier(KerasModel):  # FIXME[concept]: this is actually a Keras T
     @property
     def predictions(self):
         return self._predictions
-

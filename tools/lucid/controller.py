@@ -24,7 +24,7 @@ class Controller(BaseController):
         interested in such notifications should register to this
         Observable.
 
-        Result
+        Returns
         ------
         engine: Engine
             The lucid engine controlled by this Controller.

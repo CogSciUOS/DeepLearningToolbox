@@ -80,7 +80,7 @@ class RecorderHandler(logging.Handler):
     # 'RecorderHandler'" upon initialization.
     
     def __init__(self):
-        logging.Handler.__init__(self)
+        super().__init__()
         self._records = []
 
     def emit(self, record: logging.LogRecord) -> None:

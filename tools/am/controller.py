@@ -48,7 +48,7 @@ class Controller(View, BaseController):
         interested in such notifications should register to this
         Observable.
 
-        Result
+        Returns
         ------
         engine: Engine
             The engine controlled by this Controller.

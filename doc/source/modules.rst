@@ -1,15 +1,18 @@
-qtpyvis
-=======
+base
+====
 
 .. toctree::
    :maxdepth: 4
 
-   main
+   base
+   datasource
+   tools
    network
-   datasources
-   observer
-   controller
-   model
+   toolbox
    qtgui
+   gtkgui
    util
+   model
+   controller
    visualizations
+

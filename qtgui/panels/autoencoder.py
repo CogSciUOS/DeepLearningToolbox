@@ -5,7 +5,7 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-from toolbox import Toolbox, ToolboxController
+from toolbox import Toolbox
 from tools.train import Training, TrainingController
 from network import Network, AutoencoderController
 
@@ -21,7 +21,9 @@ from PyQt5.QtWidgets import (QPushButton, QSpinBox, QLineEdit,
                              QVBoxLayout, QHBoxLayout)
 
 
-class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
+class AutoencoderPanel(Panel, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        Network: Network.Change.all(), Training: Training.Change.all()):
     """A panel displaying autoencoders.
 
     Attributes
@@ -29,10 +31,10 @@ class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
     _autoencoder: AutoencoderController
         A controller for a network trained as autoencoder.
     """
-    _toolbox: ToolboxController = None
+    _toolbox: Toolbox = None
     _autoencoder: AutoencoderController = None
 
-    def __init__(self, toolboxController: ToolboxController,
+    def __init__(self, toolbox: Toolbox,
                  autoencoderController: AutoencoderController,
                  trainingController: TrainingController,
                  parent=None) -> None:
@@ -49,7 +51,7 @@ class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
         self._initUI()
         self._layoutComponents()
 
-        self.setToolboxController(toolboxController)
+        self.setToolbox(toolbox)
         self.setAutoencoderController(autoencoderController)
         self.setTrainingController(trainingController)
 
@@ -81,7 +83,9 @@ class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
         # Controls
         #
         def slot(checked: bool):
-            self._autoencoder(self._toolbox.hack_new_model())
+            # FIXME[old]
+            #self._autoencoder(self._toolbox.hack_new_model())
+            print("FIXME[todo]: provide a new VAE Model")
         self._buttonCreateModel = QPushButton("Create")
         self._buttonCreateModel.clicked.connect(slot)
 
@@ -176,7 +180,7 @@ class AutoencoderPanel(Panel, QObserver, Network.Observer, Training.Observer):
                   self._buttonPlotReconstruction):
             w.setEnabled(enabled)
 
-    def setToolboxController(self, toolbox: ToolboxController):
+    def setToolbox(self, toolbox: Toolbox):
         self._toolbox = toolbox
 
     def setAutoencoderController(self, autoencoder: AutoencoderController):

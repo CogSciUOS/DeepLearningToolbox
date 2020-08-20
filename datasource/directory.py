@@ -1,17 +1,30 @@
-from datasource import Indexed, InputData, Metadata
+"""Base class for datasources that read data from files in a
+directory.
 
+"""
+
+# standard imports
+from typing import Union
 import os
-from glob import glob
+import glob
 import random
 
+# toolbox imports
+from .data import Data, ClassScheme
+from .files import DataFiles
 
-class DataDirectory(Indexed):
+
+class DataDirectory(DataFiles):
+    # pylint: disable=too-many-ancestors
+    # Too many ancestors (13/7)
+    # pylint: disable=abstract-method
+    # Method 'load_datapoint_from_file' is abstract in class 'Datasource'
     """A data directory contains data entries (e.g., images), in
     individual files. Each file is only read when accessed.
 
     Attributes
     ----------
-    _dirname: str
+    _directory: str
         A directory containing input data files. Can be None.
     _filenames: list
         A list of filenames in the data directory (that is, filenames
@@ -19,63 +32,74 @@ class DataDirectory(Indexed):
         indicates that no suitable files where found in the directory.
         None means that the list has not yet been prepared.
     """
-    _dirname: str = None
-    _filenames: list = None
 
-    def __init__(self, dirname: str = None, description: str=None, **kwargs):
+    def __init__(self, directory: str = None, description: str = None,
+                 label_from_directory: Union[bool, str] = False,
+                 scheme: ClassScheme = None, **kwargs) -> None:
         """Create a new DataDirectory
 
         Parameters
         ----------
-        dirname :   str
-                    Name of the directory with files
+        directory: str
+            Name of the directory with files
+        label_from_directory:
+            Use the directory name as class labels. If True, the
+            directory name is taken as class label. If a string,
+            it should indicate a format in the py:class:`ClassScheme`
+            of this :py:class:`DataDirectory` and the directory name
+            will be looked up from that scheme.
         """
-        description = description or f"directory {dirname}"
-        super().__init__(description=description, **kwargs)
-        self.directory = dirname
+        description = description or f"directory {directory}"
+        super().__init__(directory=directory, description=description,
+                         **kwargs)
+        self._label_from_directory = label_from_directory
+        self._scheme = scheme
 
-    @property
-    def directory(self):
-        return self._dirname
+    def __str__(self):
+        """String representation of this :py:class:`DataDirectory`.
+        """
+        return f'<DataDirectory "{self._directory}">'
 
-    @directory.setter
-    def directory(self, dirname: str):
-        """Set the directory to load from
+    def _set_directory(self, directory: str):
+        """(Re)set the directory. Changing the directory requires
+        to prepare this :py:class:`DataDirectory` again.
+        """
+        super()._set_directory(directory)
+        self.unprepare()
+
+    #
+    # Preparable
+    #
+
+    def _preparable(self) -> bool:
+        """Check if this :py:class:`DataDirectory` can be prepared.
+        """
+        return (bool(self._directory) and
+                os.path.isdir(self.directory) and
+                super()._preparable())
+
+    def _prepare(self, filenames_cache: str = None, **kwargs) -> None:
+        # pylint: disable=arguments-differ
+        """Prepare this :py:class:`DataDirectory`.
+        This will build up the list of filenames, either by traversing
+        the directory, or by using a cache file.
 
         Parameters
         ----------
-        dirname: str
-            Name of the directory with files
-
-        Raises
-        ------
-        FileNotFoundError:
-            The directory does not exist.
+        filenames_cache: str
+            Name of a cache file to store the list of filenames.
         """
-        
-        if dirname and not os.path.isdir(dirname):
-            FileNotFoundError(f"No such directory: {dirname}")
-        if self._dirname != dirname:
-            self._dirname = dirname
-            self._filenames = None
-            self.change('metadata_changed')
-
-    @property
-    def prepared(self):
-        """Check if this Directory has been prepared.
-        """
-        return self._filenames is not None
-
-    def _prepare_data(self):
-        """
-        """
-        if not self._dirname:
-            raise RuntimeError("No directory was specificed for DataDirectory")
-
+        super()._prepare(**kwargs)
+        self._filenames = filenames_cache and self._read_cache(filenames_cache)
         if self._filenames is None:
             self._prepare_filenames()
+            self._write_cache(filenames_cache, self._filenames)
 
-    def _prepare_filenames(self):
+    def _unprepare(self) -> None:
+        self._filenames = None
+        super()._unprepare()
+
+    def _prepare_filenames(self) -> None:
         """Prepare the list of filenames maintained by this
         :py:class:`DataDirectory`.
 
@@ -83,54 +107,50 @@ class DataDirectory(Indexed):
         directory. Subclasses may implement alternative methods to
         collect filenames.
         """
-        # self._filenames = [f for f in os.listdir(self._dirname)
-        #                    if os.path.isfile(os.path.join(self._dirname, f))]
-        self._filenames = glob(os.path.join(self._dirname, "**", "*.*"),
-                               recursive=True)
+        # self._filenames = \
+        #         [f for f in os.listdir(self._directory)
+        #          if os.path.isfile(os.path.join(self._directory, f))]
+        pattern = os.path.join(self._directory, "**", "*.*")
+        filenames = glob.glob(pattern, recursive=True)
+        # we need relative filenames!
+        index = len(self._directory) + 1
+        self._filenames = [filename[index:] for filename in filenames]
 
-    def __len__(self):
-        """The length of a :py:class:`DataDirectory` is the number
-        of files in the directory.
+    #
+    # Data
+    #
+
+    def _get_meta(self, data: Data, **kwargs) -> None:
+        # pylint: disable=arguments-differ
+        """Get metadata for some data.
         """
-        return self.prepared and len(self._filenames) or 0
+        if self._label_from_directory:
+            data.add_attribute('label', batch=True)
+        super()._get_meta(data, **kwargs)
 
-    def __str__(self):
-        return f'<DataDirectory "{self._dirname}">'
-
-
-    @property
-    def fetched(self):
-        return self._data is not None
-
-    def _get_data(self):
-        """The actual implementation of the :py:meth:`data` property
-        to be overwritten by subclasses.
-
-        It can be assumed that a data point has been fetched when this
-        method is invoked.
+    def _get_data_from_file(self, data: Data, filename: str) -> None:
+        """Get data from a given file.
         """
-        return self._data
+        super()._get_data_from_file(data, filename)
+        self._get_label_for_filename(data, filename)
 
-    def _fetch_index(self, index, **kwargs) -> None:
-        if isinstance(index, int):
-            filename = self._filenames[index]
-        elif isinstance(index, str):
-            # FIXME[todo]: This can be improved by reverse lookup table
-            filename = index
-            index = self._filenames.index(filename)
+    def _get_label_for_filename(self, data: Data, filename: str) -> None:
+        """Get a class label for the file from the directory name.
+        """
+        if self._label_from_directory is True:
+            data.label = os.path.dirname(filename)
+        elif self._label_from_directory:
+            data.label = \
+                self._scheme.identifier(os.path.dirname(filename),
+                                        lookup=self._label_from_directory)
 
-        abs_filename = os.path.join(self._dirname, filename)
-        self._data = self.load_datapoint_from_file(abs_filename)
-        self._index = index
-        if self._metadata is not None:
-            self._metadata.set_attribute('filename', filename)
-            self._metadata.set_attribute('basename', os.path.basename(filename))
-            self._metadata.set_attribute('path', abs_filename)
-            self._metadata.set_attribute('index', index)
-            self._metadata.set_attribute('image', self._data)
-
-    # numerical index of the currently selected file
-    _index: int = 0
-
-    def _get_index(self):
-        return self._index
+    # FIXME[todo]: currently not used - provide a way to work without filelist
+    def _get_random_without_filelist(self, data: Data) -> None:
+        """Get a random datapoint in a 2-level hierarchy in cases where
+        no filelist was build up.
+        """
+        # FIXME[todo]: currently there is no list of subdirectories
+        #              (self._subdirs)
+        subdir = random.choice(self._subdirs)
+        name = random.choice(os.listdir(os.path.join(self.directory, subdir)))
+        self._get_data_from_file(data, os.path.join(subdir, name))

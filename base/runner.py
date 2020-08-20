@@ -210,7 +210,7 @@ class ProcessObservable: # (Observable):
             self._task.wait()
             method, args, kwargs = self._queue.get()
             self._task.clear()
-            print(method, args, kwargs)
+            print("ProcessObservable:", method, args, kwargs)
             # func = getattr(self, method)
             # result = func(*args, **kwargs)
             result = "the result"
@@ -269,35 +269,35 @@ class NEWBackgroundRunner:
         :py:class:`Event`.
 
         """
-        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _threadLoop: "
               "preparing the MTCNN detector.")
         try:
             self._prepare2()
         except BaseException as error:
-            print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+            print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _threadLoop: "
                   f"preparation failed ({error}).")
             handle_exception(error)
                 
-        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
-              f" ... preparation finished ({self.prepared()}).")
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _threadLoop: "
+              f" ... preparation finished ({self.prepared}).")
 
         self._thread_finished.set()
 
-        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _threadLoop: "
               "Starting the processing loop ...")
         while True:
             self._thread_new_task.wait()
             self._thread_new_task.clear()
             if self._thread_stop:
-                print(f"MTCNN[{threading.currentThread().getName()}]: "
+                print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: "
                       "_threadLoop: received a stop signal.")
                 break
-            print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+            print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _threadLoop: "
                   "detecting faces with the MTCNN detector "
                   f"{self._thread_image.shape}")
             self._thread_metadata = self._detect2(self._thread_image)
             self._thread_finished.set()
-        print(f"MTCNN[{threading.currentThread().getName()}]: _threadLoop: "
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _threadLoop: "
               " ... processing loop finished.")
 
     def _prepare2(self) -> None:
@@ -305,7 +305,7 @@ class NEWBackgroundRunner:
         (:py:meth:`_threadLoop`). Initialization and prediction will be
         done by that loop.
         """
-        print(f"MTCNN[{threading.currentThread().getName()}]: _prepare: "
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _prepare: "
               "preparing mtcnn ...")
         self._thread_new_task = threading.Event()
         self._thread_finished = threading.Event()
@@ -313,12 +313,12 @@ class NEWBackgroundRunner:
                                         name="MTCNN-Thread")
         self._thread_stop = False
         self._thread.start()
-        print(f"MTCNN[{threading.currentThread().getName()}]: _prepare: "
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _prepare: "
               "... waiting for background task to finish ....")
         self._thread_finished.wait()
         self._thread_finished.clear()
-        print(f"MTCNN[{threading.currentThread().getName()}]: _prepare: "
-              "... prepared [{self.prepared()}].")
+        print(f"NEWBackgroundRunner[{threading.currentThread().getName()}]: _prepare: "
+              "... prepared [{self.prepared}].")
 
     def _unprepare2(self) -> bool:
         """The DetectorMTCNN is prepared, once the model data
@@ -339,4 +339,43 @@ class NEWBackgroundRunner:
         self._thread_finished.wait()
         self._thread_finished.clear()
         return self._thread_metadata
+
+#
+# FIXME[experiment]: a context manager that starts a background thread
+#
+
+# The following is not exactly what I am looking for: it starts a
+# background thread and stops that Thread once the context is exited
+#
+# with Sleeper(sleep=2.0) as sleeper:
+#     time.sleep(5)
+#
+# BTW - this will crash ipython when sleep=8.0 (i.e. the background thread
+# runs longer than the context)
+
+import threading
+
+class ThreadContext(threading.Thread):
+    def __init__(self, sleep=5.0):
+        super().__init__(name='Background')
+        self.stop_event = threading.Event()
+        self.sleep = sleep
+
+    def run(self):
+        print(f"ThreadContext: ThreadContext {threading.current_thread()} started")
+        while self.sleep > 0 and not self.stop_event.is_set():
+            time.sleep(1.0)
+            self.sleep -= 1
+        print(f"ThreadContext: Thread {threading.current_thread()} ended")
+
+    def stop(self):
+        self.stop_event.set()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.stop()
+        print('ThreadContext: Force set Thread Sleeper stop_event')
 

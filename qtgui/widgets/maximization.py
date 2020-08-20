@@ -22,13 +22,15 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-from toolbox import Toolbox, Controller as ToolboxController
+from toolbox import Toolbox
+from datasource import Data
 from network import Network, Controller as NetworkController
 from tools.am import (Config as MaximizationConfig,
                       Engine as MaximizationEngine,
                       Controller as MaximizationController)
  
-from ..utils import QImageView, QObserver, protect
+from ..utils import QObserver, protect
+from .image import QImageView
 from .networkview import QNetworkSelector
 from .matplotlib import QMatplotlib
 from .logging import QLogHandler
@@ -48,8 +50,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
-                          Network.Observer):
+class QMaximizationConfig(QWidget, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        MaximizationConfig: MaximizationConfig.Change.all(),
+        Network: Network.Change.all()}):
     """
     A widget displaying controls for the parameters of the
     activation maximization visualization algorithm.
@@ -119,15 +123,15 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
     _network: NetworkController = None
     _config: MaximizationConfig = None
 
-    def __init__(self, toolbox: ToolboxController=None,
+    def __init__(self, toolbox: Toolbox=None,
                  network: NetworkController=None,
                  config: MaximizationConfig=None, **kwargs):
         """Initialization of the ActivationsPael.
 
         Parameters
         ----------
-        toolbox: ToolboxController
-            The ToolboxController. This is only needed for the
+        toolbox: Toolbox
+            The Toolbox. This is only needed for the
             network selection widget to stay informed of the
             networks available.
         network: NetworkController
@@ -141,7 +145,7 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
         self._widgets = {}
         self._initUI()
         self._layoutUI()
-        self.setToolboxController(toolbox)
+        self.setToolbox(toolbox)
         self.setConfig(config)  # FIXME[bug]: config has to be set before
                                 # network, otherwise layers will net be updated
         self.setNetworkController(network)
@@ -583,13 +587,13 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
         boxLayout.addWidget(box5)
         self.setLayout(boxLayout)
 
-    def setToolboxController(self, toolbox: ToolboxController) -> None:
-        self._networkSelector.setToolboxView(toolbox)
+    def setToolbox(self, toolbox: Toolbox) -> None:
+        self._networkSelector.setToolbox(toolbox)
 
     def setNetworkController(self, network: NetworkController) -> None:
         self._exchangeView('_network', network,
                            interests=Network.Change('observable_changed'))
-        self._networkSelector.setNetworkView(network)
+        self._networkSelector.setNetwork(None if network is None else network.FIXME_GET())
 
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
@@ -658,7 +662,7 @@ class QMaximizationConfig(QWidget, QObserver, MaximizationConfig.Observer,
                 widget.setValue(getattr(config, name))
 
         if self._network:
-            label = self._network.get_label_for_class(config.UNIT_INDEX)
+            label = self._network.class_schem.get_label(config.UNIT_INDEX)
             self._unitLabel.setText(label)
                 
         if info.layer_changed:
@@ -839,7 +843,7 @@ class QMaximizationConfigView(QWidget):
         self.selected.emit(self)
 
 
-from toolbox import Controller as ToolboxController
+from toolbox import Toolbox
 from tools.am import (Engine as MaximizationEngine,
                       Controller as MaximizationController)
 
@@ -853,9 +857,10 @@ from PyQt5.QtWidgets import QWidget, QSlider
 # dealing with multiple controllers: there is just one self._controller
 # variable. Each Controller is associate with one type of Observer.
 # This may be too restrictive: we may want to contact multiple Controllers!
-class QMaximizationControls(QWidget, QObserver,
-                            MaximizationEngine.Observer,
-                            Network.Observer):
+class QMaximizationControls(QWidget, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        MaximizationEngine: MaximizationEngine.Change.all(),
+        Network: Network.Change.all()}):
     """The :py:class:`QMaximizationControls` groups widgets to control
     a :py:class:`MaximizationEngine`. This includes buttons to start,
     pause, stop, and reset the engine, and some display to show the
@@ -868,8 +873,8 @@ class QMaximizationControls(QWidget, QObserver,
     _config: MaximizationConfig
         Shortcut to the :py:class:`MaximizationConfig`-object
         of _maximization.
-    _toolbox: ToolboxController
-        A :py:class:`ToolboxController`. Used to set a new
+    _toolbox: Toolbox
+        A :py:class:`Toolbox`. Used to set a new
         input for the toolbox.
 
     Graphical components:
@@ -887,18 +892,18 @@ class QMaximizationControls(QWidget, QObserver,
     """
     _network: NetworkController = None
     _maximization: MaximizationController = None
-    _toolbox: ToolboxController = None
+    _toolbox: Toolbox = None
     _config: MaximizationConfig = None
     # graphical components
     _display = None  # QMaximizationDisplay
     
     def __init__(self, network: NetworkController=None,
-                 toolbox: ToolboxController=None,
+                 toolbox: Toolbox=None,
                  maximization: MaximizationController=None, **kwargs):
         super().__init__(**kwargs)
         self._initUI()
         self._layoutUI()
-        self.setToolboxController(toolbox)
+        self.setToolbox(toolbox)
         self.setNetworkController(network)
         self.setMaximizationController(maximization)
 
@@ -1081,8 +1086,8 @@ class QMaximizationControls(QWidget, QObserver,
                 self._maximization.set_network(network)
             self._enableComponents()
 
-    def setToolboxController(self, toolbox: ToolboxController) -> None:
-        """Set a :py:class:`ToolboxController` for this
+    def setToolbox(self, toolbox: Toolbox) -> None:
+        """Set a :py:class:`Toolbox` for this
         :py:class:`QMaximizationControls`. This is not required,
         but it allows to use the results of the maximization
         engine as input for the Toolbox.
@@ -1141,8 +1146,12 @@ class QMaximizationControls(QWidget, QObserver,
         # FIXME[hack]: label is only self._config.UNIT_INDEX, if the
         # network is a classifier an we have selected the last
         # (i.e. output) layer.
-        self._toolbox.set_input(data=image, description=description,
-                                label=self._config.UNIT_INDEX)
+        data = Data()
+        data.data = image
+        data.image = True
+        data.description = description
+        data.label = self._config.UNIT_INDEX
+        self._toolbox.set_input(data)
 
     @protect
     def onReset(self, checked: bool):

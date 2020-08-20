@@ -8,7 +8,10 @@ from qtgui.utils import QObserver
 from tools.train import Training, TrainingController
 from network import Network, View as NetworkView
 
-class QTrainingBox(QWidget, QObserver, Training.Observer, Network.Observer):
+class QTrainingBox(QWidget, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        Training: Training.Change.all(),
+        Network: Network.Change.all()}):
     """
 
     Attributes

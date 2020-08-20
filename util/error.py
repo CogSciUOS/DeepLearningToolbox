@@ -90,7 +90,7 @@ def protect(function):
     """
     def closure(self, *args, **kwargs):
         try:
-            function(self, *args, **kwargs)
+            return function(self, *args, **kwargs)
         except BaseException as exception:
             handle_exception(exception)
     return closure

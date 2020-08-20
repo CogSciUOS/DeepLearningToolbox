@@ -5,28 +5,28 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-
 # Generic imports
+from typing import Tuple, Iterable
 import sys
 import time
 import logging
 import collections
 import importlib
-from typing import Tuple
-
 import logging
-logger = logging.getLogger(__name__)
 
+# Qt imports
+from PyQt5.QtCore import (Qt, QTimer, QCoreApplication, QThread, QTimerEvent,
+                          pyqtSignal, pyqtSlot)
+from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
+                         QCloseEvent, QHideEvent, QShowEvent)
+from PyQt5.QtWidgets import (QMenu, QAction, QMainWindow, QStatusBar,
+                             QTabWidget, QWidget, QLabel, QApplication,
+                             QDesktopWidget, QSystemTrayIcon)
 
 # Toolbox imports
 from base import Runner
-from toolbox import Toolbox, ToolboxController
-
-
-# Toolbox GUI imports
-from qtgui.utils import QtAsyncRunner, QObserver, protect, QBusyWidget
-from qtgui.panels import Panel
-
+from toolbox import Toolbox
+from network import Network
 
 # FIXME[old]: this should not be needed for the MainWindow
 import util
@@ -36,15 +36,15 @@ from util import resources, addons
 
 #from tools.am import Engine as MaximizationEngine  # FIXME[old]: check if we still need this ...
 #from tools.am import Controller as MaximizationController # FIXME[old]: check if we still need this ...
-from datasource import Datasource, Controller as DatasourceController
+from datasource import Datasource
 
-# Qt imports
-from PyQt5.QtCore import (Qt, QTimer, QCoreApplication, QThread,
-                          pyqtSignal, pyqtSlot)
-from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
-                         QCloseEvent)
-from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
-                             QWidget, QLabel, QApplication, QDesktopWidget)
+# Toolbox GUI imports
+from .utils import QtAsyncRunner, QObserver, protect, QBusyWidget
+from .panels import Panel
+
+# logging
+LOG = logging.getLogger(__name__)
+
 # FIXME[bug]: statusBar-bug:
 # There seems to be a problem with QStatusBar: creating a QStatusBar
 # will cause the CPU load to go up to 100% on all CPUs!  (strange
@@ -95,7 +95,9 @@ from PyQt5.QtWidgets import (QAction, QMainWindow, QStatusBar, QTabWidget,
 # mainwindow.BUG = True
 BUG = False
 
-class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
+class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
+        Toolbox: {'datasources_changed', 'datasource_changed',
+                  'server_changed', 'shell_changed'}}):
     """The main window of the Deep Visualization Toolbox. The window
     is intended to hold different panels that allow for different
     kinds of visualizations.
@@ -104,8 +106,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     set certain aspects, like loading a network or input data,
     switching between different panels, etc.
 
-    Class Attributes
-    ----------------
+    Attributes
+    ----------
+
+    **Class attributes:**
+
     PanelMeta: type
         A named tuple (id, label, cls, tooltip, addons). 'id' is a unique
         identifier for this panel and can be used to create or
@@ -114,11 +119,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     _panelMetas: list
         A list of PanelMeta entries supported by this MainWindow.
 
-    Attributes
-    ----------
+    **Instance attributes:**
+
     _application: QApplication
         The Qt application to which this window belongs
-    _toolbox: ToolboxController
+    _toolbox: Toolbox
         A reference to the Toolbox operated by this MainWindow. 
     _runner: QtAsyncRunner
         A dedicated :py:class:`Runner` for this Window.
@@ -131,6 +136,13 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         The activation maximzation Engine
     _current_panel: Panel
         The currently selected Panel (FIXME: currently not used!)
+
+    _timerId: int
+        The ID of a :py:class:`QTimer` that is run to regularly update the
+        interface, e.g., the status bar. The timer is started once
+        the window gets visible and is stopped if the hidden Window
+        becomes hidden. The resulting :py:class:`QTimerEvent` are handled
+        by :py:meth:`timerEvent`.
     """
     PanelMeta = collections.namedtuple('PanelMeta',
                                        'id label cls tooltip addons')
@@ -144,9 +156,15 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         PanelMeta('maximization', 'Maximization',
                   '.panels.maximization.MaximizationPanel',
                   'Show the activation maximization panel', []),
+        PanelMeta('segmentation', 'Segmentation',
+                  '.panels.segmentation.SegmentationPanel',
+                  'Show the segmentation panel', []),
         PanelMeta('lucid', 'Lucid',
                   '.panels.lucid.LucidPanel',
                   'Show the Lucid panel', ['lucid']), #  FIXME[todo]: if addons.use('lucid'):
+        PanelMeta('styletransfer', 'Style transfer',
+                  '.panels.styletransfer.StyletransferPanel',
+                  'Show the style transfer panel', []),
         PanelMeta('advexample', 'Adv. Examples',
                   '.panels.advexample.AdversarialExamplePanel',
                   'Show the adversarial example panel', ['advexample']),  # FIXME[todo]: if addons.use('advexample'):
@@ -173,7 +191,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                   'Show the logging panel', [])
     ]
 
-    _toolbox: ToolboxController = None
+    _toolbox: Toolbox = None
     _datasourceMenu = None
 
     #
@@ -196,7 +214,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     # "libpng warning: iCCP: extra compressed data"
     # probably due to some problem with the file 'logo.png'
     #icon = 'assets/logo.png'
-    def __init__(self, application: QApplication, toolbox: ToolboxController,
+    def __init__(self, application: QApplication, toolbox: Toolbox,
                  title: str='QtPyVis', icon: str='assets/logo.png',
                  focus: bool=True) -> None:
         """Initialize the main window.
@@ -214,12 +232,18 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         """
         super().__init__()
         self._app = application
-        
-        self._logger = logging.getLogger(__name__)
+        self._timerId = None
+
+        # FIXME[hack]: a dictionary mapping datasource keys (str) to
+        # QActions selecting that datasource in the toolbox
+        self._datasources = {}
+
+        self._initActions()
         self.setToolbox(toolbox)
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
 
+        
         if not focus:
             # Starting from Qt 4.4.0, the attribute
             # Qt.WA_ShowWithoutActivating forces the window not to
@@ -238,14 +262,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
         """
         # FIXME[bug]: the following line will cause the statusBar-bug
-        # (but only if the menu was installed via self._createMenu()).
+        # (but only if the menu was installed via self._initMenu()).
         # However, it seems that no QStatusBar is involved (at least
         # self.statusBar() seems not to be invoked)
         self.show()
-
-        # create a timer that regularly updates the status bar.
-        self.start_timer()
-
+        
         # Initialize the Toolbox in the background, while the (event
         # loop of the) GUI is already started in the foreground.
         if self._toolbox is not None:
@@ -258,110 +279,98 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         self.hide()
         return result
     
-
     def stop(self):
         """Quit the application.
         """
         self._saveState()
-
+        
         # Stop the Qt main event loop of this application
         # QCoreApplication.quit()
         self._app.quit()
 
-    def start_timer(self, timeout: int=1000) -> None:
-        """
-        Create a Qtimer that is safe against garbage collection
-        and overlapping calls.
-        See: http://ralsina.me/weblog/posts/BB974.html
+    @protect
+    def showEvent(self, event: QShowEvent) -> None:
+        LOG.info("DeepVisMainWindow will show")
+        if self._timerId is None:
+            self._timerId = self.startTimer(1000)
+    
+    @protect
+    def hideEvent(self, event: QHideEvent) -> None:
+        LOG.info("DeepVisMainWindow was hidden")
+        if self._timerId is not None:
+            self.killTimer(self._timerId)
+            self._timerId = None
 
-        Parameter
-        ---------
-        timeout: int
-            Time interval in millisecond between timer invocations.
-        """
-        def timer_event():
-            if self._timerIsRunning:
-                try:
-                    self.showStatusResources()
-                finally:
-                    QTimer.singleShot(timeout, timer_event)
-            else:
-                print("GUI: QTimer was stopped.")
+    @protect
+    def timerEvent(self, event: QTimerEvent) -> None:
+        self.showStatusResources()
 
-        self._timerIsRunning = True
-        QTimer.singleShot(timeout, timer_event)
-
-    def stop_timer(self):
-        """
-        """
-        print("GUI: Stopping the QTimer ...")
-        self._timerIsRunning = False
-        
     ##########################################################################
     #                          Public Interface                              #
     ##########################################################################
-
-    def setToolbox(self, toolbox: ToolboxController) -> None:
-        """Set the Toolbox controlled by this MainWindow.
-
-        Arguments
-        ---------
-        toolbox: ToolboxController
-            The ToolboxController.
-        """
-        interests = Toolbox.Change('datasources_changed', 'datasource_changed')
-        self._exchangeView('_toolbox', toolbox, interests=interests)
-        # FIXME[todo]: also inform the Panels that the toolbox was changed.
 
     def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
         if info.datasources_changed and self._datasourceMenu is not None:
             self._updateDatasourceMenu()
         elif info.datasource_changed and self._datasourceMenu is not None:
             self._updateDatasourceMenu()
+        elif info.server_changed:
+            self.updataServerActions()
+        elif info.shell_changed:
+            self.updataShellActions()
 
     def _updateDatasourceMenu(self) -> None:
         """Update the "Datasource" menu.
         """
         # self._datasourceMenu is of type PyQt5.QtWidgets.QMenu'
-        self._datasource = {}
         if self._toolbox is None:
             return  # FIXME[todo]: erase all Datasources from the menu
 
-        def slot(id):
-            def set_datasource(checked):
-                print(f"qtgui.MainWindow.set_datasource({checked}): {id}")
-                datasource = self._datasource[id]
-                print(f"qtgui.MainWindow.set_datasource: {type(datasource)}")
+        def slot(id, datasource):
+            def setDatasource(checked):
+                LOG.info("qtgui.MainWindow.setDatasource(%s): %s [%s]",
+                         checked, id, type(datasource))
                 # We first set the Datasource in the toolbox
                 # and then prepare it, in order to get a smooth
                 # reaction in the user interface.
-                self._toolbox.set_datasource(datasource)
-                datasource.prepare()
-            return protect(set_datasource)
+                self._toolbox.datasource = datasource
+                # FIXME[bug]: Object is currently busy.
+                #datasource.prepare()
+            return protect(setDatasource)
 
         # Add all datasource to the menu
+        # FIXME[bug]: only add datasources currently missing!
+        # FIXME[todo]: provide a datasourceSelected signal,
+        #  that provides the key for the datasource
         for datasource in self._toolbox.datasources:
-            id = str(datasource)
+            key = datasource.key
             label = str(datasource)
-            self._datasource[id] = datasource
+            if key in self._datasources:
+                continue
             action = QAction(label, self)
             if True: # datasource == self._toolbox.datasource:
                 action.font().setBold(True)  # FIXME[bug]: seems to have no effect
-            action.triggered.connect(slot(id))
+            action.triggered.connect(slot(id, datasource))
             self._datasourceMenu.addAction(action)
+            self._datasources[key] = action
 
     def getRunner(self) -> Runner:
         """Get the runner set up by this MainWindow. This will
         be an instance of a special Qt Runner that can manage
         inter thread communication with Qt threads.
 
-        Result
+        Returns
         ------
         runner:
             The runner set up by this :py:class:`DeepVisMainWindow`.
         """
         return self._runner
 
+    def panels(self) -> Iterable[str]:
+        """An iterator of panel identifiers.
+        """
+        for panelMeta in self._panelMetas:
+            yield panelMeta.id
         
     def panel(self, panel_id: str,
               create: bool=False, show: bool=False) -> Panel:
@@ -382,8 +391,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
         Raises
         ------
-        ValueError:
+        KeyError:
             The given panel identifier is not known.
+        ValueError:
+            The panel requested has not yet been created and no creation
+            was requested.
         """
         if not any(m.id == panel_id for m in self._panelMetas):
             raise KeyError(f"There is no panel with id '{panel_id}' "
@@ -412,7 +424,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                     index += 1
                     label = self._tabs.tabText(index)
         else:
-            index = self._panelIndex(panel_id)
+            index = self._panelTabIndex(panel_id)
             panel = self._tabs.widget(index)
         if show and panel is not None:
             self._tabs.setCurrentIndex(index)
@@ -424,7 +436,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
     # FIXME[bug]: debug the statusBar-Bug (see above)
     def statusBar(self):
-        print("DeepVisMainWindow[debug]: statusBar() was invoked.")
+        LOG.debug("DeepVisMainWindow[debug]: statusBar() was invoked.")
         return super().statusBar()
     
     def _initUI(self, title: str, icon: str) -> None:
@@ -454,18 +466,26 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         # FIXME[bug]: with the following line the statusBar-bug (see above)
         # occurs when calling self.show()
         if not BUG:
-            self._createMenu()
+            self._initMenu()
 
         #
         # Initialize the status bar
         #
-        self._statusResources = QLabel()
         # FIXME[bug]: the following line directly causes the
         # statusBar-bug (see above)
         if not BUG:
+            self._statusResources = QLabel()
             self.statusBar().addWidget(self._statusResources)
+        else:
+            self._statusResources = None
 
-    def _createMenu(self):
+        #
+        # Initialize the system tray
+        #
+        if not BUG:
+            self._initSystemTray()
+
+    def _initMenu(self):
         menubar = self.menuBar()
 
         #
@@ -477,23 +497,32 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         exitAction.triggered.connect(self.onExitClicked)
 
         fileMenu = menubar.addMenu('&File')
+        fileMenu.addAction(self.actionShell)
+        fileMenu.addSeparator()
+        fileMenu.addAction(self.actionServerStart)
+        fileMenu.addAction(self.actionServerStop)
+        fileMenu.addAction(self.actionServerOpen)
+        fileMenu.addSeparator()
         fileMenu.addAction(exitAction)
 
         #
         # Network Menu
         #
         networkMenu = menubar.addMenu('&Network')
+        networkMenu.addAction(self.actionAlexnet)
 
         #
         # Datasource Menu
         #
         self._datasourceMenu = menubar.addMenu('&Data')
+        self._datasourceMenu.setTearOffEnabled(True)
         self._updateDatasourceMenu()
 
         #
         # Tools Menu
         #
         toolsMenu = menubar.addMenu('&Tools')
+        toolsMenu.setTearOffEnabled(True)
 
         def slot(id):
             panel = lambda checked: self.panel(id, create=True, show=True)
@@ -545,6 +574,8 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
 
     @protect
     def showStatusResources(self):
+        if self._statusResources is None:
+            return
         message = f"{time.ctime()}"
         # message += (f", {self._runner.active_workers}/"
         #             f"{self._runner.max_workers} threads")
@@ -570,9 +601,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
     @protect
     def closeEvent(self, event: QCloseEvent) -> None:
         """Callback for [x] button click."""
-        print("MainWindow: Window button -> exiting the main window now ...")
+        LOG.info("MainWindow: Window button -> exiting the main window now ...")
         self._toolbox.quit()
-        print("MainWindow: toolbox.quit() returned ...")
+        LOG.info("MainWindow: toolbox.quit() returned ...")
 
     @protect
     def onExitClicked(self, checked: bool) -> None:
@@ -580,7 +611,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         then terminate the Qt application.
 
         """
-        print("MainWindow: Menu/exit -> exiting the main window now ...")
+        LOG.info("MainWindow: Menu/exit -> exiting the main window now ...")
         if self._toolbox is None:
             self.stop()
         else:
@@ -589,7 +620,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             # Qt main event loop and let run() return to its caller,
             # which may then do remaining cleanup
             self._toolbox.quit()
-        print("MainWindow: toolbox.quit() returned ...")
+        LOG.info("MainWindow: toolbox.quit() returned ...")
+
+    ###########################################################################
+    #                           Drag and Drop                                 #
+    ###########################################################################
 
     @protect
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -615,13 +650,13 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
             # 1. We just consider the first URL, even if multiple URLs
             #    are provided.
             url = mimeData.urls()[0]
-            self._logger.info(f"Drag and dropped len(mimeData.urls() URLs, "
-                              f"URL[0]: {url}")
+            LOG.info("Drag and dropped %d URLs, took first: %s",
+                     len(mimeData.urls()), url)
 
             # 2. Convert the URL to a local filename
             filename = url.toLocalFile()
             description = f"Dropped in image ({filename})"
-            self._logger.info(f"Converted URL to local filename: '{filename}'")
+            LOG.info("Converted URL to local filename: '%s'", filename)
 
             # 3. Set this file as input image for the toolbox.
             self._toolbox.set_input_from_file(filename,
@@ -639,25 +674,107 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                 e.accept()
 
     ###########################################################################
+    #                             System Tray                                 #
+    ###########################################################################
+
+    # FIXME[experiment]: add a system tray icon
+    # just for test, no real function yet,
+    # FIXME[bug]: does not seem to fully work
+    # only signal 3 (QSystemTrayIcon.Trigger) is received upon double click
+    # and onSystemTrayMenuAboutToShow is received only on the
+    # first click, but no menu is shown.
+
+    def _initSystemTray(self, withMenu: bool=False):
+        LOG.info("Initializing the system tray: available: %s, messages: %s",
+                 QSystemTrayIcon.isSystemTrayAvailable(),
+                 QSystemTrayIcon.supportsMessages())
+
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+
+        systemTrayIcon = QSystemTrayIcon(QIcon('assets/logo.png'), self._app)
+        systemTrayIcon.setToolTip("The Deep Visualization Toolbox")
+        systemTrayIcon.activated.connect(self.onSystemTrayActivated)
+
+        if withMenu:
+            contextMenu = QMenu()
+            contextMenu.aboutToShow.connect(self.onSystemTrayMenuAboutToShow)
+
+            actionTest =  QAction('Test', contextMenu)
+            actionTest.triggered.connect(self.onSystemTrayMenuActionTriggered)
+            systemTrayIcon.setContextMenu(contextMenu)
+
+        if QSystemTrayIcon.supportsMessages():
+            systemTrayIcon.\
+                messageClicked.connect(self.onSystemTrayMessageClicked)
+
+        systemTrayIcon.show()
+
+    #@pyqtSlot()
+    def onSystemTrayActivated(self, signal: int):
+        if signal == QSystemTrayIcon.Unknown:
+            text = "Unknown reason"
+        elif signal == QSystemTrayIcon.Context:
+            text = "The context menu for the system tray entry was requested"
+        elif signal == QSystemTrayIcon.DoubleClick:
+            text = "The system tray entry was double clicked"
+        elif signal == QSystemTrayIcon.Trigger:
+            text = "The system tray entry was clicked"
+        elif signal == QSystemTrayIcon.MiddleClick:
+            text = ("The system tray entry was clicked "
+                    "with the middle mouse button")
+        else:
+            text = "Illegal value"
+        LOG.info("onSystemTrayActivated: %s (%s)", signal, text)
+
+    #@pyqtSlot()
+    def onSystemTrayMenuAboutToShow(self):
+        LOG.info("onSystemTrayMenuAboutToShow")
+
+    #@pyqtSlot()
+    def onSystemTrayMenuActionTriggered(self, *args, **kwargs):
+        LOG.info("onSystemTrayMenuActionTriggered: %r, %r", args, kwargs)
+
+    #@pyqtSlot()
+    def onSystemTrayMessageClicked(self):
+        """React when the message displayed in the system tray using
+        showMessage() was clicked by the user.
+        """
+        LOG.info("onSystemTrayMessageClicked.")
+    
+    ###########################################################################
     #                               Panels                                    #
     ###########################################################################
 
-    def _panelIndex(self, panel_id: str) -> int:
+    def _panelMeta(self, panel_id: str) -> PanelMeta:
+        """Get the :py:class:`PanelMeta` for a given panel id.
+
+        Arguments
+        ---------
+        panel_id: str
+            The panel identifier
+
+        Raises
+        ------
+        KeyError:
+            The panel_id given is not a valid panel identifier.
         """
+        try:
+            return next(filter(lambda m: m.id == panel_id, self._panelMetas))
+        except StopIteration:
+            raise KeyError(f"'{self}' does not know a panel identified "
+                             f"by '{panel_id}'. Known panels are: " +
+                             ", ".join([f"'{m.id}'" for m in self._panelMetas]))
+
+    def _panelTabIndex(self, panel_id: str) -> int:
+        """Get the index of a (created) panel in the panel tab widget.
         """
         meta = self._panelMeta(panel_id)
         for index in range(self._tabs.count()):
             if self._tabs.tabText(index) == meta.label:
                 return index
-        raise KeyError(f"Panel with id '{panel_id}' has not been created yet.")
-
-    def _panelMeta(self, panel_id: str) -> PanelMeta:
-        try:
-            return next(filter(lambda m: m.id == panel_id, self._panelMetas))
-        except StopIteration:
-            raise ValueError(f"'{self}' does not know a panel identified "
-                             f"by '{panel_id}'. Known panels are: " +
-                             ", ".join([f"'{m.id}'" for m in self._panelMetas]))
+        raise ValueError(f"Panel with id '{panel_id}' "
+                         "has not been created yet.")
 
     def _panelModuleAndClass(self, panel_id: str) -> Tuple[str, str]:
         """Get module name and class name for the Panel with the given panel
@@ -688,28 +805,29 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         (3) Set observables of the panel.
 
         """
-        logger.info(f"Inserting new Panel '{meta.id}' at index {index}.")
+        LOG.info("Inserting new Panel '%s' at index %d.", meta.id, index)
         dummy = QBusyWidget()
         self._tabs.insertTab(index, dummy, label)
         if show:
             self._tabs.setCurrentIndex(index)
 
-        logger.debug(f"Running import {meta.cls} for Panel '{meta.id}'.")
+        LOG.debug("Running import %s for Panel '%s'.", meta.cls, meta.id)
         self._runner.runTask(self._importPanel, meta.id)
         
     def _importPanel(self, panel_id: str) -> None:
         module_name, class_name = self._panelModuleAndClass(panel_id)
-        logger.debug(f"Importing module {module_name} for panel '{panel_id}'.")
+        LOG.debug("Importing module '%s' for panel '%s'.",
+                  module_name, panel_id)
         module = importlib.import_module(module_name)
-        logger.debug(f"Signaling sucessful imports for panel '{panel_id}'.")
+        LOG.debug("Signaling sucessful imports for panel '%s'.", panel_id)
         self._panel_import_signal.emit(panel_id)
 
     @pyqtSlot(str)
     @protect
     def _onPanelImported(self, panel_id: str):
         module_name, class_name = self._panelModuleAndClass(panel_id)
-        logger.debug(f"Instantiating class {class_name} "
-                     f"from module {module_name} for panel '{panel_id}'")
+        LOG.debug("Instantiating class %s from module %s for panel '%s'",
+                  class_name, module_name, panel_id)
         module = sys.modules[module_name]
         cls = getattr(module, class_name)
         if hasattr(type(self), '_new' + class_name):
@@ -720,9 +838,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
                 getattr(type(self), '_init' + class_name)(self, panel)
 
         # replace the dummy content by the actual pane
-        logger.debug(f"Setting new instance of {class_name} "
-                     f"as content for panel '{panel_id}'.")
-        index = self._panelIndex(panel_id)
+        LOG.debug("Setting new instance of %s as content for panel '%s'.",
+                  class_name, panel_id)
+        index = self._panelTabIndex(panel_id)
         meta = self._panelMeta(panel_id)
         dummy = self._tabs.widget(index)
         #self._tabs.replaceWidget(dummy, panel)
@@ -731,29 +849,33 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         self._tabs.insertTab(index, panel, meta.label)
         self._tabs.setCurrentIndex(currentIndex)
         dummy.deleteLater()
-        logger.debug(f"Creation of panel '{panel_id}' "
-                     f"(index={index}) finished.")
+        LOG.debug("Creation of panel '%s' (index=%d) finished.",
+                  panel_id, index)
 
     def _newAutoencoderPanel(self, AutoencoderPanel: type) -> Panel:
         autoencoder = self._toolbox.autoencoder_controller
         training = self._toolbox.training_controller
-        return AutoencoderPanel(toolboxController=self._toolbox,
+        return AutoencoderPanel(toolbox=self._toolbox,
                                 autoencoderController=autoencoder,
                                 trainingController=training)
 
     def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
         activation_tool = self._toolbox.add_tool('activation')
-        network = self._toolbox.autoencoder_controller
+        #network = self._toolbox.autoencoder_controller
+        network = None
         return ActivationsPanel(toolbox=self._toolbox, network=network,
-                                activations=activation_tool,
-                                datasource=self._toolbox.datasource_controller)
+                                activation=activation_tool,
+                                datasource=self._toolbox.datasource)
+
+    def _newSegmentationPanel(self, SegmentationPanel: type) -> Panel:
+        return SegmentationPanel(toolbox=self._toolbox)
 
     def _initMaximizationPanel(self, maximization: Panel) -> None:
         """Initialise the activation maximization panel.
         """
         networkController = self._toolbox.autoencoder_controller  # FIXME[hack]
         maximizationController = self._toolbox.maximization_engine
-        maximization.setToolboxController(self._toolbox)
+        maximization.setToolbox(self._toolbox)
         maximization.setMaximizationController(maximizationController)
         maximization.setNetworkController(networkController)
 
@@ -764,33 +886,107 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         loggingPanel.setToolbox(self._toolbox)
         loggingPanel.addLogger(logging.getLogger())
 
+    def _initInternalsPanel(self, internalsPanel: Panel) -> None:
+        """Initialise the internalspanel.
+        """
+        internalsPanel.setToolbox(self._toolbox)
+
     def _newResourcesPanel(self, ResourcesPanel: type) -> Panel:
-        autoencoder = self._toolbox.autoencoder_controller
-        datasource = self._toolbox.datasource_controller
-        return ResourcesPanel(toolbox=self._toolbox,
-                              network1=autoencoder,
-                              datasource1=datasource)
+        return ResourcesPanel(toolbox=self._toolbox)
 
     def _newFacePanel(self, FacePanel: type) -> Panel:
-        datasource = self._toolbox.datasource_controller
-        return FacePanel(toolbox=self._toolbox, datasource=datasource)
+        return FacePanel(toolbox=self._toolbox,
+                         datasource=self._toolbox.datasource)
+
+    ##########################################################################
+    #                             Actions                                    #
+    ##########################################################################
+
+    def _initActions(self):
+        # triggered: This signal is emitted when an action is
+        # activated by the user; for example, when the user clicks a
+        # menu option, toolbar button, or presses an action's shortcut
+        # key combination, or when trigger() was called. Notably, it
+        # is not emitted when setChecked() or toggle() is called.
+
+        # exitAction.setShortcuts(['Ctrl+S', 'Ctrl+Q'])
+        action = QAction('Start Server', self)
+        action.setStatusTip('Start a HTTP server')
+        action.triggered.connect(self.onServerStartTriggered)
+        self.actionServerStart = action
+
+        action = QAction('Stop Server', self)
+        action.setStatusTip('Stop the HTTP server')
+        action.triggered.connect(self.onServerStopTriggered)
+        self.actionServerStop = action
+
+        action = QAction('Server open', self)
+        action.setStatusTip('Open Server in a Web Browser')
+        action.triggered.connect(self.onServerOpenTriggered)
+        self.actionServerOpen = action
+
+        action = QAction('Shell', self)
+        action.setStatusTip('Open Toolbox shell in the Terminal')
+        action.triggered.connect(self.onShellTriggered)
+        self.actionShell = action
+
+        action = QAction('AlexNet', self)
+        action.setStatusTip('Load AlexNet')
+        action.triggered.connect(self.onAlexnetTriggered)
+        self.actionAlexnet = action
+        
+
+    @protect
+    def onServerStartTriggered(self, checked: bool) -> None:
+        if self._toolbox:
+            self._toolbox.server = True
+
+    @protect
+    def onServerStopTriggered(self, checked: bool) -> None:
+        if self._toolbox:
+            self._toolbox.server = False
+
+    @protect
+    def onServerOpenTriggered(self, checked: bool) -> None:
+        if self._toolbox:
+            self._toolbox.server_open()
+
+    def updataServerActions(self) -> None:
+        enabled = self._toolbox is not None
+        server_running = enabled and self._toolbox.server
+        self.actionServerStart.setEnabled(enabled and not server_running)
+        self.actionServerStop.setEnabled(server_running)
+        self.actionServerOpen.setEnabled(server_running)
+
+    @protect
+    def onShellTriggered(self, checked: bool) -> None:
+        if self._toolbox:
+            self._toolbox.run_shell()
+
+    def updataShellActions(self) -> None:
+        self.actionShell.setEnabled(self._toolbox is not None and
+                                    not self._toolbox.shell)
+
+    @protect
+    def onAlexnetTriggered(self, checked: bool) -> None:
+        Network.register_initialize_key('alexnet-tf') # FIXME[todo]: prepare
 
     ##########################################################################
     #                           FIXME[old]                                   #
     ##########################################################################
 
     def setActivationEngine(self) -> None:
-        print("FIXME[old]: MainWindow.setActivationEngine() was called!")
+        print("\nFIXME[old]: MainWindow.setActivationEngine() was called!\n")
         # FIXME[hack]
         from tools.activation import Engine as ActivationEngine
-        activationsPanel = self.panel('activations')
+        activationsPanel = self.panel('activations', create=True)
         if activationsPanel is not None:
             activationsPanel.setController(self._toolbox.get_tool('activation'),
                                            ActivationEngine.Observer)
-            activationsPanel.setController(self._toolbox.datasource_controller,
+            activationsPanel.setController(self._toolbox.datasource,
                                            Datasource.Observer)
 
-        maximizationPanel = self.panel('maximization')
+        maximizationPanel = self.panel('maximization', create=True)
         if maximizationPanel is not None:
             maximizationPanel.setController(self._toolbox.activation_controller,
                                             ActivationEngine.Observer)
@@ -807,9 +1003,44 @@ class DeepVisMainWindow(QMainWindow, QObserver, Toolbox.Observer):
         """Set the datasource.
         """
         print("FIXME[old]: MainWindow.setDatasource() was called!")
-        self._toolbox.datasource_controller(datasource)
+        #self._toolbox.datasource = datasource
 
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
-            activationsPanel.setController(self._toolbox.datasource_controller,
+            activationsPanel.setController(self._toolbox.datasource,
                                            Datasource.Observer)
+
+
+    # FIXME[old]: the following timer is thread safe in the sense that
+    # it uses one-shot timers and it will start the next timer only
+    # after the last operation finishes. This prevents overlapping
+    # processing of timer events. Maybe this is a bit safer than our
+    # simple implementation, but it is also a bit more complicated.
+    # Maybe safe this somewhere for later use.
+    def start_timer(self, timeout: int=1000) -> None:
+        """
+        Create a Qtimer that is safe against garbage collection
+        and overlapping calls.
+        See: http://ralsina.me/weblog/posts/BB974.html
+        Parameter
+        ---------
+        timeout: int
+            Time interval in millisecond between timer invocations.
+        """
+        def timer_event():
+            if self._timerIsRunning:
+                try:
+                    self.showStatusResources()
+                finally:
+                    QTimer.singleShot(timeout, timer_event)
+            else:
+                LOG.info("GUI: QTimer was stopped.")
+
+        self._timerIsRunning = True
+        QTimer.singleShot(timeout, timer_event)
+
+    def stop_timer(self):
+        """
+        """
+        LOG.info("GUI: Stopping the QTimer ...")
+        self._timerIsRunning = False

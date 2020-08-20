@@ -6,25 +6,33 @@ Subpackages
 
 .. toctree::
 
-    qtgui.panels
-    qtgui.widgets
+   qtgui.panels
+   qtgui.widgets
 
 Submodules
 ----------
 
-qtgui\.mainwindow module
-------------------------
+qtgui.mainwindow module
+-----------------------
 
 .. automodule:: qtgui.mainwindow
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+qtgui.utils module
+------------------
+
+.. automodule:: qtgui.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 
 Module contents
 ---------------
 
 .. automodule:: qtgui
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,21 +1,29 @@
+"""Basic network definition.
+"""
+
+# standard imports
 from typing import Tuple, Any, Union, List
-
-import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
+from collections import OrderedDict
 import functools
 import operator
-import numpy as np
-
-from frozendict import FrozenOrderedDict
-
+import logging
 import importlib
 
-from .util import convert_data_format
-from util import Identifiable
+# third party imports
+import numpy as np
 
-from base.observer import BusyObservable, busy
+# toolbox imports
+from datasource.data import ClassScheme, ClassIdentifier
+from base import (Identifiable, Extendable, BusyObservable, Preparable,
+                  MetaRegister, busy)
+from .util import convert_data_format
+from tools.classify import SoftClassifier
+from dltb.util.image import imread, imresize
+
+# logging
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
+
 
 # FIXME[design]: we should decide on some points:
 #
@@ -28,8 +36,9 @@ from base.observer import BusyObservable, busy
 #
 
 
-class Network(Identifiable, BusyObservable, method='network_changed',
-              changes=['state_changed', 'weights_changed']):
+class Network(Identifiable, Extendable, Preparable, method='network_changed',
+              changes=['state_changed', 'weights_changed'],
+              metaclass=MetaRegister):
     """Abstract Network interface for all frameworks.
 
     The Network API will allow to order the dimensions in data arrays
@@ -67,10 +76,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     Attributes
     ----------
     layer_dict: Dict[str,Layer]
-   
-    _output_labels: List[str]
-        The output labels for this network. Only meaningful
-        if this Network is a classifier.
 
     Changes
     -------
@@ -81,20 +86,34 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     'weights_changed':
         network weights were changed
     """
-    
-    @classmethod
-    def framework_available(cls):
-        """Check if the underlying framework is available (installed
-        on this machine).
-        """
-        return false
+
+    # FIXME[problem]:
+    # There seems to be a mismatch between layer.id and the layer_id that
+    # is used as key in the layer_dict.
+    # (1) the name 'id' is alread used by the python buildin function id()
+    #     that provides a unique number for each object.
+    # (2) we want a unique key for each layer in the layer dict
+    #     probably a string (as we also want numerical index access)
+    # (3) maybe we can use the register interface?
+    # (4) we also want a string to be presented in user interfaces:
+    #     can that be the key or should we introduce an additional name?
+    #     -> Probably it is best to just use one string ...
+    # Action plan:
+    # -> remove the 'Identifiable' -> replace with register
+    #     - only used in
+    #        ./network/network.py
+    #        ./network/layers/layers.py
+    # -> replace
+    #       layer.id -> layer.key
+    #       layer_id -> layer_key
+    #       layer.name -> layer_key
+    #       network.id -> network_key
 
     @classmethod
     def import_framework(cls):
         """Import the framework (python modules) required by this network.
         """
-        pass # to be implemented by subclasses
-    
+        pass  # to be implemented by subclasses   
 
     # FIXME[todo]: add additional parameters, e.g. cpu / gpu
     # FIXME[concept]: there are at least two different concepts of loading:
@@ -106,7 +125,7 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     #   self.change('weights_changed')
     @classmethod
     def load(cls, module_name, *args, **kwargs):
-        logger.info(f"Loading module: {module_name}")
+        LOG.info("Loading module: %s", module_name)
         module = importlib.import_module(module_name)
         network_class = getattr(module, "Network")
         network_class.import_framework()
@@ -115,7 +134,8 @@ class Network(Identifiable, BusyObservable, method='network_changed',
 
     # ------------ Public interface ----------------
 
-    def __init__(self, id=None, **kwargs):
+    def __init__(self, id=None, data_format: str = 'channels_last',
+                 **kwargs) -> None:
         """
 
         Parameters
@@ -124,19 +144,20 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             data_format: {'channels_last', 'channels_first'}
                 The place of the color channels in the tensors.
         """
+        LOG.debug("Network.__init__: %s [%s]", kwargs, self.__class__.__mro__)
         # Prohibited instantiation of base class.
-        if self.__class__ == Network:
+        if self.__class__ == Network:  # FIXME[todo]: use python ABC mechanism
             raise NotImplementedError('Abstract base class Network '
                                       'cannot be used directly.')
-
-        Identifiable.__init__(self, id)
-        BusyObservable.__init__(self)
+        super().__init__(id, **kwargs)
 
         # Every loaded_network should know which data format it is using.
         # Default is channels_last.
-        data_format = kwargs.get('data_format', 'channels_last')
         self._data_format = data_format
+        self.layer_dict = None
 
+    def _prepare(self):
+        super()._prepare()
         #
         # Create the layer representation.
         #
@@ -151,18 +172,31 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             if i+1 < len(self.layer_dict):
                 self[i]._successor = self[i+1]
 
-        self._output_labels = None
-        self._labels = (None, None)
+    def _unprepare(self):
+        self.layer_dict = None
+        super()._unprepare()
 
-    def __getitem__(self, item):
+    def _prepared(self) -> bool:
+        return (self.layer_dict is not None) and super()._prepared()
+
+    def __getitem__(self, layer: Union[int, str]) -> 'Layer':
         """Provide access to the layers by number. Access by id is provided
         via :py:attr:`layer_dict`."""
-        return tuple(self.layer_dict.values())[item]
+        if not self.prepared:
+            return RuntimeError("Trying to access unprepared Network "
+                                f"'{self.key}'")
+        if isinstance(layer, str):
+            return self.layer_dict[layer]
+        if isinstance(layer, int):
+            return tuple(self.layer_dict.values())[layer]
+        raise TypeError("Network index argument layer has invalid type "
+                        f"{type(layer)}, should by str or int")
 
-    @busy
+    @busy("getting activations")
     def get_activations(self, layer_ids: Any,
                         input_samples: np.ndarray,
-                        data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray]]:
+                        data_format: str = 'channels_last'
+                        ) -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
 
@@ -172,33 +206,40 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             The layers the activations should be fetched for. Single
             layer_id or list of layer_ids.
         input_samples
-             For multi-channel, two-dimensional data, we expect the
-             input data to be given in with channel last, that is
-             (N,H,W,C). For plain data of dimensionality D we expect
-             batch first (N,D).
+            For multi-channel, two-dimensional data, we expect the
+            input data to be given in with channel last, that is
+            (N,H,W,C). For plain data of dimensionality D we expect
+            batch first (N,D).
         data_format: {'channels_last', 'channels_first'}
-            The format in which the data is provided. Either "channels_first" or "channels_last".
+            The format in which the data is provided.
+            Either "channels_first" or "channels_last".
 
         Returns
         -------
-        Array of shape (input_samples, image_height, image_width, feature_maps).
+        Array of shape
+        (input_samples, image_height, image_width, feature_maps).
 
         """
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
         # Transform the input_sample appropriate for the loaded_network.
+        LOG.debug("Transforming input data from %s to %s.",
+                  input_samples.shape, data_format)
         input_samples = self._transform_input(input_samples, data_format)
         activations = self._compute_activations(layer_ids, input_samples)
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, data_format) for activation in activations]
-        # If it was just asked for the activations of a single layer, return just an array.
+        activations = [self._transform_outputs(activation, data_format)
+                       for activation in activations]
+        # If it was just asked for the activations of a single layer,
+        # return just an array.
         if not is_list:
             activations = activations[0]
         return activations
 
     def get_net_input(self, layer_ids: Any,
                       input_samples: np.ndarray,
-                      data_format: str='channels_last') -> Union[np.ndarray, List[np.ndarray]]:
+                      data_format: str = 'channels_last'
+                      ) -> Union[np.ndarray, List[np.ndarray]]:
         """Gives the net input (inner product + bias) values of the network
         for given layers and an input sample.
 
@@ -215,7 +256,8 @@ class Network(Identifiable, BusyObservable, method='network_changed',
 
         Returns
         -------
-        Array of shape (input_samples, image_height, image_width, feature_maps).
+        Array of shape
+        (input_samples, image_height, image_width, feature_maps).
 
         """
         # Check whether the layer_ids are actually a list.
@@ -224,12 +266,13 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         input_samples = self._transform_input(input_samples, data_format)
         activations = self._compute_net_input(layer_ids, input_samples)
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, data_format) for activation in activations]
-        # If it was just asked for the activations of a single layer, return just an array.
+        activations = [self._transform_outputs(activation, data_format)
+                       for activation in activations]
+        # If it was just asked for the activations of a single layer,
+        # return just an array.
         if not is_list:
             activations = activations[0]
         return activations
-
 
     def get_layer_info(self, layername):
         """FIXME[todo]: we still have to decide on some info API
@@ -258,7 +301,7 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         Computes a list of net inputs from a list of layer ids."""
         raise NotImplementedError
 
-    def _create_layer_dict(self) -> FrozenOrderedDict:
+    def _create_layer_dict(self) -> OrderedDict:
         """Create the mapping from layer ids to layer objects.
 
         Returns
@@ -294,7 +337,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
                                      output_format=self._data_format)
 
         return inputs
-
 
     def _transform_outputs(self, outputs: np.ndarray,
                            data_format: str) -> np.ndarray:
@@ -370,7 +412,7 @@ class Network(Identifiable, BusyObservable, method='network_changed',
     @staticmethod
     def _force_list(maybe_list: Union[List, Any]) -> Tuple[list, bool]:
         """Turn something into a list, if it is none.
-        
+
         Returns
         -------
         maybe_list: list
@@ -433,8 +475,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
                              .format(input_shape, network_input_channels))
         return input_shape
 
-
-
     def _get_number_of_input_channels(self) -> int:
         """Get the number of input channels for this loaded_network.
         This is the number of channels each input given to the loaded_network
@@ -454,9 +494,11 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             have input channels.
         """
         network_input_shape = self.get_layer_input_shape(self.layer_ids[0])
-        return network_input_shape[-1] if len(network_input_shape)>2 else 0
+        return network_input_shape[-1] if len(network_input_shape) > 2 else 0
 
-    ### -------------------- methods for accessing layer attributes ---------
+    #
+    # methods for accessing layer attributes
+    #
 
     def empty(self):
         return self.layer_dict is None or not bool(self.layer_dict)
@@ -466,7 +508,8 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         return first_layer_id
 
     def output_layer_id(self):
-        for last_layer_id in iter(self.layer_dict.keys()): pass
+        for last_layer_id in iter(self.layer_dict.keys()):
+            pass
         return last_layer_id
 
     def get_input_layer(self):
@@ -474,15 +517,28 @@ class Network(Identifiable, BusyObservable, method='network_changed',
 
     def get_output_layer(self):
         return self.layer_dict[self.output_layer_id()]
-    
-    def get_input_shape(self, include_batch = True) -> tuple:
+
+    def get_input_shape(self, include_batch: bool = True,
+                        include_channel: bool = True) -> tuple:
         """Get the shape of the input data for the network.
         """
-        shape = self.get_layer_input_shape(self.input_layer_id())
-        return shape if include_batch else shape[1:]
+        shape = self._get_input_shape()
+        if include_batch and include_channel:
+            return shape
+        if include_channel:  # and not include_batch
+            return shape[1:]
+        if not include_batch:
+            return (shape[1:-1] if self._data_format == 'channels_last'
+                    else shape[2:])
+        # include_batch and not include_channel
+        if self._data_format == 'channels_last':
+            return shape[:-1]
+        return (shape[0],) + shape[2:]
 
+    def _get_input_shape(self) -> tuple:
+        return self.get_layer_input_shape(self.input_layer_id())
 
-    def get_output_shape(self, include_batch = True) -> tuple:
+    def get_output_shape(self, include_batch: bool = True) -> tuple:
         """Get the shape of the output data for the network.
         """
         shape = self.get_layer_output_shape(self.output_layer_id())
@@ -511,7 +567,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             For convolutional layers, this will be channel last (H,W,C).
         """
         return self.layer_dict[layer_id].input_shape
-
 
     def get_layer_output_shape(self, layer_id) -> tuple:
         """
@@ -545,9 +600,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
             this will be channel last (H,W,C_in,C_out).
         """
         return self.layer_dict[layer_id].weights
-
-
-
 
     def _get_layer_weights_shape(self, layer_id) -> tuple:
         weights = self.get_layer_weights(layer_id)
@@ -672,8 +724,9 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         layer_shape = self._get_layer_weights_shape(layer_id)
         return layer_shape[-1]
 
-
-###------------------------- special methods for convolutional layers -----------------
+    #
+    # Convolutional layers
+    #
 
     def get_layer_kernel_size(self, layer_id) -> int:
         """The size of the kernel in a cross-correlation/convolution
@@ -693,7 +746,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         self._check_layer_is_convolutional(layer_id)
         layer_shape = self._get_layer_weights_shape(layer_id)
         return layer_shape[:-2]
-
 
     def get_layer_stride(self, layer_id) -> (int, int):
         """The stride for the cross-correlation/convolution operation.
@@ -729,7 +781,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         self._check_layer_is_convolutional(layer_id)
         raise NotImplementedError
 
-
     def get_layer_padding(self, layer_id) -> (int,int):
         """The padding for the cross-correlation/convolution operation, i.e,
         the number of rows/columns (on both sides) by which the input
@@ -749,7 +800,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         self._check_layer_is_convolutional(layer_id)
         raise NotImplementedError
 
-
     def get_layer_output_padding(self, layer_id) -> (int,int):
         """The output padding for the cross-correlation/convolution operation.
 
@@ -765,7 +815,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         """
         self._check_layer_is_convolutional(layer_id)
         raise NotImplementedError
-
 
     def layer_is_convolutional(self, layer_id) -> bool:
         """Check if the given layer is a convolutional layer. If so,
@@ -786,7 +835,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         layer_shape = self._get_layer_weights_shape(layer_id)
         return layer_shape is not None and len(layer_shape) > 2
 
-
     def _check_layer_is_convolutional(self, layer_id) -> None:
         """Ensure that the given layer is convolutional.
 
@@ -802,85 +850,6 @@ class Network(Identifiable, BusyObservable, method='network_changed',
         """
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
-
-    #
-    # Classification
-    #
-    # FIXME[concept]: the following methods are only relevant for classifiers.
-    # redesign the API to introduce a special Classifier Network class.
-
-    def set_output_labels(self, labels: List[str]) -> None:
-        """Provide labels for the output layer. This is useful for 
-        networks that are used as classifier. It allows to report
-        results in form of human readable labels instead of just
-        the indices of units within the output layer.
-
-        Parameters
-        ----------
-        labels:
-            A list providing the labels.
-
-        Raises
-        ------
-        ValueError
-            If the length of the list does not match the number of
-            neurons in the output layer.
-        """
-        output_shape = self.get_output_shape(include_batch = False)
-        if len(output_shape) > 1 or output_shape[0] != len(labels):
-            raise ValueError("Labels do not fit to the output layer")
-        self._output_labels = labels
-
-    def get_label_for_class(self, index: int) -> str:
-        """Get a class label for the given class index.
-
-        Parameters
-        ----------
-        index:
-            The class index, i.e. the index of the unit in
-            the classification (=output) layer.
-
-        Returns
-        -------
-        label:
-            The label for the given class.
-        """
-        return (str(index) if self._output_labels is None
-                else self._output_labels[index])
-
-    def classify_top_n(self, input_samples: np.ndarray, n: int=5):
-        """Output the top-n classes for given input.
-        """
-
-        # FIXME[todo]: at least in tensorflow it seems possible to feed a list of inputs!
-        #output = sess.run(network_output_tensor, feed_dict = {network_input_tensor:input_samples})
-        # However, we do not allow this yet!
-        input_samples = np.asarray(input_samples)
-        output = self.get_activations(self.output_layer_id(), input_samples)
-
-        for input_im_ind in range(output.shape[0]):
-            inds = np.argsort(output)[input_im_ind,:]
-            print("Image", input_im_ind)
-            for i in range(n):
-                print("  {}: {} ({})".format(i,self._output_labels[inds[-1-i]],
-                                             output[input_im_ind, inds[-1-i]]))
-
-    def top_n(self, output: np.ndarray, n: int=5):
-        inds = np.argsort(output)[input_im_ind,:]
-        print("Image", input_im_ind)
-
-    def set_labels(self, datasource, format=None) -> None:
-        self._labels = (datasource, format)
-        if datasource is not None:
-            datasource.prepare_labels()
-
-    @property
-    def datasource(self):
-        return self._labels[0]
-
-    @property
-    def label_format(self):
-        return self._labels[1]
 
     # FIXME[concept]: we need some training concept ...
 
@@ -900,7 +869,7 @@ class Trainer:
         A flag indicating if the Trainer is currently busy, i.e.
         executing some training.
     """
-    
+
     def __init__(self, training, network):
         self._training = training
         self._network = network
@@ -932,14 +901,63 @@ class Trainer:
         raise NotImplementedError("A Trainer has to implement a _train method")
 
 
+class Classifier(SoftClassifier, Network):
+    """A :py:class:`Network` to be used as classifier.
 
+    """
+
+    @property
+    def logit_layer(self) -> 'Layer':
+        """The layer providing the class "logits".
+        This is usually the prefinal layer that is passed
+        in the softmax output layer.
+        """
+        return self.output_layer_id()  # FIXME[todo]
+
+    @property
+    def score_layer(self) -> 'Layer':
+        """The layer computing the class scores ("probabilities").
+        This is usually the output layer of the :py:class:`Classifier`.
+        """
+        return self.output_layer_id()
+
+    def _prepare(self, **kwargs) -> None:
+        """Prepare this :py:class:`Classifier`.
+
+        Raises
+        ------
+        ValueError
+            If the :py:class:`ClassScheme` does not fit to this
+            :py:class:`Classifier`.
+        """
+        super()._prepare()
+
+        # check if the output layer fits to the classification scheme
+        output_shape = self.get_output_shape(include_batch=False)
+        if len(output_shape) > 1:
+            raise ValueError(f"Network '{self}' seems not to be Classifier "
+                             f"(output shape is {output_shape})")
+        elif output_shape[0] != len(self._scheme):
+            raise ValueError(f"Network '{self}' does not fit the the "
+                             f"classification scheme: {output_shape} output "
+                             f"units vs. {len(self._scheme)} classes")
+
+    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+        # FIXME[todo]: at least in tensorflow it seems possible to feed
+        # a list of inputs!
+        # output = sess.run(network_output_tensor,
+        #                   feed_dict={network_input_tensor:inputs})
+        # However, we do not allow this yet!
+        inputs = np.asarray(inputs)
+        outputs = self.get_activations(self.output_layer_id(), inputs)
+        return outputs
 
 class Autoencoder(Network, method='network_changed'):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._encoder = None
-        self._decoder =None
+        self._decoder = None
 
     @property
     def encoder(self):
@@ -949,7 +967,8 @@ class Autoencoder(Network, method='network_changed'):
     def decoder(self):
         return self._decoder
 
-class VariationalAutoencoder:
+
+class VariationalAutoencoder(Autoencoder):
 
     def sampleCode(self, n=1):
         pass
@@ -964,13 +983,14 @@ class VariationalAutoencoder:
         pass
 
 
-
 from base import View, Controller, run
+
 
 class NetworkView(View, view_type=Network):
 
-    def __init__(self, network: Network=None, **kwargs):
+    def __init__(self, network: Network = None, **kwargs):
         super().__init__(observable=network, **kwargs)
+
 
 class NetworkController(NetworkView, Controller):
     """
@@ -987,7 +1007,7 @@ class NetworkController(NetworkView, Controller):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
+
         self.data = None
         self.batch_size_range = 1, 256
         self._batch_size = 128
@@ -1011,17 +1031,15 @@ class NetworkController(NetworkView, Controller):
     @run
     def load_model(self, filename):
         self._network.load(filename)
-        
+
     @run
-    def save_model(self, checked: bool=False):
+    def save_model(self, checked: bool = False):
         self._network.save(self._weights_file)
 
     def plot_model(self):
         pass
 
-    
     # """A Trainer is a Controller for some training."""
-
 
     @property
     def trainer(self):
@@ -1035,10 +1053,10 @@ class NetworkController(NetworkView, Controller):
 
 class AutoencoderController(NetworkController):
 
-    batch_size = 128 # FIXME[hack]: need some concept here!
+    batch_size = 128  # FIXME[hack]: need some concept here!
 
-    def __init__(self, autoencoder: Autoencoder=None, **kwargs):
-        super().__init__(network=autoencoder, **kwargs)      
+    def __init__(self, autoencoder: Autoencoder = None, **kwargs):
+        super().__init__(network=autoencoder, **kwargs)
 
     @run
     def encode(self, inputs):

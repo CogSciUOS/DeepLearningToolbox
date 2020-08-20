@@ -1,12 +1,21 @@
-from PyQt5.QtCore import QObject, pyqtSignal
+# standard imports
+from typing import Callable, Iterable
+import logging
 
+# Qt imports
+from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtGui import QKeyEvent
+from PyQt5.QtWidgets import QWidget
+
+# toolbox imports
+from toolbox import Toolbox
 from base import Observable, AsyncRunner
 import util
 from util.error import protect, handle_exception
 
-import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# logging
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 
 
 class QtAsyncRunner(AsyncRunner, QObject):
@@ -34,6 +43,8 @@ class QtAsyncRunner(AsyncRunner, QObject):
 
     def __init__(self):
         """Connect a signal to :py:meth:`Observable.notifyObservers`."""
+        # FIXME[question]: can we use real python multiple inheritance here?
+        # (that is just super().__init__(*args, **kwargs))
         AsyncRunner.__init__(self)
         QObject.__init__(self)
         self._completion_signal.connect(self._notifyObservers)
@@ -53,7 +64,7 @@ class QtAsyncRunner(AsyncRunner, QObject):
                 observable, info = result
                 import threading
                 me = threading.current_thread().name
-                logger.debug(f"{self.__class__.__name__}.onCompletion():{info}")
+                LOG.debug(f"{self.__class__.__name__}.onCompletion():{info}")
                 if isinstance(info, Observable.Change):
                     self._completion_signal.emit(observable, info)
         except BaseException as exception:
@@ -67,11 +78,194 @@ class QtAsyncRunner(AsyncRunner, QObject):
         observable.notifyObservers(info)
 
 
+class QDebug:  # FIXME[todo]: derive from (QWidget)
+    """The :py:class:`QDebug` is a base class that classes can inherit
+    from to provide some debug functionality.  Such classes should
+    then implement a :py:meth:`debug` method, which will be called to
+    output debug information.
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    @protect
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Process key events. The :py:class:`QImageView` supports
+        the following keys:
+
+        ?: debug
+        t: debug toolbox
+        """
+        key, text = event.key(), event.text()
+        print(f"debug: QDebug[{type(self).__name__}].keyPressEvent:"
+              f" key={key}, text={text}")
+        if text == '?':
+            self.debug()
+        elif key == Qt.Key_T:  # Debug Toolbox
+            Toolbox.debug_register()
+        elif hasattr(super(), 'keyPressEvent'):
+            super().keyPressEvent(event)
+
+    def debug(self) -> None:
+        print(f"debug: QDebug[{type(self).__name__}]. MRO:")
+        print("\n".join([f"debug:   - {str(cls)}"
+                         for cls in type(self).__mro__]))
+
+
 from PyQt5.QtCore import QObject, QMetaObject, pyqtSlot, Q_ARG
+from PyQt5.QtGui import QHideEvent, QShowEvent
 from base.observer import Observable
+from base import MetaRegister
 import threading
 
-class QObserver:
+
+class QAttribute(QDebug):
+    """A :py:class:`QAttribute` can store attributes of specified types.
+    It can also propagate changes of these attributes to interested
+    parties, usually child widgets of this :py:class:`QAttribute`.
+
+    Inheriting from :py:class:`QAttribute` allows to use a new class
+    attribute `qattributes:dict ={}`. Keys of this dictionary are
+    types of the attributes to be added to the class and the
+    corresponding value describes how the attribute can be accessed:
+    `False` means that the attribute can not be accessed (there is no
+    getter), but it can be changed (there is a setter). Having an
+    attribute that cannot be read may seem pointless, but makes sense
+    in combination with attribute propagation (see below).
+    The name of the attribute will be derived from the ClassName:
+    the getter will be called className() and the setter is called
+    setClassName(). There is also a private attribute _className
+    for storing the attribute value.
+    FIXME[todo]: we may allow to pass a name by which the attribute
+
+    Attribute propagation allows to propagate changes of the attribute
+    to other objects (provided they implement an appropriate setter).
+    The intended use is for containers, with elements interested in
+    the same type of attribute.
+
+    Examples
+    --------
+
+    Create a Widget with a `Toolbox` attribute (getter and setter):
+    >>> class QMyWidget(QWidget, QObserver, qattributes={Toolbox: True})
+
+    Create a Widget with a `Toolbox` write only attribute (only setter):
+    >>> class QViewWidget(QWidget, QObserver, qattributes={Toolbox: False})
+    """
+
+    @classmethod
+    def _qAttributeGetter(cls, name):
+        attribute_name, getter_name = \
+            cls._qAttributeNameFor(name, 'attribute', 'getter')
+        LOG.debug("QAttribute: creating new attribute to %s.%s",
+                  cls, attribute_name)
+        setattr(cls, attribute_name, None)
+        getter = lambda self, observable: getattr(self, attribute_name, None)
+        LOG.debug("QAttribute: creating new getter to  %s.%s",
+                  cls, getter_name)
+        setattr(cls, getter_name, getter)
+
+    @classmethod
+    def _qAttributeSetter(cls, name):
+        setter_name, orig_setter_name = \
+            cls._qAttributeNameFor(name, 'setter', 'orig_setter')
+        LOG.debug("QAttribute: creating new setter %s.%s",
+                  cls, setter_name)
+        if hasattr(cls, setter_name):
+            setattr(cls, orig_setter_name, getattr(cls, setter_name))
+            LOG.debug("QAttribute: moving old setter to %s.%s",
+                      cls, orig_setter_name)
+        setter = lambda self, *args, **kwargs: \
+            self._qAttributeSetAttribute(name, *args, **kwargs)
+        setattr(cls, setter_name, setter)
+
+    @staticmethod
+    def _qAttributeName(cls: type, *args) -> str:
+        """Provide name(s) for an attribute of a given type.
+        This will be the name provided by the class method
+        :py:meth:`observable_name`, which defaults to the class name.
+        """
+        name = cls.observable_name()
+        LOG.debug("QAttribute: Using attribute name '%s' for class '%s'",
+                  name, cls.__name__)
+        return QAttribute._qAttributeNameFor(name, *args)
+
+    @staticmethod
+    def _qAttributeNameFor(name: str, *args) -> Iterable[str]:
+        if not args:
+            return name
+        return iter('_' + name[0].lower() + name[1:]
+                    if what == 'attribute' else
+                    name.lower() if what == 'getter' else
+                    'set' + name if what == 'setter' else
+                    '_qAttribute' + name if what == 'propagation' else
+                    '_qAttributeSet' + name if what == 'orig_setter' else
+                    name for what in args)
+
+    def __init_subclass__(cls: type, qattributes={}):
+        for attributeClass, createAttribute in qattributes.items():
+            name = cls._qAttributeName(attributeClass)
+            LOG.debug(f"  {cls.__name__}: "
+                      f"Adding{' getter and' if createAttribute else ''}"
+                      f" setter for name ({attributeClass}): ")
+            cls._qAttributeSetter(name)
+            if createAttribute:
+                cls._qAttributeGetter(name)
+
+    def _qAttributeSetAttribute(self, name: str, obj, *args, **kwargs):
+        LOG.debug(f"_qAttributeSetAttribute({self.__class__.__name__}, "
+                  f"'{name}', {type(obj)}, {args}, {kwargs}")
+
+        attribute, setter, propagation, orig_setter = \
+            self._qAttributeNameFor(name, 'attribute', 'setter',
+                                    'propagation', 'orig_setter')
+
+        # (0) check if the attribute has changed
+        changed = (not hasattr(self, attribute) or
+                   getattr(self, attribute) is not obj)
+        LOG.debug("%s.%s(%s): self.%s: old={%s}, "
+                  "changed=%s, propagations: %d, orig_setter: %s",
+                  type(self).__name__, setter, obj, attribute,
+                  getattr(self, attribute, '??'), changed,
+                  len(getattr(self, propagation, ())),
+                  hasattr(self, orig_setter))
+
+        # (1) update the attribute if changed
+        if hasattr(self, attribute) and changed:
+            setattr(self, attribute, obj)
+
+        # (2) propagate new attribute value (we do this even if the
+        # attribute has not changed, as it may have changed for some
+        # of the propagates)
+        for target in getattr(self, propagation, ()):
+            LOG.debug(f"{type(self).__name__}: "
+                      f"propagate change of attribute '{name}' to "
+                      f"{type(target).__name__}.{setter}({obj})")
+            getattr(target, setter)(obj, *args, **kwargs)
+
+        # (3) finally call the original setter (only if the attribute
+        # has really changed)
+        if hasattr(self, orig_setter) and changed:
+            LOG.debug(f"{type(self).__name__}: "
+                      f"calling original setter for attribute '{name}' as "
+                      f"{type(self).__name__}.{orig_setter}({obj})")
+            getattr(self, orig_setter)(obj, *args, **kwargs)
+
+    def addAttributePropagation(self, cls: type, obj):
+        propagation, = self._qAttributeName(cls, 'propagation')
+        if hasattr(self, propagation):
+            getattr(self, propagation).append(obj)
+        else:
+            setattr(self, propagation, [obj])
+
+    def removeAttributePropagation(self, cls: type, obj):
+        propagation, = self._qAttributeName(cls, 'propagation')
+        if hasattr(self, propagation):
+            getattr(self, propagation).remove(obj)
+
+
+class QObserver(QAttribute):
     """This as a base class for all QWidgets that shall act as
     Observers in the toolbox. It implements support for asynchronous
     message passing to Qt's main event loop.
@@ -80,48 +274,161 @@ class QObserver:
     should be used to observer some :py:class:`Observable` (instead
     of calling :py:meth:`Observable.add_observer` directly). This will
     set up the required magic.
+
+    Deriving from :py:class:`QObserver` will automatically define
+    the following properties and methods for each observable
+    listed in `qobservables`:
+
+    * a property `observable()` providing a reference to the
+      observable.
+
+    * a method `setObervable(observable, observer=True)` allowing to
+      set and observe that observable.
+
+    * patched versions of :py:method:`observe` and :py:method:`unobserve`
+      that allow for asynchronous observation in the Qt main event loop.
+
+
+    Examples
+    --------
+    >>> class QMyWidget(QWidget, QObserver, qobservables={
+    ...         Toolbox: Toolbox.Change('network_changed'),
+    ...         Network: Network.Change('state_changed')}):
+    ...
+    ...     def toolboxChanged(self, toolbox: Toolbox, change: Toolbox.Change):
+    ...         if change.network_changed:
+    ...             self.setNetwork(toolbox.network)
     """
 
     # FIXME[concept]: we need some concept to assign observables to helpers
-    _qObserverHelpers: dict = None
+    #_qObserverHelpers: dict = None
 
-    def __init__(self):
+    @classmethod
+    def _qObserverSetter(cls, name, interests) -> None:
+        # FIXME[hack]: here we replace the qAttributeSetter.
+        # It would be nicer to find a way to set the correct setter
+        # right from the start ...
+        setter_name, = cls._qAttributeNameFor(name, 'setter')
+        setter = lambda self, observable, *args, **kwargs: \
+            self._qObserverSetAttribute(name, observable, interests,
+                                        *args, **kwargs)
+        setattr(cls, setter_name, setter)
+
+    def __init_subclass__(cls: type, qobservables={}, qattributes={}):
+        if not qobservables:
+            # FIXME[hack]: we can not really detect if observables
+            # were registered in superclasses!  FIXME[todo]: but we
+            # should - otherwise we could call our own super()-setter
+            # as orig_setter, probably not what we want to do ...  as
+            # an example use the Datasource buttons (QPrepareButton,
+            # QLoopButton, ...), which form a hierarchy derived from
+            # the same base class.
+            print(f"FIXME[old]: QObserver.__init_subclass__({cls}, without qobservables")
+            LOG.warning(f"FIXME[old]: QObserver.__init_subclass__({cls}, without qobservables")
+
+        # Add attributes for all observable classes
+        new_qattributes = dict(qattributes)
+        for observableClass in qobservables.keys():
+            new_qattributes[observableClass] = True
+
+        # Treat all observables as attributes.
+        super().__init_subclass__(qattributes=new_qattributes)
+
+        # Now adjust the setter to be informed of the changes of interest
+        for observableClass, interests in qobservables.items():
+            change = observableClass.Change(interests)
+            name = cls._qAttributeName(observableClass)
+            cls._qObserverSetter(name, change)
+            LOG.debug("Updated setter for %s (%s)", observableClass, change)
+
+    def _qObservableHelper(self, observableClass: type):  # -> QObserverHelper:
+        return self._qObservableHelpers.get(observableClass, None)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self._qObserverHelpers = {}
+
+    def __del__(self):
+        self.setVisible(False)
+        #super().__del__()
+
+    def helperForObservable(self, observable: Observable, interests=None,
+                            notify: Callable = None, create: bool = False,
+                            remove: bool = False) -> Observable.Observer:
+        if self._qObserverHelpers is None:
+            raise RuntimeError("It seems QObserver's constructor was not "
+                               "called (QObserverHelpers is not set)")
+        key = type(observable).Change
+        if key not in self._qObserverHelpers:
+            if not create:
+                raise RuntimeError("No QObserverHelper for observing "
+                                   f"{type(observable)} in {self}")
+            self._qObserverHelpers[key] = \
+                QObserver.QObserverHelper(self, observable, interests, notify)
+        elif remove:
+            return self._qObserverHelpers.pop(key)
+        return self._qObserverHelpers[key]
+
+    @protect
+    def hideEvent(self, event: QHideEvent) -> None:
+        """Hiding the widget will stop all observations.
+        """
+        for qObserverHelper in self._qObserverHelpers.values():
+            qObserverHelper.stopObservation()
+
+    @protect
+    def showEvent(self, event: QShowEvent) -> None:
+        """Showing a widget will resume all stopped observations.
+        """
+        # FIXME[bug]: here the following error can occur:
+        # RuntimeError: dictionary changed size during iteration
+        for qObserverHelper in self._qObserverHelpers.values():
+            qObserverHelper.startObservation()
+
+    def observe(self, observable: Observable, interests=None,
+                notify: Callable = None) -> None:
+        qObserverHelper = self.helperForObservable(observable, create=True)
+        qObserverHelper.startObservation(interests=interests, notify=notify)
+
+    def unobserve(self, observable, remove: bool = True):
+        qObserverHelper = self.helperForObservable(observable, remove=True)
+        qObserverHelper.stopObservation()
 
     def _registerView(self, name, interests=None):
         # FIXME[question]: do we have to call this from the main thread
-        #if not threading.current_thread() is threading.main_thread():
-        #    raise RuntimeError("QObserver._registerView must be called from"
-        #                       "the main thread, not " +
-        #                       threading.current_thread().name + ".")
+        # if not threading.current_thread() is threading.main_thread():
+        #     raise RuntimeError("QObserver._registerView must be called from"
+        #                        "the main thread, not " +
+        #                        threading.current_thread().name + ".")
         if interests is not None:
             key = interests.__class__
-            if not key in self._qObserverHelpers:
-                #print(f"INFO: creating a new QObserverHelper for {interests}: {interests.__class__}!")
+            if key not in self._qObserverHelpers:
+                # print(f"INFO: creating a new QObserverHelper for {interests}: {interests.__class__}!")
                 self._qObserverHelpers[key] = \
                     QObserver.QObserverHelper(self, interests)
         else:
             print(f"WARNING: no interest during registration of {name} for {self} - ignoring registration!")
 
-    def observe(self, observable: Observable, interests=None):
-        if self._qObserverHelpers is None:
-            raise RuntimeError("It seems QObserver's constructor was not "
-                               "called (QObserverHelpers is not set)")
-        key = observable.Change
-        if not key in self._qObserverHelpers:
-            #print(f"INFO: no QObserverHelper for observing {observable} in {self} yet - creating a new one ({key}: {key.__name__})!")
-            self._qObserverHelpers[key] = \
-                QObserver.QObserverHelper(self, interests)
-        observable.add_observer(self._qObserverHelpers[key],
-                                notify=self.QObserverHelper._qNotify,
-                                interests=interests)
+    def _qObserverSetAttribute(self, name: str, new_observable, interests=None,
+                               *args, **kwargs):
+        """Exchange an observable. This implies stopping observing the
+        old observable and starting to observe the new one.
+        """
+        LOG.debug(f"_qObserverSetAttribute({self.__class__.__name__}, "
+                  f"'{name}', {type(new_observable)}, {interests}, {args}, "
+                  f"{kwargs}")
 
-    def unobserve(self, observable):
-        key = observable.Change
-        if key in self._qObserverHelpers:
-            observable.remove_observer(self._qObserverHelpers[key])
-        else:
-            print(f"WARNING: no QObserverHelper for unobserving {observable} in {self}. Ignoring unobserver ...")
+        attribute, = self._qAttributeNameFor(name, 'attribute')
+
+        old_observable = getattr(self, attribute, None)
+        if new_observable is old_observable:
+            return  # nothing to do ...
+
+        if old_observable is not None:
+            self.unobserve(old_observable)
+        self._qAttributeSetAttribute(name, new_observable, *args, **kwargs)
+        if new_observable is not None:
+            self.observe(new_observable, interests=interests)
 
     def _exchangeView(self, name: str, new_view, interests=None):
         """Exchange the object (View or Controller) being observed.
@@ -144,20 +451,23 @@ class QObserver:
             return  # nothing to do
         if old_view is not None:
             old_view.remove_observer(self)
+            # -> this will call self.unobserve(old_view)
         setattr(self, name, new_view)
         if new_view is not None:
             new_view.add_observer(self, interests)
+            # -> this will call self.observe(new_view, interests)
 
-    def _activateView(self, name: str, interests: None) -> None:
-        view = getattr(self, name)
-        if view is not None:
-            view.add_observer(self, interests)
+    def debug(self) -> None:
+        super().debug()
+        print(f"debug: QObserver[{type(self).__name__}]: "
+              f"{len(self._qObserverHelpers)} observations:")
+        for i, (key, helper) in enumerate(self._qObserverHelpers.items()):
+            print(f"debug:   ({i}) {key.__name__.split('.')[-2]}: "
+                  f"{helper}")
 
-    def _deactivateView(self, name: str) -> None:
-        view = getattr(self, name)
-        if view is not None:
-            view.remove_observer(self)
-
+    # FIXME[bug]:
+    #   File "/home/ulf/projects/github/DeepLearningToolbox/base/observer.py", line 314, in __del__
+    #      AttributeError: 'QObserverHelper' object has no attribute 'unobserve'
     class QObserverHelper(QObject):
         """A helper class for the :py:class:`QObserver`.
 
@@ -176,7 +486,7 @@ class QObserver:
         This class has the following attributes:
 
         _observer: Observer
-            The actuall Observer the finally should receive the
+            The actuall Observer that finally should receive the
             notifications.
         _interests: Change
             The changes, the Observer is interested in.
@@ -184,16 +494,48 @@ class QObserver:
             The unprocessed changes accumulated so far.
         """
 
-        def __init__(self, observer, interests=None, parent=None):
+        def __init__(self, observer: Observable.Observer,
+                     observable: Observable, interests=None,
+                     notify: Callable=None, **kwargs) -> None:
             """Initialization of the QObserverHelper.
             """
-            super().__init__(parent)
+            super().__init__(**kwargs)
             self._observer = observer
+            self._observable = observable
+            self._observing = False
             self._interests = interests
-            self._change = None
+            self._change = None  # accumulated changes
+            self._kwargs = {}  # additional arguments provided on notification
+            self._notify = notify
 
-        def _qNotify(observable, self, change):
-            """Notify tha observer about some change. This will
+        def startObservation(self, interests=None,
+                             notify: Callable=None) -> None:
+            if self._observing:
+                return  # The observation was already started
+            self._observing = True
+            if interests is not None:
+                self._interests = interests
+            if notify is not None:
+                self._notify = notify
+            # FIXME[hack/bug]: this should be: notify=self._qNotify ...
+            self._observable.add_observer(self, notify=
+                                          QObserver.QObserverHelper._qNotify,
+                                          interests=self._interests)
+            self.__class__._qNotify(self._observable, self,
+                                    self._interests)
+
+        def stopObservation(self) -> None:
+            if not self._observing:
+                return  # No ongoing observation to stop.
+            self._observing = False
+            self._observable.remove_observer(self)
+
+        # FIXME[hack/bug]: make this a method, take self as first argument
+        # something like 'observable_changed(self, observable, change)'
+        # Then QObserverHelper could be made an Observer,
+        # e.g. called QObservableWrapper
+        def _qNotify(observable, self, change, **kwargs):
+            """Notify the Observer about some change. This will
             initiate an asynchronous notification by queueing an
             invocation of :py:meth:_qAsyncNotify in the Qt main event
             loop. If there are already pending notifications, instead
@@ -214,6 +556,7 @@ class QObserver:
                 # object. So we will queue a new one and remember the
                 # change:
                 self._change = change
+                self._kwargs = kwargs
                 # This will use Qt.AutoConnection: the member is invoked
                 # synchronously if obj lives in the same thread as the caller;
                 # otherwise it will invoke the member asynchronously.
@@ -238,375 +581,24 @@ class QObserver:
             observer.
             """
             change = self._change
+            kwargs = self._kwargs
             if change is not None:
                 try:
                     self._change = None
-                    observable.notify(self._observer, change)
-                except BaseException as ex:
+                    self._kwargs = {}
+                    if self._notify is None:
+                        observable.notify(self._observer, change, **kwargs)
+                    else:
+                        self._notify(observable, change, **kwargs)
+                except Exception as ex:
                     util.error.handle_exception(ex)
 
         def __str__(self) -> str:
-            return f"QObserver({self._observer}, {self._change})"
-
-
-import numpy as np
-from datasource import Metadata
-from util.image import imresize, imwrite, BoundingBox, PointsBasedLocation
-
-
-from PyQt5.QtCore import Qt, QPoint, QSize, QRect
-from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
-from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy
-
-
-class QImageView(QWidget):
-    """An experimental class to display images using the ``QImage``
-    class.  This may be more efficient than using matplotlib for
-    displaying images.
-
-    Attributes
-    ----------
-    _image: QImage
-        The image to display
-    _overlay: QImage
-        Overlay for displaying on top of the image
-    _show_raw: bool
-        A flag indicating whether this QImageView will show
-        the raw input data, or the data acutally fed to the network.
-    _showMetadata: bool
-        A flag indicating if metadata should be shown if available.
-    """
-    _image: QImage = None
-    _overlay: QImage = None
-    _show_raw: bool = False
-    _contextMenu: QMenu = None
-    _keepAspect: bool = True
-    _showMetadata: bool = True
-    
-    def __init__(self, parent: QWidget=None):
-        """Construct a new :py:class:`QImageView`.
-        """
-        super().__init__(parent)
-
-        self._raw: np.ndarray = None
-        self._image: QImage = None
-        self._marks: list = None
-        self._overlay: QImage = None
-        self._metadata: Metadata = None
-        self._metadata2: Metadata = None
-
-        #
-        # Prepare the context Menu
-        #
-        self._contextMenu = QMenu(self)
-        self._contextMenu.addAction(QAction('Info', self))
-
-        aspectAction = QAction('Keep Aspect Ratio', self)
-        aspectAction.setCheckable(True)
-        aspectAction.setChecked(self._keepAspect)
-        aspectAction.setStatusTip('Keep original aspect ratio of the image')
-        aspectAction.toggled.connect(self.onAspectClicked)
-        self._contextMenu.addAction(aspectAction)
-        
-        self._contextMenu.addSeparator()
-        saveAction = QAction('Save image', self)
-        saveAction.setStatusTip('save the current image')
-        saveAction.triggered.connect(self.onSaveClicked)
-        self._contextMenu.addAction(saveAction)
-        self._contextMenu.addAction(QAction('Save image as ...', self))
-
-        # set button context menu policy
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.customContextMenuRequested.connect(self.onContextMenu)
-
-        # set the size policy
-        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        #sizePolicy.setHeightForWidth(self.assetsListWidget.sizePolicy().hasHeightForWidth())
-        self.setSizePolicy(sizePolicy)
-
-        # By default, a QWidget does not accept the keyboard focus, so
-        # we need to enable it explicitly: Qt.StrongFocus means to
-        # get focus by 'Tab' key as well as by mouse click.
-        self.setFocusPolicy(Qt.StrongFocus)
-
-    #@pyqtSlot(QPoint)
-    @protect
-    def onContextMenu(self, point):
-        # show context menu
-        print(type(point))
-        self._contextMenu.exec_(self.mapToGlobal(point))
-
-    #@pyqtSlot(bool)
-    @protect
-    def onAspectClicked(self, checked):
-        self.keepAspectRatio = checked
-
-    @protect
-    def onSaveClicked(self, checked):
-        if (self._raw is not None and
-            self._metadata is not None and
-            self._metadata.has_attribute('basename')):
-            # write the file
-            imwrite(self._metadata.get_attribute('basename'), self._raw)
-
-    @property
-    def keepAspectRatio(self) -> bool:
-        return self._keepAspect
-
-    @keepAspectRatio.setter
-    def keepAspectRatio(self, flag: bool) -> None:
-        if self._keepAspect != flag:
-            self._keepAspect = flag
-            self.update()
-
-    @property
-    def showMetadata(self) -> bool:
-        return self._showMetadata
-
-    @showMetadata.setter
-    def showMetadata(self, flag: bool) -> None:
-        if self._showMetadata != flag:
-            self._showMetadata = flag
-            self.update()
-
-    def getImage(self) -> np.ndarray:
-        return self._raw
-
-    def setImage(self, image: np.ndarray) -> None:
-        """Set the image to display.
-        """
-        self._raw = image
-        self._marks = []
-        if image is not None:
-            # To construct an 8-bit monochrome QImage, we need a
-            # 2-dimensional, uint8 numpy array
-            if image.ndim == 4:
-                image = image[0]
-
-            img_format = QImage.Format_Grayscale8
-            bytes_per_line = image.shape[1]
-
-            if image.ndim == 3:
-                # three channels -> probably rgb
-                if image.shape[2] == 3:
-                    img_format = QImage.Format_RGB888
-                    bytes_per_line *= 3
-                else:
-                    image = image[:, :, 0]
-
-            if image.dtype != np.uint8:
-                image = (image * 255).astype(np.uint8)
-            image = image.copy()
-
-            self._image = QImage(image,
-                                 image.shape[1], image.shape[0],
-                                 bytes_per_line, img_format)
-            #self.resize(self._image.size())
-        else:
-            self._image = None
-
-        #self.updateGeometry()
-        self.update()
-
-    def minimumSizeHint(self):
-        # FIXME[hack]: this will change the size of the widget depending
-        # on the size of the image, probably not what we want ...
-        #return QSize(-1,-1) if self._image is None else self._image.size()
-        return QSize(100,100)
-    
-    def sizeHint(self):
-        return QSize(1000,1000)
-
-    def setMask(self, mask):
-        """Set a mask to be displayed on top of the actual image.
-
-        Parameters
-        ----------
-        mask : numpy.ndarray
-
-        """
-        if mask is None:
-            self._overlay = None
-        else:
-            if not mask.flags['C_CONTIGUOUS'] or mask.dtype != np.uint8:
-                mask = np.ascontiguousarray(mask, np.uint8)
-
-            mask = imresize(mask, (self._image.height(), self._image.width()),
-                                    interp='nearest')
-            self._overlay = QImage(mask.shape[1], mask.shape[0],
-                                   QImage.Format_ARGB32)
-            self._overlay.fill(Qt.red)
-
-            alpha = QImage(mask, mask.shape[1], mask.shape[0],
-                           mask.shape[1], QImage.Format_Alpha8)
-            painter = QPainter(self._overlay)
-            painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-            painter.drawImage(QPoint(), alpha)
-            painter.end()
-        self.update()
-
-    def addMark(self, rect: QRect):
-        """Mark a rectangle in the image.
-        The rectangle provides the image coordinates to mark.
-        """
-        self._marks.append(rect)
-
-    def setMetadata(self, metadata: Metadata, metadata2: Metadata=None):
-        """Set metadata to be displayed in this View.
-        """
-        self._metadata = metadata
-        self._metadata2 = metadata2
-        self.update()
-
-    def paintEvent(self, event):
-        """Process the paint event by repainting this Widget.
-
-        Parameters
-        ----------
-        event : QPaintEvent
-        """
-        painter = QPainter()
-        painter.begin(self)
-
-        # Compute the transformation
-        if self._image is not None:
-            w = self._image.width()
-            h = self._image.height()
-            # scale maximally while maintaining aspect ratio
-            w_ratio = self.width() / w
-            h_ratio = self.height() / h
-            if self._keepAspect:
-                w_ratio = min(w_ratio, h_ratio)
-                h_ratio = w_ratio
-            # the rect is created such that it is centered on the current widget
-            # pane both horizontally and vertically
-            x = (self.width() - w * w_ratio) // 2
-            y = (self.height() - h * h_ratio) // 2
-            transform = QTransform()
-            transform.translate(x, y)
-            transform.scale(w_ratio, h_ratio)
-            painter.setTransform(transform)
-        
-        self._drawImage(painter)
-        self._drawMask(painter)
-        self._drawMarks(painter)
-        if self.showMetadata:
-            self._drawMetadata(painter, self._metadata, color=Qt.green)
-            self._drawMetadata(painter, self._metadata2, color=Qt.red)
-        painter.end()
-
-    def _drawImage(self, painter: QPainter):
-        """Draw current image into this ``QImageView``.
-
-        Parameters
-        ----------
-        painter :   QPainter
-        """
-        if self._image is not None:
-            painter.drawImage(QPoint(0,0), self._image)
-
-    def _drawMask(self, painter: QPainter):
-        """Display the given image.
-
-        Parameters
-        ----------
-        painter :   QPainter
-        """
-        if self._image is not None and self._overlay is not None:
-            painter.drawImage(QPoint(0, 0), self._overlay)
-
-    def _drawMarks(self, painter: QPainter):
-        """Draw marks on current image into this ``QImageView``.
-
-        Parameters
-        ----------
-        painter :   QPainter
-        """
-        if not self._marks:
-            return
-
-        for mark in self._marks:
-            if isinstance(mark, QRect):
-                pen_width = 4
-                pen_color = Qt.green
-                pen = QPen(pen_color)
-                pen.setWidth(pen_width)
-                painter.setPen(pen)
-                painter.drawRect(mark)
-
-    def _drawMetadata(self, painter: QPainter, metadata: Metadata,
-                      pen: QPen=None, line_width=4, color=Qt.green):
-        if metadata is None or not metadata.has_regions():
-            return
-
-        for region in metadata.regions:
-            if pen is None:
-                pen = QPen(color)
-                pen.setWidth(line_width * (1+max(self._image.width(),
-                                                 self._image.height())//400))
-            painter.setPen(pen)
-            if isinstance(region.location, BoundingBox):
-                l = region.location
-                painter.drawRect(l.x, l.y, l.width, l.height)
-            elif isinstance(region.location, PointsBasedLocation):
-                for p in region.location.points:
-                    painter.drawPoint(p[0], p[1])
-
-
-        
-    def keyPressEvent(self, event):
-        """Process key events. The :py:class:`QImageView` supports
-        the following keys:
-
-        r: toggle the keepAspectRatio flag
-        """
-        key = event.key()
-        if key == Qt.Key_R:
-            self.keepAspectRatio = not self.keepAspectRatio
-        elif key == Qt.Key_M:
-            self.showMetadata = not self.showMetadata
-
-from datasource import Metadata
-
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QLabel
-
-
-class QMetadataView(QLabel):
-    """A :py:class:`QWidget` to display :py:class:`Metadata` information.
-    """
-
-    _metadata: Metadata
-
-    def __init__(self, metadata: Metadata=None, **kwargs):
-        super().__init__(**kwargs)
-        self._attributes = []
-        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.setMetadata(metadata)
-
-    def addAttribute(self, attribute):
-        self._attributes.append(attribute)
-
-    def setMetadata(self, metadata: Metadata) -> None:
-        self._metadata = metadata
-        if metadata is None:
-            self.setText(None)
-        else:
-            text = ("No description" if metadata.description is None
-                    else metadata.description)
-            for attribute in self._attributes:
-                if not metadata.has_attribute(attribute):
-                    text += f"\n{attribute}: None"
-                elif attribute == 'regions':
-                    text += f"\n{len(metadata.regions)} regions"
-                elif attribute == 'image':
-                    text += (f"\n{metadata.image.shape}, "
-                             f"dtype={metadata.image.dtype}")
-                else:
-                    value = metadata.get_attribute(attribute)
-                    text += f"\n{attribute}: {value}"
-            self.setText(text)
-
+            #f"QObserver({self._observer};"
+            #f"interests={self._interests}, change={self._change})"
+            return (f"observable={self._observable}, "
+                    f"observing={self._observing}, "
+                    f"notify={self._notify}")
 
 
 import os
@@ -614,9 +606,11 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtGui import QMovie
 
-from base.observer import BusyObservable
+from base import BusyObservable
 
-class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
+
+class QBusyWidget(QLabel, QObserver, qobservables={
+        BusyObservable: {'busy_changed'}}):
     """A widget indicating a that some component is busy.
     """
     _label: QLabel = None
@@ -630,7 +624,7 @@ class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
         self._movie = QMovie(os.path.join('assets', 'busy.gif'))
         self.setMovie(self._movie)
         self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self._movie.start()
+        #self._movie.start()
 
     def setView(self, busyView):
         interests = BusyObservable.Change('busy_changed')
@@ -639,7 +633,8 @@ class QBusyWidget(QLabel, QObserver, BusyObservable.Observer):
     # FIXME[hack]: we should have a callback busy_changed!
     def detector_changed(self, busyBody: BusyObservable,
                          change: BusyObservable.Change) -> None:
-        self._movie.setPaused(not busyBody.busy)
+        print("QBusyWidget.detector_changed")
+        #self._movie.setPaused(not busyBody.busy)
         #self.setVisible(busyBody.busy)
 
     def __del__(self):

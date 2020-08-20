@@ -6,20 +6,12 @@ logger.setLevel(logging.DEBUG)
 
 import tensorflow as tf
 
-os.environ['KERAS_BACKEND'] = 'tensorflow'
-import keras
-
-from keras import backend as K
-logger.info(f"Backend: {K.backend()}")
-assert K.backend() == "tensorflow", f"Keras should use the tensorflow backend, not {K.backend()}"
-
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten
 
-from network.keras import KerasClassifier
+from network.keras_tensorflow import Classifier as KerasClassifier
 from network.keras import conv_2d
 
-from toolbox import toolbox
 
 class KerasMnistClassifier(KerasClassifier):
     """A simple feed forward network implemented in Keras.
@@ -36,28 +28,37 @@ class KerasMnistClassifier(KerasClassifier):
 
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Construct a new, convolutional network.
         """
         logger.info(f"New Keras MNIST model")
-        super().__init__()
+        super().__init__(**kwargs)
 
-        with self._graph.as_default():
-            self._create_model()
+    def _prepare(self) -> None:
+        super()._prepare()
 
-        # FIXME[hack]
+        # FIXME[hack]: why are we doing this here?
+        # we get an error as the graph is empty:
+        # RuntimeError: The Session graph is empty.
+        #   Add operations to the graph before calling run().
         self.snapshot()       
         for l in self._snapshot:
             print(l.shape)
         self._model.summary(print_fn=logger.info)
 
-
+    def _prepare_graph(self):
+        super()._prepare_graph()
+        with self._graph.as_default():
+            self._create_model()
+       
+            
     def _create_model(self, img_rows=28, img_cols=28, nchannels=1,
                       nb_classes=10):
         # Create TF session and set as Keras backend session
         #self._sess = tf.Session()
         #keras.backend.set_session(self._sess)
-
+        print("\n\nKerasMnistClassifier: create_model\n\n")
+        
         # Define input TF placeholder
         input_shape = (None, img_rows, img_cols, nchannels)
         label_shape = (None, nb_classes)

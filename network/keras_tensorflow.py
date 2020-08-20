@@ -1,140 +1,51 @@
-from __future__ import absolute_import
-
-import numpy as np
-
+# standard imports
+from __future__ import absolute_import  # support for Python 2 code
+from collections import OrderedDict  # new in version 2.7
 import sys
 import os
-
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+import importlib
+
+# third party imports
+import numpy as np
+from dltb.thirdparty.keras import keras
+from dltb.thirdparty.tensorflow import v1 as tf
+
+# toolbox imports 
+from .network import Network as BaseNetwork
+from .keras import Network as KerasNetwork, Classifier
+from .tensorflow import Network as TensorflowNetwork
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
-from collections import OrderedDict
-from frozendict import FrozenOrderedDict
-from network.exceptions import ParsingError
+# FIXME[concept]: this was part (and may become part) of the
+# KerasTensorFlowLayerMixin class.
+# A KerasNetwork with tensorflow backend may dynamically extend
+# its layers to support this methods ...
+class KerasTensorFlowLayerMixin:
 
-from .keras import Network as KerasNetwork
-from .layers import keras_tensorflow_layers
+    @property
+    def input(self):
+        return self._keras_layer_objs[0].input
 
-class Network(KerasNetwork):
-
-    _layer_types_to_classes = {
-        'Conv2D': keras_tensorflow_layers.KerasTensorFlowConv2D,
-        'Dense': keras_tensorflow_layers.KerasTensorFlowDense,
-        'MaxPooling2D': keras_tensorflow_layers.KerasTensorFlowMaxPooling2D,
-        'Dropout': keras_tensorflow_layers.KerasTensorFlowDropout,
-        'Flatten': keras_tensorflow_layers.KerasTensorFlowFlatten
-    }
-
-    # Layer types that encapsulate the inner product, bias add,
-    # activation pattern.
-    _neural_layer_types = {'Dense', 'Conv2D'}
-
-    # Layer types that just map input to output without trainable
-    # parameters.
-    _transformation_layer_types = {'MaxPooling2D', 'Flatten', 'Dropout'}
+    @property
+    def output(self):
+        return self._keras_layer_objs[-1].output
 
 
-    @classmethod
-    def import_framework(cls, cpu=True):
-        
-        # TF_CPP_MIN_LOG_LEVEL: Control the amount of TensorFlow log
-        # message displayed on the console.
-        #  0 = INFO
-        #  1 = WARNING
-        #  2 = ERROR
-        #  3 = FATAL
-        #  4 = NUM_SEVERITIES
-        # Defaults to 0, so all logs are shown.
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+class Network(KerasNetwork, TensorflowNetwork):
+    """This :py:class:`Network` combines the
+    :py:class:`KerasNetwork` and the :py:class:`TensorflowNetwork`.
+    The basic ideas are the following:
 
-        # TF_CPP_MIN_VLOG_LEVEL brings in extra debugging information
-        # and actually works the other way round: its default value is
-        # 0 and as it increases, more debugging messages are logged
-        # in.
-        # Remark: VLOG messages are actually always logged at the INFO
-        # log level. It means that in any case, you need a
-        # TF_CPP_MIN_LOG_LEVEL of 0 to see any VLOG message.
-        #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+    * From the :py:class:`KerasNetwork` it inherits the construction
+      of the layers from the structure of the Keras Model.
 
-        import tensorflow as tf
-
-        # The only way to configure the keras backend appears to be
-        # via environment variable. We thus inject one for this
-        # process. Keras must be loaded after this is done
-        os.environ['KERAS_BACKEND'] = 'tensorflow'
-
-        import keras
-
-        # some sanity checks
-        # (C1) keras should not be (much) newer than tensorflow.
-        #      Some ideas a given on
-        #        https://docs.floydhub.com/guides/environments/
-        #      In the following configurations I experienced problems:
-        #      tensorflow 1.3.0, keras 2.2.4
-        #      - keras uses an 'axis' argument when calling the
-        #        tf.nn.softmax() function which is not supported:
-        #        "softmax() got an unexpected keyword argument 'axis'"
-        from packaging import version
-        keras_version = version.parse(keras.__version__)
-        if keras_version >= version.parse("2.2.4"):
-            tf_min_version = "1.11.0"
-        elif keras_version >= version.parse("2.2.0"):
-            tf_min_version = "1.10.0"
-        elif keras_version >= version.parse("2.2.0"):
-            tf_min_version = "1.9.0"
-        elif keras_version >= version.parse("2.1.6"):
-            tf_min_version = "1.5.0"
-        elif keras_version >= version.parse("2.0.8"):
-            tf_min_version = "1.4.0"
-        elif keras_version >= version.parse("2.0.6"):
-            tf_min_version = "1.0.0"
-        else:
-            raise ImportError("Your keras is too old."
-                              f"We require at least keras 2.0.6, "
-                              f"but you have keras {keras.__version__}.")
-
-        if version.parse(tf.__version__) < version.parse(tf_min_version):
-            raise ImportError("Your tensorflow is too old for your keras."
-                              f"keras {keras.__version__} requires "
-                              f"at least tensorflow {tf_min_version}, "
-                              f"but you have tensorflow {tf.__version__}.")
-        
-        if cpu:
-            # unless we do this, TF still checks and finds gpus (not
-            # sure if it actually uses them)
-            #
-            # UPDATE: TF now still loads CUDA, there seems to be no
-            # way around this
-            os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-
-            # FIXME[todo]: the following setting causes a TensorFlow
-            # error: failed call to cuInit: CUDA_ERROR_NO_DEVICE
-            #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-            logger.info("Running in CPU-only mode.")
-            from multiprocessing import cpu_count
-            num_cpus = cpu_count()
-            config = tf.ConfigProto(intra_op_parallelism_threads=num_cpus,
-                                    inter_op_parallelism_threads=num_cpus,
-                                    allow_soft_placement=True,
-                                    device_count={'CPU': num_cpus, 'GPU': 0})
-            session = tf.Session(config=config)
-
-        global K
-        from keras import backend as K
-        # image_dim_ordering:
-        #   'tf' - "tensorflow":
-        #   'th' - "theano":
-        K.set_image_dim_ordering('tf')
-        logger.info(f"image_dim_ordering: {K.image_dim_ordering()}")
-        logger.info(f"image_data_format: {K.image_data_format()}")
-
-        if cpu:
-            K.set_session(session)
-            
-        super(Network, cls).import_framework()
-
+    * From the :py:class:`TensorflowNetwork` it inherits graph
+      and session management.
+    """
 
     def __init__(self, **kwargs):
         """
@@ -144,55 +55,35 @@ class Network(KerasNetwork):
         modelfile_path
             Path to the .h5 model file.
         """
+        print("**keras_tensorflow.Network:", kwargs)
         super().__init__(**kwargs)
-        self._sess = K.get_session()
+        self._snapshot = None  # FIXME[old]: what is this? -> documentation or remove
 
-    def _create_layer_dict(self):
+    def _prepare_graph(self):
+        if self._graph is None:
+            self._graph = tf.Graph()
+        else:
+            print("network.keras: INFO: keras graph was already set")
 
-        layer_ids = self._compute_layer_ids()
-        layer_dict = OrderedDict()
-        last_layer_id = ''
-        last_layer_type = None
-        current_layers = [] # Layers that could not be wrapped in objects yet, because they were missing the activation function.
-        for layer_id in layer_ids:
-            keras_layer_obj = self._model.get_layer(layer_id)
-            layer_type = keras_layer_obj.__class__.__name__
-            # Check whether the layer type is considered a real layer.
-            if layer_type in self._layer_types_to_classes.keys():
-                # Check that if the layer is a neural layer it contains an activation function.
-                # If so the layer can be added savely.
-                # Otherwise take the next activation function and merge the layers
-                if ((layer_type in self._neural_layer_types and keras_layer_obj.activation.__name__ != 'linear') or
-                    (layer_type in self._transformation_layer_types)):
-                    # Check that there is no unfinished layer with missing activation function.
-                    # If not add the layer.
-                    if not current_layers:
-                        layer_dict[layer_id] = self._layer_types_to_classes[layer_type](self, [keras_layer_obj])
-                    else:
-                        raise ParsingError('Missing activation function.')
-                else:
-                    # Check that there is no other unfinished layer before that one.
-                    if not current_layers:
-                        current_layers.append(keras_layer_obj)
-                        last_layer_id = layer_id
-                        last_layer_type = layer_type
-                    else:
-                        raise ParsingError('Two consectutive layers with no activation function.')
+    def _prepare_session(self):
+        if self._session is None:
+            #self._session = keras.backend.get_session()
+            LOG.info("Keras-Tensorflow: prepare session with new session.")
+            self._session = tf.Session(graph=self._graph)
 
-            elif layer_type == 'Activation':
-                # Check that there was a layer before without activation function and merge.
-                if current_layers:
-                    current_layers.append(keras_layer_obj)
-                    layer_dict[last_layer_id] = self._layer_types_to_classes[last_layer_type](self, current_layers)
-                    current_layers = []
-                else:
-                    raise ParsingError('Two activation layers after each other.')
-            else:
-                raise ParsingError('Not sure how to deal with that layer type at that position.')
-
-
-        return FrozenOrderedDict(layer_dict)
-
+            # FIXME[warning]:
+            #   The name tf.keras.backend.set_session is deprecated.
+            #   Please use tf.compat.v1.keras.backend.set_session instead.
+            # (keras.__name__ is 'tensorflow.python.keras.api._v1.keras')
+            # keras.backend.set_session(self._session)
+            import tensorflow.compat.v1.keras.backend
+            tensorflow.compat.v1.keras.backend.set_session(self._session)
+        else:
+            LOG.info("Keras-Tensorflow: prepare session "
+                     "using existing session.")
+            keras.backend.set_session(self._session)
+        # FIXME[hack]: create a cleaner concept of keras/tensorflow preparation
+        # super()._prepare_session()
 
 
     def _compute_activations(self, layer_ids: list, input_samples: np.ndarray):
@@ -208,7 +99,8 @@ class Network(KerasNetwork):
         -------
 
         """
-        activation_tensors  = [self.layer_dict[layer_id].output for layer_id in layer_ids]
+        activation_tensors = \
+            [self.layer_dict[layer_id].output for layer_id in layer_ids]
         return self._feed_input(activation_tensors, input_samples)
 
     def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
@@ -225,5 +117,162 @@ class Network(KerasNetwork):
 
     def _feed_input(self, fetches: list, input_samples: np.ndarray):
         network_input_tensor = self._model.layers[0].input
-        return self._sess.run(fetches=fetches, feed_dict={network_input_tensor: input_samples})
+        return self._sess.run(fetches=fetches,
+                              feed_dict={network_input_tensor: input_samples})
 
+
+    # FIXME[hack]: The method 
+    #   network.keras_tensorflow.Network.get_input_shape()
+    # is resolved to
+    #   network.tensorflow.Network.get_input_shape()
+    # which tries to access 
+    #   self.get_input_tensor()
+    # and so
+    #   self._input_placeholder.outputs
+    # but self._input_placeholder is not set.
+    # Hence we will resolve to the original implementation
+    #  network.network.get_input_shape()
+    def _get_input_shape(self) -> tuple:
+        """Get the shape of the input data for the network.
+        """
+        return BaseNetwork._get_input_shape(self)
+    
+    #
+    # FIXME[old]: this was network.keras.KerasModel
+    # 
+
+    def reset(self):
+        """Reset the model parameters (weights) to the last snapshot.
+        """
+        if self._snapshot is not None:
+            self._keras_model.set_weights(self._snapshot)
+            self._sess.run(tf.global_variables_initializer())
+
+    @property
+    def graph(self):
+        return self._graph
+
+    @property
+    def session(self):
+        return self._session
+
+
+class ApplicationsNetwork(Network, Classifier):
+    """One of the predefined and pretrained networks from the
+    :py:mod:`keras.applications`.
+    """
+    KERAS_APPLICATIONS = 'tensorflow.keras.applications'
+
+    def __init__(self, model: str, module: str = None, **kwargs) -> None:
+        super().__init__(scheme='ImageNet', **kwargs)
+
+        # evaluate the module argument
+        if module is None:
+            self._module, self._module_name = None, None
+        elif isinstance(module, ModuleType):
+            self._module, self._module_name = module, module.__name__
+        elif isinstance(module, str):
+            self._module = None
+            self._module_name = (module if '.' in module else
+                                 '.'.join((self.KERAS_APPLICATIONS, module)))
+        else:
+            raise TypeError("Argument 'module' should by module "
+                            "or module name")
+
+        # evaluate the model argument
+        module_name = None
+        self._model, self._model_name, self._model_function = None, None, None
+        if isinstance(model, str):
+            # from tensorflow.keras.applications import ResNet50
+            # from tensorflow.keras.applications.resnet50 import ResNet50
+            if "." in model:
+                module_name, self._model_name = module.rsplit('.')
+            else:
+                self._model_name = model
+                if self._module_name is None:
+                    self._module_name = ".".join((self.KERAS_APPLICATIONS,
+                                                  model.lower()))
+        elif isinstance(model, FunctionType):
+            # model.__module__ = 'tensorflow.python.keras.applications'
+            # model.__name__ = 'wrapper'
+            if model.__name__ == 'wrapper':
+                self._model_name = model.__closure__[0].cell_contents.__name__
+            else:
+                self._model_name = model.__name
+            self._model_function = model
+        elif model is None:
+            raise ValueError("No Model provided for ApplicationsNetwork")
+        else:
+            raise TypeError("Instantiation of ApplicationsNetwork with "
+                            "bad model type ({type(model)}).")
+
+        # Consistency Check
+        if (module_name and self._module_name and
+            module_name != self._module_name):
+            # Inconsistent module names
+            raise ValueError("Inconsistent module name: "
+                             "'{self._module_name}' should be '{module_name}'")
+
+    def _prepared(self) -> bool:
+        """Check if this :py:class:`ApplicationsNetwork` has been prepared.
+
+        """
+        return self._model is not None and super()._prepared()
+
+    def _prepare(self) -> None:
+        if self._module is None:
+            self._module = importlib.import_module(self._module_name)
+            
+        self.preprocess_input = getattr(self._module, 'preprocess_input')
+        self.decode_predictions = getattr(self._module, 'decode_predictions')
+
+        if self._model is None:
+            if self._model_function is None:
+                self._model_function = getattr(self._module, self._model_name)
+
+            # Initialize the model (will download data if not yet present)
+            self._model = self._model_function(weights='imagenet')
+            # FIXME[warning]: (tensorflow.__version__ = '1.15.0')
+            # From tensorflow_core/python/ops/resource_variable_ops.py:1630:
+            #   calling BaseResourceVariable.__init__ (from
+            #   tensorflow.python.ops.resource_variable_ops) with constraint
+            #   is deprecated and will be removed in a future version.
+            # Instructions for updating:
+            # If using Keras pass *_constraint arguments to layers.
+       
+        super()._prepare()
+
+
+    #
+    # Preprocessing input
+    #
+
+    # Some models use images with values ranging from 0 to 1. Others
+    # from -1 to +1. Others use the "caffe" style, that is not
+    # normalized, but is centered.
+
+    # From the source code, Resnet is using the caffe style.
+    #
+
+    # You don't need to worry about the internal details of
+    # preprocess_input. But ideally, you should load images with the
+    # keras functions for that (so you guarantee that the images you
+    # load are compatible with preprocess_input).
+
+    # Example: https://www.tensorflow.org/api_docs/python/tf/keras/applications/resnet/preprocess_input
+
+    # i = tf.keras.layers.Input([None, None, 3], dtype = tf.uint8)
+    # x = tf.cast(i, tf.float32)
+    # x = tf.keras.applications.mobilenet.preprocess_input(x)
+    # core = tf.keras.applications.MobileNet()
+    # x = core(x)
+    # model = tf.keras.Model(inputs=[i], outputs=[x])
+    #
+    # image = tf.image.decode_png(tf.io.read_file('file.png'))
+    # result = model(image)
+
+    # https://www.tensorflow.org/api_docs/python/tf/keras/applications/resnet/preprocess_input
+    #
+    # The images are converted from RGB to BGR, then each color
+    # channel is zero-centered with respect to the ImageNet dataset,
+    # without scaling.

@@ -11,47 +11,17 @@ Internal requirements: just submodules:
  - util.error
  - util.logging
 
+
 External requirements:
  - packaging (via .check)
- - frozendict (via .check)
 """
 
 import sys
 import logging
 from . import check, error
 from .logging import RecorderHandler
-from .debugging import debug
 
 
-class Identifiable:
-    _id: str = None
-    _counter: int = 0
-
-    def __init__(self, id=None):
-        if id is None:
-            self._ensure_id()
-        else:
-            self._id = id
-
-    def _ensure_id(self):
-        if self._id is None:
-            Identifiable._counter += 1
-            self._id = self.__class__.__name__ + str(Identifiable._counter)
-        return self._id
-
-    def get_id(self):
-        return self._ensure_id()
-
-    def __hash__(self):
-        return hash(self._ensure_id())
-
-    def __eq__(self, other):
-        if isinstance(other, Identifiable):
-            return self._ensure_id() == other._ensure_id()
-        return False
-
-    def __str__(self):
-        return str(self._id)
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -73,14 +43,22 @@ def async_decorator(function):
         #run_async(function, *args, **kwargs)
     return wrapper
 
+#
+# timer loop  (FIXME[question]: what is the idea here?)
+#
+
 import time, threading
-from . import resources
+
+# FIXME[problem]: resources requires stuff from base (while base)
+# also requires stuff from util) -> cyclic import!
+#  => disentangle, maybe split into several (sub)packages
+#from . import resources
           
 _timer = None
 _timer_callbacks = []
 
 def _timer_loop():
-    resources.update()
+    #resources.update()
     for callback in _timer_callbacks:
         callback()
     if _timer is not None:
@@ -103,6 +81,10 @@ def stop_timer():
 def add_timer_callback(callback):
     global _timer_callbacks
     _timer_callbacks.append(callback)
+
+#
+# Global Flags
+#
 
 # Should we use CPU (even if GPU is available)?
 use_cpu = True

@@ -1,21 +1,20 @@
+# standard imports
 from __future__ import absolute_import
-from typing import Union, List
+from typing import List
+from collections import OrderedDict
 
-import os
-
+# third party imports
 import numpy as np
 import caffe
 from caffe.proto import caffe_pb2
 
 import google.protobuf.text_format
-
-from collections import OrderedDict
-from frozendict import FrozenOrderedDict
-from network.exceptions import ParsingError
 from tempfile import NamedTemporaryFile
 
+# toolbox imports
+from network.exceptions import ParsingError
+
 from . import Network as BaseNetwork
-from .util import convert_data_format
 from .layers import caffe_layers
 
 

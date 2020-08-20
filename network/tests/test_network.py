@@ -1,14 +1,21 @@
-from .conf import MODELS_DIRECTORY
+
+# standard imports
+from collections import OrderedDict  # new in version 2.7
 from unittest import TestCase
 
+# third party imports
 import numpy as np
-from frozendict import FrozenOrderedDict
 
-## The following line allows the test to be run from within the test
-## directory:
+# toolbox imports
+from .conf import MODELS_DIRECTORY
+
+
+# The following line allows the test to be run from within the test
+# directory:
 # if not __package__: import __init__
 
 from network import Network as BaseNetwork
+
 
 class MockLayer:
 
@@ -20,7 +27,8 @@ class MockNetwork(BaseNetwork):
     """Mock to allow instantiation."""
     def __init__(self, **kwargs):
         self._data_format = kwargs['data_format']
-        self.layer_dict = FrozenOrderedDict(input_layer=MockLayer(input_shape=kwargs['input_shape']))
+        layer = MockLayer(input_shape=kwargs['input_shape'])
+        self.layer_dict = OrderedDict(input_layer=layer)
 
 
 class TestBaseNetwork(TestCase):

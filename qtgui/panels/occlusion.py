@@ -6,9 +6,9 @@ from qtgui.widgets import QMatrixView
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
-from qtgui.widgets import QActivationView
-from qtgui.widgets import QInputSelector, QInputInfoBox, QModelImageView
-from qtgui.utils import QImageView
+from ..widgets import QActivationView
+from ..widgets import QDataInfoBox
+from ..widgets.image import QImageView
 
 from .panel import Panel
 
@@ -34,7 +34,7 @@ class OcclusionPanel(Panel):
 
             * The ``QImageView`` showing the occlusion overlay
             * The ``QImageView`` showing the current input image
-            * A ``QInputInfoBox`` to display information about the input
+            * A ``QDataInfoBox`` to display information about the input
 
         '''
         #super().initUI()

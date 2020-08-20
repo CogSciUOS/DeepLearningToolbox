@@ -12,13 +12,13 @@ def run(function):
 
 
 class View:
-    """A View can view one :py:class:`Observable`s. It allows to
+    """A View can view one :py:class:Observables. It allows to
     access (get but not set) the public (but not private) attributes
     of that observable.
 
     Attributes
     ----------
-    <_view_attribute>: Observable
+    _view_attribute: Observable
         An :py:class:`Observable` viewed by this :py:class:`View`.
 
     _observers: list
@@ -47,6 +47,9 @@ class View:
     _view_attribute = '_observable'
     _view_type_mismatch = 'error'
 
+    def FIXME_GET(self):
+        return getattr(self, type(self)._view_attribute, None)
+    
     def __init_subclass__(cls: type,
                           view_type: type=None, view_attribute: str=None):
         """Initialization of subclasses of :py:class:`View`.
@@ -123,8 +126,9 @@ class View:
             return None  # avoid RecursionError (if view_attribute is not set)
         observable = getattr(self, type(self)._view_attribute, None)
         if observable is None:
-            raise AttributeError(f"Cannot access attribute '{attr}' in "
-                                 "observable as currently nothing is viewed.")
+            raise AttributeError(f"Cannot access attribute '{attr}' of "
+                                 f"observable '{type(self)._view_attribute}' "
+                                 "as currently nothing is viewed.")
         if attr[0] == '_':
             raise AttributeError("Trying to access private attribute "
                                  f"{type(observable).__name__}.{attr}.")
@@ -145,7 +149,7 @@ class View:
         cls: type
             The type to check this object against.
 
-        Results
+        Returnss
         -------
         True if the viewed object is an instance of cls, else False.
         """
@@ -154,8 +158,14 @@ class View:
     def _get_observable(self, o) -> Observable:
         """Get the Observable matching the given observable description.
 
-        Result
+        Arguments
+        ---------
+        o:
+            An observable description.
+        
+        Returns
         ------
+        observable:
             The matching :py:class:`Observable` or None if no matching
             Observable was found (or the matching Observable was not
             set yet or set to None).
@@ -283,6 +293,9 @@ class Controller(View):
         There are different ways to return the results. These are
         mainly useful in asynchronous mode (but also available in
         synchronous mode).
+
+        Arguments
+        ---------
         out_callback: callable
             call a function and provide the result(s) as arguments,
         out_store: object

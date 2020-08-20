@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-'''A framework-agnostic visualisation tool for deep neural networks
+"""A framework-agnostic visualisation tool for deep neural networks
 
 .. moduleauthor:: Rüdiger Busche, Petr Byvshev, Ulf Krumnack, Rasmus
 Diederichsen
 
-'''
+"""
 
 import os
 import sys
-import argparse
 
 import importlib.abc
 
@@ -56,15 +55,11 @@ def main():
     '''Start the program.'''
 
     toolbox = Toolbox()
-
-    parser = argparse.ArgumentParser(
-        description='Visual neural network analysis.')
-    toolbox.add_command_line_arguments(parser)
-    args = parser.parse_args()
+    toolbox.process_command_line_arguments()
 
     # This will also run the graphical interface
-    rc = toolbox.process_command_line_arguments(args)
-
+    rc = toolbox.run()
+    
     print(f"Main: exiting gracefully (rc={rc}).")
     sys.exit(rc)
 

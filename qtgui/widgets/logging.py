@@ -17,6 +17,8 @@ class QLogHandler(QPlainTextEdit, logging.Handler):
     _message_signal = pyqtSignal(str)
 
     def __init__(self, parent=None):
+        # FIXME[question]: can we use real python multiple inheritance here?
+        # (that is just super().__init__(*args, **kwargs))
         QPlainTextEdit.__init__(self, parent)
         logging.Handler.__init__(self)
         self.setReadOnly(True)
@@ -81,7 +83,7 @@ class QLogHandler(QPlainTextEdit, logging.Handler):
             logger.info(f"Trying to open file {record.pathname}, "
                         f"line {record.lineno}, in an external editor.")
             try:
-                retcode = util.debugging.edit(record.pathname, record.lineno)
+                retcode = util.debug.edit(record.pathname, record.lineno)
                 if retcode < 0:
                     logger.error("Edit command was terminated by signal "
                                  f"{-retcode}")
@@ -93,7 +95,7 @@ class QLogHandler(QPlainTextEdit, logging.Handler):
 
 from PyQt5.QtWidgets import QPlainTextEdit
 import traceback
-import util.debugging
+import util.debug
 
 class QExceptionView(QPlainTextEdit):
     """A view for Python exceptions.  This is basically a text field in
@@ -147,7 +149,7 @@ class QExceptionView(QPlainTextEdit):
         logger.info(f"Trying to open file {frame.filename}, "
                     f"line {frame.lineno}, in an external editor.")
         try:
-            retcode = util.debugging.edit(frame.filename, frame.lineno)
+            retcode = util.debug.edit(frame.filename, frame.lineno)
             if retcode < 0:
                 logger.error("Edit command was terminated by signal "
                              f"{-retcode}")

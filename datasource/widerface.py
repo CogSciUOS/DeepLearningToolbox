@@ -1,24 +1,72 @@
-from . import Datasource, DataDirectory, Labeled, Metadata
+"""The WiderFace dataset.
+"""
 
-from util.image import imread, BoundingBox, Region, Landmarks
-
-
+# standard imports
 import os
-import random
-import numpy as np
-import pickle
-
 import logging
-logger = logging.getLogger(__name__)
+
+# third party imports
+import numpy as np
+
+# toolbox imports
+from util.image import BoundingBox, Region, Landmarks
+from .data import Data, ClassScheme
+from .datasource import Imagesource, Sectioned
+from .directory import DataDirectory
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
-class WiderFace(DataDirectory, Labeled):
+class WiderfaceScheme(ClassScheme):
+    """The WiderFace dataset divides its data into
+    62 classes (actually just 61, as class 60 is missing).
+    Class labels can be obtained from directory names in the
+    data directories.
+    """
+
+    def __init__(self) -> None:
+        """Iniitalization of the :py:class:`WiderfaceScheme`.
+        """
+        # The WIDER face dataset has 62 classes (but it seems
+        # that only 61 are used - class '60' is missing).
+        super().__init__(length=62, key='widerface')
+
+    @property
+    def prepared(self) -> bool:
+        """Check if the :py:class:`WiderfaceScheme` has been initialized.
+        """
+        return 'text' in self._labels
+
+    def prepare(self) -> None:
+        """Prepare the labels for the Widerface dataset.
+        The labels will be read in from the directory names
+        in the WIDERFACE_DATA directory.
+        """
+        if self.prepared:
+            return  # nothing to do ...
+
+        widerface_data = os.getenv('WIDERFACE_DATA')
+        train_dir = os.path.join(widerface_data, 'WIDER_train', 'images')
+        text = [''] * len(self)
+        for dirname in os.listdir(train_dir):
+            number, label = dirname.split('--', maxsplit=1)
+            text[int(number)] = label
+        self.add_labels(text, 'text')
+
+
+WiderfaceScheme()
+
+
+class WiderFace(DataDirectory, Imagesource, Sectioned,
+                sections={'train', 'val', 'test'}):
+    # pylint: disable=too-many-ancestors
     """
     http://shuoyang1213.me/WIDERFACE/
 
-    Class attributes
-    ----------------
-    
+    Attributes
+    ----------
+
     """
 
     blur = ('clear', 'normal blur', 'heavy blur')
@@ -28,88 +76,49 @@ class WiderFace(DataDirectory, Labeled):
     pose = ('typical pose', 'atypical pose')
     invalid = ('valid image', 'invalid image')
 
-    # FIXME[hack]: we should put this in the util package!
-    try:
-        from appdirs import AppDirs
-        appname = "deepvis"  # FIXME: not the right place to define here!
-        appauthor = "krumnack"
-        _appdirs = AppDirs(appname, appauthor)
-    except ImportError:
-        _appdirs = None
-        logger.warning(
-            "--------------------------------------------------------------\n"
-            "info: module 'appdirs' is not installed.\n"
-            "We can live without it, but having it around will provide\n"
-            "additional features.\n"
-            "See: https://github.com/ActiveState/appdirs\n"
-            "--------------------------------------------------------------\n")
-
-    def __init__(self, prefix=None, section='train', **kwargs):
+    def __init__(self, section: str = 'train',
+                 key: str = None, **kwargs) -> None:
         """Initialize the WIDER Face Datasource.
         """
-        super().__init__(id=f"wider-faces-{section}",
-                         description=f"WIDER Faces", **kwargs)
         self._widerface_data = os.getenv('WIDERFACE_DATA', '.')
         self._section = section
-        self.directory = os.path.join(self._widerface_data,
-                                      'WIDER_' + self._section, 'images')
-        self._available = os.path.isdir(self.directory)
-        self._image = None
+        scheme = ClassScheme.register_initialize_key('widerface')
+        directory = os.path.join(self._widerface_data,
+                                 'WIDER_' + self._section, 'images')
+        super().__init__(key=key or f"wider-faces-{section}",
+                         section=section, directory=directory, scheme=scheme,
+                         description=f"WIDER Faces", **kwargs)
         self._annotations = None
-        self._initialize_filenames()
 
-    def _initialize_filenames(self, widerface_data: str=None) ->None:
-        if widerface_data is not None:
-            self._widerface_data = widerface_data
+    def __str__(self):
+        return f'WIDER Faces ({self._section})'
 
-        self._annotations_filename = None
-        if self._widerface_data is not None:
-            annotations = os.path.join(self._widerface_data, 'wider_face_split',
-                                       'wider_face_train_bbx_gt.txt')
-            if os.path.isfile(annotations):
-                self._annotations_filename = annotations
-        
-    @property
-    def number_of_labels(self) -> int:
-        """The WIDER face dataset has 62 classes.
-        """
-        return 62
+    #
+    # Preparation
+    #
 
-    def _prepare_data(self):
+    def _prepare(self, **kwargs) -> None:
+        # pylint: disable=arguments-differ
         """Prepare the WIDER Face dataset. This will provide in a list of
         all images provided by the dataset, either by reading in a
         prepared file, or by traversing the directory.
         """
-        logger.info(f"PREPARING WIDER Face: {self.directory}: {self._available}")
+        LOG.info("Preparing WiderFace[%r]: %s",
+                 self.preparable, self.directory)
+        cache = f"widerface_{self._section}_filelist.p"
+        super()._prepare(filenames_cache=cache, **kwargs)
+        self._scheme.prepare()
+        self._prepare_annotations()
 
-        #
-        # get a list of filenames (possibly stored in a cache file)
-        #
-        if self._appdirs is not None:
-            filename = f"widerface_{self._section}_filelist.p"
-            widerface_filelist = os.path.join(self._appdirs.user_cache_dir,
-                                             filename)
-            logger.info(f"WIDER Face: trying to load filelist from "
-                        f"'{widerface_filelist}")
-            if os.path.isfile(widerface_filelist):
-                self._filenames = pickle.load(open(widerface_filelist, 'rb'))
-        else:
-            widerface_filelist = None
+    def _unprepare(self):
+        """Prepare the WIDER Face dataset. This will provide in a list of
+        all images provided by the dataset, either by reading in a
+        prepared file, or by traversing the directory.
+        """
+        self._annotations = None
+        super()._unprepare()
 
-        #
-        # No filelist available yet - read it in (and possible store in cache)
-        #
-        if self._filenames is None:
-            super()._prepare_data()
-            if self._appdirs is not None:
-                logger.info(f"Writing filenames to {widerface_filelist}")
-                if not os.path.isdir(self._appdirs.user_cache_dir):
-                    os.makedirs(self._appdirs.user_cache_dir)
-                pickle.dump(self._filenames, open(widerface_filelist, 'wb'))
-
-        self.load_annotations()
-
-    def load_annotations(self):
+    def _prepare_annotations(self):
         """Load the annotations for the training images.
 
         The annotations are stored in a single large text file
@@ -124,87 +133,86 @@ class WiderFace(DataDirectory, Labeled):
 
         0--Parade/0_Parade_marchingband_1_95.jpg
         5
-        828 209 56 76 0 0 0 0 0 0 
-        661 258 49 65 0 0 0 0 0 0 
-        503 253 48 66 0 0 1 0 0 0 
-        366 181 51 74 0 0 1 0 0 0 
-        148 176 54 68 0 0 1 0 0 0 
+        828 209 56 76 0 0 0 0 0 0
+        661 258 49 65 0 0 0 0 0 0
+        503 253 48 66 0 0 1 0 0 0
+        366 181 51 74 0 0 1 0 0 0
+        148 176 54 68 0 0 1 0 0 0
 
         """
         self._annotations = {}
+
+        # check if annotations file exists
+        filename = None
+        if self._widerface_data is not None:
+            filename = os.path.join(self._widerface_data, 'wider_face_split',
+                                    'wider_face_train_bbx_gt.txt')
+            if not os.path.isfile(filename):
+                return  # file not found
+
+        # load the annotations
         try:
-            with open(self._annotations_filename, "r") as f:
-                for filename in f:
+            with open(filename, "r") as file:
+                for filename in file:
                     filename = filename.rstrip()
-                    lines = int(f.readline())
+                    lines = int(file.readline())
                     faces = []
-                    for l in range(lines):
+                    for line_number in range(lines):
                         # x1, y1, w, h, blur, expression, illumination,
                         #    invalid, occlusion, pose
-                        faces.append(map(int, f.readline().split()))
+                        attributes = tuple(int(a)
+                                           for a in file.readline().split())
+                        if len(attributes) == 10:
+                            faces.append(attributes)
+                        else:
+                            LOG.warning("bad annotation for '%s', line %d/%d':"
+                                        "got %d instead of 10 values",
+                                        filename, line_number,
+                                        lines, len(attributes))
                     if lines == 0:
                         # images with 0 faces nevertheless have one
                         # line with dummy attributes -> just ignore that line
-                        f.readline()
+                        file.readline()
                     # Store all faces for the current file
                     self._annotations[filename] = faces
-        except FileNotFoundError as error:
+        except FileNotFoundError:
             self._annotations = {}
 
-    def _fetch(self, **kwargs):
-        self._fetch_random(**kwargs)
+    #
+    # Data
+    #
 
-    def _fetch_random(self, **kwargs):
-        img_file = random.choice(list(self._annotations.keys()))
-        self._image = imread(os.path.join(self.directory, img_file))
-        metadata = Metadata(description="Wider Face Image",
-                            directory=os.path.dirname(img_file),
-                            file=os.path.basename(img_file))
-        for (x, y, w, h, blur, expression, illumination,
-             invalid, occlusion, pose) in self._annotations[img_file]:
-            metadata.add_region(BoundingBox(x=x, y=y, width=w, height=h),
-                                blur=blur, expression=expression,
-                                illumination=illumination,
-                                invalid=invalid, occlusion=occlusion,
-                                pose=pose)
-        metadata.set_attribute('image', self._image)
-        self._metadata = metadata
-        self._label = f"{img_file}"
+    def _get_meta(self, data: Data, **kwargs) -> None:
+        data.add_attribute('label', batch=True)
+        super()._get_meta(data, **kwargs)
 
-    @property
-    def fetched(self):
-        return self._image is not None
-
-    def _get_data(self):
-        """The actual implementation of the :py:meth:`data` property
-        to be overwritten by subclasses.
-
-        It can be assumed that a data point has been fetched when this
-        method is invoked.
+    def _get_data_from_file(self, data, filename: str) -> str:
         """
-        return self._image
-
-    def _get_label(self):
-        return self._label
-
-    def __str__(self):
-        return f'WIDER Faces'
-
-    def check_availability() -> bool:
-        """Check if this Datasource is available.
-
-        Returns
-        -------
-        available: bool
-            True if the Datasource can be prepared, False otherwise.
+        Arguments
+        ---------
+        filename: str
+            The relative filename.
         """
-        return self._annotations_filename is not None
+        super()._get_data_from_file(data, filename)
+        regions = []
+        for (pos_x, pos_y, width, height, blur, expression, illumination,
+             invalid, occlusion, pose) in self._annotations[filename]:
+            region = Region(BoundingBox(x=pos_x, y=pos_y,
+                                        width=width, height=height),
+                            blur=blur, expression=expression,
+                            illumination=illumination,
+                            invalid=invalid, occlusion=occlusion,
+                            pose=pose)
+            regions.append(region)
+        data.label = regions
 
-class W300(DataDirectory):
+
+# FIXME[todo]
+class W300(DataDirectory, Imagesource):
     """The 300 Faces In-the-Wild Challenge (300-W), form the ICCV 2013.
     The challenge targets facial landmark detection, using a 68 point
     annotation scheme.
-    
+
     Besides 300-W, there are several other datasets annotated in the
     same scheme: AFW, FRGC, HELEN, IBUG, LPFW, and XM2VTS.
 
@@ -214,9 +222,9 @@ class W300(DataDirectory):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
 
-    def _load_annotation(self, filename: str) -> Landmarks:
+    @staticmethod
+    def _load_annotation(filename: str) -> Landmarks:
         """Parse the landmark annotation file.  Each image of the dataset is
         accompanied by a file with the same name und the suffix '.pts'
         providing the positions of the 68 points.
@@ -234,11 +242,11 @@ class W300(DataDirectory):
         #    }
         #
         with open(filename) as file:
-            version = file.readline().split(':')[1]
+            _ = file.readline().split(':')[1]  # version
             n_points = int(file.readline().split(':')[1])
-            points = np.ndarray((n_points,2))
-            start = file.readline()
+            points = np.ndarray((n_points, 2))
+            _ = file.readline()  # '{'
             for i in range(n_points):
-                x,y = file.readline.rstrip().split(' ')
-                ponts[i] = float(x), float(y)
+                pos_x, pos_y = file.readline.rstrip().split(' ')
+                points[i] = float(pos_x), float(pos_y)
         return Landmarks(points)

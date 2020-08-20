@@ -20,11 +20,14 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
-sys.path.insert(0, os.path.abspath('../../qtgui/'))
-sys.path.insert(0, os.path.abspath('../../controller'))
-sys.path.insert(0, os.path.abspath('../../model'))
-sys.path.insert(0, os.path.abspath('../../observer'))
+#sys.path.insert(0, os.path.abspath('../../qtgui/'))
+#sys.path.insert(0, os.path.abspath('../../controller'))
+#sys.path.insert(0, os.path.abspath('../../model'))
+#sys.path.insert(0, os.path.abspath('../../observer'))
 
+print("conf.py: silencing the logger")
+import logging
+logging.disable(logging.INFO)
 
 # -- General configuration ------------------------------------------------
 

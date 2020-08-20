@@ -25,10 +25,10 @@ from keras.losses import mse, binary_crossentropy
 
 #from toolbox import toolbox
 
-from network import Autoencoder
-from network.keras import KerasModel
+from network import VariationalAutoencoder
+from network.keras_tensorflow import Network as KerasNetwork
 
-class KerasAutoencoder(Autoencoder, KerasModel):
+class KerasAutoencoder(VariationalAutoencoder, KerasNetwork):
     """A (variational) autoencoder implemented in Keras.
 
     Attributes
@@ -49,19 +49,28 @@ class KerasAutoencoder(Autoencoder, KerasModel):
 
     """
 
-
-    def __init__(self, original_dim, intermediate_dim = 512, latent_dim = 2,
-                 loss='mse'):
+    def __init__(self, original_dim, *args, intermediate_dim: int=512,
+                 latent_dim: int=2, loss: str='mse', **kwargs):
         """Construct a new, fully connected (dense) autoencoder.
         Both, encoder and decoder, will have one itermediate layer
         of the given dimension.
         """
         logger.info(f"New VAE: {original_dim}/{intermediate_dim}/{latent_dim}")
-        Autoencoder.__init__(self)
-        KerasModel.__init__(self)
+        super().__init__(*args, **kwargs)
+
+        self._original_dim = original_dim
+        self._intermediate_dim = intermediate_dim
+        self._latent_dim = latent_dim
+        self._loss = loss
+
+    def _compute_layer_ids(self):
+        return []  # FIXME[concept]: what layer ids do we want to provide here?
+
+    def _prepare(self):
+        super()._prepare()
 
         # network parameters
-        input_shape = (original_dim, )
+        input_shape = (self._original_dim, )
 
         # VAE model = encoder + decoder
         with self._graph.as_default():
@@ -70,14 +79,17 @@ class KerasAutoencoder(Autoencoder, KerasModel):
             # (1) build encoder model
             #
             self._inputs = Input(shape=input_shape, name='encoder_input')
-            x = Dense(intermediate_dim, activation='relu')(self._inputs)
-            self._z_mean = Dense(latent_dim, name='z_mean')(x)
-            self._z_log_var = Dense(latent_dim, name='z_log_var')(x)
+            print("intput_shape:", input_shape,
+                  "intermediate_dim:", self._intermediate_dim)
+            print("intputs:", self._inputs)
+            x = Dense(self._intermediate_dim, activation='relu')(self._inputs)
+            self._z_mean = Dense(self._latent_dim, name='z_mean')(x)
+            self._z_log_var = Dense(self._latent_dim, name='z_log_var')(x)
 
             # Use reparameterization trick to push the sampling out as
             # input (note that "output_shape" isn't necessary with the
             # TensorFlow backend)
-            self._z = Lambda(self._sampling, output_shape=(latent_dim,),
+            self._z = Lambda(self._sampling, output_shape=(self._latent_dim,),
                              name='z')([self._z_mean, self._z_log_var])
 
             # instantiate encoder model. It provides two outputs:
@@ -95,9 +107,9 @@ class KerasAutoencoder(Autoencoder, KerasModel):
             #
             # (2) build decoder model
             #
-            latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
-            x = Dense(intermediate_dim, activation='relu')(latent_inputs)
-            self._outputs = Dense(original_dim, activation='sigmoid')(x)
+            latent_inputs = Input(shape=(self._latent_dim,), name='z_sampling')
+            x = Dense(self._intermediate_dim, activation='relu')(latent_inputs)
+            self._outputs = Dense(self._original_dim, activation='sigmoid')(x)
 
             # instantiate decoder model
             self._decoder = Model(latent_inputs, self._outputs, name='decoder')
@@ -109,13 +121,13 @@ class KerasAutoencoder(Autoencoder, KerasModel):
             # (3) define the loss function
             #
             self._outputs = self._decoder(self._encoder(self._inputs)[2])
-            if loss == 'mse':
+            if self._loss == 'mse':
                 reconstruction_loss = mse(self._inputs, self._outputs)
             else:
                 reconstruction_loss = binary_crossentropy(self._inputs,
                                                           self._outputs)
             # VAE loss = mse_loss or xent_loss + kl_loss
-            reconstruction_loss *= original_dim
+            reconstruction_loss *= self._original_dim
             kl_loss = (1 + self._z_log_var -
                        K.square(self._z_mean) - K.exp(self._z_log_var))
             kl_loss = K.sum(kl_loss, axis=-1)
@@ -129,7 +141,19 @@ class KerasAutoencoder(Autoencoder, KerasModel):
             self._vae.add_loss(vae_loss)
             self._vae.compile(optimizer='adam')
             self._vae.summary(print_fn=self._print_fn)
+        self._model = self._vae
 
+    def _unprepare(self) -> None:
+        self._model = None
+        self._vae = None
+        self._inputs = None
+        self._z_mean = None
+        self._z_log_var = None
+        self._z = None
+        self._encoder = None
+        self._outputs = None
+        self._decoder = None
+        super()._unprepare()           
 
     def _print_fn(self, line):
         logger.info(line)
