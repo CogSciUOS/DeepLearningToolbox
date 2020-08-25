@@ -829,7 +829,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if gui is not None:
             rc = self.start_gui(gui=gui)
         else:
-            self.setup(tools=tools, networks=networks, datasources=datasources)
+            self.setup()
+            # self.setup(tools=tools, networks=networks, datasources=datasources)
             self.run_shell(asynchronous=False)
             self.quit(sys_exit=False)
             rc = 0
@@ -1262,7 +1263,46 @@ class Toolbox(BusyObservable, Datasource.Observer,
     # Processes
     #
 
+    # FIXME[experimental]: this is experimental code that should not
+    # be part of the Toolbox
+    
+    # FIXME[bug]: a crash of the main python program leaves background
+    # processes alive!
+    # [such a crash can be caused by sounddevice]
+    # Killing such a leftover process from the command line may even
+    # crash the X-Server!
+    #
+    # We need some mechanism to avoid some unwanted background processes
+    # when ending the program (regularly or irregularly)
+    #
+    # It may, however, be useful to start a background process and then
+    # later reconnect to that process, e.g. to obtain results
+
+    # In fact, the Deep Learning Toolbox currently starts quite a lot
+    # processes:
+    #
+    #   python3(32251)-+--Deep Learning T(32253)
+    #                  +--{QDBusConnection}(32266)
+    #                  +--{QXcbEventQueue}(32265)
+    #                  +--{python3}(32254)
+    #                  +--{python3}(32268)
+    #                  +--{python3}(32269)
+    #
+    # Notice that most of these are actually threads, not processes
+    # (under linux, threads are merely processes that use the same
+    # address space as another process. They will have the same PID
+    # as the main process, but a different LWP
+    # (light weight process = thread ID)).
+
+    
     def _initialize_processes(self) -> None:
+        """
+        """
+        if True:
+            print("Toolbox: Not initializing processes")
+            self._process = None
+            return
+
         print("Toolbox: Initializing process")
         self._process = Process(name='test')
         print("Toolbox: Starting process")
@@ -1274,7 +1314,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return self._process
 
     def notify_process(self, message: str) -> None:
-        self._process.send(message)
+        if self._process is not None:
+            self._process.send(message)
 
     def _finish_processes(self) -> None:
         if self._process is not None:

@@ -177,6 +177,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         PanelMeta('face', 'Face detection',
                   '.panels.face.FacePanel',
                   'Show the Experiments panel', ['dlib', 'imutils']),
+        PanelMeta('sound', 'Sound',
+                  '.panels.sound.SoundPanel',
+                  'Show the Ikkuna panel', ['ikkuna']),
         PanelMeta('ikkuna', 'Ikkuna',
                   '.panels.ikkuna.IkkunaPanel',
                   'Show the Ikkuna panel', ['ikkuna']),
@@ -275,6 +278,14 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         # This function will only return once the main event loop is
         # finished.
         result = self._app.exec_()
+
+        # The following command is intended to avoid some QThread messages
+        # in the shell on exit
+        self._app.deleteLater()
+        
+        # Here we have a chance to cancel all running tasks
+        # avoid QThread/QTimer error messages on exit
+        # ...
 
         self.hide()
         return result

@@ -3,7 +3,7 @@ from typing import Callable, Iterable
 import logging
 
 # Qt imports
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QThreadPool, QRunnable
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import QWidget
 
@@ -599,6 +599,71 @@ class QObserver(QAttribute):
             return (f"observable={self._observable}, "
                     f"observing={self._observing}, "
                     f"notify={self._notify}")
+
+
+class QThreadedUpdate(QWidget):
+    """A class supporting the implementation of threaded update methods
+    using the `@qupdate` decorator.
+
+    Methods decorated with `@qupdate` will be executed in a separate
+    thread if currently no other update operation is running. Otherwise,
+    it is queued for later execution. If another update is issued in
+    the meantime, the former is dropped and only the last update
+    is kept in the queue. The ratio is, that only the most recent update
+    is relevant, as it will invalidate all previous updates.
+    """
+    # FIXME[todo]: we may think if a locking mechanism makes sense here
+
+    class QUpdater(QRunnable):
+        """
+        """
+
+        def __init__(self, target, obj) -> None:
+            super().__init__()
+            self._target = target
+            self._object = obj
+
+        @pyqtSlot()
+        def run(self):
+            self._target(self._object)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._updating = False
+        self._nextUpdate = None
+
+    def update(self) -> None:
+        super().update()
+        if self._nextUpdate is None:
+            self._updating = False
+        else:
+            self._updating = True
+            QThreadPool.globalInstance().start(self._nextUpdate)
+            self._nextUpdate = None
+
+
+def pyqtThreadedUpdate(method):
+    """A decorator for threaded update functions. It can be used to
+    decorate update methods in subclases of
+    :py:class:`QThreadedUpdate`. An update method is a method that
+    does some (complex) updates to a widget (e.g. prepare some graphics)
+    and then calls self.update() to trigger a repaint event that
+    than can display the updated content. When decorated with this
+    decorator, the update method will be executed in a background
+    thread, hopefully resulting in a smoother user experience, especially
+    if the update method is called from the main event loop (e.g. by
+    an event handler).
+    """
+
+    def closure(self) -> None:
+        nextUpdate = QThreadedUpdate.QUpdater(method, self)
+        if self._updating:
+            self._nextUpdate = nextUpdate
+        else:
+            self._updating = True
+            QThreadPool.globalInstance().start(nextUpdate)
+
+    return closure
 
 
 import os

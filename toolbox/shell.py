@@ -1,3 +1,6 @@
+
+# generic imports
+import os
 import sys
 import itertools
 from cmd import Cmd
@@ -5,6 +8,11 @@ from argparse import ArgumentParser, Namespace
 from functools import wraps
 from typing import Iterable
 
+
+# toolbox imports
+from dltb.base.sound import Sound, SoundDisplay
+from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
+from dltb.thirdparty.sounddevice import SoundPlayer as SoundDevicePlayer
 from toolbox import Toolbox
 from tools import Tool
 from network import Network
@@ -513,6 +521,39 @@ class ToolboxShell(Cmd):
             print(f"Opening server page ({self._toolbox.server_url}) "
                   "in web browser")
             self._toolbox.server_open()
+
+    def do_sound(self, inp):
+        """Play some demo sound.
+        """       
+        soundfile = None
+        for directory in (os.environ.get('HOME', False),
+                          os.environ.get('NET', False)):
+            if not directory:
+                continue
+            soundfile = os.path.join(directory, 'projects', 'examples',
+                                     'mime', 'audio', 'wav', 'le_tigre.wav')
+            if os.path.isfile(soundfile):
+                break
+            soundfile = None
+        if soundfile is None:
+            print("error: no soundfile provided")
+            sys.exit(1)
+        print(f"Soundfile: {soundfile}")
+
+        print("Creating reader")
+        reader = SoundfileReader()
+
+        print("Reading sound")
+        sound = reader.read(soundfile)
+            
+        print("Creating player")
+        player = SoundDevicePlayer()
+
+        print("Playing sound")
+        player.play(sound)
+
+        print("Finished playing sound.")
+
 
 if __name__ == '__main__':
     ToolboxShell().cmdloop()

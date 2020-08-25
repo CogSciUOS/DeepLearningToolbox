@@ -1,6 +1,29 @@
-"""Access to the sounddevice library
+"""Access to the sounddevice library. This library allows to
+use sound devices for recording and playback. The library
+is based on the PortAudio library [1].
 
+
+[1] http://www.portaudio.com/
 """
+# FIXME[bug]: I am experiences frequent crashes on my office computer
+# (Ubuntu 16.04):
+#    src/hostapi/alsa/pa_linux_alsa.c:3636:
+#        PaAlsaStreamComponent_BeginPolling:
+#            Assertion `ret == self->nfds' failed.
+#
+#
+#  cat /proc/asound/version
+#  Advanced Linux Sound Architecture Driver Version k4.4.0-179-generic.
+#
+#  aplay --version
+#  aplay: version 1.1.0 by Jaroslav Kysela <perex@perex.cz>
+#
+#  pulseaudio --version
+#  pulseaudio 8.0
+#
+#  python -c "import sounddevice; print(sounddevice.__version__)"
+#  0.4.0
+
 
 # standard imports
 from typing import Union
@@ -56,8 +79,8 @@ class SoundPlayer(SoundPlayerBase):
             if self._stream.active or self._stream.stopped:
                 return  # Stream seems to be ok
 
-            print("SoundDevicePlayer: discovered unsane stream - "
-                  "creating a new one ...", file=sys.stderr)
+            LOG.warning("SoundDevicePlayer: "
+                        "discovered unsane stream - creating a new one ...")
             # Stream seems to be dead - copy stream parameters
             samplerate = samplerate or self._stream.samplerate
             channels = channels or self._stream.channels
@@ -114,15 +137,14 @@ class SoundPlayer(SoundPlayerBase):
             The number of frames to be stored. This should be the
             sames as len(outdata)
         """
-        # time: _cffi_backend.CData
-        # if status:
-        #     print("SoundDevicePlayer: status =", status, file=sys.stderr)
+        if status:
+            LOG.debug("SoundDevicePlayer: status = %s", status)
 
         position = self._position
         reverse = self.reverse
 
-        print(position, reverse)
         if position is None:
+            LOG.debug("play block: no position")
             wave_frames = 0
         else:
             # obtain the relevant sound data
@@ -143,7 +165,11 @@ class SoundPlayer(SoundPlayerBase):
                 outdata[:valid_frames, :] = wave[:valid_frames]
             else:
                 outdata[:valid_frames, :] = wave[valid_frames-1::-1]
-            print(start, end, duration, end-start, wave_frames, valid_frames)
+            LOG.debug("block, position=%f:.2, reverse=%s; "
+                      "start=%f:.2, end=%f:.2, duration=%f:.4/%f:.4, "
+                      "frames=%d/%d", position, reverse, 
+                      start, end, duration, end-start,
+                      wave_frames, valid_frames)
 
         # pad missing data with zeros
         if wave_frames < frames:
@@ -243,14 +269,12 @@ class SoundRecorder(SoundRecorderBase):
     def _record(self) -> None:
         """
         """
-        print(f"Recorder: samplerate={self.samplerate}")
-        print(f"Recorder: sound={self.sound}")
+        LOG.info("Recorder: samplerate=%f", self.samplerate)
+        LOG.info("Recorder: sound=%s", self.sound)
 
-        print(f"SoundDeviceRecorder[{threading.currentThread().getName()}]"
-              ": starting stream")
+        LOG.info("Recorder: starting stream")
         self._stream.start()
-        print(f"SoundDeviceRecorder[{threading.currentThread().getName()}]"
-              ": stream started")
+        LOG.info("Recorder: stream started")
 
     def _FIXME_old_record(self) -> None:
         # This implementation assumes a plotter (like the
@@ -276,15 +300,14 @@ class SoundRecorder(SoundRecorderBase):
 
     def _record_block(self, indata, frames, time, status):
         """This is called (from a separate thread) for each audio block."""
-        # if status:
-        #     print("SoundDeviceRecorder:", status, file=sys.stderr)
+        if status:
+            LOG.debug("SoundDeviceRecorder: %s", status)
 
         # append new data to the sound object
         self._sound += indata
 
     def _finished(self) -> None:
-        print(f"SoundDeviceRecorder[{threading.currentThread().getName()}]"
-              ": finished")
+        LOG.info("SoundDeviceRecorder: finished")
 
     def _stop(self) -> None:
         """Stop ongoing sound recording.
@@ -293,10 +316,8 @@ class SoundRecorder(SoundRecorderBase):
         # The first would stop acquiring new data, but finish processing
         # buffered data, while the second would abort immediately.
         # In order to not loose any data, we choose stop here.
-        print(f"SoundDeviceRecorder[{threading.currentThread().getName()}]"
-              ": aborting stream")
+        LOG.info("SoundDeviceRecorder: aborting stream")
         #self._stream.abort()
         if self._stream.active:
             self._stream.stop()
-        print(f"SoundDeviceRecorder[{threading.currentThread().getName()}]"
-              ": stream aborted")
+        LOG.info("SoundDeviceRecorder: stream aborted")

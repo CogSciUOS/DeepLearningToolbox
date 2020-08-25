@@ -1,6 +1,10 @@
 """Definition of an abstract sound interface.
 
 """
+# FIXME[todo]: some conceptual work has to be done on
+# synchronous/asynchronous use for reading and writing,
+# but especially for recording and playback!
+
 
 # standard imports
 import logging
@@ -661,7 +665,7 @@ class SoundDisplay:
     :py:class:`SoundPlayer` and/or a :py:class:`SoundRecorder`.
     """
 
-    def __init__(self, sound: Sound, **kwargs) -> None:
+    def __init__(self, sound: Sound = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._sound = sound
 

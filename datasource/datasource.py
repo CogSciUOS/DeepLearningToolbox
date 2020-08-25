@@ -157,13 +157,6 @@ class Datasource(Preparable, FailableObservable,
         _appdirs = AppDirs(appname, appauthor)
     except ImportError:
         _appdirs = None
-        LOG.warning(
-            "--------------------------------------------------------------\n"
-            "info: module 'appdirs' is not installed.\n"
-            "We can live without it, but having it around will provide\n"
-            "additional features.\n"
-            "See: https://github.com/ActiveState/appdirs\n"
-            "--------------------------------------------------------------\n")
 
     def __init__(self, description: str = None, **kwargs) -> None:
         """Create a new Datasource.

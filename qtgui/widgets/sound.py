@@ -1,3 +1,5 @@
+"""
+"""
 
 # standard imports
 from typing import Tuple
@@ -8,16 +10,19 @@ from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QPushButton, QVBoxLayout, QApplication,
                              QHBoxLayout, QRadioButton, QStyle, QScrollBar,
                              QCheckBox)
-from PyQt5.QtGui import QPainter, QPainterPath, QPen, QMouseEvent, QWheelEvent
+from PyQt5.QtGui import (QPainter, QPainterPath, QPen,
+                         QMouseEvent, QWheelEvent, QResizeEvent, QPaintEvent)
 
 # toolbox imports
 from dltb.base.sound import (Sound, SoundPlayer, SoundRecorder,
                              SoundDisplay)
 from dltb.util.time import time_str
-from ..utils import QObserver, protect
+from ..utils import QObserver, protect, QThreadedUpdate, pyqtThreadedUpdate
 
 
-class QSoundViewer(QWidget, QObserver, SoundDisplay, qobservables={
+
+class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
+                   qobservables={
         SoundPlayer: {'state_changed', 'position_changed'}}):
     """A Qt-based graphical widget that allows to display sound.
     """
@@ -28,8 +33,10 @@ class QSoundViewer(QWidget, QObserver, SoundDisplay, qobservables={
 
     viewChanged = pyqtSignal()
 
-    def __init__(self, sound: Sound, player: SoundPlayer, **kwargs) -> None:
+    def __init__(self, sound: Sound = None, player: SoundPlayer = None,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
+        print(self.__class__.__mro__)
         self._sound = sound
         self._player = player
         self._mode = self.MODE_PLAYING
@@ -94,12 +101,63 @@ class QSoundViewer(QWidget, QObserver, SoundDisplay, qobservables={
         self.update()
 
     @protect
-    def paintEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Process resize events. Resizing the widget requires
+        an update of the wave displayed.
+
+        Parameters
+        ----------
+        event: QResizeEvent
+        """
+        # FIXME[bug]: resizing the window during playback causes a crash:
+        #
+        #  src/hostapi/alsa/pa_linux_alsa.c:3636:
+        #      PaAlsaStreamComponent_BeginPolling:
+        #          Assertion `ret == self->nfds' failed.
+        #
+        # This is probably due to an empty buffer which may be caused by
+        # the GUI repainting of the path takes too much time and slows
+        # down the buffer filling.
+        #
+        # No: it actually seems that painting a path with too many points
+        # is taking to much time, even if the path is precomputed. So
+        # what we actually should do is limit the number of points
+        # (and hence the level of detail) to be displayed, at least
+        # during playback.
+        # Other options:
+        # - only repaint relevant parts of the wave curve (not an option
+        #   on resize)
+        # - increase the buffer size / number of buffers or priority
+        #   for sound playback
+        self.updatePath()
+
+    @pyqtThreadedUpdate
+    def updatePath(self) -> None:
+        MAXIMAL_SAMPLE_POINTS = 200  # check when playback breaks
+        width = min(self.width(), MAXIMAL_SAMPLE_POINTS)
+        x_ratio = self.width()/width
+        height = self.height()
+        #text_height = self.fontMetrics().height()
+        text_height = 20
+
+        level = self._sound.level(width, start=self._view[0],
+                                  end=self._view[1])
+        level = (1-2*level) * (height - text_height)
+        path = QPainterPath()
+        iterator = enumerate(level)
+        path.moveTo(*next(iterator))
+        for (x,y) in iterator:
+            path.lineTo(x*x_ratio, y)
+        self._path = path
+        self.update()
+
+    @protect
+    def paintEvent(self, event: QPaintEvent) -> None:
         """Process the paint event by repainting this Widget.
 
         Parameters
         ----------
-        event : QPaintEvent
+        event: QPaintEvent
         """
         if self._sound is None:
             return
@@ -148,16 +206,8 @@ class QSoundViewer(QWidget, QObserver, SoundDisplay, qobservables={
                          height, end_string)
 
         # draw sound wave
-        if self._path is None:
-            level = self._sound.level(width, start=self._view[0],
-                                      end=self._view[1])
-            level = (1-2*level) * (height - text_height)
-            self._path = QPainterPath()
-            iterator = enumerate(level)
-            self._path.moveTo(*next(iterator))
-            for p in iterator:
-                self._path.lineTo(*p)
-        painter.drawPath(self._path)
+        if self._path is not None:
+            painter.drawPath(self._path)
 
         # draw position indicator
         if self._player is not None:

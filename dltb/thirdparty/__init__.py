@@ -16,6 +16,9 @@ import sys
 import logging
 import importlib
 
+# toolbox imports
+from ..config import config 
+
 # logging
 LOG = logging.getLogger(__name__)
 
@@ -234,3 +237,32 @@ else:
     if 'keras' in sys.modules:
         LOG.warning("Module 'keras' was already import, hence "
                     "patching the import machinery will have no effect")
+
+#
+# Check for some optional packages
+#
+
+def warn_missing_dependencies():
+    module_spec = importlib.util.find_spec('appdirs')
+    if module_spec is None:
+        LOG.warning(
+            "--------------------------------------------------------------\n"
+            "info: module 'appdirs' is not installed.\n"
+            "We can live without it, but having it around will provide\n"
+            "additional features.\n"
+            "See: https://github.com/ActiveState/appdirs\n"
+            "--------------------------------------------------------------\n")
+
+    module_spec = importlib.util.find_spec('setproctitle')
+    if module_spec is None:
+        LOG.warning(
+            "--------------------------------------------------------------\n"
+            "info: module 'setproctitle' is not installed.\n"
+            "We can live without it, but having it around will provide\n"
+            "additional features.\n"
+            "See: https://github.com/dvarrazzo/py-setproctitle\n"
+            "--------------------------------------------------------------\n")
+
+
+if config.warn_missing_dependencies:
+    warn_missing_dependencies()

@@ -1,11 +1,17 @@
 # Deep Learning ToolBox Development Principles
 
+* keep the implementation simple and clear: each component and method
+  should realize a simple idea, that can described in simple terms and
+  exhibited through a well-defined interface.
 
 * separate different aspects: for example separate the core implementation
   of a network from the logic to invoke it asynchronously from a
   graphical user interface. The idea is that this should help
   to keep the implementation clear, allowing to focus on the actual
   concepts without becoming distracted from technicalities.
+
+* be framework agnostic: provide an interface that can work with
+  different frameworks and backends
 
 ## Method invocation
 
@@ -115,3 +121,43 @@ def wrap_computation()
 
 
 ## Locking and business
+
+Components may become busy by performing an operation, meaning they
+are at that time not available to perform other operations (or the
+same operation on other data). Examples:
+
+* a network that is performing training. The network is not available
+  to perform infernce tasks at the same time.
+  
+* a network performing von inference task is maybe not available to
+  do other inference tasks at the same time, as this may require to
+  swap data between CPU and GPU memory, which is prohibitively
+  expensive. However, in other situations it may be allowed to
+  do multiple inference steps in parallel.
+
+* a webcam that is running a streaming loop, that is grabbing one
+  image afte the other. Such a webcam can not be used to make a
+  snapshot.
+  
+* a music player that is outputing audio data to a sound device
+  may not at the same time output a second audio.
+
+* an object that is currently in preparation (loading resources)
+  can not process any data.
+
+In all these situations, the component should signal its business by
+setting the busy flag. It should inform observers that the busy state
+changed (on starting and on finishing the job). It may also lock
+access to methods that are not available, either throwing an exception,
+or blocking the calling thread until the component is available again.
+
+
+
+
+## Notifications
+
+
+
+# Initialization and preparation
+
+
