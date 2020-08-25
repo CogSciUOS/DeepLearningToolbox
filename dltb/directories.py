@@ -1,3 +1,7 @@
+# FIXME[old]: this module seems to be not really used anywhere
+# - as it is not documented, the initiale goal is hard to guess
+# probably it should be moved to thirdparty or config ...
+
 # standard imports
 import os
 

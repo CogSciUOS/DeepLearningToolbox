@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""A command line interface for runnint and testing classifiers.
+"""A command line interface for running and testing classifiers.
 
 .. moduleauthor:: Ulf Krumnack
 
@@ -18,11 +18,10 @@ import logging
 import argparse
 
 # third party imports
-import numpy as np
-
 
 # toolbox imports
 from network import Network
+from network import argparse as NetworkArgparse
 from datasource import Data
 from tools.classify import Classifier
 from datasource.imagenet import ImageNet
@@ -54,23 +53,15 @@ def main():
 
     parser = \
         argparse.ArgumentParser(description='Deep-learning based classifiers')
-    parser.add_argument('--alexnet', help="Use AlexNet (Tensorflow) "
-                        "as classifier", action='store_true', default=False)
-    parser.add_argument('--resnet', help="Use ResNet (Torch) as classifier",
-                        action='store_true', default=False)
     parser.add_argument('--evaluate', action='store_true', default=False,
                         help='evaluate the classifier on the given datasource')
+    NetworkArgparse.prepare(parser)
     args = parser.parse_args()
 
-    if args.alexnet:
-        network = Network.register_initialize_key('alexnet-tf')
-    elif args.resnet:
-        network = Network.register_initialize_key('resnet-torch')
-    else:
-        LOG.error("No network was specified.")
-        sys.exit(1)
-
-    network.prepare()
+    network = NetworkArgparse.network(args)
+    if network is None:
+        print("No network was specified.")
+        return
 
     if args.evaluate:
         imagenet = ImageNet()

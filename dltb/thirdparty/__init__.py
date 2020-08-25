@@ -1,8 +1,24 @@
+""".. moduleauthor:: Ulf Krumnack
+
+.. module:: dltb.thirdparty
+
+This package provides utility functions for checking dealing with
+third party libraries, ranging from an interface to check availability
+and version matching, over package and data installation to abstract
+interfaces that allow to access common functionionality (like images,
+sound, video) using different libraries.
+
+"""
 
 # standard imports
 from typing import Union, List, Iterator, Any
 import sys
+import logging
 import importlib
+
+# logging
+LOG = logging.getLogger(__name__)
+
 
 _modules = {
     'imageio': {
@@ -175,3 +191,46 @@ def configure_module(module: str, attribute: str, value) -> None:
 def module_configuration(module: str, attribute: str) -> Any:
     _check_module_config(module, attribute)
     return _modules[module]['config'][attribute]
+
+
+class ImportInterceptor(importlib.abc.MetaPathFinder):
+    """The purpose of the :py:class:`ImportInterceptor` is to adapt
+    the import machinery. We want to have some influence on
+    choosing what to import (e.g. tensorflow.keras instead of keras.io,
+    or tensorflow.compat.v1 as tensorflow).
+
+    In order to work, an instance of this class should be put
+    into `sys.sys.meta_path` before those modules are imported.
+    """
+
+    def find_module(self, fullname, path=None):
+        # keras: we want to use 'tensorflow.keras' instead of keras,
+        # when available.
+        if fullname == 'keras':
+
+            module_spec = importlib.util.find_spec('tensorflow.keras')
+            if module_spec is not None:
+                # Load the module from module_spec. This actually
+                # seems not be necessary, as for some reason find_spec()
+                # already puts the module in sys.modules[].
+                #   module = importlib.util.module_from_spec(module_spec)
+                #   module_spec.loader.exec_module(module)
+                #   sys.modules['keras'] = module
+                LOG.info("Mapping 'keras' -> 'tensorflow.keras'")
+                sys.modules['keras'] = sys.modules['tensorflow.keras']
+        return None  # Proceed with the standard procedure ...
+
+
+# Is the application started from source or is it frozen (bundled)?
+# The PyInstaller bootloader adds the name 'frozen' to the sys module:
+# FIXME[todo]: explain what frozen modules are and implications
+# they have for us!
+if hasattr(sys, 'frozen'):
+    LOG.info("sys is frozen")
+else:
+    LOG.info("sys is not frozen")
+    sys.meta_path = [ImportInterceptor()] + sys.meta_path
+
+    if 'keras' in sys.modules:
+        LOG.warning("Module 'keras' was already import, hence "
+                    "patching the import machinery will have no effect")

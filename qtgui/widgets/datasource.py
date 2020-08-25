@@ -94,17 +94,17 @@ class QDatasourceList(QRegisterList, QObserver, qobservables={
         return Datasource[key] if Datasource.key_is_initialized(key) else None
 
 
-
 from .register import RegisterItemList, QRegisterItemComboBox
+
 
 class DatasourceItemList(RegisterItemList, qobservables={
         Toolbox: {'datasources_changed', 'datasource_changed'},
         Datasource: {'state_changed'}}):
     """
     There are different ways to use a :py:class:`DatasourceItemList`:
-    * Standalone: selectable :py:class:`Datasource`\ s have to be
+    * Standalone: selectable :py:class:`Datasource`\\ s have to be
       added and removed explicitly by calling
-      :py:method:`addDatasource` and :py:class:`removeDatasource`.
+      :py:meth:`addDatasource` and :py:class:`removeDatasource`.
     * Directly observing the py:class:`Datasource` register. The
       :py:class:`DatasourceItemList` will be updated when new datasources
       are initialized.

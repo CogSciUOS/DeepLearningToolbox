@@ -65,7 +65,7 @@ from base import BusyObservable, Runner, Controller as BaseController
 # that actually needed
 
 # FIXME[todo]: this will load tensorflow!
-from network import Network, AutoencoderController
+from network import Network, AutoencoderController, argparse as NetworkArgparse
 # from network.examples import keras, torch
 from datasource import Datasource, Loop, Data, DataDirectory
 from tools import Tool
@@ -224,7 +224,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
     @property
     def runner(self) -> Runner:
         return self._runner
-        
+
     def set_runner(self, runner: Runner) -> None:
         """Set the :py:class:`Runner` to be used by this
         :py:class:`Toolbox`.
@@ -259,7 +259,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
             else:
                 print("Toolbox: Starting a shell")
                 self.run_shell()
-            print("Type 'quit' or press Ctrl+\ to quit the program; "
+            print("Type 'quit' or press Ctrl+\\ to quit the program; "
                   "type 'bye' or press Ctrl+D to leave the shell")
         elif signum == signal.SIGQUIT:
             self.quit()
@@ -272,7 +272,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
         # FIXME[todo]: we need a more general solution to abort all
         # operations running in the background
 
-        
         # unset the datasource - this will also stop loops
         self.datasource = None
 
@@ -280,10 +279,10 @@ class Toolbox(BusyObservable, Datasource.Observer,
             self._runner.quit()
 
         self._finish_processes()
-            
+
         # Stop the web server if running
         self.server = False
-            
+
         if self._gui is not None:
             # This will stop the main event loop.
             print("Toolbox: Now stopping GUI main event loop.")
@@ -630,12 +629,11 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """
         return self._tools[name] if self.contains_tool(name) else None
 
+    #
+    # Command line options
+    #
 
-    ###########################################################################
-    ###                       Command line options                          ###
-    ###########################################################################
-
-    def option(self, name, default=False) -> bool:
+    def option(self, name, default: bool = False) -> bool:
         if not hasattr(self, '_command_line_arguments'):
             return default
         return getattr(self._command_line_arguments, name, default)
@@ -661,11 +659,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         #
         # Models
         #
-        parser.add_argument('--model', help='Filename of model to use',
-                            default='models/example_keras_mnist_model.h5')
-        parser.add_argument('--network', help='Name of a network to use')
-        parser.add_argument('--alexnet', help='Load the AlexNet model',
-                            action='store_true', default=False)
+        NetworkArgparse.prepare(parser)
         parser.add_argument('--autoencoder',
                             help='Load the autoencoder module (experimental!)',
                             action=addons.UseAddon, default=False)
@@ -796,38 +790,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         # Networks
         #
         if args is not None:
-
-            if args.alexnet:
-                self.add_network('alexnet-tf', prepare=True)
-
-            if args.network:
-                self.add_network(args.network)
-
-            # FIXME[old]
-            networks = []
-            if args.framework.startswith('keras'):
-                # "keras-tensorflow" or "keras-theano"
-                networks.append('keras-network')
-            elif args.framework == 'torch':
-                networks.append('torch-network')
-
-            name = "FIXME[old]"
-            if name == 'keras-network':
-                # FIXME[concept]:
-                #   here we really need the command line arguments!
-                # dash_idx = args.framework.find('-')
-                # backend = args.framework[dash_idx + 1:]
-                # network = keras(backend, args.cpu, model_file=args.model)
-                network = None
-            elif name == 'torch-network':
-                # FIXME[hack]: provide these parameters on the command line ...
-                # net_file = 'models/example_torch_mnist_net.py'
-                # net_class = 'Net'
-                # parameter_file = 'models/example_torch_mnist_model.pth'
-                # input_shape = (28, 28)
-                # network = torch(args.cpu, net_file, net_class,
-                #                 parameter_file, input_shape)
-                network = None
+            for network in NetworkArgparse.networks(args):
+                self.add_network(network)  # prepare=True
 
     def run(self) -> int:
         #
@@ -870,16 +834,15 @@ class Toolbox(BusyObservable, Datasource.Observer,
             self.quit(sys_exit=False)
             rc = 0
         return rc
-        
 
-    ###########################################################################
-    ###                              Shell                                  ###
-    ###########################################################################
+    #
+    # Shell
+    #
 
     @property
     def shell(self):
         return hasattr(self, '_shell')
-            
+
     def run_shell(self, asynchronous: bool = True):
         """Run the toolbox shell.
         """
@@ -888,7 +851,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         from .shell import ToolboxShell
         self._shell = ToolboxShell(self)
         self.change('shell_changed')
-        
+
         def run_shell_loop():
             self._shell.cmdloop()
             self.stop_shell()
@@ -900,7 +863,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
             # running. This is currently necessary, as we have no way
             # to stop the shell programatically (see comment in stop_shell).
             self._shell_thread.setDaemon(True)
-            self._shell_thread.start()            
+            self._shell_thread.start()
         else:
             run_shell_loop()
 
@@ -925,16 +888,15 @@ class Toolbox(BusyObservable, Datasource.Observer,
         del self._shell
         self.change('shell_changed')
 
-        
-    ###########################################################################
-    ###                               GUI                                   ###
-    ###########################################################################
+    #
+    # GUI
+    #
 
     @property
     def gui(self):
         return self._gui
 
-    def start_gui(self, gui: str='qtgui', threaded: bool=None, **kwargs):
+    def start_gui(self, gui: str = 'qtgui', threaded: bool = None, **kwargs):
         """Start the graphical user interface.
 
         Arguments
@@ -945,7 +907,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         threaded: bool
             Run the GUI in its own thread.
         """
-        
+
         # we need the GUI first to get the runner ...
 
         #
@@ -956,7 +918,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
             'gtkgui': 'gi'
         }
 
-        if not gui in valid_guis:
+        if gui not in valid_guis:
             raise ValueError(f"Invalid gui module '{gui}'. "
                              f"Valid values are {valid_guis.keys()}")
         for name, module in valid_guis.items():
@@ -1175,7 +1137,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """
         return getattr(self, '_logging_recorder', None)
 
-    def record_logging(self, flag: bool=True) -> None:
+    def record_logging(self, flag: bool = True) -> None:
         """Determine if a logging recorder should be used in this
         :py:class:`Toolbox`. A logging record will record all
         log records emitted, so they can be inspected later on.
@@ -1183,7 +1145,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if flag == hasattr(self, '_logging_recorder'):
             return  # nothing to do
         if flag:
-            self._logging_recorder = util.RecorderHandler() 
+            self._logging_recorder = util.RecorderHandler()
             self.add_logging_handler(self._logging_recorder)
         else:
             self.remove_logging_handler(self._logging_recorder)
@@ -1202,8 +1164,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
             format = f"[%(threadName)s]: %(levelname)-8s %(message)s"
             self._logging_formatter = logging.Formatter(format)
         return self._logging_formatter
-    
-    def _initialize_exception_handler(self, record: bool=True) -> None:
+
+    def _initialize_exception_handler(self, record: bool = True) -> None:
         """Initialize exception handling by this Toolbox.
         This will register als the global exception handler, that is
         calls to :py:func:`util.error.handle_exception` will be
@@ -1259,9 +1221,9 @@ class Toolbox(BusyObservable, Datasource.Observer,
                          "at this Toolbox.")
         return self._exceptions
 
-    ###########################################################################
-    ###                             Server                                  ###
-    ###########################################################################
+    #
+    # Server
+    #
 
     @property
     def server(self) -> bool:
@@ -1322,17 +1284,18 @@ class Toolbox(BusyObservable, Datasource.Observer,
             self._process.join()
             print("Toolbox: Finished process")
             self._process = None
-            
-    ###########################################################################
-    ###                          Miscallenous                               ###
-    ###########################################################################
+
+    #
+    # Miscallenous
+    #
 
     def __repr__(self):
         return f"<Toolbox: {self._gui is not None}>"
 
     def __str__(self):
         return ("Toolbox with "
-                f"{len(self._datasources or '')}/{len(Datasource)} datasources, "
+                f"{len(self._datasources or '')}/{len(Datasource)} "
+                "datasources, "
                 f"{len(self._networks or '')}/{len(Network)} networks, "
                 f"{len(Tool)} tools.")
 
@@ -1365,9 +1328,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
                     mark = '+'
                 else:
                     mark = '-'
-                    
                 result += f"\n  {mark} {datasource}"
-
 
         result += "\nPredefined data sources: "
         result += f"{list(Datasource.register_keys())}"
@@ -1375,7 +1336,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return result + "\n"
 
     def old__str__2(self):
-        self = self._toolbox # FIXME[hack]
+        self = self._toolbox  # FIXME[hack]
         result = f"GUI: {self._gui is not None}"
         result += "\nTools:"
         if self._tools is None:
@@ -1524,7 +1485,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
     #
     # FIXME[old] old stuff from the controller
-    #  
+    #
 
     # FIXME[old]: seems not to be used anymore ...
     def set_network(self, network: Network):
@@ -1532,21 +1493,21 @@ class Toolbox(BusyObservable, Datasource.Observer,
             if getattr(self, attribute, None) is not None:
                 setattr(self, attribute, network)
 
-    ###########################################################################
-    ###                            Datasources                              ###
-    ###########################################################################
+    #
+    # Datasources
+    #
 
     def get_inputs(self, dtype=np.float32, flat=True, test=False):
         inputs = self.dataset[1 if test else 0][0]
         if (np.issubdtype(inputs.dtype, np.integer) and
-            np.issubdtype(dtype, np.floating)):
+                np.issubdtype(dtype, np.floating)):
             # conversion from int to float will also scale to the interval
             # [0,1].
             inputs = inputs.astype(dtype)/256
         if flat:
             inputs = np.reshape(inputs, (-1, inputs[0].size))
         return inputs
-            
+
     def get_labels(self, dtype=np.float32, one_hot=True, test=False):
         labels = self.dataset[1 if test else 0][1]
         if not one_hot:
@@ -1555,4 +1516,3 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
     def get_data_shape(self):
         return self.dataset[0][0][0].shape
-

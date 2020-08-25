@@ -326,14 +326,14 @@ class Network(BaseNetwork):
 
     def _online(self) -> None:
         """Setup the tensorflow Session. This assumes that the computational
-        graph has been prepared (in property :py:prop:`_graph`).
+        graph has been prepared (in property :py:attr:`_graph`).
 
         """
         if self._session is None:
             LOG.info("online -> starting tf.Session")
             # tf_config = tf.ConfigProto(log_device_placement=True)
             if util.use_cpu:
-                tf_config = tf.ConfigProto(device_count = {'GPU': 0})
+                tf_config = tf.ConfigProto(device_count={'GPU': 0})
             else:
                 tf_config = tf.ConfigProto()
             LOG.info("Tensorflow: Creating new session for graph")

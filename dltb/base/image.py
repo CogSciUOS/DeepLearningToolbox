@@ -1,3 +1,6 @@
+"""Defintion of abstract classes for image handling.
+"""
+
 # standard imports
 from typing import Union, List
 from threading import Thread

@@ -21,7 +21,7 @@ LOG = logging.getLogger(__name__)
 class Registrable(object):
     """A :py:class:`Registrable` is an object that may be put into a
     register. This basically mean that it has a unique key (accessible
-    via the :py:method:`key` property).
+    via the :py:meth:`key` property).
 
     Parameters
     ----------

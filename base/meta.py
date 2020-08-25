@@ -71,10 +71,12 @@ class Metaclass(type):
                 #      f"({getattr(meta_object, attr)})")
                 return getattr(meta_object, attr)
 
-        LOG.warning("Metaclass[%s]: Not adapting meta method '%s' (%s) "
-                    "[type=%s, callable=%s, is_property=%s]",
-                    cls, attr, value, type(value), callable(value),
-                    isinstance(value, property))
+        # FIXME[concept]: we need some more pincipled way of determining
+        # what methods to adapt ...
+        #LOG.warning("Metaclass[%s]: Not adapting meta method '%s' (%s) "
+        #            "[type=%s, callable=%s, is_property=%s]",
+        #            cls, attr, value, type(value), callable(value),
+        #            isinstance(value, property))
         return value
 
     def debug(cls):

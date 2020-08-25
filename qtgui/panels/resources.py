@@ -285,7 +285,7 @@ class QDatasourceInspector(QResourceInspector, QObserver,
     @protect
     def onDatasourceButtonClicked(self, checked: bool):
         """React to a click on the "Set as Toolbox Datasource"-Button.
-        If a :py:toolbox:`Toolbox` is present, this currently selected
+        If a :py:class:`Toolbox` is present, this currently selected
         :py:class:`Datasource` will be assigned as the active datasource
         of the toolbox.
         """

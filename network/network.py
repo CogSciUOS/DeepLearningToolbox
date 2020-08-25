@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Tuple, Any, Union, List
+from typing import Tuple, Any, Union, List, Iterable
 from collections import OrderedDict
 import functools
 import operator
@@ -274,6 +274,9 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             activations = activations[0]
         return activations
 
+    def layers(self) -> Iterable['Layer']:
+        return self.layer_dict.values()
+
     def get_layer_info(self, layername):
         """FIXME[todo]: we still have to decide on some info API
 
@@ -500,10 +503,10 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # methods for accessing layer attributes
     #
 
-    def empty(self):
+    def empty(self) -> bool:
         return self.layer_dict is None or not bool(self.layer_dict)
 
-    def input_layer_id(self):
+    def input_layer_id(self) -> str:
         first_layer_id = next(iter(self.layer_dict.keys()))
         return first_layer_id
 
@@ -856,6 +859,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     def get_trainer(self, training):
         return Trainer(training, self)
 
+        
 class Trainer:
     """
 

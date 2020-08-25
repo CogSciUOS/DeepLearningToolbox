@@ -140,7 +140,7 @@ class Engine(Observable, method='maximization_changed',
         """Assign a new network to this maximization engine.
         All future operations will be performed using this network.
         All initializations are lost by assigning a new network.
-        :py:method:`_prepare` has to be run before the
+        :py:meth:`_prepare` has to be run before the
         optimizer can be used (again).
         """
         print(f"!!! MaximizationEngine: network={network} !!!")

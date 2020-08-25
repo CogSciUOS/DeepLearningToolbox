@@ -285,7 +285,7 @@ class QObserver(QAttribute):
     * a method `setObervable(observable, observer=True)` allowing to
       set and observe that observable.
 
-    * patched versions of :py:method:`observe` and :py:method:`unobserve`
+    * patched versions of :py:meth:`observe` and :py:meth:`unobserve`
       that allow for asynchronous observation in the Qt main event loop.
 
 

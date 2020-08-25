@@ -1,6 +1,6 @@
 """Access to the imageio library
 
-These following main classes of imageio expose an interface for
+The following main classes of imageio expose an interface for
 advanced users. A brief overview:
 
   * imageio.FormatManager - for keeping track of registered formats.

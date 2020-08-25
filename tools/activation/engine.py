@@ -38,10 +38,10 @@ class Engine(Processor, Toolbox.Observer, method='activation_changed',
     network_changed : bool
         The underlying :py:class:`network.Network` has changed,
         or its preparation state was altered. The new network
-        can be accessed vie the :py:prop:`network` property.
+        can be accessed vie the :py:attr:`network` property.
     input_changed : bool
         The input data changed. The new data can be accessed
-        as :py:prop:`data`.
+        as :py:attr:`data`.
     activation_changed: bool
         The network activation changed. This usually coincides
         with a change in input data, but may occur delayed in case

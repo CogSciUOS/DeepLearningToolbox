@@ -29,12 +29,12 @@ LOG = logging.getLogger(__name__)
 class RegisterItemList(QObserver, QDebug,
                        qobservables={MetaRegister: {'key_changed'}}):
     """A list of register items.
-    Register items are objects registered in a :python:class:`MetaRegister`.
-    Those objects have :py:property:`key` property providing
+    Register items are objects registered in a :py:class:`MetaRegister`.
+    Those objects have :py:attr:`key` property providing
     a unique string allowing to refer to the object in the register.
 
     The :py:class:`RegisterItemList` can observe the
-    :python:class:`MetaRegister` and react to changes like adding
+    :py:class:`MetaRegister` and react to changes like adding
     or removing keys, or initialization or deletion of objects.
 
     Subclasses of this class have to implement the methods
@@ -58,20 +58,20 @@ class RegisterItemList(QObserver, QDebug,
         self.setRegister(register)
 
     def register(self) -> MetaRegister:
-        """The :python:class:`MetaRegister` used by this
+        """The :py:class:`MetaRegister` used by this
         :py:class:`RegisterItemList`.
         """
         return self._register
 
     def setRegister(self, register: MetaRegister) -> None:
-        """Set a new :python:class:`MetaRegister` for this
+        """Set a new :py:class:`MetaRegister` for this
         :py:class:`RegisterItemList`. The entries of this list
         will be updated from the register.
 
         Arguments
         ---------
         register: MetaRegister
-            The :python:class:`MetaRegister` from which the list
+            The :py:class:`MetaRegister` from which the list
             will be updated. If `None` the list will be cleared.
         """
         self._updateFromRegister()
@@ -92,7 +92,7 @@ class RegisterItemList(QObserver, QDebug,
 
     def register_changed(self, register: MetaRegister,
                          change: MetaRegister.Change, key: str = None) -> None:
-        """Called upon a change in the :python:class:`MetaRegister`.
+        """Called upon a change in the :py:class:`MetaRegister`.
 
         Arguments
         ---------

@@ -1,13 +1,18 @@
 
 # standard imports
 from __future__ import absolute_import
+from types import ModuleType, FunctionType
 from typing import List
 from collections import OrderedDict
+import importlib
 
 # third party imports
+import numpy as np
+import keras.layers
+from keras import backend as K
 
 # toolbox imports
-from . import Network as BaseNetwork, Classifier as BaseClassifier
+from . import Network as BaseNetwork, Classifier as Classifier
 from .exceptions import ParsingError
 from . import layers
 from dltb.thirdparty.keras import keras
@@ -35,7 +40,18 @@ class Layer(layers.Layer):
         """The input shape is obtained from the first Keras layer bundled
         in this `py:class:`Layer`.
         """
-        return self._keras_layer_objs[0].input_shape
+        keras_layer = self._keras_layer_objs[0]
+        input_shape = keras_layer.input_shape
+        # FIXME[hack]: keray_layer.input_shape may be a list of tuples
+        # (at least for ResNet50). But why? - I could not find an
+        # API documentation for Layer.input_shape
+        # return self._keras_layer_objs[0].input_shape
+        # if isinstance(input_shape, list):
+        if isinstance(keras_layer, keras.layers.InputLayer):
+            print(f"{type(self._keras_layer_objs[0])}:",
+                  [layer.input_shape for layer in self._keras_layer_objs])
+            input_shape = input_shape[0]
+        return input_shape
 
     @property
     def output_shape(self):
@@ -339,6 +355,27 @@ class Network(BaseNetwork):
     def plot(self):  # FIXME[hack]: plot_model allows for more parameters ...
         plot_model(self._model)
 
+    def _compute_activations(self, layer_ids: list,
+                             input_samples: np.ndarray) -> List[np.ndarray]:
+        """To be implemented by subclasses.
+        Computes a list of activations from a list of layer ids.
+        """
+
+        # input placeholder
+        inputs = [self._model.input, K.learning_phase()]
+
+        # all layer outputs except first (input) layer
+        outputs = [self[layer]._keras_layer_objs[-1].output
+                   for layer in layer_ids]
+
+        # activations function
+        activations_functor = K.function(inputs, outputs)
+
+        # do the actual computation (0.=training, 1.=predict)
+        activations = activations_functor([input_samples, 1.])
+
+        return activations
+
 
 from .network import Trainer as BaseTrainer
 from keras.callbacks import Callback
@@ -357,7 +394,7 @@ class Trainer(BaseTrainer, Callback):
     def __init__(self, training, network, count_mode='samples'):
         # FIXME[question]: can we use real python multiple inheritance here?
         # (that is just super().__init__(*args, **kwargs))
-        BaseTraining.__init__(self, training, network)
+        BaseTrainer.__init__(self, training, network)
         Callback.__init__(self)
         if count_mode == 'samples':
             self.use_steps = False
@@ -519,8 +556,137 @@ def conv_2d(filters, kernel_shape, strides, padding, input_shape=None):
                                  subsample=strides, border_mode=padding)
 
 
+class ApplicationsNetwork(Network, Classifier):
+    """One of the predefined and pretrained networks from the
+    :py:mod:`keras.applications`.
+
+
+    Parameters
+    ----------
+    model: str
+        The name of the model, e.g. `ResNet50`.
+    module: str
+        The python module in which the model is defined, e.g.,
+        `tensorflow.keras.applications`.
+    """
+    KERAS_APPLICATIONS = 'tensorflow.keras.applications'
+
+    def __init__(self, model: str, module: str = None, **kwargs) -> None:
+        super().__init__(scheme='ImageNet', **kwargs)
+
+        # evaluate the module argument
+        if module is None:
+            self._module, self._module_name = None, None
+        elif isinstance(module, ModuleType):
+            self._module, self._module_name = module, module.__name__
+        elif isinstance(module, str):
+            self._module = None
+            self._module_name = (module if '.' in module else
+                                 '.'.join((self.KERAS_APPLICATIONS, module)))
+        else:
+            raise TypeError("Argument 'module' should by module "
+                            "or module name")
+
+        # evaluate the model argument
+        module_name = None
+        self._model, self._model_name, self._model_function = None, None, None
+        if isinstance(model, str):
+            # from tensorflow.keras.applications import ResNet50
+            # from tensorflow.keras.applications.resnet50 import ResNet50
+            if "." in model:
+                module_name, self._model_name = module.rsplit('.')
+            else:
+                self._model_name = model
+                if self._module_name is None:
+                    self._module_name = ".".join((self.KERAS_APPLICATIONS,
+                                                  model.lower()))
+        elif isinstance(model, FunctionType):
+            # model.__module__ = 'tensorflow.python.keras.applications'
+            # model.__name__ = 'wrapper'
+            if model.__name__ == 'wrapper':
+                self._model_name = model.__closure__[0].cell_contents.__name__
+            else:
+                self._model_name = model.__name
+            self._model_function = model
+        elif model is None:
+            raise ValueError("No Model provided for ApplicationsNetwork")
+        else:
+            raise TypeError("Instantiation of ApplicationsNetwork with "
+                            "bad model type ({type(model)}).")
+
+        # Consistency Check
+        if (module_name and self._module_name and
+                module_name != self._module_name):
+            # Inconsistent module names
+            raise ValueError("Inconsistent module name: "
+                             "'{self._module_name}' should be '{module_name}'")
+
+    def _prepared(self) -> bool:
+        """Check if this :py:class:`ApplicationsNetwork` has been prepared.
+
+        """
+        return self._model is not None and super()._prepared()
+
+    def _prepare(self) -> None:
+        if self._module is None:
+            self._module = importlib.import_module(self._module_name)
+
+        self.preprocess_input = getattr(self._module, 'preprocess_input')
+        self.decode_predictions = getattr(self._module, 'decode_predictions')
+
+        if self._model is None:
+            if self._model_function is None:
+                self._model_function = getattr(self._module, self._model_name)
+
+            # Initialize the model (will download data if not yet present)
+            self._model = self._model_function(weights='imagenet')
+            # FIXME[warning]: (tensorflow.__version__ = '1.15.0')
+            # From tensorflow_core/python/ops/resource_variable_ops.py:1630:
+            #   calling BaseResourceVariable.__init__ (from
+            #   tensorflow.python.ops.resource_variable_ops) with constraint
+            #   is deprecated and will be removed in a future version.
+            # Instructions for updating:
+            # If using Keras pass *_constraint arguments to layers.
+
+        super()._prepare()
+
+    #
+    # Preprocessing input
+    #
+
+    # Some models use images with values ranging from 0 to 1. Others
+    # from -1 to +1. Others use the "caffe" style, that is not
+    # normalized, but is centered.
+
+    # From the source code, Resnet is using the caffe style.
+    #
+
+    # You don't need to worry about the internal details of
+    # preprocess_input. But ideally, you should load images with the
+    # keras functions for that (so you guarantee that the images you
+    # load are compatible with preprocess_input).
+
+    # Example: https://www.tensorflow.org/api_docs/python/tf/keras/applications/resnet/preprocess_input
+
+    # i = tf.keras.layers.Input([None, None, 3], dtype = tf.uint8)
+    # x = tf.cast(i, tf.float32)
+    # x = tf.keras.applications.mobilenet.preprocess_input(x)
+    # core = tf.keras.applications.MobileNet()
+    # x = core(x)
+    # model = tf.keras.Model(inputs=[i], outputs=[x])
+    #
+    # image = tf.image.decode_png(tf.io.read_file('file.png'))
+    # result = model(image)
+
+    # https://www.tensorflow.org/api_docs/python/tf/keras/applications/resnet/preprocess_input
+    #
+    # The images are converted from RGB to BGR, then each color
+    # channel is zero-centered with respect to the ImageNet dataset,
+    # without scaling.
+
+
 # FIXME[hack]: what is this supposed to do?
-class Classifier(Network, BaseClassifier):
+class KerasClassifier(Network, Classifier):
 
     def __init__(self, **kwargs):
         print("**keras_tensorflow.Classifier:", kwargs, self.__class__.__mro__)

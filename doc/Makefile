@@ -13,6 +13,7 @@ BASEDIR       = ..
 PACKAGES = base model controller toolbox util datasource visualizations \
     tools tools.lucid tools.train tools.am tools.activation \
     network network.layers \
+    dltb dltb.base dltb.thirdparty dltb.util \
     qtgui qtgui.panels qtgui.widgets \
     gtkgui
 

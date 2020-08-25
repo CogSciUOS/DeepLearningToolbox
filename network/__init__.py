@@ -8,7 +8,10 @@ from .resize import *
 Network.register_key('alexnet-tf', 'network.tensorflow', 'Alexnet')
 # FIXME[old]:                     extend=Classifier, scheme='ImageNet')
 
-Network.register_key('resnet-keras', 'network.keras_tensorflow',
+Network.register_key('resnet-keras', 'network.keras',
+                     'ApplicationsNetwork', model='ResNet50')
+
+Network.register_key('resnet-keras-tf', 'network.keras_tensorflow',
                      'ApplicationsNetwork', model='ResNet50')
 
 Network.register_key('mnist-keras-tf', 'models.example_keras_advex_mnist',
@@ -22,7 +25,7 @@ Network.register_key('resnet-torch', 'network.torch', 'DemoResnetNetwork')
 #
 # original_dim = self.data[0][0].size
 original_dim = 28 * 28
-print(f"Hack 1: new model with original_dim={original_dim}")
+# print(f"Hack 1: new model with original_dim={original_dim}")
 #intermediate_dim = 512
 #latent_dim = 2
 Network.register_key('mnist-vae', 'models.example_keras_vae_mnist',

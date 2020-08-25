@@ -234,7 +234,7 @@ class NetworkList(RegisterItemList, QDebug, qobservables={
 
     * Standalone: selectable :py:class:`Network`\ s have to be
       added and removed explicitly by calling
-      :py:method:`addNetwork` and :py:class:`removeNetwork`.
+      :py:meth:`addNetwork` and :py:class:`removeNetwork`.
       Standalone can be enabled by calling the :py:meth:`setStandalone`
       method.
 

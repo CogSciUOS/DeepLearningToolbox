@@ -340,7 +340,7 @@ class QDataView(QWidget, QObserver, qobservables={
 
     def setToolbox(self, toolbox: Toolbox) -> None:
         """Set a Toolbox for this :py:class:`QDataView`.
-        If a toolbox is set, the :py:calls:`QDataView` will display
+        If a toolbox is set, the :py:class:`QDataView` will display
         the current input of the :py:class:`Toolbox`.
         """
         if toolbox is not None:
@@ -348,7 +348,7 @@ class QDataView(QWidget, QObserver, qobservables={
 
     def setDatasource(self, datasource: Datasource) -> None:
         """Set a Datasource for this :py:class:`QDataView`.
-        If a datasource is set, the :py:calls:`QDataView` will display
+        If a datasource is set, the :py:class:`QDataView` will display
         the currently selected data item of that :py:class:`Datasource`.
         """
         if datasource is not None:

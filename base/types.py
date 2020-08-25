@@ -9,7 +9,7 @@ class Extendable:
     The instance can be extended in two ways:
     * upon construction, by passing a `extend` parameter, providing either
       a single class or a tuple of classes
-    * after initialization, by infoking the :py:method:`extend` method,
+    * after initialization, by infoking the :py:meth:`extend` method,
       providing one or more superclasses.
 
     Examples
@@ -85,14 +85,14 @@ class Extendable:
         Notes
         -----
         Extending an object by a new superclass, that does not require
-        initialization (does not provide its own :py:method:`__init__`
+        initialization (does not provide its own :py:meth:`__init__`
         method) should work fine.  However, if the superclass would
         require initialization, the situation is not so easy: simply
-        calling its :py:method:`__init__` will usually also invoke the
+        calling its :py:meth:`__init__` will usually also invoke the
         initialization of the new superclasses parents, which may cause
         reinitialization of parts of the :py:class:`Extendable` that
         have already been initialized and hence may lead to unpredictable
-        behaviour.  Hence that :py:method:`__init__` method will not
+        behaviour.  Hence that :py:meth:`__init__` method will not
         be invoked automatically and it is up to the caller to perform
         necessary initialization steps.
         """

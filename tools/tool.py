@@ -141,8 +141,8 @@ class Processor(Tool):
         When processing one data item finishes, observers will
         receive a 'detection_finished' notification, and can obtain
         the data object including the detections via the
-        :py:method:`data` property. The detections can be accessed
-        as a data attribute named by the :py:method:`detector` property.
+        :py:meth:`data` property. The detections can be accessed
+        as a data attribute named by the :py:meth:`detector` property.
 
         The main motivation for this method is to process data from
         a data loop (like a webcam or a video) in real-time, always
