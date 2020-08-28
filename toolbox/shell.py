@@ -545,17 +545,17 @@ class ToolboxShell(Cmd):
 
         print("Reading sound")
         sound = reader.read(soundfile)
-            
+
         print("Creating player")
         player = SoundDevicePlayer()
 
         print("Playing sound")
         player.play(sound)
+        # FIXME[todo]: we should allow for keyboard interrupt here (and
+        # probably in other cases as well ...)
 
         print("Finished playing sound.")
 
 
 if __name__ == '__main__':
     ToolboxShell().cmdloop()
-
-    

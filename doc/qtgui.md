@@ -62,3 +62,18 @@ a background thread and call `widget.update()` once the computation
 is finished. The class `QThreadedUpdate` and the decorator
 `pyqtThreadedUpdate` support such a design.
   
+
+
+
+
+# Some components
+
+## Data view
+
+* QImageView, QSoundView, etc.: data observer, just display
+
+* QDataView: combines different views, again data observer, but may
+  also observe toolbox or datafetcher
+
+* QDatasourceNavigate: contains a QDataView, but is also
+  Toolbox or Datafetch observer

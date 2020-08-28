@@ -56,9 +56,51 @@ the result in a local attribute and notify observers once the computation
 is complete. The invocation may be synchronous (in library mode) or
 asynchronous (in GUI mode).
 
+ * Principle: all asynchronous methods should also be callable in a
+   synchronously (blocking)
+
+When called synchronously:
+* no Thread should be created
+* the result should still be stored (if there is some result)
+* observers should still be informed
+
+The decision wether to run synchronously or asynchronously is based on:
+* an explicit paramter (`run: bool=None`)
+* some default mechanism (checking the nature of the current thread)
+
+Methods eligible to asynchronous (threaded) execution should be
+decorated with the `@run` decorator. Typical examples are:
+
+* the `prepare()`and `unprepare()` methods
+* methods fetching data and storing it
+* methods performing some computation and storing the result
+* methods for training a network
+* methods for playing a sound or a video
+
+Criteria to decide if a method should be decorated with `@run`:
+* if the method performs a complex operation that may require some time
+  (and block a user interface), then it is a candidate for asynchronous
+  (threaded) execution.
+
+* A `@run` method must not return any result. If it does, it should
+  be redesigned by storing the result in some object property.
+* A `@run` method must notify observers. Notification has at least
+  be done when the operation finishes, but may in addition happen
+  at the beginning or when some progress is achieved. It is sufficient
+  to combine it with the `@busy` decorator.
+
+The `@run` decorator can be combined with the `@busy` decorator.
+In this case the order is important: it should be `@run @busy`, as
+the busy notifications should send when the thread starts and stops,
+not when the wraper ends.
+
+
+
 Examples:
-* Datasource vs. Datafetcher
-* Network vs. ActivationTool
+* Datasource vs. Datafetcher: there may be multiple datafetchers 
+  per datasource, 
+  FIXME[todo]: a fetcher may also provide loop functionality 
+* Network vs. ActivationTool: again ther may be multiple tools per network
 
 
 An asynchronous invocation class may be busy, meaning that it is
@@ -156,6 +198,39 @@ or blocking the calling thread until the component is available again.
 
 ## Notifications
 
+
+
+## Stateless and stateful objects
+
+A stateless object (or better an object with frozen state) can be
+called in parallel. On the other hand, a stateful object (an object
+that changes) has to be treated with care in parallel environments.
+
+* stateless / no threads / synchronous
+
+* stateful / threaded / asynchronous -> sutiable for GUI
+
+It may make sense to split objects into a stateless and a stateful
+part:
+
+* Datasource: the actual stateless Datasource allowing to load data
+  in a synchronous way, and a Datafetcher, which is based on a
+  Datasource and can fetch data asynchronously, storing the result
+  as part of its state, notifying observers when done, etc.
+  
+* Network: the actual network can compute activations synchronously,
+  while the activation tool can use a network to compute activations
+  and asynchronously store results and notify observers. However,
+  a trainable network obviously has some state (the connection weights),
+  though this seems to be somewhat different.
+  
+For some components, their nature is not so clear to me:
+
+* The toolbox definitively hold some state: the current input data,
+  the set of datasources, networks, tools, etc.
+
+* A Trainer has some state (epach, batch) - it should probably
+  notify observers when these change.
 
 
 # Initialization and preparation

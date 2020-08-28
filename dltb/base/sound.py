@@ -14,6 +14,7 @@ import numpy as np
 
 # toolbox imports
 from base import Observable
+from . import run
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -468,6 +469,7 @@ class SoundPlayer(Observable, method='player_changed', changes=[
         """
         return False  # to be implemented by sublcassses
 
+    @run
     def play(self, sound: Sound = None, start: float = None, end: float = None,
              duration: float = None,
              loop: bool = None, reverse: bool = None) -> None:

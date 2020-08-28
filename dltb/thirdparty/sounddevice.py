@@ -37,17 +37,22 @@ import sounddevice as sd
 # toolbox imports
 from ..base.sound import (SoundPlayer as SoundPlayerBase,
                           SoundRecorder as SoundRecorderBase)
+from ..base import get_default_run
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
 class SoundPlayer(SoundPlayerBase):
+    """An implementation of a :py:class:`SoundPlayerBase` based on
+    the `sounddevice` library.
+    """
 
     def __init__(self, samplerate: float = None, channels: int = None,
                  **kwargs) -> None:
         super().__init__(**kwargs)
         self._lock = threading.Lock()
+        self._event = threading.Event()
 
         if channels is None:
             channels = 2 if self._sound is None else self._sound.channels
@@ -57,6 +62,7 @@ class SoundPlayer(SoundPlayerBase):
 
         # _finishing: this is a hack - we need it to mark a stream that
         # finishes, but that has not yet been stopped (see method _finished).
+        self._blocking = False
         self._finishing = False
         self._stream = None
         self._check_stream(samplerate=samplerate, channels=channels)
@@ -66,7 +72,7 @@ class SoundPlayer(SoundPlayerBase):
         """This function is a hack to fix a problem with an sounddevice
         streams in an unsane state: these streams have both, `active`
         and `stopped` flag (and also the `closed` flag) set to `False`.
-        Such a state seems to occur when the stream is stopped 
+        Such a state seems to occur when the stream is stopped
         (or aborted) from within the stream Thread (while stopping
         or aborting from another Thread seems to be ok).
         Such unsane streams can not be restarted by calling stream.start(),
@@ -106,22 +112,47 @@ class SoundPlayer(SoundPlayerBase):
 
     @property
     def samplerate(self) -> float:
+        """Samplerate to be used for playback.
+        """
         return self._stream.samplerate
 
     @property
     def channels(self) -> int:
+        """Number of channels to be used for playback.
+        """
         return self._stream.channels
+
+    def play(self, *args, run: bool = None, **kwargs):
+        # we have to overwrite the super method to care for the 'run'
+        # parameter (which would usually be done by the @run decorator):
+        # as the stream playback is done in its own thread (and there
+        # is no way to prevent this from happening), we will realize
+        # a blocking call (run=False), explicitly waiting for the
+        # playback to finish.
+        self._blocking = not get_default_run(run)
+        super().play(self, *args, run=False, **kwargs)
 
     def _play(self) -> None:
         """Start the actual playback in a background thread.
         """
         self._check_stream()
-        # another hack: 
+        # another hack:
         self._finishing = False
-        
+        self._event.clear()
+
         # this will start the background thread, periodically invoking
         # _play_block
         self._stream.start()
+
+        print("Soundplayer: blocking:", self._blocking)
+        if self._blocking:
+            try:
+                self._event.wait()
+            finally:
+                # Playback/recording may have been stopped with
+                # a `KeyboardInterrupt` - make sure the stream
+                # is closed
+                self._stream.close(ignore_errors=True)
 
     def _play_block(self, outdata: np.ndarray, frames: int,
                     time, status: sd.CallbackFlags) -> None:
@@ -167,36 +198,30 @@ class SoundPlayer(SoundPlayerBase):
                 outdata[:valid_frames, :] = wave[valid_frames-1::-1]
             LOG.debug("block, position=%f:.2, reverse=%s; "
                       "start=%f:.2, end=%f:.2, duration=%f:.4/%f:.4, "
-                      "frames=%d/%d", position, reverse, 
+                      "frames=%d/%d", position, reverse,
                       start, end, duration, end-start,
                       wave_frames, valid_frames)
 
         # pad missing data with zeros
         if wave_frames < frames:
             outdata[wave_frames:, :].fill(0)
-            
+
         # If we have not obtained any data (wave_frames == 0) we will stop
         # playback here.
         if not reverse:
             new_position = end if wave_frames > 0 else None
             if new_position is not None and new_position >= self.end:
-                if self.loop:
-                    new_position = self.start
-                else:
-                    new_position = None
+                new_position = self.start if self.loop else None
         else:
             new_position = start if wave_frames > 0 else None
             if new_position is not None and new_position <= self.start:
-                if self.loop:
-                    new_position = self.end
-                else:
-                    new_position = None
+                new_position = self.end if self.loop else None
         # We have to avoid overwriting a change of position
         # that may have occured in the meantime (by some other thread)
         with self._lock:
             if self._position == position:
                 super()._set_position(new_position)
-        
+
         if new_position is None:
             # We cannot call _stream.stop() (or _stream.abort()) from
             # within the sub-thread (also not from finished_callback)
@@ -215,8 +240,9 @@ class SoundPlayer(SoundPlayerBase):
         # property may still report playing - to avoid this, we have
         # introduced the _finishing flag, that indicates that playback
         # has finished.
+        self._event.set()
         if self.playing:
-            self._finishing = True       
+            self._finishing = True
             self.change('state_changed')
 
     def _stop(self) -> None:
@@ -228,7 +254,6 @@ class SoundPlayer(SoundPlayerBase):
         # For the sake of a responsive interface, we choose abort here.
         if self._stream.active:
             self._stream.abort(ignore_errors=True)
-
 
 
 class SoundRecorder(SoundRecorderBase):
@@ -256,10 +281,14 @@ class SoundRecorder(SoundRecorderBase):
 
     @property
     def samplerate(self) -> float:
+        """Samplerate used for recording.
+        """
         return self._stream.samplerate
 
     @property
     def channels(self) -> int:
+        """Number of channels to be recorded.
+        """
         return self._stream.channels
 
     @property
@@ -298,7 +327,7 @@ class SoundRecorder(SoundRecorderBase):
         #    plt.show()
         pass
 
-    def _record_block(self, indata, frames, time, status):
+    def _record_block(self, indata, _frames, _time, status):
         """This is called (from a separate thread) for each audio block."""
         if status:
             LOG.debug("SoundDeviceRecorder: %s", status)
@@ -317,7 +346,7 @@ class SoundRecorder(SoundRecorderBase):
         # buffered data, while the second would abort immediately.
         # In order to not loose any data, we choose stop here.
         LOG.info("SoundDeviceRecorder: aborting stream")
-        #self._stream.abort()
+        # self._stream.abort()
         if self._stream.active:
             self._stream.stop()
         LOG.info("SoundDeviceRecorder: stream aborted")
