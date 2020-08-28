@@ -42,7 +42,7 @@ class DataWebcam(Imagesource, Loop, Snapshot):
     """
 
     def __init__(self, key: str = "Webcam", description: str = "<Webcam>",
-                 device: int = 0, **kwargs):
+                 device: int = 0, **kwargs) -> None:
         """Create a new DataWebcam
 
         Raises
@@ -152,4 +152,14 @@ class DataWebcam(Imagesource, Loop, Snapshot):
                 _ = self._backend.get_frame(clear_buffer=False)
                 ignored += 1
 
+    #
+    # information
+    #
 
+    def _get_description(self) -> str:
+        description = super()._get_description()
+        description += ", backend="
+        description += ("None" if self._backend is None else
+                        (type(self._backend).__module__ + '.' +
+                         type(self._backend).__name__))
+        return description

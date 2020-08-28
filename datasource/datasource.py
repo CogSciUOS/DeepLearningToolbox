@@ -343,9 +343,9 @@ class Datasource(Preparable, FailableObservable,
 
     @property
     def description(self) -> str:   # FIXME[todo]
-        return self.get_description()
+        return self._get_description()
 
-    def get_description(self) -> str:   # FIXME[todo]
+    def _get_description(self) -> str:   # FIXME[todo]
         """Provide a description of the Datasource or one of its
         elements.
 
@@ -721,8 +721,8 @@ class Indexed(Random):
                                   "should implement 'len', but "
                                   f"{type(self).__name__} doesn't do that.")
 
-    def get_description(self, index=None, **kwargs) -> str:
-        description = super().get_description(**kwargs)
+    def _get_description(self, index=None, **kwargs) -> str:
+        description = super()._get_description(**kwargs)
         if index is not None:
             description += f", index={index}"
         return description
@@ -1091,7 +1091,7 @@ class Labeled(Datasource):
 
     # FIXME[old]:
 
-    def get_description(self, with_label: bool = False, **kwargs) -> str:
+    def _get_description(self, with_label: bool = False, **kwargs) -> str:
         """Provide a description of the Datasource or one of its
         elements.
 
@@ -1100,7 +1100,7 @@ class Labeled(Datasource):
         with_label: bool
             Provide information if labels are available.
         """
-        description = super().get_description(**kwargs)
+        description = super()._get_description(**kwargs)
         if with_label:
             if not self.labels_prepared:
                 description += " (without labels)"

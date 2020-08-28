@@ -14,15 +14,13 @@ import logging
 import numpy as np
 
 # Qt imports
-from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel, QVBoxLayout)
-from PyQt5.QtWidgets import (QWidget, QLabel, QGroupBox,
+from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel,
                              QVBoxLayout, QHBoxLayout, QGridLayout)
 from PyQt5.QtGui import QResizeEvent
 
 # toolbox imports
 from tools.face.detector import Detector as FaceDetector
-from tools.face.landmarks import Detector as LandmarkDetector
-from datasource import Data
+from datasource import Data, Datasource
 from toolbox import Toolbox
 
 # GUI imports
@@ -31,8 +29,6 @@ from ..widgets.datasource import QDatasourceNavigator
 from ..widgets.image import QImageView
 from ..widgets.data import QDataView
 from .panel import Panel
-
-
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -103,11 +99,18 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
 
     def detector_changed(self, detector: FaceDetector,
                          change: FaceDetector.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to changes in the observed :py:class:`FaceDetector`.
+        """
         LOG.debug("QDetectorWidget.detector_changed(%s, %s)", detector, change)
         if change.detection_finished:
             self.update()
 
     def setData(self, data: Data) -> None:
+        """Set a new :py:class:`Data` object to be displayed by this
+        :py:class:`QDetectorWidget`. The data is expected to an image.
+
+        """
         self.setImage(None if not data else data.data, data)
 
     def setImage(self, image: np.ndarray, data: Data = None):
@@ -128,7 +131,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
             self._view.setData(None)
             self._label.setText("Off.")
             return
-        
+
         data = self._faceDetector.data
         detections = self._faceDetector.detections
         LOG.debug("QDetectorWidget.update(): %s", detections)
@@ -137,7 +140,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         if detections is None:
             self._label.setText("No detections.")
             return
-    
+
         # FIXME[old/todo]
         # self._view.showAnnotations(self._trueMetadata, detections)
         self._view.setMetadata(detections)
@@ -149,7 +152,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
                                 f"in {detections.duration:.3f}s")
 
     @protect
-    def onToggled(self, on: bool) -> None:
+    def onToggled(self, _state: bool) -> None:
         """We want to update this QDetectorWidget when it gets
         (de)activated.
         """
@@ -158,6 +161,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
 
 class FacePanel(Panel, QObserver, qobservables={
         Toolbox: {'input_changed', 'datasource_changed'}}):
+    # pylint: disable=too-many-instance-attributes
     """The FacePanel provides access to different face recognition
     technologies. This includes
     * face detection
@@ -170,7 +174,6 @@ class FacePanel(Panel, QObserver, qobservables={
     * Compare multiple face detectors
     * Evaluate face detectors
 
-    
     _toolbox: Toolbox = None
 
     _detectors: list = None
@@ -201,7 +204,7 @@ class FacePanel(Panel, QObserver, qobservables={
 
         self._detectors = []
         self._detectorViews = []
-        for name in 'haar', :  # 'mtcnn', 'ssd', 'hog', 'cnn'
+        for name in ('haar',):  # 'mtcnn', 'ssd', 'hog', 'cnn'
             # FIXME[todo]: 'cnn' runs really slow on CPU and
             # blocks the GUI! - we may think of doing
             # real multiprocessing!
@@ -286,7 +289,8 @@ class FacePanel(Panel, QObserver, qobservables={
 
         self.setLayout(layout)
 
-    def _detectorWidget(self, name: str, widget: QWidget):
+    @staticmethod
+    def _detectorWidget(name: str, widget: QWidget):
         layout = QVBoxLayout()
         layout.addWidget(widget)
         layout.addWidget(QLabel(name))
@@ -316,6 +320,7 @@ class FacePanel(Panel, QObserver, qobservables={
 
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
+        # pylint: disable=invalid-name
         """The FacePanel is a Toolbox.Observer. It is interested
         in input changes and will react with applying face recognition
         to a new input image.
@@ -333,8 +338,11 @@ class FacePanel(Panel, QObserver, qobservables={
         As soon as a :py:class:`Toolbox` is assigned, its current
         datasource will be use.
         """
-        print(f"\nFacePanel.setDatasource(datasource)\n")
+        print(f"\nFacePanel.setDatasource({datasource})\n")
         self._datasourceNavigator.setDatasource(datasource)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
+        """React to a resizing of this :py:class:`FacePanel`
+        """
+        LOG.debug("Resize event")
         super().resizeEvent(event)

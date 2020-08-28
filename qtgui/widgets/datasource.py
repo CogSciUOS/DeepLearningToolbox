@@ -785,7 +785,7 @@ class QInputNavigator(QWidget, QObserver, qobservables={
     def _updateDescription(self, datasource):
         info = ''
         if datasource:
-            text = datasource.get_description()
+            text = datasource.description
         else:
             text = "No datasource"
         self._infoDatasource.setText(text)
@@ -962,7 +962,7 @@ class QDatasourceSelectionBox(QWidget, QObserver, qobservables={
         # if isinstance(datasource, DataArray):
         #     info = (datasource.getFile()
         #             if isinstance(datasource, DataFile)
-        #             else datasource.get_description())
+        #             else datasource.description)
         #     if info is None:
         #         info = ''
         #     if len(info) > 40:
@@ -1045,17 +1045,23 @@ class QDatasourceSelectionBox(QWidget, QObserver, qobservables={
         LOG.info("QDatasourceSelectionBox._openButtonClicked: "
                  "We have selected the following Datasource:")
         if datasource is None:
-            print("QDatasourceSelectionBox._openButtonClicked:   -> no Datasource")
+            print("QDatasourceSelectionBox._openButtonClicked:"
+                  "   -> no Datasource")
         else:
-            print(f"QDatasourceSelectionBox._openButtonClicked:   type: {type(datasource)}")
-            print(f"QDatasourceSelectionBox._openButtonClicked:   prepared:  {datasource.prepared}")
+            print(f"QDatasourceSelectionBox._openButtonClicked:"
+                  "   type: {type(datasource)}")
+            print(f"QDatasourceSelectionBox._openButtonClicked:"
+                  "   prepared:  {datasource.prepared}")
 
         try:
             datasource.prepare()
-            print(f"QDatasourceSelectionBox._openButtonClicked:   len:  {len(datasource)}")
-            print(f"QDatasourceSelectionBox._openButtonClicked:   description:  {datasource.datasource.get_description()}")
+            print(f"QDatasourceSelectionBox._openButtonClicked:"
+                  "   len:  {len(datasource)}")
+            print(f"QDatasourceSelectionBox._openButtonClicked:"
+                  "   description:  {datasource.datasource.description}")
         except Exception as ex:
-            print(f"QDatasourceSelectionBox._openButtonClicked:   preparation failed ({ex})!")
+            print(f"QDatasourceSelectionBox._openButtonClicked:"
+                  "   preparation failed ({ex})!")
             datasource = None
 
         # FIXME[hack]: not really implemented. what should happen is:

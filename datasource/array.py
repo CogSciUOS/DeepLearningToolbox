@@ -43,7 +43,7 @@ class DataArray(Indexed):
         shape = None if self._array is None else self._array.shape
         return f'<DataArray "{shape}">'
 
-    def get_description(self, index: int = None, **kwargs) -> str:
+    def _get_description(self, index: int = None, **kwargs) -> str:
         """Provide a description of the Datasource or one of its
         elements.
 
@@ -52,7 +52,7 @@ class DataArray(Indexed):
         index: int
             Provide a description of the datapoint for that index.
         """
-        description = super().get_description(**kwargs)
+        description = super()._get_description(**kwargs)
         if index is not None:
             description = 'Image ' + str(index) + ' from ' + description
         return description
@@ -147,8 +147,8 @@ class LabeledArray(DataArray, Labeled):
         label = self._labels[index] if self.labels_prepared else None
         data.label = label
 
-    def get_description(self, index: int = None, short: bool = False,
-                        with_label: bool = False, **kwargs) -> str:
+    def _get_description(self, index: int = None, short: bool = False,
+                         with_label: bool = False, **kwargs) -> str:
         """Provide a description of the Datasource or one of its
         elements.
 
@@ -159,12 +159,12 @@ class LabeledArray(DataArray, Labeled):
             of the given element.
         """
         if index and with_label:
-            description = super().get_description(index=index, **kwargs)
+            description = super()._get_description(index=index, **kwargs)
             if self.labels_prepared:
                 description += " with label {self._labels[index]}"
             else:
                 description += ", no label available"
         else:
-            description = super().get_description(with_label=with_label,
-                                                  **kwargs)
+            description = super()._get_description(with_label=with_label,
+                                                   **kwargs)
         return description

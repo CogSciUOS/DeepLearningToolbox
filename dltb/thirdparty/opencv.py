@@ -23,6 +23,8 @@ class OpenCV:
     """
 
     def info(self) -> str:
+        """
+        """
         return cv2.getBuildInformation()
 
     def check_url_https(self) -> bool:
@@ -149,9 +151,11 @@ class VideoReader(video.Reader):
         if not self.prepared:
             raise RuntimeError("VideoHelper object was not prepared.")
         ok, frame = self._capture.read()
+        # ok: signals success of the operation
+        # frame: is the image (in BGR!)
         if not ok:
             raise RuntimeError("VideoHelper object was not prepared.")
-        return frame
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     def prepared(self) -> bool:
         return self._capture is not None

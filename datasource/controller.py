@@ -53,7 +53,7 @@ class Controller(View, BaseController):
             kwargs['with_label'] = True
         if self.isinstance(Indexed):
             kwargs['index'] = self._datasource.index
-        return (self._datasource.get_description(**kwargs)
+        return (self._datasource._get_description(**kwargs)
                 if self else "No data")
 
     @property
