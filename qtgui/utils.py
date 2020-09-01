@@ -137,7 +137,7 @@ class QAttribute(QDebug):
     the getter will be called className() and the setter is called
     setClassName(). There is also a private attribute _className
     for storing the attribute value.
-    FIXME[todo]: we may allow to pass a name by which the attribute
+    FIXME[todo]: we may allow to pass a name for the attribute
 
     Attribute propagation allows to propagate changes of the attribute
     to other objects (provided they implement an appropriate setter).

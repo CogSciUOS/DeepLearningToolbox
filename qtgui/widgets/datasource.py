@@ -25,7 +25,7 @@ from .register import QRegisterList, QRegisterController, QPrepareButton
 # toolbox imports
 from base import Observable, MetaRegister
 from toolbox import Toolbox
-from datasource import Datasource, View as DatasourceView
+from datasource import Datasource, Datafetcher, View as DatasourceView
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ class DatasourceItemList(RegisterItemList, qobservables={
         if change.datasources_changed:
             self._updateFromIterator(toolbox.datasources)
 
-    def setDatasourcek(self, datasource: Datasource) -> None:
+    def setDatasource(self, datasource: Datasource) -> None:
         self.setEnabled(datasource is not None)
 
     def datasource_changed(self, datasource: Datasource,
@@ -213,12 +213,11 @@ class QDatasourceSelector(QRegisterItemComboBox, DatasourceItemList):
         """
         print(f"QDatasourceSelector.__init__({kwargs})")
         super().__init__(**kwargs)
-        self.activated[str].connect(self.onActivated)
+        self.activated[str].connect(self.onActivated)  # FIXME[demo/debug]
 
     @protect
-    def onActivated(self, name) -> None:
+    def onActivated(self, name: str) -> None:
         print(f"QDatasourceSelector.onActivated({name})")
-            
 
 
 from PyQt5.QtWidgets import QWidget, QPushButton
@@ -226,28 +225,39 @@ from PyQt5.QtWidgets import QWidget, QPushButton
 from datasource import Datasource, Loop, Indexed
 
 class QDatasourceObserver(QObserver, qobservables={
-        Datasource: {'busy_changed', 'state_changed'}}):
-    """A QObserver observing a Datasource. This is intended to be
-    inherited by classes observing a :py:class:`Datasource`.
+        Datafetcher: {'state_change', 'datasource_changed'}}):
+    """A QObserver observing a :py:class:`Datafetcher`. This is intended
+    to be inherited by classes observing a :py:class:`Datafetcher`.
 
     Attributes
     ----------
-    _datasource: Datasource
-        A datasource controller used by this Button to control the
+    _datafetcher: Datafetcher
+        A :py:class:`Datafetcher` used by this Button to control the
         (loop mode) of the Datasource.
     """
     _interests: Datasource.Change = None
 
-    def __init__(self, datasource: Datasource = None,
-                 interests: Datasource.Change = None, **kwargs) -> None:
+    def __init__(self, datafetcher: Datafetcher = None,
+                 interests: Datafetcher.Change = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._interests = interests or \
-            Datasource.Change('busy_changed', 'state_changed')
-        self.setDatasource(datasource)
+            Datafetcher.Change('busy_changed', 'state_changed')
+        self.setDatafetcher(datafetcher)
+
+    def setDatafetcher(self, datafetcher: Datafetcher) -> None:
+        print(f"QDatasourceObserver[{type(self).__name__}]."
+              f"setDatafetcher({datafetcher})")
 
     def datasource_changed(self, datasource: Datasource,
                            info: Datasource.Change) -> None:
         if info.state_changed:
+            self.update()
+
+    def datafetcher_changed(self, datafetcher: Datafetcher,
+                            info: Datafetcher.Change) -> None:
+        print(f"QDatasourceObserver[{type(self).__name__}]."
+              f"datafetcher_changed({datafetcher}, {info})")
+        if info.state_changed or info.datasource_changed:
             self.update()
 
 
@@ -263,37 +273,41 @@ class QLoopButton(QPushButton, QDatasourceObserver):
 
     """
 
-    def __init__(self, text: str='Loop', **kwargs) -> None:
+    def __init__(self, text: str = 'Loop', **kwargs) -> None:
         super().__init__(text, **kwargs)
         self.setCheckable(True)
         self.clicked.connect(self.onClicked)
 
     @protect
     def onClicked(self, checked: bool) -> None:
-        LOG.info("QLoopButton.onClicked(%s): %s", checked, self._datasource)
-        if isinstance(self._datasource, Loop):
-            LOG.info("QLoopButton: looping=%s", self._datasource.looping)
-            self._datasource.loop(checked)
+        LOG.info("QLoopButton.onClicked(%s): %s", checked, self._datafetcher)
+        datasource = self._datafetcher.datasource
+        if isinstance(datasource, Loop):
+            LOG.info("QLoopButton: looping=%s", datasource.looping)
+            datasource.loop(checked)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (isinstance(self._datasource, Loop) and
-                   self._datasource.prepared and
-                   (self._datasource.looping or not self._datasource.busy))
-        checked = enabled and self._datasource.looping
+        datasource = self._datafetcher and self._datafetcher.datasource
+        enabled = (isinstance(datasource, Loop) and
+                   datasource.prepared and
+                   (datasource.looping or not datasource.busy))
+        checked = enabled and datasource.looping
         self.setEnabled(enabled)
         self.setChecked(checked)
 
     def hideEvent(self, event: QHideEvent) -> None:
-        if isinstance(self._datasource, Loop) and self.isChecked():
-            self._datasource.loop(False)
+        datasource = self._datafetcher and self._datafetcher.datasource
+        if isinstance(datasource, Loop) and self.isChecked():
+            datasource.loop(False)
         super().hideEvent(event)
 
 from PyQt5.QtWidgets import QWidget, QPushButton
 
 from datasource import Datasource, Loop, Snapshot
+
 
 class QSnapshotButton(QPushButton, QDatasourceObserver):
     """A Button to control a :py:class:`Datasource` of type
@@ -311,23 +325,24 @@ class QSnapshotButton(QPushButton, QDatasourceObserver):
 
     """
 
-    def __init__(self, text: str='Snapshot', **kwargs) -> None:
+    def __init__(self, text: str = 'Snapshot', **kwargs) -> None:
         super().__init__(text, **kwargs)
         self.clicked.connect(self.onClicked)
 
     def onClicked(self):
         """Create a snapshot as reaction to a button click.
         """
-        if isinstance(self._datasource, Snapshot):
-            self._datasource.fetch_snapshot()
+        if isinstance(self._datafetcher.datasource, Snapshot):
+            self._datafetcher.fetch(snapshot=True)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (isinstance(self._datasource, Snapshot) and
-                   self._datasource.prepared and
-                   not self._datasource.busy)
+        datasource = self._datafetcher and self._datafetcher.datasource
+        enabled = (isinstance(datasource, Snapshot) and
+                   datasource.prepared and
+                   not self._datafetcher.busy)
         self.setEnabled(enabled)
 
 
@@ -348,22 +363,26 @@ class QRandomButton(QPushButton, QDatasourceObserver):
     datasource is not busy (e.g., by looping).
     """
 
-    def __init__(self, text: str='Random', **kwargs) -> None:
+    def __init__(self, text: str = 'Random', **kwargs) -> None:
         super().__init__(text, **kwargs)
         self.clicked.connect(self.onClicked)
 
     def onClicked(self):
-        if isinstance(self._datasource, Random):
-            self._datasource.fetch(random=True)
+        if isinstance(self._datafetcher.datasource, Random):
+            self._datafetcher.fetch(random=True)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (isinstance(self._datasource, Random)
-                   and self._datasource.prepared and
-                   not self._datasource.busy)
-
+        datasource = self._datafetcher and self._datafetcher.datasource
+        print(f"datasource={datasource}, "
+              f"random: {isinstance(datasource, Random)}, "
+              f"prepared: {datasource and datasource.prepared}, "
+              f"busy: {self._datafetcher and self._datafetcher.busy}")
+        enabled = (isinstance(datasource, Random)
+                   and datasource.prepared and
+                   not self._datafetcher.busy)
         self.setEnabled(enabled)
 
 
@@ -381,22 +400,23 @@ class QBatchButton(QPushButton, QDatasourceObserver):
 
     """
 
-    def __init__(self, text: str='Batch', **kwargs) -> None:
+    def __init__(self, text: str = 'Batch', **kwargs) -> None:
         super().__init__(text, **kwargs)
         self._batch_size = 8
         self.clicked.connect(self.onClicked)
 
     def onClicked(self):
-        if isinstance(self._datasource, Random):
-            self._datasource.fetch(batch=self._batch_size, random=True)
+        if isinstance(self._datafetcher.datasource, Random):
+            self._datafetcher.fetch(batch=self._batch_size, random=True)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        enabled = (isinstance(self._datasource, Datasource)
-                   and self._datasource.prepared and
-                   not self._datasource.busy)
+        datasource = self._datafetcher and self._datafetcher.datasource
+        enabled = (isinstance(datasource, Datasource)
+                   and datasource.prepared and
+                   not self._datafetcher.busy)
         self.setEnabled(enabled)
 
 
@@ -407,7 +427,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
 from .navigation import QIndexControls as QBaseIndexControls
 
 class QIndexControls(QBaseIndexControls, QDatasourceObserver, qobservables={
-        Datasource: {'busy_changed', 'state_changed', 'data_changed'}}):
+        Datafetcher: {'state_changed', 'datasource_changed', 'data_changed'}}):
     """A group of Widgets to control an :py:class:`Indexed`
     :py:class:`Datasource`. The controls allow to select elements
     from the datasource based on their index.
@@ -429,7 +449,7 @@ class QIndexControls(QBaseIndexControls, QDatasourceObserver, qobservables={
 
     @protect
     def onIndexChanged(self, index: int) -> None:
-        self._datasource.fetch_index(index)
+        self._datafetcher.fetch(index=index)
 
     def setDatasource(self, datasource: Datasource) -> None:
         #print(f"\nQIndexControls.setDatasource({datasource}): self._datasource={self._datasource}")
@@ -466,9 +486,35 @@ class QIndexControls(QBaseIndexControls, QDatasourceObserver, qobservables={
                 self.setIndex(datasource.data.index)
         self.update(enabled)
 
+    def datafetcher_changed(self, datafetcher: Datafetcher,
+                            info: Datafetcher.Change) -> None:
+        print(f"QIndexControls.datafetcher_changed({datafetcher}, {info})")
+        if info.data_changed:
+            datasource = datafetcher.datasource
+            data = datafetcher.data
+            print(f"QIndexControls.datafetcher_changed: datasource={datasource}, data={data}, ..., {isinstance(datasource, Indexed)}, {data and data.is_batch}, {isinstance(datasource, Indexed) and data and data.index}")
+            if (isinstance(datasource, Indexed) and
+                    data is not None and not data.is_batch and
+                    data.index is not None):
+                # The index may have changed
+                self.setIndex(data.index)
+            self.update(True)
+        elif info.state_changed:
+            #self.update(not datasource.busy)
+            datasource = datafetcher.datasource
+            enabled = not datasource.busy
+            if isinstance(datasource, Indexed) and datasource.prepared:
+                self.setElements(len(datasource))
+            else:
+                self.setElements(-1)
+                enabled = False
+            print(f"QIndexControls.datafetcher_changed: enabled: {enabled}")
+            self.update(enabled)
 
-class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
-                           qobservables={Toolbox: {'datasource_changed'}}):
+
+class QDatasourceNavigator(QWidget, QObserver, qattributes={
+        Toolbox: False, Datasource: False},
+        qobservables={Datafetcher: {'datasource_changed', 'data_changed'}}):
     """The QDatasourceNavigator offers control widgets to navigate through
     a :py:class:`Datasource`. The actual controls depend on the type
     of the datasource and the arrangement can be adapted by providing
@@ -479,7 +525,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
     can be set using the :py:class:`setToolbox` method.
     If a toolbox is set, its current datasource will be used and it
     is no longer allowed to set the Datasource via :py:meth:`setDatasource`.
-    
+
     _indexControls: QIndexControls
         controls for an indexed datasource (Indexed)
 
@@ -501,7 +547,8 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
 
     """
 
-    def __init__(self, datasource: Datasource = None, **kwargs):
+    def __init__(self, toolbox: Toolbox = None,
+                 datasource: Datasource = None, **kwargs):
         """Initialization of the :py:class:`QDatasourceNavigator`.
 
         Parameters
@@ -514,35 +561,38 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
         self._initUI()
         self._layoutUI()
 
-        # if we have a toolbox, the datasource is taken from that
-        # toolbox. Without a toolbox, the datasource has to be set
-        # explicitly.
-        if self._toolbox is None:
+        self.setToolbox(toolbox)
+        if datasource is not None:
             self.setDatasource(datasource)
+        elif self._selector is not None:
+            self.setDatasource(self._selector.currentDatasource())
 
     def _initUI(self, selector: bool = True) -> None:
         """Initialize the user interface.
 
         """
         self._indexControls = QIndexControls()
-        self.addAttributePropagation(Datasource, self._indexControls)
-        
+        self.addAttributePropagation(Datafetcher, self._indexControls)
+
         self._randomButton = QRandomButton()
-        self.addAttributePropagation(Datasource, self._randomButton)
+        self.addAttributePropagation(Datafetcher, self._randomButton)
 
         self._snapshotButton = QSnapshotButton()
-        self.addAttributePropagation(Datasource, self._snapshotButton)
+        self.addAttributePropagation(Datafetcher, self._snapshotButton)
 
         self._loopButton = QLoopButton()
-        self.addAttributePropagation(Datasource, self._loopButton)
+        self.addAttributePropagation(Datafetcher, self._loopButton)
 
         self._batchButton = QBatchButton()
-        self.addAttributePropagation(Datasource, self._batchButton)
+        self.addAttributePropagation(Datafetcher, self._batchButton)
 
         if selector:
             self._selector = QDatasourceSelector()
             self._selector.currentIndexChanged.\
                 connect(self.onCurrentDatasourceChanged)
+            self._selector.activated[str].connect(self.onDatasourceActivated)
+            self.addAttributePropagation(Toolbox, self._selector)
+
             self._prepareButton = QPrepareButton()
         else:
             self._selector = None
@@ -582,6 +632,11 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
         will run in standalone mode and the :py:class:`Datasource`
         has to be set explicitly.
         """
+        print("\n *** QDatasourceNavigator.setToolbox(): "
+              f"{toolbox and toolbox.datafetcher} vs. {self._datafetcher}\n")
+        self.setDatafetcher(Datafetcher() if toolbox is None else
+                            toolbox.datafetcher)
+        print("\n  ***\n")
         LOG.debug("QDatasourceNavigator.setToolbox(%s)", toolbox)
 
     def setDatasource(self, datasource: Datasource) -> None:
@@ -590,6 +645,28 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
         become visible.
         """
         LOG.debug("QDatasourceNavigator.setDatasource(%s)", datasource)
+
+    def setDatafetcher(self, datafetcher: Datafetcher) -> None:
+        """Set the :py:class:`Datafetcher` for this
+        :py:class:`QDatasourceNavigator`.
+        Depending on the type of the :py:class:`Datasource` from which
+        data are fetched, the controls of this
+        :py:class:`QDatasourceNavigator` will become visible or hidden.
+        """
+        print(f"** QDatasourceNavigator[{self}]."
+              f"setDatafetcher({datafetcher}) [{self._datafetcher}]")
+        self._updateDatasource()
+
+    def datafetcher_changed(self, datafetcher: Datafetcher, info) -> None:
+        """React to a change of the Toolbox datasource.
+        """
+        LOG.debug("QDatasourceNavigator.datafetcher_changed(%s, %s)",
+                  datafetcher, info)
+        if info.datasource_changed:
+            self._updateDatasource()
+
+    def _updateDatasource(self) -> None:
+        datasource = self._datafetcher.datasource
         self._indexControls.setVisible(isinstance(datasource, Indexed))
         self._randomButton.setVisible(isinstance(datasource, Random))
         self._snapshotButton.setVisible(isinstance(datasource, Snapshot))
@@ -598,14 +675,6 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
         if self._prepareButton is not None:
             self._prepareButton.setPreparable(datasource)
 
-    def toolbox_changed(self, toolbox: Toolbox, info) -> None:
-        """React to a change of the Toolbox datasource.
-        """
-        LOG.debug("QDatasourceNavigator.toolbox_changed(%s, %s)",
-                  toolbox, info)
-        if info.datasource_changed:
-            self.setDatasource(toolbox and toolbox.datasource)
-
     @protect
     def onCurrentDatasourceChanged(self, index: int) -> None:
         """The signal `currentIndexChanged` is sent whenever the currentIndex
@@ -613,10 +682,20 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={Datasource: False},
         programmatically.
         """
         datasource = self._selector.currentDatasource()
-        if self._toolbox is not None:
-            self._toolbox.datasource = datasource
-        else: 
-            self.setDatasource(datasource)
+        print(f"QDatasourceNavigator[{self}].onCurrentDatasourceChanged: "
+              f"datasource={datasource} [{type(datasource)}]")
+        print(f"QDatasourceNavigator[{self}].onCurrentDatasourceChanged: "
+              f"datafetcher={self._datafetcher}")
+        self._datafetcher.datasource = datasource
+
+    @protect
+    def onDatasourceActivated(self, name: str) -> None:
+        datasource = self._selector.currentDatasource()
+        print(f"QDatasourceNavigator[{self}].onCurrentDatasourceChanged: "
+              f"datasource={datasource} [{type(datasource)}]")
+        print(f"QDatasourceNavigator[{self}].onCurrentDatasourceChanged: "
+              f"datafetcher={self._datafetcher}")
+        self._datafetcher.datasource = datasource
 
 
 class QDatasourceController(QRegisterController, Datasource.Observer):
@@ -631,11 +710,10 @@ class QDatasourceController(QRegisterController, Datasource.Observer):
 
     **Signals:**
 
-    A :py:class:`QDatasourceController` emits different signals 
+    A :py:class:`QDatasourceController` emits different signals
     corresponding to the different actions that can be initiated:
     * initializeKeyClicked(str): The value is the key.
     * initializeClassClicked(str): The value is the fully qualified class name.
-    
     """
 
     def __init__(self, **kwargs) -> None:

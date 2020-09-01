@@ -10,7 +10,36 @@ import numpy as np
 
 # toolbox imports
 from base.observer import Observable
+from datasource import Data
 from .. import thirdparty
+
+
+Imagelike = Union[np.ndarray]
+
+
+class Image:
+    """A collection of image related functions.
+    """
+
+    @staticmethod
+    def as_array(image: Imagelike) -> np.ndarray:
+        """Get image-like objec as numpy array.
+        """
+        if isinstance(image, np.ndarray):
+            return image
+        raise NotImplementedError(f"Conversion of {type(image).__module__}."
+                                  f"{type(image).__name__} to numpy.ndarray "
+                                  "is not implemented")
+
+    @staticmethod
+    def as_data(image: Imagelike) -> Data:
+        """Get image-like objec as :py:class:`Data` object.
+        """
+        if isinstance(image, Data):
+            return image
+        data = Data(Image.as_array(image))
+        data.type = Data.TYPE_IMAGE
+        return data
 
 
 class ImageIO:

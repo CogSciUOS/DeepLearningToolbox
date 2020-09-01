@@ -41,11 +41,11 @@ class QIndexControls(QWidget):
     """
 
     indexChanged = pyqtSignal(int)
-    
+
     def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
         self._index = 0
         self._elements = -1
+        super().__init__(**kwargs)
         self._initUI()
         self._layoutUI()
 

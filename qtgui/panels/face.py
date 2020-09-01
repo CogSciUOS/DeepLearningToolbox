@@ -22,12 +22,12 @@ from PyQt5.QtGui import QResizeEvent
 from tools.face.detector import Detector as FaceDetector
 from datasource import Data, Datasource
 from toolbox import Toolbox
+from dltb.base.image import Image, Imagelike
 
 # GUI imports
 from ..utils import QObserver, QBusyWidget, protect
-from ..widgets.datasource import QDatasourceNavigator
 from ..widgets.image import QImageView
-from ..widgets.data import QDataView
+from ..widgets.data import QDataSelector
 from .panel import Panel
 
 # logging
@@ -160,30 +160,58 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
 
 
 class FacePanel(Panel, QObserver, qobservables={
+        Datasource: {'data_changed'},
         Toolbox: {'input_changed', 'datasource_changed'}}):
     # pylint: disable=too-many-instance-attributes
-    """The FacePanel provides access to different face recognition
-    technologies. This includes
+    """The :py:class:`FacePanel` provides access to different
+    face recognition technologies. This includes
     * face detection
     * face landmarking
     * face alignment
     * face recogntion
 
-    Face detection:
+    The panel allows to independently select these components (if
+    possible - some implementations combine individutal steps).
+
+    The :py:class:`FacePanel` can be assigned an image to process
+    using the :py:meth:`setImage`. This will trigger the processing
+    steps, updating the display(s) accordingly. Alternatively, if
+    a full data object is available, including image data and
+    metadata like ground truth annotations, this can be set using
+    the :py:class:`setData` method (which will internally call
+    :py:class:`setImage`).
+
+    A :py:class:`FacePanel` can be associated with a
+    :py:class:`Datasource`. If this is done, the image will be changed
+    automatically, if new data is feteched from that datasource.  The
+    :py:class:`FacePanel` may also include a
+    :py:class:`QDatasourceNavigator` allowing to fetch new images.
+
+    A :py:class:`FacePanel` can be associated with a
+    :py:class:`Toolbox`.  If this is done, it will the toolbox' input
+    and the `QDatasourceNavigator` will controll the toolbox' current
+    datasource.
+
+
+    Face detection
+    --------------
     * Apply face detector to some data source
     * Compare multiple face detectors
     * Evaluate face detectors
 
+
+    Properties
+    ----------
     _toolbox: Toolbox = None
 
     _detectors: list = None
     _detectorViews: list = None
-    _inputView: QImageView = None
     _dataView: QDataView = None
 
     _inputCounter: QLabel = None
     _processCounter: QLabel = None
     _datasourceNavigator: QDatasourceNavigator = None
+
     """
 
     def __init__(self, toolbox: Toolbox = None,
@@ -243,8 +271,8 @@ class FacePanel(Panel, QObserver, qobservables={
         #
 
         # QImageView: a widget to display the input data
-        self._inputView = QImageView()
-        self._dataView = QDataView()
+        self._dataSelector = QDataSelector()
+        self._dataView = self._dataSelector.dataView()
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
         self._dataView.addAttribute('directory')
@@ -255,20 +283,33 @@ class FacePanel(Panel, QObserver, qobservables={
         self._inputCounter = QLabel("0")
         self._processCounter = QLabel("0")
 
-        self._datasourceNavigator = QDatasourceNavigator()
-
         for detector in self._detectors:
             LOG.info("FacePanel._initUI(): add detector %s", detector)
             self._detectorViews.append(QDetectorWidget(detector=detector))
 
     def _layoutUI(self):
-        """Initialize the user interface
+        """Initialize the user interface of this :py:class:`FacePanel`.
         """
+        # The big picture:
+        #
+        #  +--------------------+----------------------------------------+
+        #  |+------------------+|                                        |
+        #  ||dataSelector      ||                                        |
+        #  ||[view]            ||                                        |
+        #  ||                  ||                                        |
+        #  ||                  ||                                        |
+        #  ||                  ||                                        |
+        #  ||                  ||                                        |
+        #  ||                  ||                                        |
+        #  ||[navigator]       ||                                        |
+        #  ||                  ||                                        |
+        #  ||                  ||                                        |
+        #  |+------------------+|                                        |
+        #  +--------------------+----------------------------------------+
         layout = QHBoxLayout()
 
         layout2 = QVBoxLayout()
-        layout2.addWidget(self._inputView)
-        layout2.addWidget(self._dataView)
+        layout2.addWidget(self._dataSelector)
         row = QHBoxLayout()
         row.addWidget(self._processCounter)
         row.addWidget(QLabel("/"))
@@ -276,7 +317,6 @@ class FacePanel(Panel, QObserver, qobservables={
         row.addStretch()
         # FIXME[todo]: here we could add a datasource selector ...
         layout2.addLayout(row)
-        layout2.addWidget(self._datasourceNavigator)
         layout2.addStretch(1)
         layout.addLayout(layout2)
         layout.setStretchFactor(layout2, 1)
@@ -299,22 +339,28 @@ class FacePanel(Panel, QObserver, qobservables={
         groupBox.setCheckable(True)
         return groupBox
 
+    def setImage(self, image: Imagelike) -> None:
+        """Set the image for this :py:class:`FacePanel`. This
+        will initiate the processing of this image using the
+        current tools.
+        """
+        self.setData(Image.as_data(image))
+
     def setData(self, data: Data) -> None:
         """Set the data to be processed by this :py:class:`FacePanel`.
         """
-        self._inputView.setData(data)
         self._dataView.setData(data)
         for detectorView in self._detectorViews:
             if detectorView.isChecked():
                 detectorView.setData(data)
         self._inputCounter.setText(str(int(self._inputCounter.text())+1))
 
-
     def setToolbox(self, toolbox: Toolbox) -> None:
         """Set a new Toolbox.
         We are only interested in changes of the input data.
         """
-        self._inputView.setToolbox(toolbox)
+        self._dataSelector.setToolbox(toolbox)
+        self._dataView.setToolbox(toolbox)
         self.setDatasource(toolbox.datasource if toolbox is not None else None)
         self.setData(toolbox.input_data if toolbox is not None else None)
 
@@ -339,7 +385,7 @@ class FacePanel(Panel, QObserver, qobservables={
         datasource will be use.
         """
         print(f"\nFacePanel.setDatasource({datasource})\n")
-        self._datasourceNavigator.setDatasource(datasource)
+        self._dataSelector.setDatasource(datasource)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         """React to a resizing of this :py:class:`FacePanel`

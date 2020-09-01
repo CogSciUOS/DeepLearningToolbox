@@ -301,6 +301,8 @@ class Observable(object):
     def __init__(self, *args, sender=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._observers = dict()
+        self._observers_new = None
+        self._observers_lock = threading.RLock()
         self._thread_local = threading.local()
         if sender is not None:
             self._sender = sender
@@ -368,8 +370,8 @@ class Observable(object):
     @classmethod
     def observable_name(cls) -> str:
         return cls.__name__
-            
-    def change(self, *args, **kwargs):
+
+    def change(self, *args, debug: bool = False, **kwargs):
         """Register a change to be sent to the observers.
 
         The observers will not be notified immediatly, but only after
@@ -379,14 +381,14 @@ class Observable(object):
         final result.
         """
         if not hasattr(self._thread_local, 'change'):
-            self.notifyObservers(type(self).Change(*args, **kwargs))
+            self.notifyObservers(type(self).Change(*args, **kwargs),
+                                 debug=debug)
         else:
             self._thread_local.change |= {a for a in args}
-            self._thread_local.change |= {k for k,v in kwargs.items() if v}
-        
+            self._thread_local.change |= {k for k, v in kwargs.items() if v}
 
-    def add_observer(self, observer: Observer,
-                     interests: Change=None, notify: Callable=None) -> None:
+    def add_observer(self, observer: Observer, interests: Change = None,
+                     notify: Callable = None) -> None:
         """Add an object to observe this Observable.
 
         Parameters
@@ -401,9 +403,13 @@ class Observable(object):
             Method to be called to notify the observer. Default is
             self.notify()
         """
-        self._observers[observer] = \
-            (notify if notify else type(self).notify,
-             interests if interests else type(self).Change.all())
+        observation = (notify if notify else type(self).notify,
+                       interests if interests else type(self).Change.all())
+        with self._observers_lock:
+            if self._observers_new is None:
+                self._add_observer(observer, observation)
+            else:
+                self._observers_new[observer] = observation
 
     def remove_observer(self, observer: Observer):
         """Remove an observer from this Observable.
@@ -413,14 +419,25 @@ class Observable(object):
         observer: object
             Object which no longer wants to be notified of changes.
         """
-        del self._observers[observer]
+        with self._observers_lock:
+            if self._observers_new is None:
+                self._add_observer(observer, None)
+            else:
+                self._observers_new[observer] = None
+
+    def _add_observer(self, observer: Observer, observation) -> None:
+        if observation is None:
+            del self._observers[observer]
+        else:
+            self._observers[observer] = observation
 
     @property
     def sender(self):
         return getattr(self, '_sender', self)
 
     # FIXME[name]: should be notify_observers
-    def notifyObservers(self, *args, sender=None, **kwargs):
+    def notifyObservers(self, *args, sender=None, debug: bool = False,
+                        **kwargs) -> None:
         """Notify all observers that the state of this Observable has changed.
 
         Parameters
@@ -436,29 +453,56 @@ class Observable(object):
 
         logger.debug(f"{type(self).__name__}.notifyObservers({changes})")
         if changes:
-            sender = sender or self.sender
+            with self._observers_lock:
+                # We lock the notification, as notifications may result in
+                # adding or removing observers (which then raises
+                # RuntimeError: "dictionary changed size during iteration")
+                # FIXME[todo]: check for recursion - we probably want
+                # to avoid notifications
+                self._observers_new = {}
+                sender = sender or self.sender
 
-            # FIXME[bug]: RuntimeError: dictionary changed size during iteration
-            # - we need some locking mechanism
-            for observer, (notify, interests) in self._observers.items():
-                relevant_changes = interests & changes
-                #print(f"notifyObservers: interests={interests}, changes={changes}, relevant_changes={relevant_changes} [{bool(relevant_changes)}]")
-                if not relevant_changes:
-                    continue
-                # FIXME[concept]: notify will usually be
-                # Observable.notify or QObserver.QObserverHelper._qNotify
-                # -> why not directly register the change_method
-                #    instead of the notify callback?
                 try:
-                    notify(sender, observer,
-                           type(self).Change(relevant_changes))
-                except Exception as exception:
-                    # We will not deal with exceptions raised during not
-                    # notification, but instead use the default error
-                    # handling mechanism.
-                    handle_exception(exception)
+                    for observer, (notify, interests) \
+                            in self._observers.items():
+                        relevant_changes = interests & changes
+                        if debug:
+                            observer_type = type(observer).__name__
+                            if observer_type == 'QObserverHelper':
+                                observer_type = \
+                                    type(observer._observer).__name__
+                            print(f"notifyObservers: {observer_type}"
+                                  f"interests={interests}, "
+                                  f"changes={changes}, "
+                                  f"relevant_changes={relevant_changes} "
+                                  f"[{bool(relevant_changes)}]")
+                        if not relevant_changes:
+                            continue
+                        # FIXME[concept]: notify will usually be
+                        # Observable.notify or
+                        # QObserver.QObserverHelper._qNotify
+                        # -> why not directly register the change_method
+                        #    instead of the notify callback?
+                        try:
+                            notify(sender, observer,
+                                   type(self).Change(relevant_changes))
+                        except Exception as exception:
+                            # We will not deal with exceptions raised
+                            # during not notification, but instead use
+                            # the default error handling mechanism.
+                            handle_exception(exception)
+                except RuntimeError as error:
+                    # dictionary changed size during iteration
+                    self.debug()
+                    raise error
+                for observer, observations in self._observers_new.items():
+                    print("Observable.notifyObservers: "
+                          f"new_observer[{observations}]")
+                    self._add_observer(observer, observations)
+                self._observers_new = None
 
-    def notify(self, observer: Observer, info: Change=None, **kwargs) -> None:
+    def notify(self, observer: Observer,
+               info: Change = None, **kwargs) -> None:
         """Notify the given observer that the state of this
         :py:class:`Observable` has changed.
 
@@ -470,15 +514,18 @@ class Observable(object):
         """
         if info is None:
             info = type(self).Change.all()
-        getattr(observer, type(self)._change_method)\
-            (self.sender, info, **kwargs)
+        getattr(observer, type(self)._change_method)(self.sender,
+                                                     info, **kwargs)
 
     def debug(self) -> None:
         """Output the observers. Intended for debugging.
         """
-        print(f"debug: Observable[{type(self).__name__}] with "
+        print(f"debug: Observable[{type(self).__name__}/{self}] with "
               f"{len(self._observers)} Observers:")
         for i, (observer, (notify, interest)) in enumerate(self._observers.items()):
+            if type(observer).__name__ == 'QObserverHelper':
+                notify = observer._notify
+                observer = observer._observer
             print(f"debug: ({i}) {type(observer).__name__}: "
                   f"{notify} ({interest})") 
 
@@ -527,4 +574,3 @@ class MetaObservable(Metaclass):
     def debug(cls):
         super().debug()
         cls._meta_observable.debug()
-

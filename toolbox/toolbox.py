@@ -67,7 +67,7 @@ from base import BusyObservable, Runner, Controller as BaseController
 # FIXME[todo]: this will load tensorflow!
 from network import Network, AutoencoderController, argparse as NetworkArgparse
 # from network.examples import keras, torch
-from datasource import Datasource, Loop, Data, DataDirectory
+from datasource import Datasource, Datafetcher, Loop, Data, DataDirectory
 from tools import Tool
 from tools.train import TrainingController
 from .process import Process
@@ -244,8 +244,8 @@ class Toolbox(BusyObservable, Datasource.Observer,
         if self._tools is not None:
             for tool in self._tools.values():
                 tool.runner = runner
-        if self._datasource is not None:
-            self._datasource.runner = runner
+        if self.datasource is not None:
+            self.datasource.runner = runner
 
     # FIXME[concept]: It may be better to define the interrupt handler as
     # a global function (not a method) to make sure it is not garbage
@@ -374,17 +374,19 @@ class Toolbox(BusyObservable, Datasource.Observer,
         """Networks registered with this Toolbox."""
         return iter(self._networks)
 
-    ###########################################################################
-    ###                            Datasources                              ###
-    ###########################################################################
+    #
+    # Datasources
+    #
 
     def _initialize_datasources(self) -> None:
         """Initialized the datasources managed by this :py:class:`Toolbox`.
         """
         self._datasources = []
 
-        # the currently selected Datasource
-        self._datasource = None
+        # a datafetcher for the currently selected datasource.
+        self._datafetcher = Datafetcher()
+        interests = Datafetcher.Change('data_changed')
+        self.observe(self._datafetcher, interests=interests)
 
         # FIXME[hack]: training - we need a better concept ...
         # self.dataset = None
@@ -432,49 +434,56 @@ class Toolbox(BusyObservable, Datasource.Observer,
         return iter(self._datasources)
 
     @property
+    def datafetcher(self) -> Datasource:
+        return self._datafetcher
+
+    @property
     def datasource(self) -> Datasource:
-        return self._datasource
+        return self._datafetcher.datasource
 
     @datasource.setter
     def datasource(self, datasource: Datasource) -> None:
-        print(f"Toolbox.datasource = {datasource} (was {self._datasource})")
+        print(f"Toolbox.datasource = {datasource} (was {self.datasource})")
 
-        if datasource is self._datasource:
+        if datasource is self.datasource:
             return  # nothing to do
 
-        if self._datasource is not None:
-            self.unobserve(self._datasource)
+        if self.datasource is not None:
+            # FIXME[old]: we now have a Datafetcher
+            # self.unobserve(self.datasource)
 
             # FIXME[todo] stop looping the old datasource ...
             # The Datasource currently does not provide a
             # useful API ...
-            if (isinstance(self._datasource, Loop) and
-                self._datasource.looping):
+            if (isinstance(self.datasource, Loop) and
+                self.datasource.looping):
                 # datasource is currently looping
                 print("Toolbox: stopping the datasource loop")
-                self._datasource.stop_loop()  # FIXME[todo]: may take some time and should hence be done in background thread
+                self.datasource.stop_loop()  # FIXME[todo]: may take some time and should hence be done in background thread
 
-        self._datasource = datasource
+        self._datafetcher.datasource = datasource
 
         print(f"Toolbox: setting new datasource: {datasource}")
         if datasource is not None:
+            # FIXME[old]: we now have a Datafetcher
             # Observe the new Datasource
-            interests = Datasource.Change('data_changed')
-            self.observe(datasource, interests=interests)
+            # interests = Datasource.Change('data_changed')
+            # self.observe(datasource, interests=interests)
 
             # Add new datasources to the list of known datasources
             self.add_datasource(datasource)
 
             # get input data from the new datasource (data may be None)
-            self.set_input(data=datasource.data)
+            # self.set_input(data=datasource.data)
 
             # Prepare the new datasource
-            datasource.prepare()  # may run asynchronously
+            # datasource.prepare()  # may run asynchronously
 
         # Inform observers that we have a new datasource
         self.change('datasource_changed')
 
-
+    # FIXME[old]: we now have the Datafetcher - we probably don't
+    # need this anymore
     def datasource_changed(self, datasource: Datasource,
                            change: Datasource.Change) -> None:
         """React to a change of the observed :py:class:`Datasource`.
@@ -493,6 +502,24 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
         if change.data_changed:
             self.set_input(data=datasource.data)  # data may be None
+
+    def datafetcher_changed(self, datafetcher: Datafetcher,
+                            change: Datafetcher.Change) -> None:
+        """React to a change of the observed :py:class:`Datasource`.
+
+        Arguments
+        ---------
+        datafetcher: Datafetcher
+            The datafetcher that has changed. This should be the
+            datafetcher of this :py:class:`Toolbox`.
+        change: Datafetcher.Change
+            The change that occured. We are interested in a change
+            of the :py:class:`Data`.
+        """
+        print(f"Toolbox: New input: {change}")
+        if change.data_changed:
+            print(f"Toolbox: New input: {datafetcher.data}")
+            self.set_input(data=datafetcher.data)  # data may be None
 
     ###########################################################################
     ###                               Input                                 ###

@@ -31,6 +31,7 @@ from tools.activation import Engine as ActivationEngine
 from ..utils import QObserver, protect
 from .image import QImageView
 from .navigation import QIndexControls
+from .datasource import QDatasourceNavigator
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -186,10 +187,10 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             self._processed = processed
             self._updateInfo()
 
-    def _showInfo(self, data: np.ndarray = None, label=None,
+    def _showInfo(self, data: Data = None, label=None,
                   description: str = ''):
-        '''Show info for the given (image) data.
-        '''
+        """Show info for the given (image) data.
+        """
         self._metaText = '<b>Input image:</b><br>\n'
         self._metaText += f'Description: {description}<br>\n'
         if label is not None:
@@ -199,12 +200,13 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                           if self._processed else
                           '<b>Raw input:</b><br>\n')
         if data is not None:
-            self._dataText += (f'Input shape: {data.shape}, '
-                               f'dtype={data.dtype}<br>\n')
+            array = data.data
+            self._dataText += (f'Input shape: {array.shape}, '
+                               f'dtype={array.dtype}<br>\n')
             self._dataText += ('min = {}, max={}, mean={:5.2f}, '
                                'std={:5.2f}\n'.
-                               format(data.min(), data.max(),
-                                      data.mean(), data.std()))
+                               format(array.min(), array.max(),
+                                      array.mean(), array.std()))
         self.update()
 
     def update(self):
@@ -269,7 +271,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
 
 class QDataView(QWidget, QObserver, qobservables={
         Datasource: {'data_changed'}, Toolbox: {'input_changed'}}):
-    """Display data.
+    """A Display for :py:class:`Data` objects.
 
     The display is split into two parts:
     * _imageView: a :py:class:`QImageView` for displaying image data.
@@ -282,6 +284,7 @@ class QDataView(QWidget, QObserver, qobservables={
     """
 
     def __init__(self, **kwargs) -> None:
+        print(f"QDataView.__init__({kwargs})")
         super().__init__(**kwargs)
         self._data = None
         self._attributes = []
@@ -489,3 +492,120 @@ class QMetadataView(QLabel):
                     value = metadata.get_attribute(attribute)
                     text += f"\n{attribute}: {value}"
             self.setText(text)
+
+
+class QDataSelector(QWidget, QObserver, qattributes={Toolbox: True},
+                    qobservables={Datasource: {'data_changed'}}):
+    """A widget for selecting and viewing data items. This is essentially
+    a combination of a :py:class:`QDataView` and a
+    :py:class:`QDatasourceNavigator`.
+
+    A :py:class:`QDataSelector` can include a
+    :py:class:`QDatasourceNavigator` that allows to select a
+    :py:class:`Data` object from a :py:class:`Datasource`.
+
+    A :py:class:`QDataSelector` can be associated with a
+    :py:class:`Toolbox`. In this case, the datasource navigator
+    (if any) will navigate the current datasource of the toolbox.
+    """
+
+    def __init__(self, toolbox: Toolbox = None, **kwargs) -> None:
+        super().__init__()
+        self._layoutScheme = 2
+        self._initUI()
+        self._layoutUI()
+        self.setToolbox(toolbox)
+
+    def _initUI(self) -> None:
+        self._dataView = QDataView()
+        self.addAttributePropagation(Toolbox, self._dataView)
+
+        self._datasourceNavigator = QDatasourceNavigator()
+        self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+
+        self._button = QPushButton("Change Layout")
+        self._button.clicked.connect(self._onButtonClicked)
+
+    def _layoutUI(self) -> None:
+        """Layout the user interface. There are different ways in which
+        the components of a :py:class:`QDataSelector` can be arranged.
+        """
+        if self._layoutScheme == 1:
+            row = QHBoxLayout()
+            row.addWidget(self._dataView)
+            row.addWidget(self._datasourceNavigator)
+            row.addWidget(self._button)
+            self.setLayout(row)
+        elif self._layoutScheme == 2:
+            column = QVBoxLayout()
+            column.addWidget(self._dataView)
+            column.addWidget(self._datasourceNavigator)
+            column.addWidget(self._button)
+            self.setLayout(column)
+
+    def _updateUI(self) -> None:
+        """Update the layout of the user interface.
+        """
+        # QLayout::removeItem() just removes the item from layout, but
+        # does not hide or delete it.
+        layout = self.layout()
+        layout.removeItem(layout.itemAt(2))
+        layout.removeItem(layout.itemAt(1))
+        layout.removeItem(layout.itemAt(0))
+        # self.layout().removeWidget(self._dataView)
+        # self.layout().removeWidget(self._datasourceNavigator)
+        # self.layout().removeWidget(self._button)
+        # Reparent the current layout to a dummy widget, which will
+        # be delete immedieatly as we do not store a reference.
+        # https://stackoverflow.com/a/10439207
+        QWidget().setLayout(layout)
+        self._layoutUI()
+        self.update()
+
+    @protect
+    def _onButtonClicked(self, checked: bool) -> None:
+        if self._layoutScheme == 1:
+            self._layoutScheme = 2
+        elif self._layoutScheme == 2:
+            self._layoutScheme = 1
+        self._updateUI()
+
+    def dataView(self) -> QDataView:
+        """The :py:class:`QDataView` used by this
+        :py:class:`QDataSelector`.
+        """
+        return self._dataView
+
+    def datasourceNavigator(self) -> QDatasourceNavigator:
+        """The :py:class:`QDatasourceNavigator` used by this
+        :py:class:`QDataSelector`.
+        """
+        return self._datasourceNavigator
+
+    def showNavigator(self, datasource: Datasource = None) -> None:
+        """Show the :py:class:`QDatasourceNavigator` allowing to
+        select :py:class:`Data` objects from a :py:class:`Datasource`.
+        """
+        self._datasourceNavigator.show()
+
+    def hideNavigator(self) -> None:
+        """Hide the :py:class:`QDatasourceNavigator`.
+        """
+        self._datasourceNavigator.hide()
+
+    def setDatasource(self, datasource: Datasource) -> None:
+        """Set the datasource for the datasource navigator.
+        If this :py:class:`QDataSelector` is associated with
+        a :py:class:`Toolbox`, it will set the current datasource
+        for that tooblox.
+
+        Arguments
+        ---------
+        datasource: Datasource
+            The new datasource to navigate. If None, the datasource
+            navigator will be disabled.
+        """
+        if self._toolbox is None:
+            self._datasourceNavigator.setDatasource(datasource)
+        else:
+            self._toolbox.setDatasource(datasource)

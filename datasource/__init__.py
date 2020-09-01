@@ -35,6 +35,7 @@ from .data import Data, ClassScheme, ClassIdentifier
 from .meta import Metadata
 from .datasource import (Datasource, Labeled, Random, Sectioned,
                          Loop, Snapshot, Indexed, Imagesource)
+from .fetcher import Datafetcher
 from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
