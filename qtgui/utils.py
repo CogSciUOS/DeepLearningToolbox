@@ -695,10 +695,11 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         interests = BusyObservable.Change('busy_changed')
         self._exchangeView('_busy', busyView, interests=interests)
 
-    # FIXME[hack]: we should have a callback busy_changed!
     def detector_changed(self, busyBody: BusyObservable,
                          change: BusyObservable.Change) -> None:
-        print("QBusyWidget.detector_changed")
+        """FIXME[hack]: we should have a callback busy_changed!
+        """
+        #print("QBusyWidget.detector_changed")
         #self._movie.setPaused(not busyBody.busy)
         #self.setVisible(busyBody.busy)
 

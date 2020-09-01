@@ -262,7 +262,7 @@ class QDatasourceInspector(QResourceInspector, QObserver,
         self.addAttributePropagation(Datasource, self._datasourceNavigator)
 
         self._dataView = QDataView()
-        self.addAttributePropagation(Datasource, self._dataView)
+        # self.addAttributePropagation(Datasource, self._dataView)
 
         datasourceView = QWidget()
         layout = QVBoxLayout()

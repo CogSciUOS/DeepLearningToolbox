@@ -463,6 +463,10 @@ class Observable(object):
                 sender = sender or self.sender
 
                 try:
+                    if debug:
+                        print(f"notifyObservers: {type(self).__name__} "
+                              f"with {len(self._observers)} observers, "
+                              f"changes={changes}")
                     for observer, (notify, interests) \
                             in self._observers.items():
                         relevant_changes = interests & changes
@@ -473,7 +477,6 @@ class Observable(object):
                                     type(observer._observer).__name__
                             print(f"notifyObservers: {observer_type}"
                                   f"interests={interests}, "
-                                  f"changes={changes}, "
                                   f"relevant_changes={relevant_changes} "
                                   f"[{bool(relevant_changes)}]")
                         if not relevant_changes:
@@ -491,6 +494,8 @@ class Observable(object):
                             # during not notification, but instead use
                             # the default error handling mechanism.
                             handle_exception(exception)
+                    if debug:
+                        print(f"notifyObservers: ---------------------------")
                 except RuntimeError as error:
                     # dictionary changed size during iteration
                     self.debug()

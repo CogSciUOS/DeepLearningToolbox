@@ -4,6 +4,7 @@
 # standard imports
 from typing import Tuple
 import os
+import errno
 from glob import glob
 
 # third party imports
@@ -95,7 +96,8 @@ class Helen(DataDirectory, Imagesource):
         for subdir in subdirs:
             subdir = os.path.join(self.directory, subdir)
             if not os.path.isdir(subdir):
-                FileNotFoundError(f"No such directory: {subdir}")
+                FileNotFoundError(errno.ENOTDIR, os.strerror(errno.ENOTDIR),
+                                  subdir)
             self._filenames += glob(os.path.join(subdir, "*.*"))
 
     def _prepare_annotations(self, filename: str = 'annotations.txt',
@@ -123,8 +125,10 @@ class Helen(DataDirectory, Imagesource):
         """
         abs_annotation_dir = os.path.join(self.directory, 'annotation')
         if not os.path.isdir(abs_annotation_dir):
-            raise FileNotFoundError("The 'annotation' directory of the HELEN "
-                                    "facial landmark dataset is missing.")
+            raise FileNotFoundError(errno.ENOTDIR,
+                                    "The 'annotation' directory of the HELEN "
+                                    "facial landmark dataset is missing.",
+                                    abs_annotation_dir)
 
         if load is not None:
             self._load_annotations = load

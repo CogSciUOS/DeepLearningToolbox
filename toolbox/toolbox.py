@@ -85,7 +85,7 @@ LOG.info("Effective log level for logger '%s': %d",
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 
-class Toolbox(BusyObservable, Datasource.Observer,
+class Toolbox(BusyObservable, Datafetcher.Observer,
               method='toolbox_changed',
               changes=['networks_changed',
                        'tools_changed',
@@ -221,6 +221,17 @@ class Toolbox(BusyObservable, Datasource.Observer,
         self._initialize_datasources()
         self._initialize_networks()
 
+    def _uninitialize(self) -> None:
+        """Free resources acquired by the toolbox.
+        Most important: stop running threads and background processes.
+        """
+        #self._uninitialize_logging()
+        #self._uninitialize_exception_handler()
+        #self._uninitialize_processes()
+        #self._uninitialize_tools()
+        self._uninitialize_datasources()
+        #self._uninitialize_networks()
+
     @property
     def runner(self) -> Runner:
         return self._runner
@@ -314,7 +325,6 @@ class Toolbox(BusyObservable, Datasource.Observer,
                 self.add_tool(tool)
 
             for datasource in datasources:
-                print(f"Toolbox: prepare datasource {datasource}")
                 datasource.prepare()
             if len(datasources) > 0:
                 self.datasource = datasources[-1]
@@ -392,6 +402,12 @@ class Toolbox(BusyObservable, Datasource.Observer,
         # self.dataset = None
         # self.data = None
 
+    def _uninitialize_datasources(self) -> None:
+        """Free (most) datasource related resources acquired by the toolbox.
+        Most important: stop running threads.
+        """
+        self._datafetcher.datasource = None  # will stop running loops
+
     def add_datasource(self, datasource: Union[str, Datasource],
                        select: bool = False) -> None:
         """Add a new Datasource to this Toolbox.
@@ -443,65 +459,16 @@ class Toolbox(BusyObservable, Datasource.Observer,
 
     @datasource.setter
     def datasource(self, datasource: Datasource) -> None:
-        print(f"Toolbox.datasource = {datasource} (was {self.datasource})")
 
-        if datasource is self.datasource:
-            return  # nothing to do
-
-        if self.datasource is not None:
-            # FIXME[old]: we now have a Datafetcher
-            # self.unobserve(self.datasource)
-
-            # FIXME[todo] stop looping the old datasource ...
-            # The Datasource currently does not provide a
-            # useful API ...
-            if (isinstance(self.datasource, Loop) and
-                self.datasource.looping):
-                # datasource is currently looping
-                print("Toolbox: stopping the datasource loop")
-                self.datasource.stop_loop()  # FIXME[todo]: may take some time and should hence be done in background thread
-
-        self._datafetcher.datasource = datasource
-
-        print(f"Toolbox: setting new datasource: {datasource}")
+        # Add new datasources to the list of known datasources
         if datasource is not None:
-            # FIXME[old]: we now have a Datafetcher
-            # Observe the new Datasource
-            # interests = Datasource.Change('data_changed')
-            # self.observe(datasource, interests=interests)
+            self.add_datasource(datasource, select=False)
 
-            # Add new datasources to the list of known datasources
-            self.add_datasource(datasource)
-
-            # get input data from the new datasource (data may be None)
-            # self.set_input(data=datasource.data)
-
-            # Prepare the new datasource
-            # datasource.prepare()  # may run asynchronously
+        # set the datasource to be used for fetching data
+        self._datafetcher.datasource = datasource
 
         # Inform observers that we have a new datasource
         self.change('datasource_changed')
-
-    # FIXME[old]: we now have the Datafetcher - we probably don't
-    # need this anymore
-    def datasource_changed(self, datasource: Datasource,
-                           change: Datasource.Change) -> None:
-        """React to a change of the observed :py:class:`Datasource`.
-
-        Arguments
-        ---------
-        datasource: Datasource
-            The current datasource that has changed. In case of
-            a change of datasource (observable_changed), this will
-            be the new datasource.
-        change: Datasource.Change
-            The change that occured. We are interested in a change
-            of the datasource itself (observable_changed) and a
-            change of the current data.
-        """
-
-        if change.data_changed:
-            self.set_input(data=datasource.data)  # data may be None
 
     def datafetcher_changed(self, datafetcher: Datafetcher,
                             change: Datafetcher.Change) -> None:
@@ -516,9 +483,7 @@ class Toolbox(BusyObservable, Datasource.Observer,
             The change that occured. We are interested in a change
             of the :py:class:`Data`.
         """
-        print(f"Toolbox: New input: {change}")
         if change.data_changed:
-            print(f"Toolbox: New input: {datafetcher.data}")
             self.set_input(data=datafetcher.data)  # data may be None
 
     ###########################################################################

@@ -132,7 +132,7 @@ class RegisterItemList(QObserver, QDebug,
 
         # 3. Remove items from this list that are no longer present
         for key in keys:
-            index = self.findText(key)
+            index = self.findText(key)  # FIXME[hack]: combobox specific
             if index >= 0:
                 item = self.itemData(index)
                 self._removeItem(item)
@@ -186,13 +186,38 @@ class RegisterItemList(QObserver, QDebug,
         for key in self._keys():
             LOG.debug(f"debug:  - key: {key}")
 
+    def currentItem(self) -> Registrable:
+        """Get the currently selected item.
+        This may be `None` if no item is selected.
+        """
+        return self._currentItem()
+
+    def setCurrentItem(self, item: Registrable) -> None:
+        """Select the given item in this :py:class:`RegisterItemList`.
+
+        Arguments
+        ---------
+        item: Registrable
+            The item to become the currently selected item
+            in this list. `None` will deselect the current element.
+        
+        Raises
+        ------
+        ValueError:
+            The given item is not an element of this
+            :py:class:`RegisterItemList`.
+        """
+        if not self.contains(item):
+            raise ValueError("Item is not contained in RegisterItemList")
+        self._setCurrentItem(self, item)
+
     #
     # methods to be implemented by subclasses
     #
 
     def _keys(self) -> Iterator[str]:
-        """An iterator providing keys for all items in this
-        :py:class:`QRegisterItemComboBox`.
+        """An iterator for the keys of all items in this
+        :py:class:`RegisterItemList`.
         """
         raise NotImplementedError("A 'RegisterItemList' has to implement "
                                   "the _keys() method")
@@ -228,6 +253,26 @@ class RegisterItemList(QObserver, QDebug,
         raise NotImplementedError("A 'RegisterItemList' has to implement "
                                   "the _updateItems() method")
 
+    def _currentItem(self) -> Registrable:
+        """Get the currently selected item.
+        This may be `None` if no item is selected.
+        """
+        raise NotImplementedError("A 'RegisterItemList' has to implement "
+                                  "the _currentItem() method")
+
+    def _setCurrentItem(self, item: Registrable) -> None:
+        """Select the given item in this :py:class:`RegisterItemList`.
+
+        Arguments
+        ---------
+        item: Registrable
+            The item to become the currently selected item
+            in this list (the item is guaranteed to be an element
+            of this list). `None` will deselect the current element.        
+        """
+        raise NotImplementedError("A 'RegisterItemList' has to implement "
+                                  "the _setCurrentItem() method")
+
 
 class QRegisterItemComboBox(RegisterItemList, QComboBox):
     """A :py:class:`QRegisterItemComboBox` is a :py:class:`QComboBox`
@@ -236,8 +281,19 @@ class QRegisterItemComboBox(RegisterItemList, QComboBox):
     This class extends the :py:class:`RegisterItemList` by providing
     methods for adding and removing items to/from a :py:class:`QComboBox`.
 
-    The combobox will show the keys of the items.
+    The `QComboBox` will show the keys of the items and it will have
+    the actual items stored as associated data (using Qt's `itemData`
+    mechanism with the default role `Qt.UserRole`).
     """
+
+    def __init__(self, **kwargs) -> None:
+        """Initialization of the :py:class:`QNetworkSelector`.
+
+        Parameters
+        ----------
+        """
+        super().__init__(**kwargs)
+        self.setCurrentIndex(-1)
 
     def _keys(self) -> Iterator[str]:
         """An iterator providing keys for all items in this
@@ -281,6 +337,27 @@ class QRegisterItemComboBox(RegisterItemList, QComboBox):
                                     Qt.green if item.prepared else Qt.red),
                              Qt.ForegroundRole)  # Qt.BackgroundRole
         self.update()
+
+    def _currentItem(self) -> Registrable:
+        """Get the currently selected item.
+        This may be `None` if no item is selected.
+        """
+        return self.currentData()
+
+    def _setCurrentItem(self, item: Registrable) -> None:
+        """Select the given item in this :py:class:`RegisterItemList`.
+
+        Arguments
+        ---------
+        item: Registrable
+            The item to become the currently selected item
+            in this list (the item is guaranteed to be an element
+            of this list). `None` will deselect the current element.        
+        """
+        # For an empty combo box or a combo box in which no current item
+        # is set, the index is -1 (which is also returned by findText if
+        # the item is not found).
+        self.setCurrentIndex(self.findText(item.key))
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Process key events. The :py:class:`RegisterItemList` supports
@@ -544,14 +621,12 @@ class QRegisterList(QListWidget, QObserver, qobservables={
                  type(self).__name__, register.__name__, change, key)
         if change.key_changed and key and key in register.register_keys():
             item = self.itemForKey(key)
-            print(f"\nITEM[{key}]:  {type(item)}\n")
             if register.key_is_initialized(key):
                 item.updateData(register[key])
             else:
                 item.updateFormat()
         elif change.class_changed and key and key in register.classes():
             item = self.itemForClass(key)
-            print(f"\nCLASS[{key}]: type{item}\n")
             if register.class_is_initialized(key):
                 item.updateData(register.register_get_class[key])
             else:

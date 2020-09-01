@@ -104,8 +104,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         ---------
         parent: QWidget
         """
-        print("\n".join([f"debug:   - {str(cls)}"
-                         for cls in type(self).__mro__]))
         super().__init__(**kwargs)
         self._raw: np.ndarray = None
         self._show_raw = False

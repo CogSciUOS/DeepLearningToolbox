@@ -19,8 +19,8 @@ from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel,
 from PyQt5.QtGui import QResizeEvent
 
 # toolbox imports
+from datasource import Data
 from tools.face.detector import Detector as FaceDetector
-from datasource import Data, Datasource
 from toolbox import Toolbox
 from dltb.base.image import Image, Imagelike
 
@@ -116,11 +116,8 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
     def setImage(self, image: np.ndarray, data: Data = None):
         """Set the image to be processed by the underlying detector.
         """
-        print("QDetectorWidget.setImage"
-              f"({None if image is None else image.shape})")
         self._trueMetadata = data
         if self._faceDetector is not None:
-            print(f"QDetectorWidget.process({data})")
             self._faceDetector.process(data)
         self.update()
 
@@ -159,9 +156,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         self.update()
 
 
-class FacePanel(Panel, QObserver, qobservables={
-        Datasource: {'data_changed'},
-        Toolbox: {'input_changed', 'datasource_changed'}}):
+class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
     # pylint: disable=too-many-instance-attributes
     """The :py:class:`FacePanel` provides access to different
     face recognition technologies. This includes
@@ -181,17 +176,9 @@ class FacePanel(Panel, QObserver, qobservables={
     the :py:class:`setData` method (which will internally call
     :py:class:`setImage`).
 
-    A :py:class:`FacePanel` can be associated with a
-    :py:class:`Datasource`. If this is done, the image will be changed
-    automatically, if new data is feteched from that datasource.  The
-    :py:class:`FacePanel` may also include a
-    :py:class:`QDatasourceNavigator` allowing to fetch new images.
-
-    A :py:class:`FacePanel` can be associated with a
-    :py:class:`Toolbox`.  If this is done, it will the toolbox' input
-    and the `QDatasourceNavigator` will controll the toolbox' current
-    datasource.
-
+    A :py:class:`FacePanel` is associated with a :py:class:`Toolbox`.
+    It will use the toolbox' input and the `QDataselector` can be
+    used to change this input.
 
     Face detection
     --------------
@@ -210,12 +197,11 @@ class FacePanel(Panel, QObserver, qobservables={
 
     _inputCounter: QLabel = None
     _processCounter: QLabel = None
-    _datasourceNavigator: QDatasourceNavigator = None
+    _dataSelector: QDataSelector = None
 
     """
 
-    def __init__(self, toolbox: Toolbox = None,
-                 datasource: Datasource = None, parent=None):
+    def __init__(self, toolbox: Toolbox = None, parent=None):
         """Initialization of the FacePanel.
 
         Parameters
@@ -253,7 +239,6 @@ class FacePanel(Panel, QObserver, qobservables={
         self._initUI()
         self._layoutUI()
         self.setToolbox(toolbox)
-        self.setDatasource(datasource)
 
         self._counter = 0  # FIXME[hack]
 
@@ -261,10 +246,11 @@ class FacePanel(Panel, QObserver, qobservables={
         """Initialize the user interface
 
         The user interface contains the following elements:
-        * the input view: depicting the current input image
-        * a datasource navigator allowing to select new inputs from
-        * a datasource, an input counter and a process counter:
-        * up to four detector views: depicting faces located in the input image
+        * the data selector: depicting the current input image
+          and allowing to select new inputs from a datasource
+        * an input counter and a process counter:
+        * up to four detector views: depicting faces located in
+          the input image
         """
         #
         # Input data
@@ -315,7 +301,6 @@ class FacePanel(Panel, QObserver, qobservables={
         row.addWidget(QLabel("/"))
         row.addWidget(self._inputCounter)
         row.addStretch()
-        # FIXME[todo]: here we could add a datasource selector ...
         layout2.addLayout(row)
         layout2.addStretch(1)
         layout.addLayout(layout2)
@@ -349,10 +334,17 @@ class FacePanel(Panel, QObserver, qobservables={
     def setData(self, data: Data) -> None:
         """Set the data to be processed by this :py:class:`FacePanel`.
         """
+        # set data for the dataView - this is redundant if data is set
+        # from the toolbox (as the dataView also observes the toolbox),
+        # but it is necessary, if setData is called independently.
         self._dataView.setData(data)
+
+        # now feed the new data to the detecotors
         for detectorView in self._detectorViews:
             if detectorView.isChecked():
                 detectorView.setData(data)
+
+        # increase the data counter
         self._inputCounter.setText(str(int(self._inputCounter.text())+1))
 
     def setToolbox(self, toolbox: Toolbox) -> None:
@@ -361,7 +353,6 @@ class FacePanel(Panel, QObserver, qobservables={
         """
         self._dataSelector.setToolbox(toolbox)
         self._dataView.setToolbox(toolbox)
-        self.setDatasource(toolbox.datasource if toolbox is not None else None)
         self.setData(toolbox.input_data if toolbox is not None else None)
 
     def toolbox_changed(self, toolbox: Toolbox,
@@ -371,21 +362,8 @@ class FacePanel(Panel, QObserver, qobservables={
         in input changes and will react with applying face recognition
         to a new input image.
         """
-        print("FacePanel.toolbox_changed({toolbox}, {change})")
-        if change.datasource_changed:
-            self.setDatasource(toolbox.datasource)
         if change.input_changed:
             self.setData(toolbox.input_data)
-
-    def setDatasource(self, datasource: Datasource) -> None:
-        """Set a :py:class:`Datasource` for this :py:class:`FacePanel`.
-        A datasource other the `None` is only allowed if no
-        :py:class:`Toolbox` is assigned to this :py:class:`FacePanel`.
-        As soon as a :py:class:`Toolbox` is assigned, its current
-        datasource will be use.
-        """
-        print(f"\nFacePanel.setDatasource({datasource})\n")
-        self._dataSelector.setDatasource(datasource)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         """React to a resizing of this :py:class:`FacePanel`

@@ -906,8 +906,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         return ResourcesPanel(toolbox=self._toolbox)
 
     def _newFacePanel(self, FacePanel: type) -> Panel:
-        return FacePanel(toolbox=self._toolbox,
-                         datasource=self._toolbox.datasource)
+        return FacePanel(toolbox=self._toolbox)
 
     ##########################################################################
     #                             Actions                                    #

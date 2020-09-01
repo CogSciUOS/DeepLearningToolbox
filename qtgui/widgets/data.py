@@ -5,7 +5,7 @@
 
 This module provides widgets for viewing data and metadata.
 """
-# pylint --method-naming-style=camelCase --attr-naming-style=camelCase qtgui.widgets.data
+# pylint --method-naming-style=camelCase --attr-naming-style=camelCase --variable-naming-style=camelCase qtgui.widgets.data
 
 # standard imports
 from typing import Any
@@ -22,8 +22,8 @@ from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
 # toolbox imports
 from toolbox import Toolbox
-from datasource import Data, Metadata, ClassIdentifier, Datasource
-from datasource import View as DatasourceView
+from datasource import Data, Metadata, ClassIdentifier
+from datasource import Datasource, Datafetcher
 from util.image import Region, PointsBasedLocation
 from tools.activation import Engine as ActivationEngine
 
@@ -38,11 +38,11 @@ LOG = logging.getLogger(__name__)
 
 
 class QDataInfoBox(QWidget, QObserver, qobservables={
-        Datasource: {'data_changed'},
+        Datafetcher: {'data_changed'},
         Toolbox: {'input_changed'},
         ActivationEngine: {'input_changed'}}):
     # FIXME[concept]: should we forbid simultanous observation of
-    # datasource and toolbox?
+    # datafetcher and toolbox?
     """A :py:class:`QDataInfoBox` displays information on a piece of
     :py:class:`Data`.
 
@@ -58,28 +58,31 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     Data can be provided in different ways:
     (1) By calling the method :py:meth:`setData`.
     (2) From a :py:class:`Toolbox`, using the input data
-    (3) From a :py:class:`Datasource`, using the current data
+    (3) From a :py:class:`Datafetcher`, using the current data
+    Setting a Toolbox will invalidate the Datafetcher and vice versa.
 
     _toolbox: Toolbox = None
+    _datafetcher: Datafetcher = None
     """
-    _datasourceView: DatasourceView = None
-    _activation: ActivationEngine = None
+    _activation: ActivationEngine = None  # FIXME[why]?
     _processed: bool = False
 
     def __init__(self, toolbox: Toolbox = None,
-                 datasource: DatasourceView = None,
-                 activation: ActivationEngine = None, parent=None):
+                 datafetcher: Datafetcher = None,
+                 activation: ActivationEngine = None, **kwargs):
         '''Create a new QDataInfoBox.
 
         parent: QWidget
             Parent widget
         '''
-        super().__init__(parent)
+        super().__init__(**kwargs)
+        self._data = None
+        self._metaText = ""
         self._initUI()
         self._layoutUI()
         self._showInfo()
         self.setToolbox(toolbox)
-        self.setDatasourceView(datasource)
+        self.setDatafetcher(datafetcher)
         self.setActivationEngine(activation)
 
     def _initUI(self):
@@ -108,47 +111,58 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     # Toolbox.Observer
     #
 
+    def setToolbox(self, toolbox: Toolbox) -> None:
+        """Set a Toolbox for this :py:class:`QDataInfoBox`.
+        If a toolbox is set, the :py:class:`QDataInfoBox` will display
+        the current input of the :py:class:`Toolbox`.
+        """
+        LOG.debug("QDataInfoBox.setToolbox: %s -> %s",
+                  self._toolbox, toolbox)
+        if toolbox is not None:
+            self.setDatafetcher(None)
+
+    @protect
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
-        LOG.debug("QDataView.toolbox_changed(%s, %s)", toolbox, change)
-        if change.input_changed:
-            if not self._toolbox:
-                data = None
-            elif self._processed:
-                data = self._toolbox.input_data
-            else:
-                data = self._toolbox.input_data
-            label = getattr(data, 'label', None)
-            description = getattr(data, 'description', None)
-            self._showInfo(data=data, description=description)
+        # pylint: disable=invalid-name
+        """React to a input change of the :py:class:`Toolbox`.
+        """
+        LOG.debug("QDataInfoBox.toolbox_changed(%s, %s)", toolbox, change)
+        self.setData(toolbox.input_data)
 
     #
-    # Datasource.Observer
+    # Datafetcher.Observer
     #
 
-    def setDatasource(self, datasource: Datasource) -> None:
-        LOG.debug("QDataView.setDatasource: %s -> %s",
-                  self._datasource, datasource)
+    def setDatafetcher(self, datafetcher: Datafetcher) -> None:
+        """Set a Datafetcher for this :py:class:`QDataInfoBox`.
+        If a datafetcher is set, the :py:class:`QDataInfoBox` will display
+        the currently selected data item of that :py:class:`Datafetcher`.
+        """
+        LOG.debug("QDataView.setDatafetcher: %s -> %s",
+                  self._datafetcher, datafetcher)
+        if datafetcher is not None:
+            self.setToolbox(None)
 
-    def setDatasourceView(self, datasource: DatasourceView) -> None:
-        self._exchangeView('_datasourceView', datasource,
-                           interests=Datasource.Change('data_changed'))
-
-    def datasource_changed(self, datasource, change):
-        LOG.debug("QDataInfoBox.datasource_changed(%s, %s)",
-                  datasource, change)
-        if change.data_changed:
-            # the data provided by the Datasource has changed
-            if self._datasource and self._datasource.fetched:
-                self.setData(datasource.data)
-            else:
-                self.setData(None)
+    @protect
+    def datafetcher_changed(self, datafetcher: Datafetcher,
+                            change: Datafetcher.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to newly fetched data item in the :py:class:`Datafetcher`.
+        """
+        LOG.debug("QDataInfoBox.datafetcher_changed(%s, %s)",
+                  datafetcher, change)
+        self.setData(datafetcher.data)
 
     #
     # ActivationEngine.Observer
     #
 
-    def activation_changed(self, engine: ActivationEngine, info):
+    # FIXME[hack]: what are we trying to achieve here?
+    def activation_changed(self, _engine: ActivationEngine, info):
+        # pylint: disable=invalid-name
+        """React to changes of the activation engine.
+        """
         if info.input_changed:
             self._updateInfo()
 
@@ -164,11 +178,50 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                               if self._toolbox else "No toolbox")
         self._showInfo(data=data, label=label, description=description)
 
-    # FIXME[old]
-    def setController(self, controller) -> None:
-        # FIXME[hack]: we need a more reliable way to observe multiple
-        # observable!
-        self.observe(controller.get_observable(), interests=None)
+    #
+    # Data
+    #
+
+    def setData(self, data: Data, index: int = None) -> None:
+        """Set the data to be displayed in the :py:class:`QDataInfoBox`.
+
+        Arguments
+        ---------
+        data: Data
+            The data to be displayed in this :py:class:`QDataInfoBox`.
+        index: int
+            The index of the batch item to be displayed (in case that
+            `data` is a batch).
+        """
+        LOG.debug("QDataInfoBox.setData[%s]: %s", index, data)
+
+        if data is self._data:
+            return  # nothing changed
+
+        # label = getattr(data, 'label', None)
+        # description = getattr(data, 'description', None)
+        # self._showInfo(data=data, description=description)
+
+        self._metaText = "<b>Input Data:</b><br>\n"
+        if data:
+            for attribute in data.attributes(batch=False):
+                value = self._attributeValue(data, attribute)
+                self._metaText += f"{attribute}: {value}<br>\n"
+            if data.is_batch:
+                if index is not None:
+                    self._metaText += \
+                        f"<b>Batch Data ({index}/{len(data)}):</b><br>\n"
+                    data = data[index]
+                else:
+                    self._metaText += \
+                        f"<b>Batch Data ({len(data)}):</b><br>\n"
+            for attribute in data.attributes(batch=True):
+                value = ('*' if data.is_batch else
+                         self._attributeValue(data, attribute))
+                self._metaText += f"{attribute}[batch]: {value}<br>\n"
+        else:
+            self._metaText += "No data!<br>\n"
+        self.update()
 
     @pyqtSlot(bool)
     @protect
@@ -183,6 +236,8 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self.setMode(processed)
 
     def setMode(self, processed):
+        """Set the display mode for this :py:class:`QDataInfoBox`.
+        """
         if processed != self._processed:
             self._processed = processed
             self._updateInfo()
@@ -209,12 +264,11 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                                       array.mean(), array.std()))
         self.update()
 
-    def update(self):
-        self._metaLabel.setText(self._metaText)
-        self._dataLabel.setText(
-            self._dataText if self._button.isChecked() else '')
-
-    def _attributeValue(self, data: Data, attribute: str) -> Any:
+    @staticmethod
+    def _attributeValue(data: Data, attribute: str) -> Any:
+        """Return the attribute of the current data object in
+        a form suitable to be displayed in this :py:class:`QDataInfoBox`.
+        """
         if attribute == 'data':
             return data.data.shape
         value = getattr(data, attribute)
@@ -225,7 +279,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             points = (len(value.location)
                       if isinstance(value.location, PointsBasedLocation)
                       else 'no')
-            attributes = len(value._attributes)  # FIXME[hack]: privte property
+            attributes = len(value._attributes)  # FIXME[hack]: private property
             value = (f"Region[{type(value.location).__name__}]: "
                      f"{points} points, {attributes} attributes")
         elif isinstance(value, list):
@@ -235,42 +289,18 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             value = f"array[{value.dtype}]: {value.shape}"
         return value
 
-    def setData(self, data: Data, index: int = None) -> None:
-        """Set the data to be displayed in the :py:class:`QDataInfoBox`.
-
-        Arguments
-        ---------
-        data: Data
-            The data to be displayed in this :py:class:`QDataInfoBox`.
-        index: int
-            The index of the batch item to be displayed (in case that
-            `data` is a batch).
+    def update(self):
+        """Update the information displayed by this :py:class:`QDataInfoBox`.
         """
-        LOG.debug("QDataInfoBox.setData[%s]: %s", index, data)
-        self._metaText = "<b>Input Data:</b><br>\n"
-        if data:
-            for attribute in data.attributes(batch=False):
-                value = self._attributeValue(data, attribute)
-                self._metaText += f"{attribute}: {value}<br>\n"
-            if data.is_batch:
-                if index is not None:
-                    self._metaText += \
-                        f"<b>Batch Data ({index}/{len(data)}):</b><br>\n"
-                    data = data[index]
-                else:
-                    self._metaText += \
-                        f"<b>Batch Data ({len(data)}):</b><br>\n"
-            for attribute in data.attributes(batch=True):
-                value = ('*' if data.is_batch else
-                         self._attributeValue(data, attribute))
-                self._metaText += f"{attribute}[batch]: {value}<br>\n"
-        else:
-            self._metaText += f'No data!<br>\n'
-        self.update()
+        self._metaLabel.setText(self._metaText +
+                                f"Toolbox: {self._toolbox is not None}, "
+                                f"Datfetcher: {self._datafetcher is not None}")
+        self._dataLabel.setText(
+            self._dataText if self._button.isChecked() else '')
 
 
 class QDataView(QWidget, QObserver, qobservables={
-        Datasource: {'data_changed'}, Toolbox: {'input_changed'}}):
+        Datafetcher: {'data_changed'}, Toolbox: {'input_changed'}}):
     """A Display for :py:class:`Data` objects.
 
     The display is split into two parts:
@@ -284,7 +314,6 @@ class QDataView(QWidget, QObserver, qobservables={
     """
 
     def __init__(self, **kwargs) -> None:
-        print(f"QDataView.__init__({kwargs})")
         super().__init__(**kwargs)
         self._data = None
         self._attributes = []
@@ -300,7 +329,7 @@ class QDataView(QWidget, QObserver, qobservables={
 
         self._dataInfo = QDataInfoBox()
         self.addAttributePropagation(Toolbox, self._dataInfo)
-        self.addAttributePropagation(Datasource, self._dataInfo)
+        self.addAttributePropagation(Datafetcher, self._dataInfo)
         self._imageView.modeChanged.connect(self._dataInfo.onModeChanged)
 
         self._batchNavigator = QBatchNavigator()
@@ -325,7 +354,9 @@ class QDataView(QWidget, QObserver, qobservables={
         dataInfo.addWidget(self._dataInfo)
         dataInfo.addWidget(self._batchNavigator)
 
-        if True:
+        orientation = 'vertical'
+        if orientation == 'vertical':
+            # vertical layout: image above info
             layout = QVBoxLayout()
             row = QHBoxLayout()
             row.addStretch()
@@ -334,6 +365,7 @@ class QDataView(QWidget, QObserver, qobservables={
             layout.addLayout(row)
             layout.addLayout(dataInfo)
         else:
+            # horizontal layout: image left of info
             layout = QHBoxLayout()
             self._imageView.setMinimumSize(400, 400)
             layout.addWidget(self._imageView)
@@ -341,56 +373,84 @@ class QDataView(QWidget, QObserver, qobservables={
 
         self.setLayout(layout)
 
+    #
+    # Toolbox.Observer
+    #
+
     def setToolbox(self, toolbox: Toolbox) -> None:
         """Set a Toolbox for this :py:class:`QDataView`.
         If a toolbox is set, the :py:class:`QDataView` will display
         the current input of the :py:class:`Toolbox`.
         """
+        LOG.debug("QDataView.setToolbox: %s -> %s",
+                  self._toolbox, toolbox)
         if toolbox is not None:
-            self.setDatasource(None)
-
-    def setDatasource(self, datasource: Datasource) -> None:
-        """Set a Datasource for this :py:class:`QDataView`.
-        If a datasource is set, the :py:class:`QDataView` will display
-        the currently selected data item of that :py:class:`Datasource`.
-        """
-        if datasource is not None:
-            self.setToolbox(None)
+            self.setDatafetcher(None)
 
     @protect
     def toolbox_changed(self, toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
+        # pylint: disable=invalid-name
         """React to a input change of the :py:class:`Toolbox`.
         """
+        LOG.debug("QDataView.toolbox_changed(%s, %s)", toolbox, change)
         self.setData(toolbox.input_data)
 
-    @protect
-    def datasource_changed(self, datasource: Datasource,
-                           change: Datasource.Change) -> None:
-        """React to a fetching a data item in the :py:class:`Datasource`.
+    #
+    # Datafetcher.Observer
+    #
+
+    def setDatafetcher(self, datafetcher: Datafetcher) -> None:
+        """Set a Datafetcher for this :py:class:`QDataView`.
+        If a datafetcher is set, the :py:class:`QDataView` will display
+        the currently selected data item of that :py:class:`Datafetcher`.
         """
-        LOG.debug("QDataView.datasource_changed(%s, %s)", datasource, change)
-        if change.data_changed:
-            self.setData(datasource.data)
+        LOG.debug("QDataView.setDatafetcher: %s -> %s",
+                  self._datafetcher, datafetcher)
+        if datafetcher is not None:
+            self.setToolbox(None)
+
+    @protect
+    def datafetcher_changed(self, datafetcher: Datafetcher,
+                            change: Datafetcher.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to newly fetched data item in the :py:class:`Datafetcher`.
+        """
+        LOG.debug("QDataView.datafetcher_changed(%s, %s)", datafetcher, change)
+        self.setData(datafetcher.data)
+
+    #
+    # Data
+    #
 
     def setData(self, data: Data) -> None:
         """Set the :py:class:`Data` to be viewed by this
         :py:class:`QDataView`.
         """
         LOG.debug("QDataView.setData: %s", data)
+        if data is self._data:
+            return  # nothing changed
+        
         self._data = data
-        is_batch = bool(data) and data.is_batch
-        self._batchNavigator.setVisible(is_batch)
-        if is_batch:
+        isBatch = bool(data) and data.is_batch
+        self._batchNavigator.setVisible(isBatch)
+        if isBatch:
             self._batchNavigator.setData(data)
         self.update()
 
+    #
+    # Configuration
+    #
+
     def addAttribute(self, name: str) -> None:
-        """
+        """Add an attribute to the list of attributes to be displayed.
         """
         self._attributes.append(name)
 
     def update(self):
+        """Update the information displayed by this :py:class:`QDataView`
+        to reflect the current state of the data object.
+        """
         if not self._data:
             self._imageView.setImage(None)
             self._imageView.setMetadata(None)
@@ -418,11 +478,10 @@ class QDataView(QWidget, QObserver, qobservables={
                 for val in value:
                     if isinstance(val, Region):
                         self._imageView.addRegion(val)
-            # self._imageView.setMetadata(self._datasource.data)
 
     @protect
-    def onIndexChanged(self, index: int) -> None:
-        """Slot to react to changes of the batch index.
+    def onIndexChanged(self, _index: int) -> None:
+        """A slot to react to changes of the batch index.
         """
         self.update()
 
@@ -494,8 +553,8 @@ class QMetadataView(QLabel):
             self.setText(text)
 
 
-class QDataSelector(QWidget, QObserver, qattributes={Toolbox: True},
-                    qobservables={Datasource: {'data_changed'}}):
+class QDataSelector(QWidget, QObserver, qattributes={
+        Toolbox: False, Datafetcher: False}):
     """A widget for selecting and viewing data items. This is essentially
     a combination of a :py:class:`QDataView` and a
     :py:class:`QDatasourceNavigator`.
@@ -509,19 +568,24 @@ class QDataSelector(QWidget, QObserver, qattributes={Toolbox: True},
     (if any) will navigate the current datasource of the toolbox.
     """
 
-    def __init__(self, toolbox: Toolbox = None, **kwargs) -> None:
+    def __init__(self, toolbox: Toolbox = None,
+                 datafetcher: Datafetcher = None,
+                 **kwargs) -> None:
         super().__init__()
         self._layoutScheme = 2
         self._initUI()
         self._layoutUI()
         self.setToolbox(toolbox)
+        self.setDatafetcher(datafetcher)
 
     def _initUI(self) -> None:
         self._dataView = QDataView()
         self.addAttributePropagation(Toolbox, self._dataView)
+        self.addAttributePropagation(Datafetcher, self._dataView)
 
         self._datasourceNavigator = QDatasourceNavigator()
         self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+        self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
 
         self._button = QPushButton("Change Layout")
         self._button.clicked.connect(self._onButtonClicked)
@@ -563,7 +627,7 @@ class QDataSelector(QWidget, QObserver, qattributes={Toolbox: True},
         self.update()
 
     @protect
-    def _onButtonClicked(self, checked: bool) -> None:
+    def _onButtonClicked(self, _checked: bool) -> None:
         if self._layoutScheme == 1:
             self._layoutScheme = 2
         elif self._layoutScheme == 2:
@@ -582,9 +646,8 @@ class QDataSelector(QWidget, QObserver, qattributes={Toolbox: True},
         """
         return self._datasourceNavigator
 
-    def showNavigator(self, datasource: Datasource = None) -> None:
-        """Show the :py:class:`QDatasourceNavigator` allowing to
-        select :py:class:`Data` objects from a :py:class:`Datasource`.
+    def showNavigator(self) -> None:
+        """Show the :py:class:`QDatasourceNavigator`.
         """
         self._datasourceNavigator.show()
 
@@ -605,7 +668,4 @@ class QDataSelector(QWidget, QObserver, qattributes={Toolbox: True},
             The new datasource to navigate. If None, the datasource
             navigator will be disabled.
         """
-        if self._toolbox is None:
-            self._datasourceNavigator.setDatasource(datasource)
-        else:
-            self._toolbox.setDatasource(datasource)
+        self._datasourceNavigator.setDatasource(datasource)

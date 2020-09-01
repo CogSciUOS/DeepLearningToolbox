@@ -2,12 +2,14 @@
 
 """
 # standard imports
+import time
 import logging
+import threading
 
 # toolbox imports
 from base import busy, BusyObservable
 from .data import Data
-from .datasource import Datasource
+from .datasource import Datasource, Loop
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -27,12 +29,36 @@ class Datafetcher(BusyObservable, Datasource.Observer,
     data may be used at other places and hence should not be changed.
     If that party is interested in up to date data, it should become
     an observer of this :py:class:`Datafetcher`.
+
+    The :py:class:`Datafetcher` class provides a loop logic.
+
+    Attributes
+    ----------
+    _loop_stop_event: threading.Event
+        An Event signaling that the loop should stop.
+        If not set, this means that the loop is currently running,
+        if set, this means that the loop is currently not running (or at
+        least supposed to stop running soon).
+    _loop_interval: float
+        The time in (fractions of a second) between two successive
+        fetches when running the loop.
     """
 
-    def __init__(self, datasource: Datasource = None, **kwargs) -> None:
+    def __init__(self, datasource: Datasource = None,
+                 loop_interval: float = 0.2, **kwargs) -> None:
         super().__init__(**kwargs)
         self._data = None
         self._datasource = datasource
+
+        #
+        # Loop specific variables
+        #
+        self._loop_interval = loop_interval
+
+        # An event manages a flag that can be set to true with the set()
+        # method and reset to false with the clear() method.
+        self._loop_stop_event = threading.Event()
+        self._loop_stop_event.set()
 
     @property
     def datasource(self) -> Datasource:
@@ -46,6 +72,10 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         if datasource is self._datasource:
             return  # nothing has changed
+
+        if self.looping:
+            self.looping = False
+
         if self._datasource is not None:
             self.unobserve(self._datasource)
         self._datasource = datasource
@@ -53,8 +83,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
             interests = Datasource.Change('busy_changed', 'state_changed')
             self.observe(datasource, interests)
         self._data = None
-        self.debug()
-        self.change('data_changed', 'datasource_changed', debug=True)
+        self.change('data_changed', 'datasource_changed')
         if self.ready:
             self.fetch()
 
@@ -95,13 +124,11 @@ class Datafetcher(BusyObservable, Datasource.Observer,
             property.
         """
         if not self.ready:
-            raise RuntimeError("No Datafetcher is not ready.")
+            raise RuntimeError("Datafetcher is not ready.")
 
         with self.failure_manager():
             LOG.info("Datasouce.fetch(%s)", kwargs)
-            print(f"fetching: {kwargs}")
             self._data = self._datasource.get_data(**kwargs)
-            print(f"fetched: {self._data}")
             self.change('data_changed')
 
     def unfetch(self):
@@ -117,10 +144,109 @@ class Datafetcher(BusyObservable, Datasource.Observer,
                            change: Datasource.Change) -> None:
         """React to a change of the observed :py:class:`Datasource`.
         """
-        # FIXME[hack]
+        # changing state and business of the datasource also changes
+        # our readiness - we will inform our observers
         self.change('state_changed')
+
+        # If the datasource became prepared and we have no data yet,
+        # we will start fetching
+        if change.state_changed:
+            if self.data is None and self.ready:
+                self.fetch()
+            elif self.data is not None and not self._datasource.prepared:
+                self.unfetch()
 
     @property
     def ready(self) -> bool:
+        """A flag indicating if the datafetcher is ready for use.
+        """
         return (self._datasource is not None and
                 self._datasource.prepared and not self._datasource.busy)
+
+    #
+    # Loop
+    #
+
+    @property
+    def loopable(self) -> bool:
+        """Check if the datafetcher can run a loop. This is true,
+        if it currently is running a loop or it is ready and the
+        underlying datasource allows for loops.
+        """
+        return (self.looping or
+                (self.ready and isinstance(self._datasource, Loop)))
+
+    @property
+    def looping(self) -> bool:
+        """Check if this datasource is currently looping.
+        """
+        return not self._loop_stop_event.is_set()
+
+    @looping.setter
+    def looping(self, looping: bool) -> None:
+        """Set the looping state, that is start or stop a loop.
+        """
+        self.loop(looping)
+
+    def loop(self, looping: bool = None, interval: float = 0.5):
+        """Start or stop looping through the Datasource.
+        This will fetch one data point after another.
+        This is mainly intended to display live input like
+        movies or webcam, but it can also be used for other Datasources.
+        """
+        if looping is not None and (looping == self.looping):
+            return
+
+        if self.looping:
+            LOG.info("Stopping datasource loop")
+            self.stop_loop()
+        else:
+            LOG.info("Starting datasource loop")
+            if interval is not None:
+                self._loop_interval = interval
+            self.start_loop()
+            self.run_loop()
+
+    def start_loop(self):
+        """Start an asynchronous loop cycle. This method will return
+        immediately, running the loop cycle in a background thread.
+        """
+        # FIXME[todo]: does it really?
+        if self._loop_stop_event.is_set():
+            self._loop_stop_event.clear()
+
+    def stop_loop(self):
+        """Stop a currently running loop.
+        """
+        if not self._loop_stop_event.is_set():
+            self._loop_stop_event.set()
+
+    @busy("looping")
+    def run_loop(self):
+        """
+        This method is intended to be invoked in its own Thread.
+        """
+        LOG.info(f"Loop[{self}]: start loop")
+        self.change('state_changed')
+        self._run_loop()
+        self.change('state_changed')
+        LOG.info(f"Loop[{self}]: end loop")
+
+    def _run_loop(self):
+        """Actual implementation of the loop. This method schould
+        be overwritten by subclasses for adaptation.
+        """
+
+        while not self._loop_stop_event.is_set():
+            # Fetch a data item
+            last_time = time.time()
+            LOG.debug(f"Loop: {self._loop_stop_event.is_set()} "
+                      f"at {last_time:.4f}")
+            self.fetch()
+
+            # Now wait before fetching the next input
+            sleep_time = last_time + self._loop_interval - time.time()
+            if sleep_time > 0:
+                self._loop_stop_event.wait(timeout=sleep_time)
+            else:
+                LOG.debug(f"Loop: late for {-sleep_time:.4f}s")
