@@ -43,8 +43,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
 
     Attributes
     ----------
+    _data: Data
+        The data object from which the image is taken (may be `None`)
     _image: QImage
-        The image to display
+        The image displayed
     _overlay: QImage
         Overlay for displaying on top of the image
     _show_raw: bool
@@ -111,6 +113,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         self._raw: np.ndarray = None
         self._show_raw = False
 
+        self._data = None
         self._image = None
         self._marks = None
         self._receptiveField = None
@@ -208,11 +211,13 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
             self._showMetadata = flag
             self.update()
 
-    def setData(self, data: Data, attribute='data') -> None:
+    def setData(self, data: Data, attribute='data', index: int=0) -> None:
         """Set the data to be displayed by this :py:class:`QImageView`.
         """
-        LOG.debug("QImageView.setData(%s)",
-                  data is not None, data is not self._data)
+        LOG.debug("QImageView.setData(%s, attribute='%s', index=%d): "
+                  "new=%s, none=%s", data, attribute, index,
+                  data is not self._data, data is None)
+        data = data[index] if data is not None and data.is_batch else data
         self._data = data
         self.setImage(None if data is None else getattr(data, attribute))
 

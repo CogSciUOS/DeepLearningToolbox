@@ -4,7 +4,6 @@
 # standard imports
 import time
 import logging
-import threading
 
 # toolbox imports
 from base import busy, BusyObservable
@@ -17,8 +16,8 @@ LOG = logging.getLogger(__name__)
 
 class Datafetcher(BusyObservable, Datasource.Observer,
                   method='datafetcher_changed',
-                  changes=['state_changed', 'datasource_changed',
-                           'data_changed']):
+                  changes=['state_changed', 'data_changed',
+                           'datasource_changed', 'prepared_changed']):
     """A :py:class:`Datafetcher` asynchronously fetches a
     :py:class:`Data` object from a :py:class:`Datasource` and
     stores it as local attribute.
@@ -31,6 +30,24 @@ class Datafetcher(BusyObservable, Datasource.Observer,
     an observer of this :py:class:`Datafetcher`.
 
     The :py:class:`Datafetcher` class provides a loop logic.
+
+    Notifications
+    -------------
+    The :py:class:`Datafetcher` will send four types of notifications:
+    state_changed:
+        The readiness of the fetcher have changed.
+    data_changed:
+        The data has change, usually meaning that new data have
+        been fetched and are now available in the :py:attr:`data`
+        property.
+    datasource_changed:
+        The underlying datasource was exchanged. The current
+        datasource can be accessed through the :py:attr:`datasource`
+        property.
+    prepared_changed:
+        The preparation of the underlying datasource has changed.
+        This merely propagates the corresponding notification from
+        the underlying datasource.
 
     Attributes
     ----------
@@ -137,14 +154,14 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         # changing state and business of the datasource also changes
         # our readiness - we will inform our observers
-        self.change('state_changed')
+        self.change('state_changed', 'prepared_changed')
 
         # If the datasource became prepared and we have no data yet,
         # we will start fetching
         if change.state_changed:
             if self.data is None and self.ready:
                 self.fetch()
-            elif self.data is not None and not self._datasource.prepared:
+            elif self.data is not None and not datasource.prepared:
                 self.unfetch()
 
     @property
@@ -158,15 +175,15 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
     @property
     def snapshotable(self) -> bool:
-        """A flag indicating if the datafetcher is ready for taking
-        a snapshot..
+        """A flag indicating if the datafetcher can take
+        a snapshot.
         """
         return isinstance(self._datasource, Snapshot)
 
     @property
     def randomable(self) -> bool:
-        """A flag indicating if the datafetcher is ready for taking
-        a snapshot..
+        """A flag indicating if the datafetcher can fetch a random
+        data object.
         """
         return isinstance(self._datasource, Random)
 
@@ -222,7 +239,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         interval = 1. / frames_per_second
         start_time = time.time()
-        LOG.info(f"Loop: start loop")
+        LOG.info("Loop: start loop")
         self.change('state_changed')
         while self._datasource.looping:
             # Fetch a data item
@@ -236,9 +253,9 @@ class Datafetcher(BusyObservable, Datasource.Observer,
             if sleep_time > 0:
                 self._datasource.loop_stop_event.wait(timeout=sleep_time)
             else:
-                LOG.debug(f"Loop: late for %.4fs", -sleep_time)
+                LOG.debug("Loop: late for %.4fs", -sleep_time)
         self.change('state_changed')
-        LOG.info(f"Loop: end loop")
+        LOG.info("Loop: end loop")
 
     #
     # Public interface (convenience functions)
@@ -280,6 +297,8 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         self._assert_indexable()
         current_index = self.index
+        if current_index == len(self) and not cycle:
+            raise ValueError("Cannot fetch after the last data object.")
         next_index = (current_index + 1) if current_index < len(self) else 0
         self.fetch(index=next_index, **kwargs)
 
@@ -289,6 +308,8 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         self._assert_indexable()
         current_index = self.index
+        if current_index == 0 and not cycle:
+            raise ValueError("Cannot fetch before the first data object.")
         next_index = (current_index - 1) if current_index > 0 else len(self)
         self.fetch(index=next_index, **kwargs)
 

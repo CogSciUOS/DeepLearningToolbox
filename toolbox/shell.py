@@ -196,6 +196,18 @@ class ToolboxShell(Cmd):
         print("Known subclasses of Datasource:")
         for key in Datasource.classes():
             print(f" - {key}")
+        print("Tools:")
+        for key in Tool.register_keys():
+            print(f" - {key}")
+        print("Known subclasses of Tool:")
+        for key in Tool.classes():
+            print(f" - {key}")
+        print("Tools in the Toolbox:")
+        if self._toolbox is None:
+            print(f" - [No Toolbox]")
+        else:
+            for tool in self._toolbox.tools:
+                print(f" - {tool.key}")
 
     def do_info(self, inp):
         """Display information on the current Toolbox.

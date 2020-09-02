@@ -21,7 +21,7 @@ class Helen(DataDirectory, Imagesource):
     # pylint: disable=too-many-ancestors
     """A face landmarking dataset consisting of 2330 higher resolution
     face images, annotated with 194 points facial landmarks (one face
-    per image).
+    per image), but no bounding box for the face.
 
     http://www.ifp.illinois.edu/~vuongle2/helen/
 
@@ -29,7 +29,7 @@ class Helen(DataDirectory, Imagesource):
     files, distributed over the directories helen_1 to helen_5 (or
     alternatively in train_1 to train_4 and test). Landmark annotations
     for each image are in a separate file in the directory `annotation`.
-    Each file contains a reference to the image file hand coordinates
+    Each file contains a reference to the image file and coordinates
     of the 194 facial landmark points.
 
     Attributes

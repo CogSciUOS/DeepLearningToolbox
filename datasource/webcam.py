@@ -135,7 +135,7 @@ class DataWebcam(Imagesource, Loop, Snapshot):
         """Stop a currently running loop.
         """
         super().stop_loop()
-        if sys.platform == 'linux':
+        if sys.platform == 'linux' and self._loop_thread is not None:
             self._loop_thread.join()
             self._loop_thread = None
             LOG.info("Webcam: loop thread joined.")

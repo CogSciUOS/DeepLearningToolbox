@@ -2,6 +2,7 @@
 """
 
 # standard imports
+from typing import Any
 import os
 import sys
 import time
@@ -9,7 +10,7 @@ import importlib
 import logging
 
 # toolbox imports
-from base import Preparable, MetaRegister, busy
+from base import Preparable, Failable, MetaRegister, busy
 from datasource import Data
 
 # logging
@@ -18,7 +19,7 @@ LOG = logging.getLogger(__name__)
 
 # FIXME[todo]: move Resource to some other package (e.g. base) and
 # merge with other Resource classes ...
-class Resource(Preparable):
+class Resource(Preparable, Failable):
     """A resource may have some requirements to be used.
     It may provide methods to install such requirements.
     """
@@ -74,7 +75,7 @@ class Resource(Preparable):
         # may require the 'cv2' module to be loaded in order to construct
         # the full path to that file.
 
-        for name, requirement in self._requirements.items():
+        for requirement in self._requirements.values():
             if requirement[0] == 'module' and requirement[1] not in globals():
                 globals()[requirement[1]] = \
                     importlib.import_module(requirement[1])
@@ -108,7 +109,8 @@ class Resource(Preparable):
         # and which (sub)classes should implement this method.
         """Actual implementation of the installation procedure.
         """
-        pass
+        # to be implemented by subclasses
+
         # raise NotImplementedError("Installation of resources for '" +
         #                           type(self).__name__ +
         #                           "' is not implemented (yet).")
@@ -129,8 +131,55 @@ class Tool(Resource, metaclass=MetaRegister):
         """
         super()._prepare(**kwargs)
 
+    def add_data_attribute(self, data: Data, name: str,
+                           batch: bool = True) -> None:
+        """Add a tool specific attribute to a data object.
+        """
+        data.add_attribute(self.key + '_' + name, batch=batch)
+
+    def set_data_attribute(self, data: Data, name: str, value: Any,
+                           index: int = None) -> None:
+        """Set a tool specific attribute in a data object.
+        """
+        setattr(data if index is None else data[index],
+                self.key + '_' + name, value)
+
+    def get_data_attribute(self, data: Data, name: str, default: Any = None,
+                           index: int = None) -> Any:
+        """Get a tool specific attribute from a data object.
+        """
+        value = getattr(data if index is None else data[index],
+                        self.key + '_' + name, None)
+        return default if value is None else value
+
 
 class Processor(Tool):
+    # pylint: disable=too-many-ancestors
+    """A processor can be used to process data with a :py:class:`Tool`.
+    The processor will hold a data object to which the tool is
+    applied. The results are stored as new attributes of that data
+    object.
+
+    Processing can be done asynchronously. The processor is observable
+    and will notify observers on the progress. All processors support
+    the following notifications:
+
+    data_changed:
+        The data for processing was changed. The underlying tool
+        has started processing the data, but it may not have finished
+        yet. However, the :py:attr:`data` property will already
+        provide the new :py:class:`Data` object.
+
+    detection_finished:
+        The detection has finished. The data object will now contain
+        the results.
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._data = None
+        self._next_data = None
 
     def process(self, data: Data) -> None:
         """Run a data processing loop. This will set the detector
@@ -170,12 +219,51 @@ class Processor(Tool):
         while self._next_data is not None:
 
             data = self._next_data
-            self._next_data = None
-            self._process_data(data)
 
-    def _process_data(self, data: Data) -> None:
+            # FIXME[todo/hack]: the following deals data batches
+            # currently we simply flatten the batch, taking the first item.
+            # The correct approach would be to really process
+            # the whole batch
+            # FIXME[bug]: and it still breaks if processing adds
+            # attributes to the batch element ... so currentyl don't use
+            # with batches
+            data = data[0] if data.is_batch else data
+
+            self._next_data = None
+            self._update_data(data)
+            with self.failure_manager(catch=True):
+                self._process_data(data)
+                self.change(detection_finished=True)
+    # FIXME[bug]: In case of an error, we may also cause some Qt error here:
+    #   QObject::connect: Cannot queue arguments of type 'QTextBlock'
+    #   (Make sure 'QTextBlock' is registered using qRegisterMetaType().)
+    #   QObject::connect: Cannot queue arguments of type 'QTextCursor'
+    #   (Make sure 'QTextCursor' is registered using qRegisterMetaType().)
+    # This happens for example when the face panel is shown and a too
+    # small image (244x244x3) is causing an error in the 'haar' detector.
+    # The source of this messages is not clear to me yet (I have also
+    # seen it at other locations ...)
+
+    def _process_data(self, _data: Data) -> None:
+        """Adapt the data.
+        To be implemented by subclasses. Subclasses may augment
+        the given data object with the result of their processing.
+        """
+        # to be implemented by subclasses
+
+    def _update_data(self, data: Data) -> None:
         """Adapt the data.
         To be implemented by subclasses. Subclasses may augment
         the given data object.
         """
-        self._data = data 
+        self._data = data
+        self.change(data_changed=True)
+
+    @property
+    def data(self):
+        """The :py:class:`Data` structure used by the processor.
+        This data will contain results in specific attributes,
+        depending on the tool used and its configuration.
+        The data also includes the `duration` (in seconds).
+        """
+        return self._data

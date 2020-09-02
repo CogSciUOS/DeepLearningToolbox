@@ -28,6 +28,7 @@ from dltb.base.image import Image, Imagelike
 from ..utils import QObserver, QBusyWidget, protect
 from ..widgets.image import QImageView
 from ..widgets.data import QDataSelector
+from ..widgets.tools import QToolSelector
 from .panel import Panel
 
 # logging
@@ -96,6 +97,8 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         self._faceDetector = detector
         self.setTitle("None" if self._faceDetector is None else
                       self._faceDetector.__class__.__name__)
+        if detector is not None:
+            detector.prepare()
 
     def detector_changed(self, detector: FaceDetector,
                          change: FaceDetector.Change) -> None:
@@ -191,7 +194,6 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
     ----------
     _toolbox: Toolbox = None
 
-    _detectors: list = None
     _detectorViews: list = None
     _dataView: QDataView = None
 
@@ -215,26 +217,6 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
 
         name = 'shape_predictor_5_face_landmarks.dat'
         name = 'shape_predictor_68_face_landmarks.dat'  # FIXME[hack]
-
-        self._detectors = []
-        self._detectorViews = []
-        for name in ('haar',):  # 'mtcnn', 'ssd', 'hog', 'cnn'
-            # FIXME[todo]: 'cnn' runs really slow on CPU and
-            # blocks the GUI! - we may think of doing
-            # real multiprocessing!
-            # https://stackoverflow.com/questions/7542957/is-python-capable-of-running-on-multiple-cores
-            # https://stackoverflow.com/questions/47368904/control-python-code-to-run-on-different-core
-            # https://docs.python.org/3/library/multiprocessing.html
-            # https://stackoverflow.com/questions/10721915/shared-memory-objects-in-multiprocessing
-            # detector = FaceDetector[name] # .create(name, prepare=False)
-            LOG.info("FacePanel: Initializing detector '%s'", name)
-            detector = FaceDetector.register_initialize_key(
-                name)  # FIXME[todo], busy_async=False)
-            if toolbox is not None:
-                detector.runner = toolbox.runner  # FIXME[hack]
-            LOG.info("FacePanel: Preparing detector '%s'", name)
-            detector.prepare(busy_async=False)
-            self._detectors.append(detector)
 
         self._initUI()
         self._layoutUI()
@@ -269,9 +251,13 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         self._inputCounter = QLabel("0")
         self._processCounter = QLabel("0")
 
-        for detector in self._detectors:
-            LOG.info("FacePanel._initUI(): add detector %s", detector)
-            self._detectorViews.append(QDetectorWidget(detector=detector))
+        self._toolSelector = QToolSelector()
+        self.addAttributePropagation(Toolbox, self._toolSelector)
+
+        self._detectorViews = []
+        for detector in range(2):
+            LOG.info("FacePanel._initUI(): add detector view %s", detector)
+            self._detectorViews.append(QDetectorWidget())
 
     def _layoutUI(self):
         """Initialize the user interface of this :py:class:`FacePanel`.
@@ -300,6 +286,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         row.addWidget(self._processCounter)
         row.addWidget(QLabel("/"))
         row.addWidget(self._inputCounter)
+        row.addWidget(self._toolSelector)
         row.addStretch()
         layout2.addLayout(row)
         layout2.addStretch(1)
@@ -351,6 +338,17 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         """Set a new Toolbox.
         We are only interested in changes of the input data.
         """
+
+        if toolbox is not None:
+            print("FacePanel: new toolbox contains the following detectors:")
+            detector = None
+            for key in 'haar', 'mtcnn', 'ssd', 'hog', 'cnn':
+                print(f" - {key}: {toolbox.contains_tool(key)}")
+                if toolbox.contains_tool(key):
+                    detector = toolbox.get_tool(key)
+            if detector is not None:
+                self._detectorViews[0].setFaceDetector(detector)
+
         self._dataSelector.setToolbox(toolbox)
         # self._dataView.setToolbox(toolbox)
         self.setData(toolbox.input_data if toolbox is not None else None)

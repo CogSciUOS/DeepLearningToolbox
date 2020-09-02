@@ -64,7 +64,8 @@ class Detector(Processor, method='detector_changed',
         if not data:
             return None
 
-        detector_in = getattr(data, self.key + '_in', data.data)
+        # obtain the (preprocessed) input data
+        detector_in = self.get_data_attribute(data, 'in', default=data.data)
 
         try:
             start = time.time()
@@ -95,37 +96,22 @@ class Detector(Processor, method='detector_changed',
     # Processor
     #
 
-    def _process_data(self, next_data):
+    def _process_data(self, data) -> None:
         """Process the given data. This will run the detector on
         the data and add the detection results as new attribute
         'detections'.
         """
-        detector_data = Data(data=next_data.data)
-        detector_data.add_attribute('detections', batch=True)
-        next_data.add_attribute(self.key, self._data)
-        self._data = detector_data
-        self.change(data_changed=True)
         LOG.info("processing loop <%s> passes <%s> to detector",
-                 self, self._data)
-        detections = self.detect(self._data)
-        self._data.detections = detections
-        self.change(detection_finished=True)
-
-    @property
-    def data(self):
-        """The :py:class:`Data` structure used by the detector.
-        This data will contain the detections in the attribute
-        `detections`. The data also includes the `duration`
-        (in seconds).
-        """
-        return self._data
+                 self, data)
+        self.add_data_attribute(data, 'detections')
+        self.set_data_attribute(data, 'detections', self.detect(data))
 
     @property
     def detections(self) -> Metadata:
         """A metadata holding the results of the last invocation
         of the detector.
         """
-        return getattr(self._data, 'detections', None)
+        return self.get_data_attribute(self._data, 'detections')
 
 
 class ImageDetector(Detector):
@@ -139,6 +125,12 @@ class ImageDetector(Detector):
         if not data:
             return None
 
+        # FIXME[todo/hack]: the following will data batches
+        # currently we simply flatten the batch, taking the first item.
+        # The correct approach would be to really do detection on
+        # the whole batch
+        data = data[0] if data.is_batch else data
+        
         image = data.data
 
         resize_ratio = image.shape[1]/400.0

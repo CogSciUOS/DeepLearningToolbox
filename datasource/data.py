@@ -26,7 +26,7 @@ class Data:
     TYPE_IMAGE = 1
     TYPE_FACE = 2 | TYPE_IMAGE
 
-    def __init__(self, datasource=None, data=None, batch: int = None) -> None:
+    def __init__(self, data=None, datasource=None, batch: int = None) -> None:
         super().__setattr__('_attributes', {})
         if batch is not None:
             super().__setattr__('_batch', batch)
@@ -183,6 +183,11 @@ class Data:
                 else:
                     setattr(self, name, None)
 
+    def debug(self) -> None:
+        print(f"Data object ({id(self)})")
+        for name, is_batch in self._attributes.items():
+            print(f" - {name}[{is_batch}]: {type(getattr(self, name, None))}")
+
 
 class BatchDataItem:
     """A single data item in a batch of data.
@@ -221,6 +226,34 @@ class BatchDataItem:
         else:
             setattr(self._data, attr, val)
 
+    def add_attribute(self, name: str, value: Any = None, batch: bool = True,
+                      initialize: bool = True) -> None:
+        """Add an attribute to this :py:class:`Data`. Only attributes
+        added by this method can be set.
+
+        Parameters
+        ----------
+        name: str
+            Name of the new attribute.
+        initialize:
+            A flag indicating if the attribute should be initialized.
+        value: Any (optional)
+            Value for the new attribute. If not None, this implies
+            initialize=True.
+        batch: bool
+            A flag indicating if the attribute is a batch attribute
+            (`True` = different value for each batch item) or a global
+            attribute (`False` = each batch item has the same value).
+        """
+        if not batch:
+            raise ValueError(f"Cannot add non-batch attribute '{name}' "
+                             "to a BatchDataItem.")
+        if not initialize:
+            raise ValueError("You have to initialize the whole batch when "
+                             "adding the the batch attribute '{name}' "
+                             "via a BatchDataItem.")
+        self._data.add_attribute(name, value=value,
+                                 batch=True, initialize=True)
 
 class ClassScheme(metaclass=MetaRegister):
     """A :py:class:`ClassScheme` represents a classification scheme.  This

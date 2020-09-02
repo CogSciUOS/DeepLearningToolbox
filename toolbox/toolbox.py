@@ -44,14 +44,14 @@ Concepts:
 #
 
 # standard imports
+from typing import Iterable, Iterator, Union
 import os
 import sys
 import signal
 import threading
-from typing import Iterable, Union
-from argparse import ArgumentParser
 import importlib.util
 import logging
+from argparse import ArgumentParser
 
 # third party imports
 import numpy as np
@@ -60,6 +60,8 @@ import numpy as np
 import util
 from util import addons
 from base import BusyObservable, Runner, Controller as BaseController
+from dltb.util.image import imread
+from dltb.base import run
 
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
@@ -492,28 +494,40 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
     @property
     def input_data(self) -> Data:
+        """The current input data of this :py:class:`Toolbox`.
+        """
         return self._input_data
 
     def set_input(self, data: Data):
+        """Set a new input :py:data:`Data` object for this
+        :py:class:`Toolbox`. Observers will be notified.
+        """
         self._input_data = data
         self.change('input_changed')
 
     # FIXME[todo]: we should set input_data busy
-    #@run
-    def set_input_from_file(self, filename: str, label=None,
-                            description: str=None):
+    @run
+    def set_input_from_file(self, filename: str, label = None,
+                            description: str = None):
+        """Read data from a file and set a new input
+        :py:data:`Data` object for this :py:class:`Toolbox`.
+        Observers will be notified.
+
+        Currently only image files are supported.
+        """
         # FIXME[todo]: we should allow for other data than images
-        image = util.imread(filename)
-        data = Data()
-        data.data = image
-        data.image = True
-        data.shape = image.shape
-        data.description = f"Image from file '{filename}'"
+        image = imread(filename)
+        data = Data(data=image)
+        data.type = Data.TYPE_IMAGE
+        data.add_attribute('shape', image.shape)
+        data.add_attribute('filename', filename)
+        data.add_attribute('description',
+                           description or "Image loaded from file")
         self.set_input(data)
 
-    ###########################################################################
-    ###                               Tools                                 ###
-    ###########################################################################
+    #
+    # Tools
+    #
 
     def _initialize_tools(self) -> None:
         """Initialize the tools of this :py:class:`Toolbox`.
@@ -545,15 +559,15 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         """
 
         if isinstance(tool, str):
-            name = tool
-            if name in self._tools:
-                return self._tools[name] # tool is already in this Toolbox
+            key = tool
+            if key in self._tools:
+                return self._tools[key] # tool is already in this Toolbox
                 # FIXME[concept]: in some situations it may be desirable
                 # to have multiple instances of a tool in the Toolbox,
                 # e.g. multiple activation tools if we want to compare
                 # activations of multiple networks ...
             
-            if name == 'activation':
+            if key == 'activation':
                 # FIXME[hack] ...
                 from tools.activation import Engine as ActivationEngine
                 tool = ActivationEngine(toolbox=self)
@@ -562,7 +576,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                 #    self._toolbox_controller.autoencoder_controller  # FIXME[hack]
                 #tool.set_network_controller(network_controller)
 
-            elif name == 'lucid':
+            elif key == 'lucid':
                 if addons.use('lucid') and False:  # FIXME[todo]
                     from tools.lucid import Engine as LucidEngine
 
@@ -574,14 +588,14 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                         self._gui.setLucidEngine(lucid_engine)  # FIXME[hack]
                     tool = lucid_engine
             else:
-                raise ValueError(f"Unknown tool: '{name}'")
+                raise ValueError(f"Unknown tool: '{key}'")
         else:
-            name = tool.name
+            key = tool.key
         if isinstance(tool, str):
             # print(f"Toolbox: FIXME[error]: Tool '{tool}' is a string!")
             pass
         elif tool is not None:
-            self._tools[name] = tool
+            self._tools[key] = tool
             tool.runner = self._runner
             self.change('tools_changed')
         return tool
@@ -601,16 +615,16 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             True, if the tool is in this :py:class:`Toolbox`,
             False otherwise.
         """
-        name = tool if isinstance(tool, str) else tool.name
-        return self._tools is not None and name in self._tools
+        key = tool if isinstance(tool, str) else tool.key
+        return self._tools is not None and key in self._tools
 
-    def get_tool(self, name: str):
+    def get_tool(self, key: str):
         """Get a tool with the given name from this :py:class:`Toolbox`.
         tool.
 
         Parameters
         ----------
-        name: str
+        key: str
             The name of the tool to fetch.
 
         Returns
@@ -619,8 +633,14 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             The tool or None, if no tool with this name is contained in
             this :py:class:`Toolbox`.
         """
-        return self._tools[name] if self.contains_tool(name) else None
+        return self._tools[key] if self.contains_tool(key) else None
 
+    @property
+    def tools(self) -> Iterator[Tool]:
+        """Iterate over the tools registered in this :py:class:`Toolbox`.
+        """
+        return self._tools.values()
+        
     #
     # Command line options
     #
@@ -758,6 +778,26 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         tools = []
         tools.append('activation')
         tools.append('lucid')
+        if args is not None:
+            if args.face:
+                for key in ('widerface', '5celeb'):
+                    self.add_datasource(key)
+                for key in ('haar',):  # 'mtcnn', 'ssd', 'hog', 'cnn'
+                    # FIXME[todo]: 'cnn' runs really slow on CPU and
+                    # blocks the GUI! - we may think of doing
+                    # real multiprocessing!
+                    # https://stackoverflow.com/questions/7542957/is-python-capable-of-running-on-multiple-cores
+                    # https://stackoverflow.com/questions/47368904/control-python-code-to-run-on-different-core
+                    # https://docs.python.org/3/library/multiprocessing.html
+                    # https://stackoverflow.com/questions/10721915/shared-memory-objects-in-multiprocessing
+                    # detector = FaceDetector[key] # .create(name, prepare=False)
+                    LOG.info("Toolbox: Initializing detector '%s'", key)
+                    detector = Tool.register_initialize_key(
+                        key)  # FIXME[todo], busy_async=False)
+                    detector.runner = self.runner  # FIXME[hack]
+                    # LOG.info("Toolbox: Preparing detector '%s'", key)
+                    # detector.prepare(busy_async=False)
+                    self.add_tool(detector)
 
         #
         # Datasources

@@ -271,7 +271,7 @@ class QObserver(QAttribute):
     message passing to Qt's main event loop.
 
     This class provides a convenience method :py:meth:`observe`, which
-    should be used to observer some :py:class:`Observable` (instead
+    should be used to observe some :py:class:`Observable` (instead
     of calling :py:meth:`Observable.add_observer` directly). This will
     set up the required magic.
 
@@ -282,7 +282,7 @@ class QObserver(QAttribute):
     * a property `observable()` providing a reference to the
       observable.
 
-    * a method `setObervable(observable, observer=True)` allowing to
+    * a method `setObervable(observable, observe=True)` allowing to
       set and observe that observable.
 
     * patched versions of :py:meth:`observe` and :py:meth:`unobserve`
@@ -292,8 +292,12 @@ class QObserver(QAttribute):
     Examples
     --------
     >>> class QMyWidget(QWidget, QObserver, qobservables={
-    ...         Toolbox: Toolbox.Change('network_changed'),
-    ...         Network: Network.Change('state_changed')}):
+    ...         Toolbox: {'network_changed'},
+    ...         Network: {'state_changed'}}):
+    ...
+    ...     def __init__(self, toolbox: Toolbox = None, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.setToolbox(toolbox)
     ...
     ...     def toolboxChanged(self, toolbox: Toolbox, change: Toolbox.Change):
     ...         if change.network_changed:
@@ -309,12 +313,16 @@ class QObserver(QAttribute):
         # It would be nicer to find a way to set the correct setter
         # right from the start ...
         setter_name, = cls._qAttributeNameFor(name, 'setter')
+        if cls.__name__ == 'QIndexControls':  # FIXME[debug]
+            print(f" - {name}: {setter_name} - {interests}")
         setter = lambda self, observable, *args, **kwargs: \
             self._qObserverSetAttribute(name, observable, interests,
                                         *args, **kwargs)
         setattr(cls, setter_name, setter)
 
     def __init_subclass__(cls: type, qobservables={}, qattributes={}):
+        if cls.__name__ == 'QIndexControls':  # FIXME[debug] 
+            print(f"FIXME[old]: QObserver[{cls.__name__}] .__init_subclass__({cls}, {qobservables}, {qattributes}): {cls.__mro__}")
         if not qobservables:
             # FIXME[hack]: we can not really detect if observables
             # were registered in superclasses!  FIXME[todo]: but we
@@ -418,11 +426,30 @@ class QObserver(QAttribute):
                   f"'{name}', {type(new_observable)}, {interests}, {args}, "
                   f"{kwargs}")
 
+        # FIXME[debug]: "setter". It seems that this setter is called a
+        #     bit too often, sometimes with identical arguments (button
+        #     interestingly with different interests).
+        # debug_class = 'QIndexControls'
+        # if type(self).__name__ == debug_class:  # FIXME[debug]
+        #     print(f"[setter] 1: _qObserverSetAttribute('{name}', "
+        #           f"{type(new_observable).__name__}[at {id(new_observable)}]): {interests}")
+        #     import traceback
+        #     traceback.print_stack()
+        #     print("-------------------------------------------------")
+
         attribute, = self._qAttributeNameFor(name, 'attribute')
 
         old_observable = getattr(self, attribute, None)
         if new_observable is old_observable:
+            # FIXME[debug]: "setter". see above.
+            # if type(self).__name__ == debug_class:
+            #     print("[setter] 2a: _qObserverSetAttribute: "
+            #           "new observable is old observable")
             return  # nothing to do ...
+
+        # FIXME[debug]: "setter". see above.
+        # if type(self).__name__ == debug_class:
+        #     print(f"[setter] 2b: observe {interests}")
 
         if old_observable is not None:
             self.unobserve(old_observable)
@@ -466,7 +493,7 @@ class QObserver(QAttribute):
                   f"{helper}")
 
     # FIXME[bug]:
-    #   File "/home/ulf/projects/github/DeepLearningToolbox/base/observer.py", line 314, in __del__
+    #   File "base/observer.py", line 314, in __del__
     #      AttributeError: 'QObserverHelper' object has no attribute 'unobserve'
     class QObserverHelper(QObject):
         """A helper class for the :py:class:`QObserver`.

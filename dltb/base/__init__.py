@@ -23,11 +23,16 @@ def get_default_run(run: bool = None) -> bool:
 
 
 def run(function):
+    """A decorator for functions which may be run in a separate
+    `Thread`. The decorator will consult the function
+    `get_default_run` to determin if a new `Thread` should
+    be started.
+    """
 
     def wrapper(self, *args, run: bool = False, **kwargs):
         if get_default_run(run):
-            _executor.submit(function, *args, **kwargs)
+            _executor.submit(function, self, *args, **kwargs)
         else:
-            function(*args, **kwargs)
+            function(self, *args, **kwargs)
 
     return wrapper

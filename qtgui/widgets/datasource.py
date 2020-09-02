@@ -349,9 +349,11 @@ class QSnapshotButton(QPushButton, QDatasourceObserver):
         super().__init__(text, **kwargs)
         self.clicked.connect(self.onClicked)
 
-    def onClicked(self):
+    @protect
+    def onClicked(self, _checked: bool):
         """Create a snapshot as reaction to a button click.
         """
+        # FIXME[bug]: May throw a RuntimeError (when busy)
         self._datafetcher.fetch(snapshot=True)
 
     def update(self) -> None:
@@ -360,7 +362,8 @@ class QSnapshotButton(QPushButton, QDatasourceObserver):
         """
         self.setEnabled(self._datafetcher is not None and
                         self._datafetcher.snapshotable and
-                        self._datafetcher.ready)
+                        self._datafetcher.ready and
+                        not self._datafetcher.looping)
 
 
 class QRandomButton(QPushButton, QDatasourceObserver):
@@ -380,17 +383,19 @@ class QRandomButton(QPushButton, QDatasourceObserver):
         super().__init__(text, **kwargs)
         self.clicked.connect(self.onClicked)
 
-    def onClicked(self):
+    @protect
+    def onClicked(self, _checked: bool):
+        # FIXME[bug]: May throw a RuntimeError (when busy)
         self._datafetcher.fetch(random=True)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        datasource = self._datafetcher and self._datafetcher.datasource
         enabled = (self._datafetcher is not None and
                    self._datafetcher.randomable and
-                   self._datafetcher.ready)
+                   self._datafetcher.ready and
+                   not self._datafetcher.looping)
         self.setEnabled(enabled)
 
 
@@ -413,7 +418,9 @@ class QBatchButton(QPushButton, QDatasourceObserver):
         self._batch_size = 8
         self.clicked.connect(self.onClicked)
 
-    def onClicked(self):
+    @protect
+    def onClicked(self, _checked: bool):
+        # FIXME[bug]: May throw a RuntimeError (when busy)
         if isinstance(self._datafetcher.datasource, Random):
             self._datafetcher.fetch(batch=self._batch_size, random=True)
 
@@ -421,15 +428,16 @@ class QBatchButton(QPushButton, QDatasourceObserver):
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        datasource = self._datafetcher and self._datafetcher.datasource
-        enabled = (isinstance(datasource, Datasource)
-                   and datasource.prepared and
-                   not self._datafetcher.busy)
+        enabled = (self._datafetcher is not None and
+                   self._datafetcher.randomable and
+                   self._datafetcher.ready and
+                   not self._datafetcher.looping)
         self.setEnabled(enabled)
 
 
 class QIndexControls(QBaseIndexControls, QDatasourceObserver, qobservables={
-        Datafetcher: {'state_changed', 'datasource_changed', 'data_changed'}}):
+        Datafetcher: {'state_changed', 'data_changed',
+                      'datasource_changed', 'prepared_changed'}}):
     """A group of Widgets to control an :py:class:`Indexed`
     :py:class:`Datasource`. The controls allow to select elements
     from the datasource based on their index.
@@ -452,36 +460,35 @@ class QIndexControls(QBaseIndexControls, QDatasourceObserver, qobservables={
     @protect
     def onIndexChanged(self, index: int) -> None:
         LOG.info("QIndexControls: index changed=%d", index)
+        # FIXME[bug]: May throw a RuntimeError (when busy)
         self._datafetcher.fetch(index=index)
 
     def datafetcher_changed(self, datafetcher: Datafetcher,
                             info: Datafetcher.Change) -> None:
         LOG.debug("QIndexControls: datafetcher %s changed %s",
                   datafetcher, info)
-        enabled = True
+        enabled = not datafetcher.looping
 
-        # FIXME[bug]: for some reason we do not receive
-        # datasource_changed events here. Probably something wrong
-        # with inheriting qobservers ...
-        # if info.datasource_changed:
-        if info.datasource_changed or info.data_changed:
+        if info.datasource_changed or info.prepared_changed:
             datasource = datafetcher.datasource
-            if isinstance(datasource, Indexed) and datasource.prepared:
+            # we can obtain the length only from a prepared datasource
+            if datafetcher.indexable and datasource.prepared:
                 self.setElements(len(datasource))
             else:
                 self.setElements(-1)
                 enabled = False
-            LOG.debug("QIndexControls: elements=%d", self._elements)
+
         if info.data_changed:
-            datasource = datafetcher.datasource
             data = datafetcher.data
             if datafetcher.indexable and datafetcher.fetched:
                 # The index may have changed
                 index = data[0].index if data.is_batch else data.index
                 self.setIndex(index)
                 LOG.debug("QIndexControls: index=%d", index)
+
         if info.state_changed:
-            enabled = datafetcher.ready
+            enabled = enabled and datafetcher.ready
+
         self.update(enabled)
 
 

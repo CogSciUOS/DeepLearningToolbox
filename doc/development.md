@@ -236,3 +236,139 @@ For some components, their nature is not so clear to me:
 # Initialization and preparation
 
 
+
+
+# Open points:
+
+* integrate batch data: a lot of tools and graphical components do not
+  know how to deal with batch data correctly.
+
+* the states of stateful object should be designed in a clearer way
+  (including notifications that signal the change of state):
+  - busy: the object is currently busy doing some task
+  - prepared: the object was prepared. if False, the object
+    is unprepared and can be prepared by calling prepare()
+  - failed: the object is in a failed state and should not be used.
+    calling clean may reset it into a healthy state
+  - ready: the object is ready and can be used:
+      - if Preparable, the object has to be prepared
+      - if Busy, the object must not be busy
+      - if Failable, the object must not be in the failed state
+
+  Some specific questions:
+  - looping (in Datafetcher): maybe busy + some extra flag?
+  - what is the state of a tool.Processor processing data.
+    it should be busy (as it can not immediately react to new data)
+    but it allows to queue new data (hence it is in some sense ready)
+    maybe some extra state 'processing'? still the underlying tool
+    can be busy, meaning the processor has to wait before it can
+    apply that tool.
+
+* running background tasks: there are currently multiple run/runner/async
+  implementations. My goal would be one or at most two decorators:
+  - run: run a task in the background
+  - busy: mark object as busy, may (but doesn't have to) run in its
+    own thread
+
+  Some quesions have to be considered: may a busy object call other
+  methods protected by @busy? probably yes (example: a looping 
+  datafetch calls the @busy fetch method to obtain the next data).
+  - should we provide names for running background threads?
+
+* subprocessing:
+  for some computations it would be good to run them in parallel,
+  that is in their own thread or even in another process.
+
+
+* lazy import:
+  in packages `__init__.py` files, we should not
+  
+  
+* FIXMES:
+   30    datasource/
+   71    network/
+   66    toolbox/
+   70    tools/
+   36    dltb/
+   55    base/
+   17    util/
+    3    demos/
+    2    gui/  -> move to dltb.toolbox.gui
+    0    dl-toolbox.py
+  271    qtgui/
+   
+  EXPERIMENTAL:
+    1    downloader.py
+         maximize_activation.py
+
+   OLD:
+         controller/
+         model/
+
+# Subpackages of the Deep Learning ToolBox
+
+## base
+
+Abstract datastructures to be used by other classes of the toolbox.
+Should nor rely on/import any other subpackage directly.
+
+## util
+
+Collection of convenience functions, different motivations:
+* simple functional API, for simply accessing the class based API
+  of the Toolbox
+* functions for installing software and data
+
+## datasource
+
+Definition of the abstract `Datasource` class and several
+implementations, not (directly) using third party modules.
+
+## network
+
+Definition of the abstract `Network` class and several
+implementations, using different third party modules.
+
+
+## tools
+
+Definition of the abstract `Tool` class and specialized subclasses
+and several implementations, using different third party modules.
+
+
+## toolbox
+
+The Toolbox makes use of the abstract intefaces defined in
+base, datasource, network, and tools, as well as util.
+
+The central `Toolbox` class provides a hub for requesting data, and
+tools. It also coordinates starting the different possible interfaces.
+
+
+### gui
+
+Abstract definition of a graphical user interface framework as a base
+for real implementations of such a interface.
+
+### shell
+
+A shell allowing to interactively query the toolbox.
+
+### server
+
+A webserver allowing to query the toolbox from a webbrowser.
+
+
+## thirdparty
+
+Implementations of the abstract classes from base using thirdparty
+libraries.
+
+
+## Individual files 
+
+### argparse.py
+
+### config.py
+
+### directories.py

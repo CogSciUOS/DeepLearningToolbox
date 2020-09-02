@@ -5,20 +5,6 @@ interfacing individual components of the Deep Learning ToolBox. It is
 based on the Qt5 library for Python (PyQt5).
 
 
-# Coding standards for the Qt graphical user interface
-
-In the Qt graphical user interface we deviate in some points from the
-[general coding standards of the Deep Learning ToolBox](coding.md)
-to conform with the Qt standards:
-* use camel case instead of snake case for methods and attribute names
-
-# Linting the QtGUI
-
-```sh
-pylint --extension-pkg-whitelist=PyQt5 --method-naming-style=camelCase --attr-naming-style=camelCase --attr-naming-style=camelCase [FILE]...
-```
-
-
 
 # Smooth user experience
 
@@ -46,6 +32,32 @@ backend block other operations and these dependencies should be
 reflected by the graphical user interface.
 
 
+
+# Coding standards for the Qt graphical user interface
+
+In the Qt graphical user interface we deviate in some points from the
+[general coding standards of the Deep Learning ToolBox](coding.md)
+to conform with the Qt standards:
+* use camel case instead of snake case for methods and attribute names
+
+
+## Problematic aspects
+
+### Threading
+
+Qt uses real threads allowing for real parallelism, in contrast to
+Python that just does its own preemptive multitasking.  This speeds
+can make the interface smoother, as calculations can really be done in
+the background, but it puts some extra burden to communication between
+threads.
+
+### Multiple inheritance
+
+It seems not to be possible to do multiple inheritance, inheriting
+from different native Qt classes (but I have not really systematically
+checked this yet).
+
+
 ## Checks
 
 The following list contains some proposals of what to check when
@@ -61,7 +73,18 @@ Another important aspect can be to outsource complex computation into
 a background thread and call `widget.update()` once the computation
 is finished. The class `QThreadedUpdate` and the decorator
 `pyqtThreadedUpdate` support such a design.
-  
+
+
+
+# Linting the QtGUI
+
+As the QtGUI adopts different coding standards than the rest of the
+project, `pylint` has to be invoked with some special arguments:
+
+```sh
+pylint --extension-pkg-whitelist=PyQt5 --method-naming-style=camelCase --attr-naming-style=camelCase --variable-naming-style=camelCase [FILE]...
+```
+
 
 
 

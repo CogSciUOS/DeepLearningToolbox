@@ -353,6 +353,7 @@ class QDataView(QWidget, QObserver, qobservables={
         dataInfo = QVBoxLayout()
         dataInfo.addWidget(self._dataInfo)
         dataInfo.addWidget(self._batchNavigator)
+        self._batchNavigator.hide()
 
         orientation = 'vertical'
         if orientation == 'vertical':

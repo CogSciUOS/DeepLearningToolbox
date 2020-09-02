@@ -190,3 +190,7 @@ class QToolSelector(QRegisterItemComboBox, ToolItemList,
         """
         self.unobserve(item)
         super()._removeItem(item)
+
+    def detector_changed(self, *args, **kwargs) -> None:
+        # FIXME[hack]:
+        print(f"QToolSelector.detector_changed({args}, {kwargs})")
