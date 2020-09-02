@@ -9,7 +9,7 @@ import threading
 # toolbox imports
 from base import busy, BusyObservable
 from .data import Data
-from .datasource import Datasource, Loop
+from .datasource import Datasource, Loop, Snapshot, Random, Indexed
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -34,18 +34,13 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
     Attributes
     ----------
-    _loop_stop_event: threading.Event
-        An Event signaling that the loop should stop.
-        If not set, this means that the loop is currently running,
-        if set, this means that the loop is currently not running (or at
-        least supposed to stop running soon).
-    _loop_interval: float
-        The time in (fractions of a second) between two successive
-        fetches when running the loop.
+    _frames_per_second: float
+        The number of frames to be fetched per second
+        when running the loop.
     """
 
     def __init__(self, datasource: Datasource = None,
-                 loop_interval: float = 0.2, **kwargs) -> None:
+                 frames_per_seccond: float = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._data = None
         self._datasource = datasource
@@ -53,12 +48,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         #
         # Loop specific variables
         #
-        self._loop_interval = loop_interval
-
-        # An event manages a flag that can be set to true with the set()
-        # method and reset to false with the clear() method.
-        self._loop_stop_event = threading.Event()
-        self._loop_stop_event.set()
+        self._frames_per_seccond = frames_per_seccond
 
     @property
     def datasource(self) -> Datasource:
@@ -98,9 +88,6 @@ class Datafetcher(BusyObservable, Datasource.Observer,
     def data(self) -> Data:
         """Get the last data that was fetched from this :py:class:`Datasource`.
         """
-        # if not self.fetched:
-        #    raise RuntimeError("No data has been fetched on Datasource "
-        #                       f"{self.__class__.__name__}")
         return self._data
 
     @busy("fetching")
@@ -127,8 +114,12 @@ class Datafetcher(BusyObservable, Datasource.Observer,
             raise RuntimeError("Datafetcher is not ready.")
 
         with self.failure_manager():
-            LOG.info("Datasouce.fetch(%s)", kwargs)
+            LOG.info("Datafetcher: fetch(%s) from %s",
+                     kwargs, self._datasource)
             self._data = self._datasource.get_data(**kwargs)
+            LOG.info("Datafetcher: fetched %s",
+                     self._data and self._data.data is not None
+                     and (self._data.is_batch or self._data.data.shape))
             self.change('data_changed')
 
     def unfetch(self):
@@ -158,10 +149,26 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
     @property
     def ready(self) -> bool:
-        """A flag indicating if the datafetcher is ready for use.
+        """A flag indicating if the datafetcher is ready for use, meaning
+        that a fetch operation should yield a result.
         """
         return (self._datasource is not None and
-                self._datasource.prepared and not self._datasource.busy)
+                self._datasource.prepared and
+                not self._datasource.busy)
+
+    @property
+    def snapshotable(self) -> bool:
+        """A flag indicating if the datafetcher is ready for taking
+        a snapshot..
+        """
+        return isinstance(self._datasource, Snapshot)
+
+    @property
+    def randomable(self) -> bool:
+        """A flag indicating if the datafetcher is ready for taking
+        a snapshot..
+        """
+        return isinstance(self._datasource, Random)
 
     #
     # Loop
@@ -173,14 +180,13 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         if it currently is running a loop or it is ready and the
         underlying datasource allows for loops.
         """
-        return (self.looping or
-                (self.ready and isinstance(self._datasource, Loop)))
+        return self.looping or isinstance(self._datasource, Loop)
 
     @property
     def looping(self) -> bool:
-        """Check if this datasource is currently looping.
+        """Check if this datafetcher is currently looping.
         """
-        return not self._loop_stop_event.is_set()
+        return isinstance(self._datasource, Loop) and self._datasource.looping
 
     @looping.setter
     def looping(self, looping: bool) -> None:
@@ -188,7 +194,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         self.loop(looping)
 
-    def loop(self, looping: bool = None, interval: float = 0.5):
+    def loop(self, looping: bool = None, frames_per_second: float = None):
         """Start or stop looping through the Datasource.
         This will fetch one data point after another.
         This is mainly intended to display live input like
@@ -199,54 +205,103 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
         if self.looping:
             LOG.info("Stopping datasource loop")
-            self.stop_loop()
+            self._datasource.stop_loop()
         else:
             LOG.info("Starting datasource loop")
-            if interval is not None:
-                self._loop_interval = interval
-            self.start_loop()
-            self.run_loop()
-
-    def start_loop(self):
-        """Start an asynchronous loop cycle. This method will return
-        immediately, running the loop cycle in a background thread.
-        """
-        # FIXME[todo]: does it really?
-        if self._loop_stop_event.is_set():
-            self._loop_stop_event.clear()
-
-    def stop_loop(self):
-        """Stop a currently running loop.
-        """
-        if not self._loop_stop_event.is_set():
-            self._loop_stop_event.set()
+            if frames_per_second is None:
+                frames_per_second = self._frames_per_seccond
+            if frames_per_second is None:
+                frames_per_second = self._datasource.frames_per_second
+            self._datasource.start_loop()
+            self.run_loop(frames_per_second)
 
     @busy("looping")
-    def run_loop(self):
+    def run_loop(self, frames_per_second: float) -> None:
         """
         This method is intended to be invoked in its own Thread.
         """
-        LOG.info(f"Loop[{self}]: start loop")
+        interval = 1. / frames_per_second
+        start_time = time.time()
+        LOG.info(f"Loop: start loop")
         self.change('state_changed')
-        self._run_loop()
-        self.change('state_changed')
-        LOG.info(f"Loop[{self}]: end loop")
-
-    def _run_loop(self):
-        """Actual implementation of the loop. This method schould
-        be overwritten by subclasses for adaptation.
-        """
-
-        while not self._loop_stop_event.is_set():
+        while self._datasource.looping:
             # Fetch a data item
             last_time = time.time()
-            LOG.debug(f"Loop: {self._loop_stop_event.is_set()} "
-                      f"at {last_time:.4f}")
+            LOG.debug("Loop: %s at %.4f",
+                      self._datasource.looping, last_time - start_time)
             self.fetch()
 
             # Now wait before fetching the next input
-            sleep_time = last_time + self._loop_interval - time.time()
+            sleep_time = last_time + interval - time.time()
             if sleep_time > 0:
-                self._loop_stop_event.wait(timeout=sleep_time)
+                self._datasource.loop_stop_event.wait(timeout=sleep_time)
             else:
-                LOG.debug(f"Loop: late for {-sleep_time:.4f}s")
+                LOG.debug(f"Loop: late for %.4fs", -sleep_time)
+        self.change('state_changed')
+        LOG.info(f"Loop: end loop")
+
+    #
+    # Public interface (convenience functions)
+    #
+
+    @property
+    def indexable(self) -> bool:
+        """Check if the datafetcher can be indexed.
+        """
+        return isinstance(self._datasource, Indexed)
+
+    def _assert_indexable(self) -> None:
+        if not self.indexable:
+            raise TypeError("Datafetcher for datasource "
+                            f"{type(self._datasource).__name__} "
+                            "is not indexable.")
+
+    @property
+    def index(self):
+        """The index of the currently fetched data item.
+        """
+        self._assert_indexable()
+        if self._data is None or not hasattr(self._data, 'index'):
+            raise RuntimeError("No index available.")
+        return self._data.index
+
+    def fetch_index(self, index: int, **kwargs) -> None:
+        """This method should be implemented by subclasses that claim
+        to be a py:meth:`Random` datasource.
+        It should perform whatever is necessary to fetch a random
+        element from the dataset.
+        """
+        self._assert_indexable()
+        self.fetch(index=index, **kwargs)
+
+    def fetch_next(self, cycle: bool = True, **kwargs) -> None:
+        """Fetch the next entry. In a :py:class:`Indexed` datasource
+        we can simply increase the index by one.
+        """
+        self._assert_indexable()
+        current_index = self.index
+        next_index = (current_index + 1) if current_index < len(self) else 0
+        self.fetch(index=next_index, **kwargs)
+
+    def fetch_prev(self, cycle: bool = True, **kwargs) -> None:
+        """Fetch the previous entry. In a :py:class:`Indexed` datasource
+        we can simply decrease the index by one.
+        """
+        self._assert_indexable()
+        current_index = self.index
+        next_index = (current_index - 1) if current_index > 0 else len(self)
+        self.fetch(index=next_index, **kwargs)
+
+    def fetch_first(self, **kwargs) -> None:
+        """Fetch the first entry of this :py:class:`Indexed` datasource.
+        This is equivalent to fetching index 0.
+        """
+        self._assert_indexable()
+        self.fetch(index=0, **kwargs)
+
+    def fetch_last(self, **kwargs) -> None:
+        """Fetch the last entry of this :py:class:`Indexed` datasource.
+        This is equivalent to fetching the element with index `len(self)-1`.
+        """
+        self._assert_indexable()
+        self.fetch(index=len(self)-1, **kwargs)

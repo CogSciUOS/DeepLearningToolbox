@@ -352,7 +352,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         We are only interested in changes of the input data.
         """
         self._dataSelector.setToolbox(toolbox)
-        self._dataView.setToolbox(toolbox)
+        # self._dataView.setToolbox(toolbox)
         self.setData(toolbox.input_data if toolbox is not None else None)
 
     def toolbox_changed(self, toolbox: Toolbox,

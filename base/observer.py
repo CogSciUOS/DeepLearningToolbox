@@ -465,6 +465,7 @@ class Observable(object):
                 try:
                     if debug:
                         print(f"notifyObservers: {type(self).__name__} "
+                              f"at <{id(self)}> "
                               f"with {len(self._observers)} observers, "
                               f"changes={changes}")
                     for observer, (notify, interests) \
@@ -475,7 +476,7 @@ class Observable(object):
                             if observer_type == 'QObserverHelper':
                                 observer_type = \
                                     type(observer._observer).__name__
-                            print(f"notifyObservers: {observer_type}"
+                            print(f"notifyObservers: {observer_type} with "
                                   f"interests={interests}, "
                                   f"relevant_changes={relevant_changes} "
                                   f"[{bool(relevant_changes)}]")

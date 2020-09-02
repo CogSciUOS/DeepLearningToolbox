@@ -102,8 +102,9 @@ class ImageUtils(image.ImageResizer):
 
 class VideoReader(video.Reader):
     """A :py:class:`VideoReader` realized by an OpenCV
-    :py:class:`VideoCapture` object.
-
+    :py:class:`VideoCapture` object. This is a superclass of
+    :py:class:`VideoFileReader` and :py:class:`Webcam`, providing
+    common functionality.
 
     Attributes
     ----------
@@ -139,7 +140,7 @@ class VideoReader(video.Reader):
         released and deleted.
         """
         if self._capture is not None:
-            LOG.info("Releasing OpenCV Webcam (%d)", self._device)
+            LOG.info("Releasing OpenCV capture")
             self._capture.release()
             del self._capture
             self._capture = None

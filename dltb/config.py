@@ -8,3 +8,4 @@ class Config:
 config = Config()
 config.warn_missing_dependencies = True
 
+config.thirdparty_info = True

@@ -3,6 +3,7 @@ import sys
 
 # Generic imports
 import numpy as np
+import logging
 
 # Qt imports
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
@@ -10,7 +11,6 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtGui import (QImage, QPainter, QPen, QTransform,
                          QKeyEvent, QMouseEvent)
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy
-from PyQt5.QtWidgets import QApplication
 
 # toolbox imports
 from toolbox import Toolbox
@@ -18,11 +18,14 @@ from tools.activation import Engine as ActivationEngine
 from datasource import Data, Metadata
 from util.image import BoundingBox, PointsBasedLocation, Region
 
-from dltb.base.image import ImageDisplay, ImageTool
+from dltb.base.image import ImageTool
 from dltb.util.image import imresize, imwrite
 
 # GUI imports
 from ..utils import QObserver, protect
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 # FIXME[todo]: add docstrings!
@@ -208,6 +211,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
     def setData(self, data: Data, attribute='data') -> None:
         """Set the data to be displayed by this :py:class:`QImageView`.
         """
+        LOG.debug("QImageView.setData(%s)",
+                  data is not None, data is not self._data)
         self._data = data
         self.setImage(None if data is None else getattr(data, attribute))
 
@@ -217,6 +222,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
     def setImage(self, image: np.ndarray) -> None:
         """Set the image to display.
         """
+        LOG.debug("QImageView.setImage(%s)", image is not None and image.shape)
         self._raw = image
         self._marks = []
         self._regions = []
@@ -244,21 +250,21 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
             self._image = QImage(image,
                                  image.shape[1], image.shape[0],
                                  bytes_per_line, img_format)
-            #self.resize(self._image.size())
+            # self.resize(self._image.size())
         else:
             self._image = None
 
-        #self.updateGeometry()
+        # self.updateGeometry()
         self.update()
 
     def minimumSizeHint(self):
         # FIXME[hack]: this will change the size of the widget depending
         # on the size of the image, probably not what we want ...
-        #return QSize(-1,-1) if self._image is None else self._image.size()
-        return QSize(100,100)
-    
+        # return QSize(-1,-1) if self._image is None else self._image.size()
+        return QSize(100, 100)
+
     def sizeHint(self):
-        return QSize(1000,1000)
+        return QSize(1000, 1000)
 
     def setMask(self, mask):
         """Set a mask to be displayed on top of the actual image.
@@ -348,7 +354,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         """
         self._marks.append(rect)
 
-    def setMetadata(self, metadata: Metadata, metadata2: Metadata=None):
+    def setMetadata(self, metadata: Metadata, metadata2: Metadata = None):
         """Set metadata to be displayed in this View.
         """
         self._metadata = metadata
@@ -373,7 +379,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         # - check if this is so and why!
         painter = QPainter()
         painter.begin(self)
-         
+
         # Compute the transformation
         if self._image is not None:
             w = self._image.width()
@@ -384,15 +390,15 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
             if self._keepAspect:
                 w_ratio = min(w_ratio, h_ratio)
                 h_ratio = w_ratio
-            # the rect is created such that it is centered on the current widget
-            # pane both horizontally and vertically
+            # the rect is created such that it is centered on the
+            # current widget pane both horizontally and vertically
             x = (self.width() - w * w_ratio) // 2
             y = (self.height() - h * h_ratio) // 2
             transform = QTransform()
             transform.translate(x, y)
             transform.scale(w_ratio, h_ratio)
             painter.setTransform(transform)
-        
+
         self._drawImage(painter)
         self._drawReceptiveField(painter)
         self._drawMask(painter)
@@ -421,7 +427,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         painter :   QPainter
         """
         if self._image is not None:
-            painter.drawImage(QPoint(0,0), self._image)
+            painter.drawImage(QPoint(0, 0), self._image)
 
     def _drawMask(self, painter: QPainter):
         """Display the given image.
@@ -433,11 +439,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         if self._image is not None and self._overlay is not None:
             painter.drawImage(QPoint(0, 0), self._overlay)
 
-
     def _drawReceptiveField(self, painter: QPainter):
         if self._receptiveField is None:
             return
-       
+
         pen_width = 4
         pen_color = Qt.green
         pen = QPen(pen_color)
@@ -490,13 +495,12 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
     #
     # Events
     #
-    
+
     @protect
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """A mouse press toggles between raw and processed mode.
         """
-        self.setMode(not self._processed)
-
+        self.setMode(not self.mode())
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -607,6 +611,9 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
             The new display mode (False=raw, True=processed).
         """
         self.setMode(processed)
+
+    def mode(self) -> bool:
+        return self._processed
 
     def setMode(self, processed: bool) -> None:
         if not self._toolbox:

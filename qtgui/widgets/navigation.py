@@ -130,7 +130,7 @@ class QIndexControls(QWidget):
             self.setIndex(self._index + 1, True)
         elif self.sender() == self._lastButton:
             self.setIndex(self._elements - 1, True)
-        
+
     @protect
     def onIndexEdited(self, text: str) -> None:
         """React to a textEdited signal.
@@ -162,6 +162,8 @@ class QIndexControls(QWidget):
         return self._index
 
     def setIndex(self, index: int, emit: bool = False) -> None:
+        """Set the index for this :py:class:`QIndexControls`
+        """
         if index >= self._elements:
             index = self._elements - 1
         if index < 0:
@@ -176,6 +178,8 @@ class QIndexControls(QWidget):
         return self._elements
 
     def setElements(self, elements: int) -> None:
+        """Set the number of elements for this :py:class:`QIndexControls`.
+        """
         if elements != self._elements:
             self._elements = elements
             if elements > 0:
@@ -186,7 +190,7 @@ class QIndexControls(QWidget):
     def update(self, enabled: bool = True) -> None:
         """Update this :py:class:`IndexControls`.
         """
-        have_elements =  self._elements > 0
+        have_elements = self._elements > 0
         enabled = enabled and have_elements
         self._firstButton.setEnabled(enabled and self._index > 0)
         self._prevButton.setEnabled(enabled and self._index > 0)

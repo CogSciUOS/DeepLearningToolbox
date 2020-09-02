@@ -128,22 +128,13 @@ class Video(Imagesource, Indexed, Loop):
             be fetched (advancing the frame number by 1).
         """
         data.data = self._backend[index]
-        data.index = index
         data.frame = self._backend.frame
+        data.index = index or data.frame
         data.time = self._backend.time
 
     #
     # Public Video API
     #
-
-    def fetch_frame(self, frame: int, time: float = None, **kwargs) -> None:
-        """Fetch a given frame from this video:
-        """
-        if frame is not None:
-            kwargs['frame'] = frame
-        elif time is not None:
-            kwargs['time'] = time
-        self.fetch(**kwargs)
 
     @property
     def frame(self) -> int:

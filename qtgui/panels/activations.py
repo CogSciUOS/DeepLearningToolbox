@@ -23,7 +23,7 @@ import util.image
 from .panel import Panel
 from ..utils import QObserver, protect
 from ..widgets.activationview import QActivationView
-from ..widgets.data import QDataView
+from ..widgets.data import QDataSelector, QDataView
 from ..widgets.image import QImageView
 from ..widgets.network import QLayerSelector, QNetworkSelector
 from ..widgets.classesview import QClassesView
@@ -195,11 +195,14 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         #
 
         # QImageView: a widget to display the input data
-        self._imageView = QImageView()
-        self.addAttributePropagation(Toolbox, self._imageView)
+        self._dataSelector = QDataSelector()
+        self.addAttributePropagation(Toolbox, self._dataSelector)
+
+        self._imageView = self._dataSelector.imageView()
+        # self.addAttributePropagation(Toolbox, self._imageView)
 
         # QDataView: display data related to the current input data
-        self._dataView = QDataView()
+        self._dataView = self._dataSelector.dataView()
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
         self._dataView.addAttribute('directory')
@@ -208,8 +211,8 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._dataView.addAttribute('image')
 
         # QDatasourceNavigator: navigate through the datasource
-        self._datasourceNavigator = QDatasourceNavigator()
-        self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+        self._datasourceNavigator = self._dataSelector.datasourceNavigator()
+        # self.addAttributePropagation(Toolbox, self._datasourceNavigator)
 
         #
         # (C) Network
@@ -265,22 +268,23 @@ class ActivationsPanel(Panel, QObserver, qobservables={
 
         # FIXME[layout]
         # keep image view square (TODO: does this make sense for every input?)
-        self._imageView.heightForWidth = lambda w: w
-        self._imageView.hasHeightForWidth = lambda: True
+        # self._imageView.heightForWidth = lambda w: w
+        # self._imageView.hasHeightForWidth = lambda: True
         # FIXME[hack]
-        self._imageView.setMaximumSize(500, 500)
+        # self._imageView.setMaximumSize(500, 500)
 
         # FIXME[layout]
-        inputLayout.setSpacing(0)
-        inputLayout.setContentsMargins(0, 0, 0, 0)
-        row = QHBoxLayout()
-        row.addStretch()
-        row.addWidget(self._imageView)
-        row.addStretch()
-        inputLayout.addLayout(row)
+        # inputLayout.setSpacing(0)
+        # inputLayout.setContentsMargins(0, 0, 0, 0)
+        # row = QHBoxLayout()
+        # row.addStretch()
+        # row.addWidget(self._imageView)
+        # row.addStretch()
+        # inputLayout.addLayout(row)
         #inputLayout.addWidget(self._dataView)
-        inputLayout.addWidget(self._datasourceNavigator)
-        inputLayout.addStretch()
+        # inputLayout.addWidget(self._datasourceNavigator)
+        # inputLayout.addStretch()
+        inputLayout.addWidget(self._dataSelector)
 
         inputBox = QGroupBox('Input')
         inputBox.setLayout(inputLayout)

@@ -18,6 +18,7 @@ Examples
 # standard imports
 import sys
 import time
+import threading
 import logging
 
 # toolbox imports
@@ -53,6 +54,8 @@ class DataWebcam(Imagesource, Loop, Snapshot):
         super().__init__(key=key, description=description, **kwargs)
         self._device = device
         self._backend = None
+        self._loop_thread = None
+        self._loop_data = None
 
     def __str__(self) -> str:
         return "Webcam"
@@ -110,18 +113,32 @@ class DataWebcam(Imagesource, Loop, Snapshot):
             one should first empty the buffer before reading the data.
         """
         LOG.debug("Webcam._get_data(snapshot=%r)", snapshot)
-        data.data = self._backend.get_frame(clear_buffer=snapshot)
+        data.data = (self._loop_data if self.looping else
+                     self._backend.get_frame(clear_buffer=snapshot))
         super()._get_snapshot(data, snapshot, **kwargs)
 
     #
     # Loop
     #
 
-    def _run_loop(self) -> None:
+    def start_loop(self):
+        """Start an asynchronous loop cycle. This method will return
+        immediately, running the loop cycle in a background thread.
+        """
+        super().start_loop()
         if sys.platform == 'linux':
-            self._run_loop_linux()
-        else:
-            super().run_loop()
+            self._loop_thread = threading.Thread(target=self._run_loop_linux)
+            self._loop_thread.start()
+            LOG.info("Webcam: loop thread started.")
+
+    def stop_loop(self):
+        """Stop a currently running loop.
+        """
+        super().stop_loop()
+        if sys.platform == 'linux':
+            self._loop_thread.join()
+            self._loop_thread = None
+            LOG.info("Webcam: loop thread joined.")
 
     def _run_loop_linux(self) -> None:
         """Under linux, the av-based linux capture code is using
@@ -132,25 +149,14 @@ class DataWebcam(Imagesource, Loop, Snapshot):
         fast as possible and only report them at certain times.
         """
         LOG.info("Webcam: employing linux loop")
-        last_time = 0
         fetched = 0
-        ignored = 0
         start_time = time.time()
-        while not self._loop_stop_event.is_set():
-            if time.time() - last_time > self._loop_interval:
-                # enough time has passed: fetch and notify observers
-                last_time = time.time()
-                self.fetch(snapshot=False)
-                fetched += 1
-                total = fetched+ignored
-                LOG.debug("Webcam: frames per second: %.1f, "
-                          "fetched: %d, ignored: %d (fetch rate=%.1f%%)",
-                          total/(last_time-start_time),
-                          fetched, total, fetched*100/total)
-            else:
-                # read and ignore
-                _ = self._backend.get_frame(clear_buffer=False)
-                ignored += 1
+        while not self.loop_stop_event.is_set():
+            self._loop_data = self._backend.get_frame(clear_buffer=False)
+            last_time = time.time()
+            fetched += 1
+            LOG.debug("Webcam: fetched: %d, frames per second: %.1f",
+                      fetched, fetched/(last_time-start_time))
 
     #
     # information

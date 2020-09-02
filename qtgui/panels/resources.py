@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (QWidget, QGroupBox, QTabWidget,
 # toolbox imports
 from toolbox import Toolbox
 from network import Network
-from datasource import Datasource
+from datasource import Datasource, Datafetcher
 from tools import Tool
 from base import MetaRegister
 
@@ -214,7 +214,7 @@ class QNetworkInspector(QResourceInspector, QObserver,
 
 
 class QDatasourceInspector(QResourceInspector, QObserver,
-        qattributes={Datasource: False},
+        qattributes={Datasource: False, Datafetcher: False},
         qobservables={Toolbox: Toolbox.Change('datasource_changed')}):
     """
 
@@ -258,11 +258,15 @@ class QDatasourceInspector(QResourceInspector, QObserver,
         return datasourceController
 
     def _initResourceView(self) -> QWidget:
-        self._datasourceNavigator = QDatasourceNavigator()
-        self.addAttributePropagation(Datasource, self._datasourceNavigator)
+        self._datasourceNavigator = \
+            QDatasourceNavigator(datasource_selector=False)
+        self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
+        #self.addAttributePropagation(Datasource, self._datasourceNavigator)
 
         self._dataView = QDataView()
+        self.addAttributePropagation(Datafetcher, self._dataView)
         # self.addAttributePropagation(Datasource, self._dataView)
+        self.setToolbox(None)
 
         datasourceView = QWidget()
         layout = QVBoxLayout()
@@ -281,6 +285,10 @@ class QDatasourceInspector(QResourceInspector, QObserver,
             The resource is expected to be a :py:class:`Datasource`.
         """
         self.setDatasource(resource)
+        if self._toolbox is not None:
+            self._toolbox.datasource = resource
+        else:
+            self.setDatafetcher(Datasource)
 
     @protect
     def onDatasourceButtonClicked(self, checked: bool):
@@ -296,6 +304,12 @@ class QDatasourceInspector(QResourceInspector, QObserver,
     def setClassKey(self, key: str) -> None:
         super().setClassKey(key)
         self.setDatasource(None)
+
+    def setToolbox(self, toolbox: Toolbox) -> None:
+        """
+        """
+        self.setDatafetcher(Datafetcher() if toolbox is None else
+                            toolbox.datafetcher)
 
     # FIXME[todo]: for this to work we have to observe the toolbox!
     def toolbox_changed(self, toolbox, change):

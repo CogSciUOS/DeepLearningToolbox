@@ -5,7 +5,7 @@
 
 This module contains widgets for viewing and controlling
 :py:class:`Datasource`s. It aims at providing support for all
-abstract interfaces defined in 
+abstract interfaces defined in
 `datasource.datasource`.
 """
 
@@ -16,10 +16,8 @@ import logging
 # Qt imports
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QHideEvent, QKeyEvent
-from PyQt5.QtGui import QFontMetrics, QIntValidator, QIcon
-from PyQt5.QtWidgets import QListWidgetItem
 from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
-from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QLabel
+from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 # toolbox imports
 from base import Observable, MetaRegister
@@ -102,8 +100,7 @@ class QDatasourceList(QRegisterList, QObserver, qobservables={
 
 
 class DatasourceItemList(RegisterItemList, qobservables={
-        Toolbox: {'datasources_changed', 'datasource_changed'},
-        Datasource: {'state_changed'}}):
+        Toolbox: {'datasources_changed', 'datasource_changed'}}):
     """There are different ways to use a :py:class:`DatasourceItemList`:
     * Standalone: selectable :py:class:`Datasource`\\ s have to be
       added and removed explicitly by calling
@@ -133,7 +130,7 @@ class DatasourceItemList(RegisterItemList, qobservables={
         :py:class:`Toolbox`, reacting to 'datasources_changed' signals.
 
     """
-        
+
     def __init__(self, toolbox: Toolbox = None,
                  datasource: Datasource = None, **kwargs) -> None:
         """Initialization of the :py:class:`DatasourceItemList`.
@@ -142,11 +139,13 @@ class DatasourceItemList(RegisterItemList, qobservables={
         ----------
         """
         super().__init__(register=Datasource, **kwargs)
-        #self.setToolbox(toolbox)
+        self.setToolbox(toolbox)
         self.setDatasource(datasource)
 
     def setToolbox(self, toolbox: Toolbox) -> None:
-        print(f"\nWarning: Setting Datasource Toolbox ({toolbox}) is currently disabled ...\n")
+        """Set a :py:class:`Toolbox` from which a list of datasources can
+        be obtained.
+        """
         # palette = QPalette();
         # palette.setColor(QPalette.Background, Qt.darkYellow)
         # self.setAutoFillBackground(True)
@@ -157,7 +156,8 @@ class DatasourceItemList(RegisterItemList, qobservables={
         else:
             self._updateFromIterator(iter(()))
 
-    def toolbox_changed(self, toolbox: Toolbox, change: Toolbox.Change) -> None:
+    def toolbox_changed(self, toolbox: Toolbox,
+                        change: Toolbox.Change) -> None:
         """React to changes in the Toolbox. We are only interested
         when the list of datasources has changed, in which case we will
         update the content of the QComboBox to reflect the available
@@ -171,7 +171,7 @@ class DatasourceItemList(RegisterItemList, qobservables={
         This may be `None` if no datasource is selected.
         """
         return self.currentItem()
-    
+
     def setCurrentDatasource(self, datasource: Datasource) -> None:
         """Select the given :py:class:`Datasource`.
 
@@ -180,7 +180,7 @@ class DatasourceItemList(RegisterItemList, qobservables={
         datasource: Datasource
             The datasource to become the currently selected element
             in this list. `None` will deselect the current element.
-        
+
         Raises
         ------
         ValueError:
@@ -188,12 +188,6 @@ class DatasourceItemList(RegisterItemList, qobservables={
             :py:class:`DatasourceItemList`.
         """
         self.setCurrentItem(datasource)
-
-    def datasource_changed(self, datasource: Datasource,
-                           change: Datasource.Change) -> None:
-        """React to a change of an observed datasource.
-        """
-        print(f"DatasourceItemList.datasource_changed({datasource}, {change})")
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -203,9 +197,9 @@ class DatasourceItemList(RegisterItemList, qobservables={
         r: toggle the keepAspectRatio flag
         """
         key = event.key()
-        #LOG.debug("debug: DatasourceItemList.keyPressEvent: key=%d", key)
-        print(f"debug: DatasourceItemList.keyPressEvent: key={key}")
-        if key == Qt.Key_T: # t = debug toolbox:
+        LOG.debug("DatasourceItemList.keyPressEvent: key=%d", key)
+
+        if key == Qt.Key_T:  # t = debug toolbox:
             if self._toolbox is None:
                 print("No Toolbox")
             else:
@@ -216,7 +210,8 @@ class DatasourceItemList(RegisterItemList, qobservables={
             super().keyPressEvent(event)
 
 
-class QDatasourceSelector(QRegisterItemComboBox, DatasourceItemList):
+class QDatasourceSelector(QRegisterItemComboBox, DatasourceItemList,
+                          qobservables={Datasource: {'state_changed'}}):
     """A widget to select a :py:class:`Datasource` from a list of
     :py:class:`Datasource`\ s.
 
@@ -237,6 +232,32 @@ class QDatasourceSelector(QRegisterItemComboBox, DatasourceItemList):
         """A forward to map item selection to Datasource selection.
         """
         self.datasourceSelected.emit(self.itemData(index))
+
+    def datasource_changed(self, datasource: Datasource,
+                           change: Datasource.Change) -> None:
+        """React to a change of an observed datasource.
+        """
+        LOG.debug("QDatasourceSelector: datasource %s changed %s.",
+                  datasource, change)
+        self._updateItems()
+
+    def _addItem(self, item: Datasource) -> None:
+        """Add an item to this :py:class:`QRegisterItemComboBox`.
+        It is assumed that the item is not yet contained in this
+        :py:class:`QRegisterItemComboBox`.
+        """
+        super()._addItem(item)
+        self.observe(item, interests=Datasource.Change('state_changed'))
+
+    def _removeItem(self, item: Datasource) -> None:
+        """Remove an item from this :py:class:`QRegisterItemComboBox`.  It is
+        assumed that the item is contained in this
+        :py:class:`QRegisterItemComboBox`, otherwise a
+        :py:class:`ValueError` is raised.
+
+        """
+        self.unobserve(item)
+        super()._removeItem(item)
 
 
 class QDatasourceObserver(QObserver, qobservables={
@@ -284,25 +305,27 @@ class QLoopButton(QPushButton, QDatasourceObserver):
 
     @protect
     def onClicked(self, checked: bool) -> None:
-        LOG.info("QLoopButton.onClicked(%s): %s", checked, self._datafetcher)
-        if self._datafetcher.loopable:
-            LOG.info("QLoopButton: looping=%s", self._datafetcher.looping)
-            self._datafetcher.loop(checked)
+        LOG.info("QLoopButton: looping=%s", self._datafetcher.looping)
+        self._datafetcher.looping = checked
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datafetcher`.
         """
-        datasource = self._datafetcher and self._datafetcher.datasource
-        enabled = self._datafetcher.loopable
+        enabled = (self._datafetcher is not None and
+                   self._datafetcher.loopable and
+                   self._datafetcher.ready)
         checked = enabled and self._datafetcher.looping
         self.setEnabled(enabled)
         self.setChecked(checked)
 
     def hideEvent(self, event: QHideEvent) -> None:
-        datasource = self._datafetcher and self._datafetcher.datasource
-        if isinstance(datasource, Loop) and self.isChecked():
-            datasource.loop(False)
+        """When hiding the button, we should stop the loop,
+        assuming it makes no sense to waste resources by playing
+        it in the background.
+        """
+        if self._datafetcher is not None and self._datafetcher.loopable:
+            self._datafetcher.looping = False
         super().hideEvent(event)
 
 
@@ -329,18 +352,15 @@ class QSnapshotButton(QPushButton, QDatasourceObserver):
     def onClicked(self):
         """Create a snapshot as reaction to a button click.
         """
-        if isinstance(self._datafetcher.datasource, Snapshot):
-            self._datafetcher.fetch(snapshot=True)
+        self._datafetcher.fetch(snapshot=True)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
-        datasource = self._datafetcher and self._datafetcher.datasource
-        enabled = (isinstance(datasource, Snapshot) and
-                   datasource.prepared and
-                   not self._datafetcher.busy)
-        self.setEnabled(enabled)
+        self.setEnabled(self._datafetcher is not None and
+                        self._datafetcher.snapshotable and
+                        self._datafetcher.ready)
 
 
 class QRandomButton(QPushButton, QDatasourceObserver):
@@ -361,17 +381,16 @@ class QRandomButton(QPushButton, QDatasourceObserver):
         self.clicked.connect(self.onClicked)
 
     def onClicked(self):
-        if isinstance(self._datafetcher.datasource, Random):
-            self._datafetcher.fetch(random=True)
+        self._datafetcher.fetch(random=True)
 
     def update(self) -> None:
         """Update this QLoopButton based on the state of the
         :py:class:`Datasource`.
         """
         datasource = self._datafetcher and self._datafetcher.datasource
-        enabled = (isinstance(datasource, Random)
-                   and datasource.prepared and
-                   not self._datafetcher.busy)
+        enabled = (self._datafetcher is not None and
+                   self._datafetcher.randomable and
+                   self._datafetcher.ready)
         self.setEnabled(enabled)
 
 
@@ -432,59 +451,38 @@ class QIndexControls(QBaseIndexControls, QDatasourceObserver, qobservables={
 
     @protect
     def onIndexChanged(self, index: int) -> None:
+        LOG.info("QIndexControls: index changed=%d", index)
         self._datafetcher.fetch(index=index)
-
-    def setDatasource(self, datasource: Datasource) -> None:
-        #self._datasource = datasource  # FIXME[hack]: should be done by QObserver
-        # FIXME[todo]: we should only observe this datasource, if it is
-        # isinstance(datasource, Indexed)!
-        if isinstance(datasource, Indexed) and datasource.prepared:
-            self.setElements(len(datasource))
-            if datasource.fetched and not datasource.data.is_batch:
-                self.setIndex(datasource.data.index)
-        else:
-            self.setElements(-1)
-        LOG.debug("QIndexControls._elements=%d", self._elements)
-
-    def datasource_changed(self, datasource: Datasource,
-                           info: Datasource.Change) -> None:
-        enabled = not datasource.busy
-        if info.state_changed:
-            #self.update(not datasource.busy)
-            if isinstance(datasource, Indexed) and datasource.prepared:
-                self.setElements(len(datasource))
-            else:
-                self.setElements(-1)
-                enabled = False
-        if info.data_changed:
-            if (isinstance(datasource, Indexed) and
-                datasource.fetched and not datasource.data.is_batch and
-                datasource.data.index is not None): # FIXME[bug]: the last condition should not happen, but seems to be the case wie datasource 'Movie'
-                # The index may have changed
-                self.setIndex(datasource.data.index)
-        self.update(enabled)
 
     def datafetcher_changed(self, datafetcher: Datafetcher,
                             info: Datafetcher.Change) -> None:
-        if info.data_changed:
+        LOG.debug("QIndexControls: datafetcher %s changed %s",
+                  datafetcher, info)
+        enabled = True
+
+        # FIXME[bug]: for some reason we do not receive
+        # datasource_changed events here. Probably something wrong
+        # with inheriting qobservers ...
+        # if info.datasource_changed:
+        if info.datasource_changed or info.data_changed:
             datasource = datafetcher.datasource
-            data = datafetcher.data
-            if (isinstance(datasource, Indexed) and
-                    data is not None and not data.is_batch and
-                    data.index is not None):
-                # The index may have changed
-                self.setIndex(data.index)
-            self.update(True)
-        elif info.state_changed:
-            #self.update(not datasource.busy)
-            datasource = datafetcher.datasource
-            enabled = not datasource.busy
             if isinstance(datasource, Indexed) and datasource.prepared:
                 self.setElements(len(datasource))
             else:
                 self.setElements(-1)
                 enabled = False
-            self.update(enabled)
+            LOG.debug("QIndexControls: elements=%d", self._elements)
+        if info.data_changed:
+            datasource = datafetcher.datasource
+            data = datafetcher.data
+            if datafetcher.indexable and datafetcher.fetched:
+                # The index may have changed
+                index = data[0].index if data.is_batch else data.index
+                self.setIndex(index)
+                LOG.debug("QIndexControls: index=%d", index)
+        if info.state_changed:
+            enabled = datafetcher.ready
+        self.update(enabled)
 
 
 class QDatasourceNavigator(QWidget, QObserver, qattributes={
@@ -523,7 +521,8 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
     """
 
     def __init__(self, toolbox: Toolbox = None,
-                 datasource: Datasource = None, **kwargs):
+                 datasource: Datasource = None,
+                 datasource_selector: bool = True, **kwargs):
         """Initialization of the :py:class:`QDatasourceNavigator`.
 
         Parameters
@@ -533,7 +532,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
             :py:class:`QDatasourceNavigator`
         """
         super().__init__(**kwargs)
-        self._initUI()
+        self._initUI(datasource_selector)
         self._layoutUI()
 
         self.setToolbox(toolbox)

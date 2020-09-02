@@ -179,24 +179,8 @@ class Datasource(Preparable, FailableObservable,
         return f"{self.key}"
 
     #
-    # Preparation
-    #
-
-    def _post_prepare(self):
-        """After preparing the :py:class:`Datasource`, we will
-        fetch the first datapoint.
-        """
-        # FIXME[concept]: this may be useful in interactive settings but
-        # may not be desirable in scripted and other applications ...
-        self.fetch()
-
-    def _unprepare(self):
-        self.unfetch()
-        super()._unprepare()
-
-    ##
     # Data
-    ##
+    #
 
     def get_data(self, batch: int = None, **kwargs) -> Data:
         data = Data(datasource=self, batch=batch)
@@ -243,99 +227,6 @@ class Datasource(Preparable, FailableObservable,
 
         """
         pass  # to be implemented by subclasses
-
-    # @abstractmethod
-    def _get_data_old(self) -> np.ndarray:  # FIXME[old]
-        """The actual implementation of the :py:meth:`data` property
-        to be overwritten by subclasses.
-
-        It can be assumed that a data point has been fetched when this
-        method is invoked.
-        """
-        pass
-        raise NotImplementedError(f"{self.__class__.__name__} claims to be "
-                                  "a Datasource, but it does not "
-                                  "implement the '_get_data' method")
-
-    def _get_batch_data_old(self) -> np.ndarray:  # FIXME[old]
-        """The actual implementation of the :py:meth:`batch_data`
-        to be overwritten by subclasses.
-
-        It can be assumed that a batch has been fetched when this
-        method is invoked.
-        """
-        pass
-        raise NotImplementedError(f"{self.__class__.__name__} claims to be "
-                                  "a Datasource, but it does not "
-                                  "implement the '_get_batch_data' method")
-
-    #
-    # Fetching
-    #
-
-    @property
-    def fetched(self) -> bool:
-        """Check if data have been fetched and are now available.
-        If so, :py:meth:`data` should deliver this data.
-        """
-        return self._data is not None
-
-    @property
-    def data(self) -> Data:
-        """Get the last data that was fetched from this :py:class:`Datasource`.
-        """
-        #if not self.fetched:
-        #    raise RuntimeError("No data has been fetched on Datasource "
-        #                       f"{self.__class__.__name__}")
-        return self._data
-
-    @property
-    def batch_data_old(self) -> np.ndarray:  # FIXME[old]
-        """Get the currently selected batch.
-        """
-        return self._get_batch_data()
-
-    @property
-    def metadata_old(self):  # FIXME[old]
-        """Metadata for the currently selected data.
-        """
-        if not self.fetched:
-            raise RuntimeError("No (meta)data has been fetched "
-                               f"on Datasource {self.__class__.__name}")
-        return self._metadata
-
-    @busy("fetching")
-    def fetch(self, **kwargs):
-        """Fetch a new data point from the datasource. After fetching
-        has finished, which may take some time and may be run
-        asynchronously, this data point will be available via the
-        :py:meth:`data` property. Observers will be notified by
-        by 'data_changed'.
-
-        Arguments
-        ---------
-        Subclasses may specify additional arguments to describe
-        how data should be fetched (e.g. indices, preprocessing, etc.).
-
-        Changes
-        -------
-        data_changed
-            Observers will be notified on data_changed, once fetching
-            is completed and data are available via the :py:meth:`data`
-            property.
-        """
-        if not self.prepared:
-            return  # Nothing to do - FIXME[todo]: maybe raise an exception?
-
-        with self.failure_manager():
-            LOG.info(f"Datasouce.fetch({kwargs})")
-            self._data = self.get_data(**kwargs)
-            self.change('data_changed')
-
-    def unfetch(self):
-        LOG.info("Datasource.unfetch - data_changed")
-        self._data = None
-        self.change('data_changed')
 
     #
     # Description
@@ -404,7 +295,7 @@ class Datasource(Preparable, FailableObservable,
 
 class Imagesource(Datasource):
 
-    def __init__(self, shape: Tuple=None, **kwargs) -> None:
+    def __init__(self, shape: Tuple = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.shape = shape
 
@@ -477,14 +368,11 @@ class Loop(Datasource):
 
     Attributes
     ----------
-    _loop_stop_event: threading.Event
+    loop_stop_event: threading.Event
         An Event signaling that the loop should stop.
         If not set, this means that the loop is currently running,
         if set, this means that the loop is currently not running (or at
         least supposed to stop running soon).
-    _loop_interval: float
-        The time in (fractions of a second) between two successive
-        fetches when running the loop.
     """
 
     # An event manages a flag that can be set to true with the set()
@@ -497,73 +385,44 @@ class Loop(Datasource):
         ---------
         """
         super().__init__(**kwargs)
-        self._loop_stop_event = threading.Event()
-        self._loop_stop_event.set()
-        self._loop_interval = loop_interval
+
+        # An event manages a flag that can be set to true with the set()
+        # method and reset to false with the clear() method.
+        self.loop_stop_event = threading.Event()
+        # The flag is initially false, so we have to set it to True.
+        self.loop_stop_event.set()
+
+    def _unprepare(self):
+        """Unpreparing a :py:class:`Loop` includes stopping the loop
+        if running.
+        """
+        self.stop_loop()
+        super()._unprepare()
+
+    @property
+    def frames_per_second(self) -> float:
+        """Frames per second when looping.
+        """
+        return 10.
 
     @property
     def looping(self):
         """Check if this datasource is currently looping.
         """
-        return not self._loop_stop_event.is_set()
-
-    def loop(self, looping: bool = None):
-        """Start or stop looping through the Datasource.
-        This will fetch one data point after another.
-        This is mainly intended to display live input like
-        movies or webcam, but it can also be used for other Datasources.
-        """
-        if looping is not None and (looping == self.looping):
-            return
-
-        if self.looping:
-            LOG.info("Stopping datasource loop")
-            self.stop_loop()
-        else:
-            LOG.info("Starting datasource loop")
-            self.start_loop()
-            self.run_loop()
+        return not self.loop_stop_event.is_set()
 
     def start_loop(self):
         """Start an asynchronous loop cycle. This method will return
         immediately, running the loop cycle in a background thread.
         """
-        if self._loop_stop_event.is_set():
-            self._loop_stop_event.clear()
+        if self.loop_stop_event.is_set():
+            self.loop_stop_event.clear()
 
     def stop_loop(self):
         """Stop a currently running loop.
         """
-        if not self._loop_stop_event.is_set():
-            self._loop_stop_event.set()
-
-    @busy("looping")
-    def run_loop(self):
-        """
-        This method is intended to be invoked in its own Thread.
-        """
-        LOG.info(f"Loop[{self}]: start loop")
-        self._run_loop()
-        LOG.info(f"Loop[{self}]: end loop")
-
-    def _run_loop(self):
-        """Actual implementation of the loop. This method schould
-        be overwritten by subclasses for adaptation.
-        """
-
-        while not self._loop_stop_event.is_set():
-            # Fetch a data item
-            last_time = time.time()
-            LOG.debug(f"Loop: {self._loop_stop_event.is_set()} "
-                      f"at {last_time:.4f}")
-            self.fetch()
-
-            # Now wait before fetching the next input
-            sleep_time = last_time + self._loop_interval - time.time()
-            if sleep_time > 0:
-                self._loop_stop_event.wait(timeout=sleep_time)
-            else:
-                LOG.debug(f"Loop: late for {-sleep_time:.4f}s")
+        if not self.loop_stop_event.is_set():
+            self.loop_stop_event.set()
 
 
 class Snapshot(Datasource):
@@ -590,11 +449,6 @@ class Snapshot(Datasource):
         """Create a snapshot (synchronously).
         """
         return self.get_data(snapshot=True, **kwargs)
-
-    def fetch_snapshot(self, **kwargs) -> None:
-        """Create a snapshot.
-        """
-        self.fetch(snapshot=True, **kwargs)
 
     #
     # private methods
@@ -652,12 +506,6 @@ class Random(Loop):
         This is equivalent to calling `fetch(random=True)`.
         """
         return self.get_data(random=True, **kwargs)
-
-    def fetch_random(self, **kwargs) -> None:
-        """
-        This is equivalent to calling `fetch(random=True)`.
-        """
-        return self.fetch(random=True, **kwargs)
 
     #
     # Private methods
@@ -769,88 +617,6 @@ class Indexed(Random):
         """
         index = random.randrange(len(self))
         self._get_index(data, index=index, **kwargs)
-
-    #
-    # Public interface (convenience functions)
-    #
-
-    @property
-    def index(self):
-        """The index of the currently fetched data item.
-        """
-        # FIXME[hack]: unprepared datasources should raise an exception
-        return (self._data and hasattr(self, '_data') and
-                hasattr(self._data, 'index') and self._data.index or 0)
-
-    def fetch_index(self, index: int, **kwargs) -> None:
-        """This method should be implemented by subclasses that claim
-        to be a py:meth:`Random` datasource.
-        It should perform whatever is necessary to fetch a random
-        element from the dataset.
-        """
-        self.fetch(index=index, **kwargs)
-
-    def fetch_next(self, cycle: bool = True, **kwargs) -> None:
-        """Fetch the next entry. In a :py:class:`Indexed` datasource
-        we can simply increase the index by one.
-        """
-        current_index = self.index
-        next_index = (current_index + 1) if current_index < len(self) else 0
-        self.fetch(index=next_index, **kwargs)
-
-    def fetch_prev(self, cycle: bool = True, **kwargs) -> None:
-        """Fetch the previous entry. In a :py:class:`Indexed` datasource
-        we can simply decrease the index by one.
-        """
-        current_index = self.index
-        next_index = (current_index - 1) if current_index > 0 else len(self)
-        self.fetch(index=next_index, **kwargs)
-
-    def fetch_first(self, **kwargs) -> None:
-        """Fetch the first entry of this :py:class:`Indexed` datasource.
-        This is equivalent to fetching index 0.
-        """
-        self.fetch(index=0, **kwargs)
-
-    def fetch_last(self, **kwargs) -> None:
-        """Fetch the last entry of this :py:class:`Indexed` datasource.
-        This is equivalent to fetching the element with index `len(self)-1`.
-        """
-        self.fetch(index=len(self)-1, **kwargs)
-
-
-#
-# FIXME[old/todo]: things that are not really used (yet)
-#
-class TODO:
-    #
-    # FIXME[old]: stuff from the now obsolote "Predefined" class
-    # -> probably, this can be removed or realized in other ways ...
-    #
-
-    def check_availability(self) -> bool:   # FIXME[todo]
-        """Check if this Datasource is available.
-
-        Returns
-        -------
-        True if the Datasource can be instantiated, False otherwise.
-        """
-        return False
-
-    def download(self):
-        #  (self, file, url, md5sum: str=None, sha1sum: str=None) -> None:
-        raise NotImplementedError("Downloading this datasource is "
-                                  "not implemented yet.")
-
-    def _install(self):
-        pass  # FIXME[todo]
-        # download
-        # self.download(md5sum=)
-
-        # check
-        #
-        # unpack
-        #
 
 
 class Labeled(Datasource):

@@ -29,7 +29,7 @@ class Reader:
         """
 
         if filename is not None:
-            classname = 'VideoFileReader'
+            classname = 'VideoReader'
         elif device is not None:
             classname = 'Webcam'
         else:

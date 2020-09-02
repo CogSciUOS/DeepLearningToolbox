@@ -29,7 +29,7 @@ _modules = {
         'classes': {
             'ImageReader': 'ImageIO',
             'ImageWriter': 'ImageIO',
-            'VideoReader': 'VideoReader',
+            'VideoReader': 'VideoFileReader',
             'Webcam': 'Webcam'
         },
     },
@@ -40,7 +40,7 @@ _modules = {
             'ImageWriter': 'ImageIO',
             'ImageDisplay': 'ImageIO',
             'ImageResizer': 'ImageUtils',
-            'VideoReader': 'VideoReader',
+            'VideoReader': 'VideoFileReader',
             'Webcam': 'Webcam'
         }
     },
@@ -75,6 +75,20 @@ _modules = {
         }
     }
 }
+
+
+def modules() -> Iterator[str]:
+    """An iterator for names of known thirdparty modules.
+    """
+    return _modules.keys()
+
+
+def classes() -> Iterator[str]:
+    classnames = set()
+    for description in _modules.values():
+        if 'classes' in description:
+            classnames |= description['classes'].keys()
+    return iter(classnames)
 
 
 def module_provides_class(module: str, name: str) -> bool:
@@ -264,5 +278,25 @@ def warn_missing_dependencies():
             "--------------------------------------------------------------\n")
 
 
+def list_modules():
+    """List the state of registered third party modules.
+    """
+    LOG.warn("Status of thirdparty modules:")
+    for name in modules():
+        LOG.warn("module '%s': %s", name, available(name))
+
+
+def list_classes():
+    """List classes that are provide by thirdparty modules.
+    """
+    LOG.warn("Classes provided by third party modules:")
+    for name in classes():
+        LOG.warn("class '%s': %s", name, ", ".join(modules_with_class(name)))
+
+
 if config.warn_missing_dependencies:
     warn_missing_dependencies()
+
+if config.thirdparty_info:
+    list_modules()
+    list_classes()

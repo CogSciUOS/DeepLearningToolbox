@@ -106,7 +106,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         layout.addLayout(layout1)
         layout.addWidget(self._dataLabel)
         self.setLayout(layout)
-
+        
     #
     # Toolbox.Observer
     #
@@ -373,6 +373,11 @@ class QDataView(QWidget, QObserver, qobservables={
 
         self.setLayout(layout)
 
+    def imageView(self) -> QImageView:
+        """Get the :py:class:`QImageView` of this :py:class:`QDataView`.
+        """
+        return self._imageView
+
     #
     # Toolbox.Observer
     #
@@ -407,8 +412,11 @@ class QDataView(QWidget, QObserver, qobservables={
         """
         LOG.debug("QDataView.setDatafetcher: %s -> %s",
                   self._datafetcher, datafetcher)
-        if datafetcher is not None:
-            self.setToolbox(None)
+        if self._toolbox is not None and datafetcher is not None:
+            if datafetcher is self._toolbox.datafetcher:
+                self.setDatafetcher(None)
+            else:
+                self.setToolbox(None)
 
     @protect
     def datafetcher_changed(self, datafetcher: Datafetcher,
@@ -430,7 +438,7 @@ class QDataView(QWidget, QObserver, qobservables={
         LOG.debug("QDataView.setData: %s", data)
         if data is self._data:
             return  # nothing changed
-        
+
         self._data = data
         isBatch = bool(data) and data.is_batch
         self._batchNavigator.setVisible(isBatch)
@@ -570,20 +578,22 @@ class QDataSelector(QWidget, QObserver, qattributes={
 
     def __init__(self, toolbox: Toolbox = None,
                  datafetcher: Datafetcher = None,
+                 datasource_selector = True,
                  **kwargs) -> None:
         super().__init__()
         self._layoutScheme = 2
-        self._initUI()
+        self._initUI(datasource_selector)
         self._layoutUI()
         self.setToolbox(toolbox)
         self.setDatafetcher(datafetcher)
 
-    def _initUI(self) -> None:
+    def _initUI(self, datasource_selector) -> None:
         self._dataView = QDataView()
         self.addAttributePropagation(Toolbox, self._dataView)
         self.addAttributePropagation(Datafetcher, self._dataView)
 
-        self._datasourceNavigator = QDatasourceNavigator()
+        self._datasourceNavigator = \
+            QDatasourceNavigator(datasource_selector=datasource_selector)
         self.addAttributePropagation(Toolbox, self._datasourceNavigator)
         self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
 
@@ -633,6 +643,12 @@ class QDataSelector(QWidget, QObserver, qattributes={
         elif self._layoutScheme == 2:
             self._layoutScheme = 1
         self._updateUI()
+
+    def imageView(self) -> QImageView:
+        """The :py:class:`QDataView` used by this
+        :py:class:`QDataSelector`.
+        """
+        return self._dataView.imageView()
 
     def dataView(self) -> QDataView:
         """The :py:class:`QDataView` used by this
