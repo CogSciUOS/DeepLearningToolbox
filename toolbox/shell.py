@@ -2,22 +2,18 @@
 # generic imports
 import os
 import sys
-import itertools
 from cmd import Cmd
 from argparse import ArgumentParser, Namespace
 from functools import wraps
 from typing import Iterable
 
-
 # toolbox imports
-from dltb.base.sound import Sound, SoundDisplay
+from dltb.tool import Tool
 from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
 from dltb.thirdparty.sounddevice import SoundPlayer as SoundDevicePlayer
 from toolbox import Toolbox
-from tools import Tool
 from network import Network
 from datasource import Datasource
-
 from util.error import handle_exception
 
 # FIXME[bug]: a (syntax) error in this file lets the toolbox crash!

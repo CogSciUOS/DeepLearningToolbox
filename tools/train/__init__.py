@@ -19,10 +19,10 @@ from base import BusyObservable, Controller as BaseController, View as BaseView
 
 
 class Training(BusyObservable, method='training_changed',
-               changes=['training_changed', 'epoch_changed',
+               changes={'training_changed', 'epoch_changed',
                         'batch_changed', 'metric_changed',
                         'optimizer_changed', 'data_changed',
-                        'network_changed', 'parameter_changed'],
+                        'network_changed', 'parameter_changed'},
                changeables={
                    'epochs': 'parameter_changed',
                    'epochs_range': 'parameter_changed',
@@ -34,7 +34,7 @@ class Training(BusyObservable, method='training_changed',
     ----------
     running: bool
         A flag indicating ongoing training.
-    
+
     Changes
     -------
     training_changed:
@@ -65,18 +65,18 @@ class Training(BusyObservable, method='training_changed',
         self.epochs = 20
         self.epochs_range = (1, 40)
         self.batch_size = 128
-        self.batch_size_range = (1,256)
-        
+        self.batch_size_range = (1, 256)
+
         self._running = False
         self._epoch = None
         self._batches = None
         self._batch = None
         self._loss = None
-        
+
         self._accuracy = None
         self._validation_loss = None
         self._validation_accuracy = None
-        
+
         self._network = None
 
     def start(self):
@@ -100,8 +100,7 @@ class Training(BusyObservable, method='training_changed',
     def running(self, state: bool):
         if state != self._running:
             self._running = state
-            self.notifyObservers('training_changed')
-
+            self.notify_observers('training_changed')
 
     #@batch_size.setter
     def old_batch_size(self, size: int):
@@ -113,7 +112,6 @@ class Training(BusyObservable, method='training_changed',
             raise ValueError(f"Invalid batch size {size}:"
                              f"allowed range is from {self.batch_size_min}"
                              f"to {self.batch_size_max}")
-    
 
     @property
     def batches(self):
@@ -144,14 +142,15 @@ class Training(BusyObservable, method='training_changed',
     def network(self, network):
         self._network = network
         self._model = network  # FIXME[hack]
-        print(f"Training({self}).notifyObservers(network_changed)")
-        self.notifyObservers('network_changed')
+        print(f"Training({self}).notify_observers(network_changed)")
+        self.notify_observers('network_changed')
 
 
 class TrainingView(BaseView, view_type=Training):
 
-    def __init__(self, training: Training=None, **kwargs):
+    def __init__(self, training: Training = None, **kwargs):
         super().__init__(observable=training, **kwargs)
+
 
 class TrainingController(TrainingView, BaseController):
     """A TrainingController is a Controller for some Training."""
@@ -178,4 +177,3 @@ class TrainingController(TrainingView, BaseController):
     def pause(self):
         if self.running:
             print("Pause Training not implemented yet")
-

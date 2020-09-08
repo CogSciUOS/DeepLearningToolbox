@@ -16,8 +16,8 @@ LOG = logging.getLogger(__name__)
 
 class Datafetcher(BusyObservable, Datasource.Observer,
                   method='datafetcher_changed',
-                  changes=['state_changed', 'data_changed',
-                           'datasource_changed', 'prepared_changed']):
+                  changes={'state_changed', 'data_changed',
+                           'datasource_changed', 'prepared_changed'}):
     """A :py:class:`Datafetcher` asynchronously fetches a
     :py:class:`Data` object from a :py:class:`Datasource` and
     stores it as local attribute.

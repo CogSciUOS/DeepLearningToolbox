@@ -17,8 +17,8 @@ from PyQt5.QtWidgets import (QWidget, QGroupBox, QTabWidget,
 from toolbox import Toolbox
 from network import Network
 from datasource import Datasource, Datafetcher
-from tools import Tool
 from base import MetaRegister
+from dltb.tool import Tool
 
 # GUI imports
 from .panel import Panel

@@ -184,6 +184,8 @@ class Data:
                     setattr(self, name, None)
 
     def debug(self) -> None:
+        """Debugging a data object. Output types of all attributes.
+        """
         print(f"Data object ({id(self)})")
         for name, is_batch in self._attributes.items():
             print(f" - {name}[{is_batch}]: {type(getattr(self, name, None))}")
@@ -254,6 +256,38 @@ class BatchDataItem:
                              "via a BatchDataItem.")
         self._data.add_attribute(name, value=value,
                                  batch=True, initialize=True)
+
+
+class BatchWrapper:
+    """A wrapper letting a single (non-batch) :py:class:`Data` object
+    looking like a batch.
+    """
+    is_batch: bool = True
+
+    def __init__(self, data: Data) -> None:
+        super().__init__()
+        self._data = data
+
+    def __getattr__(self, attr) -> Any:
+        if attr.startswith('_'):
+            raise AttributeError(f"BatchWrapper has no attribute '{attr}'")
+        if self._data.is_batch_attribute(attr):
+            value = getattr(self._data, attr)
+            return (value[np.newaxsis] if isinstance(np.ndarray, value)
+                    else [value])
+        return getattr(self._data, attr)
+
+    def __setattr__(self, attribute: str, value: Any) -> None:
+        if attribute.startswith('_'):
+            super().__setattr__(attribute, value)
+        elif self._data.is_batch_attribute(attribute):
+            if len(value) != 1:
+                raise AttributeError(f"BatchWrapper only accepts batches "
+                                     "of size 1 for attribute '{attribute}'")
+            setattr(self._data, attribute, value[1])
+        else:
+            setattr(self._data, attribute, value)
+
 
 class ClassScheme(metaclass=MetaRegister):
     """A :py:class:`ClassScheme` represents a classification scheme.  This
@@ -330,7 +364,8 @@ class ClassScheme(metaclass=MetaRegister):
             if name == 'default':
                 return index
             return [self._labels[name][i] for i in index]
-        elif isinstance(index, tuple):
+
+        if isinstance(index, tuple):
             if lookup is not None:
                 index = tuple(self._lookup[lookup][i] for i in index)
             if name == 'default':

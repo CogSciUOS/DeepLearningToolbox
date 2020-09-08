@@ -9,9 +9,9 @@ import cv2
 import numpy as np
 
 # toolbox imports
+from dltb.tool.detector import Detector
 from datasource import Metadata
 from util.image import BoundingBox
-from .detector import Detector
 
 
 class DetectorHaar(Detector):

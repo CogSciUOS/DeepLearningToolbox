@@ -1,12 +1,23 @@
+"""
+.. moduleauthor:: Ulf Krumnack
+
+.. module:: dltb.base.busy
+
+This module provides an API for busy objects.
+
+"""
+
+# standard imports
 import threading
 from contextlib import contextmanager
-
-from .observer import Observable
-from .fail import FailableObservable
-from util.error import handle_exception
-
 import logging
-logger = logging.getLogger(__name__)
+
+# toolbox imports
+from util.error import handle_exception
+from .fail import FailableObservable
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 def busy(message):
@@ -22,7 +33,8 @@ def busy(message):
         return wrapper
     return decorator
 
-class BusyObservable(FailableObservable, changes=['busy_changed']):
+
+class BusyObservable(FailableObservable, changes={'busy_changed'}):
     """A :py:class:`BusyObservable` object provides configuration data.
     It is an :py:class:Observable, allowing :py:class:Engine and user
     interfaces to be notified on changes.
@@ -49,16 +61,6 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
         The thread performing the business
     """
 
-    def __init_subclass__(cls: type, changes: list=[], **kwargs):
-        """Create a subclass of the :py:class:`BusyObservable` class.
-        Those classes can signal the following change: 'busy_changed'.
-        """
-        if 'busy_changed' not in changes:
-            changes.append('busy_changed')
-        # FIXME[question]: why this indirect instruction?
-        #super().__init_subclass__.__func__(cls, changes=changes, **kwargs)
-        super().__init_subclass__(changes=changes, **kwargs)
-
     def __init__(self, *args, **kwargs):
         """Initialization of this :py:class:`BusyObservable`.
         The default state is that the object is not busy.
@@ -67,7 +69,7 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
         self._busy = None
         self._busy_lock = threading.RLock()
         self._busy_thread = None
-        
+
     @property
     def busy(self) -> bool:
         """A flag indicating if this :py:class:`BusyObservable` is
@@ -88,14 +90,16 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
 
         """
         if message != self._busy:
-            logger.debug(f"busy: new message: '{self._busy}' -> '{message}'")
+            LOG.debug("busy: new message: '%s' -> '%s'", self._busy, message)
             change = self.Change('busy_changed')
             if (self._busy is None) != (message is None):
                 change.add('state_changed')
             self._busy = message
-            self.notifyObservers(change)
+            self.notify_observers(change)
 
-    def busy_start(self, message):
+    def busy_start(self, message: str):
+        """Start some business.
+        """
         old_thread = self._busy_thread
         if old_thread is None:
             # The object is not busy yet
@@ -111,7 +115,7 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
             # Anogher thread is using this object
             raise RuntimeError("Object is currently busy.")
 
-        logger.info(f"busy_start: '{self._busy}' -> '{message}'")
+        LOG.info("busy_start: '%s' -> '%s'", self._busy, message)
         old_busy = self._busy
         self._set_busy(message)
         return old_busy, old_thread
@@ -119,7 +123,7 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
     def busy_change(self, message):
         """Change the busy message during a business.
         """
-        if not self._busy_thread is threading.current_thread():
+        if self._busy_thread is not threading.current_thread():
             raise RuntimeError("Cannot change business of object "
                                "owned by another Thread.")
         if not self._busy:
@@ -127,22 +131,22 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
         self._set_busy(message)
 
     def busy_stop(self, busy_handle=None) -> None:
-        """Stop a business. This will restore the messagereleas
+        """Stop a business. This will restore the message and realease
+        the lock.
         """
         old_busy, old_thread = busy_handle or (None, None)
-        logger.info(f"busy_stop: '{self._busy}' -> '{old_busy}'")
-        if not self._busy_thread is threading.current_thread():
+        LOG.info("busy_stop: '%s' -> '%s'", self._busy, old_busy)
+        if self._busy_thread is not threading.current_thread():
             raise RuntimeError("Cannot stop business of object "
                                "owned by another Thread.")
         self._busy_thread = old_thread
         self._set_busy(old_busy)
 
-    def _busy_run(self, func, *args, busy_message: str=None,
-                  busy_async: bool=None, busy_takeover: bool=False,
+    def _busy_run(self, func, *args, busy_message: str = None,
+                  busy_async: bool = None, busy_takeover: bool = False,
                   **kwargs):
-        logger.info(f"busy_run: {func}({args}, {kwargs}): "
-                    f"message='{busy_message}', async={busy_async}, "
-                    f"takeover={busy_takeover}")
+        LOG.info("busy_run: {%s}(%s, %s): message='%s', async=%s, takeover=%s",
+                 func, args, kwargs, busy_message, busy_async, busy_takeover)
 
         #
         # Determine if we want to run asynchronously
@@ -150,8 +154,8 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
         if busy_takeover:
             # Take business over to the current thread.
             self._busy_thread = threading.current_thread()
-            logger.debug(f"busy_run: taking over the thread")
-        
+            LOG.debug("busy_run: taking over the thread")
+
         # We need to decide if we should run synchronously or
         # asynchronously. The main idea is that a graphical
         # user interface will usualy profit from running
@@ -160,18 +164,17 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
         # situations synchronous processing is more suitable.
         if busy_async is not None:
             # We are explicitly instructed how to run the method.
-            logger.debug(f"busy_run: busy_async is {busy_async}")
+            LOG.debug("busy_run: busy_async is %s", busy_async)
         elif self._busy_thread is threading.current_thread():
             # we are already running in our own thread and hence do
             # not want to start a new one.
             busy_async = False
-            logger.debug(f"busy_run: running in own thread")
+            LOG.debug("busy_run: running in own thread")
         elif getattr(threading.current_thread(), 'GUI_event_loop', False):
             # If we are not the GUI event loop Thread, then
             # there is probably no need to start a new Thread:
             busy_async = True
-            logger.debug(f"busy_run: running async in a GUI eventloop")
-
+            LOG.debug("busy_run: running async in a GUI eventloop")
 
         if busy_async:
             #
@@ -189,12 +192,13 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
                 runner = getattr(self, '_runner', None)
                 if runner is None:
                     threading.Thread(target=self._busy_run,
-                                     args=(func,) + args, kwargs=kwargs).start()
+                                     args=(func,) + args,
+                                     kwargs=kwargs).start()
                 else:
                     runner.run_task(self._busy_run, func, *args, **kwargs)
             except Exception as exception:
                 # FIXME[todo]: exception handling concept - we need to
-                # deal with asynchronous situations 
+                # deal with asynchronous situations
                 handle_exception(exception)
 
         else:
@@ -222,9 +226,10 @@ class BusyObservable(FailableObservable, changes=['busy_changed']):
                     # here
                     self.busy_stop()
 
-
     @contextmanager
     def busy_manager(self, message: str):
+        """A context manager for a block of code to be run in busy mode.
+        """
 
         old_busy = self.busy_start(message)
         try:

@@ -9,24 +9,19 @@ abstract interfaces defined in `tools`.
 """
 
 # standard imports
-from typing import Iterator
 import logging
 
 # Qt imports
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QHideEvent, QKeyEvent
-from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
+from PyQt5.QtGui import QKeyEvent
 
 # toolbox imports
 from toolbox import Toolbox
-from tools import Tool
+from dltb.tool import Tool
 
 # GUI imports
-from ..utils import QObserver, protect
-from .register import QRegisterList, QRegisterController, QPrepareButton
+from ..utils import protect
 from .register import RegisterItemList, QRegisterItemComboBox
-from .navigation import QIndexControls as QBaseIndexControls
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -144,9 +139,9 @@ class ToolItemList(RegisterItemList, qobservables={
 
 
 class QToolSelector(QRegisterItemComboBox, ToolItemList,
-                          qobservables={Tool: {'state_changed'}}):
+                    qobservables={Tool: {'state_changed'}}):
     """A widget to select a :py:class:`Tool` from a list of
-    :py:class:`Tool`\ s.
+    :py:class:`Tool`\\ s.
 
     """
     toolSelected = pyqtSignal(object)
@@ -191,6 +186,6 @@ class QToolSelector(QRegisterItemComboBox, ToolItemList,
         self.unobserve(item)
         super()._removeItem(item)
 
-    def detector_changed(self, *args, **kwargs) -> None:
+    def processor_changed(self, *args, **kwargs) -> None:
         # FIXME[hack]:
         print(f"QToolSelector.detector_changed({args}, {kwargs})")

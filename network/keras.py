@@ -439,7 +439,7 @@ class Trainer(BaseTrainer, Callback):
 
     def on_epoch_begin(self, epoch, logs=None):
         self._training.epoch = epoch
-        self.notifyObservers('epoch_changed')
+        self.notify_observers('epoch_changed')
 
     def on_batch_begin(self, batch, logs=None):
         """
@@ -449,7 +449,7 @@ class Trainer(BaseTrainer, Callback):
         self._training.batch = batch
         self._batch_size = logs['size']
         self._batch_start = time.time()
-        self.notifyObservers('batch_changed')
+        self.notify_observers('batch_changed')
 
     def on_batch_end(self, batch, logs=None):
         """
@@ -459,7 +459,7 @@ class Trainer(BaseTrainer, Callback):
         self._loss = logs['loss']
         if 'acc' in logs:
             self._accuracy = logs['acc']
-        self.notifyObservers('metrics_changed')
+        self.notify_observers('metrics_changed')
     
     def on_epoch_end(self, epoch, logs=None):
         """
@@ -475,7 +475,7 @@ class Trainer(BaseTrainer, Callback):
             self._validation_loss = logs['val_loss']
         if 'val_acc' in logs:
             self._validation_accuracy = logs['val_acc']
-        self.notifyObservers('metrics_changed')
+        self.notify_observers('metrics_changed')
 
     def on_train_end(self, logs=None):
         """Called at the end of training.
@@ -513,7 +513,7 @@ class Trainer(BaseTrainer, Callback):
         self._y_train = y_train
         self._x_test = x_test
         self._y_test = y_test
-        self.notifyObservers('data_changed')
+        self.notify_observers('data_changed')
 
 
 from packaging import version

@@ -243,7 +243,7 @@ For some components, their nature is not so clear to me:
 * integrate batch data: a lot of tools and graphical components do not
   know how to deal with batch data correctly.
 
-* the states of stateful object should be designed in a clearer way
+* states: the states of stateful object should be designed in a clearer way
   (including notifications that signal the change of state):
   - busy: the object is currently busy doing some task
   - prepared: the object was prepared. if False, the object
@@ -254,6 +254,16 @@ For some components, their nature is not so clear to me:
       - if Preparable, the object has to be prepared
       - if Busy, the object must not be busy
       - if Failable, the object must not be in the failed state
+  * we have to distinguish objects that are busy and cannot do another
+    task (e.g. a webcam that is streaming, or a network that is
+    using/blocking the GPU, an object that is currently preparing -
+    it should not start a second preparation ...) and those that are
+    busy but can be called again (e.g. a processor that is queueing requests).
+  * threading: we may start a background thread and feed this thread
+    from a queue (like a Processor), or we may just start a new
+    background thread for every call. In the first case we need a
+    mechanism to check if a thread is currently running (including
+    some synchronization logic ...)
 
   Some specific questions:
   - looping (in Datafetcher): maybe busy + some extra flag?

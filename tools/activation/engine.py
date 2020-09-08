@@ -10,7 +10,7 @@ import numpy as np
 
 # toolbox imports
 from toolbox import Toolbox
-from tools import Processor
+from dltb.tool import Tool
 from datasource import Data
 from network import Network, Classifier, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
@@ -19,9 +19,9 @@ from network.layers import Layer
 LOG = logging.getLogger(__name__)
 
 
-class Engine(Processor, Toolbox.Observer, method='activation_changed',
-             changes=['network_changed', 'input_changed',
-                      'activation_changed']):
+class Engine(Tool, Toolbox.Observer, method='activation_changed',
+             changes={'network_changed', 'input_changed',
+                      'activation_changed'}):
     # pylint: disable=too-many-ancestors, too-many-instance-attributes
     """.. :py:class:: Engine
 
@@ -367,7 +367,7 @@ class Engine(Processor, Toolbox.Observer, method='activation_changed',
         # Notify observers that activation values are available
         # FIXME[problem]: why does change not work here?
         # self.change(activation_changed=True)
-        self.notifyObservers(activation_changed=True)
+        self.notify_observers(activation_changed=True)
 
     def _preprocess_data(self, data: Data, prefix: str = '') -> None:
         """Preprocess the given data.

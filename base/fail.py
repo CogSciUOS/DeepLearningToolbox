@@ -1,17 +1,21 @@
 """
 .. moduleauthor:: Ulf Krumnack
 
-.. module:: base.fail
+.. module:: dltb.base.fail
 
 This module contains a base definition for :py:class:`Failable` class.
 """
+
+# standard imports
 from typing import Callable
 from contextlib import contextmanager
+import logging
 
-from .observer import Observable
+# toolbox imports
 from util.error import handle_exception
-
 from util.debug import debug_object as object
+from .observer import Observable
+
 
 class Failable(object):
     """A base class for objects that are :py:class:`Failable`. Those are
@@ -66,9 +70,10 @@ class Failable(object):
         self._failure = None
 
     @contextmanager
-    def failure_manager(self, cleanup: Callable[[], None]=None,
-                        logger=None, message: str='failure',
-                        catch: bool=False) -> None:
+    def failure_manager(self, cleanup: Callable[[], None] = None,
+                        logger: logging.Logger = None,
+                        message: str = 'failure',
+                        catch: bool = False) -> None:
         """Provide a manager for contexts in which failures may arise.
         If any failure is detected, that is, if an exception is raised,
         the object will be set in a failed state.
@@ -100,7 +105,7 @@ class Failable(object):
                 raise exception
 
 
-class FailableObservable(Observable, Failable, changes=['failure']):
+class FailableObservable(Observable, Failable, changes={'failure'}):
     """The :py:class:`FailableObservable` class is an extension of
     :py:class:`Failable`, that can notify observers in case of a
     failure.

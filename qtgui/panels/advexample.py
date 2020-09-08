@@ -178,11 +178,11 @@ class KerasClassifier(KerasNetwork, Classifier): pass
 from models.example_keras_advex_mnist import KerasMnistClassifier
 
 
-
+# FIXME[design]: QtGUI objects should not be Observable! move this to the dltb.
 class AdversarialExampleController(Observable,
                                    method='adversarialControllerChanged',
-                                   changes=['busy_changed', 'data_changed',
-                                            'parameter_changed']):
+                                   changes={'busy_changed', 'data_changed',
+                                            'parameter_changed'}):
     """
 
     Attributes
@@ -199,7 +199,6 @@ class AdversarialExampleController(Observable,
     _filename                   = 'mnist.ckpt'
     _testing                    = False
     _label_smoothing            = 0.1
-
 
     # FIXME[todo]: this needs to be initialized ...
     _runner: Runner = None

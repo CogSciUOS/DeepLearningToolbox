@@ -12,7 +12,6 @@ import time
 import logging
 import collections
 import importlib
-import logging
 
 # Qt imports
 from PyQt5.QtCore import (Qt, QTimer, QCoreApplication, QThread, QTimerEvent,
@@ -29,13 +28,7 @@ from toolbox import Toolbox
 from network import Network
 
 # FIXME[old]: this should not be needed for the MainWindow
-import util
-from util import resources, addons
-
-#from tools.activation import Engine as ActivationEngine
-
-#from tools.am import Engine as MaximizationEngine  # FIXME[old]: check if we still need this ...
-#from tools.am import Controller as MaximizationController # FIXME[old]: check if we still need this ...
+from util import resources
 from datasource import Datasource
 
 # Toolbox GUI imports
@@ -94,6 +87,7 @@ LOG = logging.getLogger(__name__)
 # from qtgui import mainwindow
 # mainwindow.BUG = True
 BUG = False
+
 
 class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         Toolbox: {'datasources_changed', 'datasource_changed',
@@ -246,7 +240,6 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         self._runner = QtAsyncRunner()
         self._initUI(title, icon)
 
-        
         if not focus:
             # Starting from Qt 4.4.0, the attribute
             # Qt.WA_ShowWithoutActivating forces the window not to
@@ -269,7 +262,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         # However, it seems that no QStatusBar is involved (at least
         # self.statusBar() seems not to be invoked)
         self.show()
-        
+
         # Initialize the Toolbox in the background, while the (event
         # loop of the) GUI is already started in the foreground.
         if self._toolbox is not None:
@@ -282,19 +275,19 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         # The following command is intended to avoid some QThread messages
         # in the shell on exit
         self._app.deleteLater()
-        
+
         # Here we have a chance to cancel all running tasks
         # avoid QThread/QTimer error messages on exit
         # ...
 
         self.hide()
         return result
-    
+
     def stop(self):
         """Quit the application.
         """
         self._saveState()
-        
+
         # Stop the Qt main event loop of this application
         # QCoreApplication.quit()
         self._app.quit()
@@ -304,7 +297,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         LOG.info("DeepVisMainWindow will show")
         if self._timerId is None:
             self._timerId = self.startTimer(1000)
-    
+
     @protect
     def hideEvent(self, event: QHideEvent) -> None:
         LOG.info("DeepVisMainWindow was hidden")
@@ -346,7 +339,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
                 # reaction in the user interface.
                 self._toolbox.datasource = datasource
                 # FIXME[bug]: Object is currently busy.
-                #datasource.prepare()
+                # datasource.prepare()
             return protect(setDatasource)
 
         # Add all datasource to the menu
@@ -359,7 +352,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
             if key in self._datasources:
                 continue
             action = QAction(label, self)
-            if True: # datasource == self._toolbox.datasource:
+            if True:  # datasource == self._toolbox.datasource:
                 action.font().setBold(True)  # FIXME[bug]: seems to have no effect
             action.triggered.connect(slot(id, datasource))
             self._datasourceMenu.addAction(action)
@@ -382,9 +375,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         """
         for panelMeta in self._panelMetas:
             yield panelMeta.id
-        
+
     def panel(self, panel_id: str,
-              create: bool=False, show: bool=False) -> Panel:
+              create: bool = False, show: bool = False) -> Panel:
         """Get the panel for a given panel identifier. Optionally
         create that panel if it does not yet exist.
 
@@ -411,13 +404,13 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         if not any(m.id == panel_id for m in self._panelMetas):
             raise KeyError(f"There is no panel with id '{panel_id}' "
                            "in DeepVisMainWindow.")
-        
+
         if QThread.currentThread() != self.thread():
             # method was called from different thread
             # emit signal to run in main thread
             self.panel_signal.emit(panel_id, create, show)
             return
-        
+
         meta = self._panelMeta(panel_id)
         panel = None
         if create:
@@ -449,7 +442,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     def statusBar(self):
         LOG.debug("DeepVisMainWindow[debug]: statusBar() was invoked.")
         return super().statusBar()
-    
+
     def _initUI(self, title: str, icon: str) -> None:
         """Initialize the graphical components of this user interface."""
         #

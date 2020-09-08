@@ -3,9 +3,10 @@
 from base import Config as BaseConfig
 from base.observer import change
 
+
 class Config(BaseConfig,
-             changes=['network_changed', 'layer_changed', 'unit_changed',
-                      'config_changed']):
+             changes={'network_changed', 'layer_changed', 'unit_changed',
+                      'config_changed'}):
     """Configuration data for the "activation maximization" (am) module.
     """
 

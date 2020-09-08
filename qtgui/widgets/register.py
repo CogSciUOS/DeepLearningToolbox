@@ -16,7 +16,8 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QLabel,
 from PyQt5.QtWidgets import QComboBox
 
 # toolbox imports
-from base import Observable, View, MetaRegister, Registrable, MetaRegisterEntry
+from base import (Observable, MetaRegister, Registrable,
+                  InstanceRegisterItem)
 from toolbox import Toolbox
 
 # GUI imports
@@ -331,7 +332,7 @@ class QRegisterItemComboBox(RegisterItemList, QComboBox):
         """
         for index in range(self.count()):
             item = self.itemData(index)
-            initialized = not isinstance(item, MetaRegisterEntry)
+            initialized = not isinstance(item, InstanceRegisterItem)
             self.setItemData(index,
                              QBrush(Qt.gray if not initialized else
                                     Qt.green if item.prepared else Qt.red),
@@ -1041,8 +1042,8 @@ class QRegisterController(QWidget, QObserver, qobservables={
         #  File "/home/ulf/projects/github/DeepLearningToolbox/datasource/datasource.py", line 120, in unprepare
         #    self.change('state_changed', 'data_changed')
         #  File "/home/ulf/projects/github/DeepLearningToolbox/base/observer.py", line 323, in change
-        #    self.notifyObservers(self.Change(*args, **kwargs))
-        #  File "/home/ulf/projects/github/DeepLearningToolbox/base/observer.py", line 377, in notifyObservers
+        #    self.notify_observers(self.Change(*args, **kwargs))
+        #  File "/home/ulf/projects/github/DeepLearningToolbox/base/observer.py", line 377, in notify_observers
         self.update()
 
     def observable_changed(self, sender, change) -> None:

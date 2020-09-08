@@ -83,9 +83,8 @@ import threading
 import numpy as np
 
 # toolbox imports
-from .meta import Metadata
 from .data import Data
-from base import Preparable, FailableObservable, MetaRegister, change, busy
+from base import Preparable, FailableObservable, MetaRegister
 from util.image import imread
 
 # logging
@@ -94,9 +93,9 @@ LOG = logging.getLogger(__name__)
 
 class Datasource(Preparable, FailableObservable,
                  method='datasource_changed',
-                 changes=['state_changed', 'metadata_changed',
-                          'data_changed', 'batch_changed'],
-                 metaclass=MetaRegister):  # FIXME[todo]: ABCMetaRegister
+                 changes={'state_changed', 'metadata_changed',
+                          'data_changed', 'batch_changed'},
+                 metaclass=MetaRegister):
     # For some (unknown) reason, pylint currently complains when
     # not overriding an abstract method (load_datapoint_from_file)
     # pylint: disable=abstract-method

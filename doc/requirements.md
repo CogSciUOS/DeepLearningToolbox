@@ -13,10 +13,32 @@
 
 ## Tensors
 
-* tensorflow
+### tensorflow
 
-* torch
+### torch
 
+
+## Tools
+
+### dlib
+
+`dlib` is a machine learning library by Davis King. Provides several
+pretraiend models for different tasks, including face detection,
+landmarking and recognition. It provides the following tools:
+* `hog`: a history of gradient based face detector.
+
+A recent version of `dlib`can be installed from PyPi
+(this requires `cmake` for building a wheel and 
+installation fails if `cmake` is not installed):
+```sh
+pip install dlib
+```
+
+
+The conda version seems somewhat outdated:
+```sh
+conda install -c menpo dlib
+```
 
 
 # Multimedia

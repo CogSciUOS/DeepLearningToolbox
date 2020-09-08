@@ -28,14 +28,20 @@ from .busy import BusyObservable, busy
 
 # FIXME[todo]: make this an abstract class
 class Preparable(BusyObservable, method='preparable_changed',
-                 changes=['state_changed']):
+                 changes={'state_changed'}):
     """The :py:class:`Preparable` implements this idea providing three public
     methods:
-    * :py:meth:`prepare`: Prepare the object by allocating all resources
-    required to use the object.
-    * :py:meth:`unprepare`: Release all resource acquired by :py:meth:`prepare`.
-    * :py:meth:`prepared`: A boolean property indicating if the the object
-    was prepared (successfully).
+
+    :py:meth:`prepare`:
+        Prepare the object by allocating all resources required
+        to use the object.
+
+    :py:meth:`unprepare`:
+        Release all resource acquired by :py:meth:`prepare`.
+
+    :py:meth:`prepared`:
+    A boolean property indicating if the the object was prepared
+    (successfully).
 
     Classes that realize the idea preparation should inherit from
     :py:class:`Preparable` and reimplement the corresponding private
@@ -51,7 +57,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         """
         self._unprepare()
         super().__del__()
-    
+
     @property
     def prepared(self) -> bool:
         """Report if this :py:class:`Preparable` is prepared for use.
@@ -62,6 +68,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         return self._prepared()
 
     def _prepared(self) -> bool:
+        # pylint: disable=no-self-use
         """Implementation of the :py:class:`prepared` property.
         The default implementation will always return `True`.
         Subclasses should overwrite this method to adapt to their
@@ -89,7 +96,7 @@ class Preparable(BusyObservable, method='preparable_changed',
             return  # nothing to do ...
 
         if not self.preparable and not force:
-            raise RuntimeException(f"{self} is not preparable.")
+            raise RuntimeError(f"{self} is not preparable.")
 
         try:
             with self.failure_manager(cleanup=self._unprepare):
@@ -111,7 +118,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         deep class hierarchies and multiple inheritance.
 
         """
-        pass
+        # To be implemented by subclasses
 
     def _post_prepare(self) -> None:
         """An additional action that shall be performed upon successful
@@ -119,7 +126,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         subclasses may overwrite this method to perform some initial
         action with the freshly prepared object.
         """
-        pass
+        # To be implemented by subclasses
 
     @busy("unpreparing")
     def unprepare(self) -> None:
@@ -156,7 +163,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         multiple inheritance.
 
         """
-        pass
+        # To be implemented by subclasses
 
     def preparable(self) -> bool:
         """Check if this :py:class:`Preparable` can be prepared. This
@@ -166,6 +173,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         return self.prepared or self._preparable()
 
     def _preparable(self) -> bool:
+        # pylint: disable=no-self-use
         """The actual implementation of :py:meth:`preparable`. The default
         is `True` and subclasses with deviating behaviour should overwrite
         this method (combining their state `with super._preparable()`).

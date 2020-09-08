@@ -3,7 +3,7 @@ import numpy as np
 from datasource import Metadata
 from util.image import Landmarks, BoundingBox
 from base import run, busy
-from tools.detector import ImageDetector as BaseDetector
+from ..detector import ImageDetector as BaseDetector
 from .detector import Detector as FaceDetector
 
 

@@ -73,6 +73,7 @@ def edit(filename: str, lineno: int=None) -> int:
     command = f"metaulf-edit {filename}:{lineno}"
     return subprocess.call(command, shell=True)
 
+
 class debug_object(object):
 
     def __init__(self, *args, **kwargs) -> None:
@@ -88,7 +89,7 @@ class debug_object(object):
     def __getattribute__(self, attr: str) -> Any:
         value = super().__getattribute__(attr)
         return (debug(value)
-                if callable(value) and hasattr(self, '_debug') 
+                if callable(value) and hasattr(self, '_debug')
                 else value)
 
     def debug_on(self) -> None:

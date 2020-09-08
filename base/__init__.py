@@ -16,7 +16,7 @@ calling busy methods, one may specify an additional parameter busy
 to specify how to proceed in case that the object is busy
 
 * 'block': wait until the object is no longer busy
-* 'queue': 
+* 'queue': FIXME[what]?
 * 'exception': raise a BusyException
 
 A :py:class:`BusyObservable` provides the property `busy`, to check
@@ -97,5 +97,4 @@ from .prepare import Preparable
 from .config import Config
 from .runner import Runner, AsyncRunner
 from .controller import Controller, View, run
-from .register import (MetaRegister, MetaRegisterEntry, Registrable,
-                       ABCMetaRegister)
+from .register import MetaRegister, InstanceRegisterItem, Registrable

@@ -28,7 +28,8 @@ For details see:
 
 ### Checks
 
-```sh
-grep -r ':py:' *  | grep py: | grep -v doc/ | sed 's/^.*\(:py:[^:]*:\).*/\1/m' | sort | uniq -c
 
+Check the roles used for cross-referencing:
+```sh
+find . -name '*.py' -exec grep ':py:' '{}' ';' | sed 's/^.*\(:py:[^:]*:\).*/\1/m' | sort | uniq -c
 ```

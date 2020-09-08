@@ -8,6 +8,7 @@ import logging
 # logging
 LOG = logging.getLogger(__name__)
 
+
 class Metaclass(type):
     """A base class for metaclasses.
 
@@ -20,15 +21,19 @@ class Metaclass(type):
 
     """
 
-    def __init_subclass__(mcl, **kwargs) -> None:
-        LOG.info("Metaclass: new metaclass %s", mcl.__name__)
-        super().__init_subclass__(**kwargs)
+    def __init_subclass__(cls, **kwargs) -> None:
+        LOG.info("Metaclass: new metaclass %s", cls.__name__)
+        super().__init_subclass__()
+        # FIXME[bug]: TypeError: __init_subclass__() takes no keyword arguments
+        # super().__init_subclass__(**kwargs)
 
     def __init__(cls, *args, **kwargs) -> None:
         cls._meta_objects = []
         super().__init__(*args, **kwargs)
-        
+
     def add_meta_object(cls, obj, methods) -> None:
+        """Add an meta object.
+        """
         cls._meta_objects.append((obj, methods))
 
     def __getattribute__(cls, attr: str) -> Any:
@@ -67,20 +72,25 @@ class Metaclass(type):
 
         for meta_object, meta_methods in cls._meta_objects:
             if attr in meta_methods:
-                #print(f"Metaclass[{cls}]: Adapting meta method '{attr}' "
-                #      f"({getattr(meta_object, attr)})")
+                # print(f"Metaclass[{cls}]: Adapting meta method '{attr}' "
+                #       f"({getattr(meta_object, attr)})")
                 return getattr(meta_object, attr)
 
         # FIXME[concept]: we need some more pincipled way of determining
         # what methods to adapt ...
-        #LOG.warning("Metaclass[%s]: Not adapting meta method '%s' (%s) "
-        #            "[type=%s, callable=%s, is_property=%s]",
-        #            cls, attr, value, type(value), callable(value),
-        #            isinstance(value, property))
+        # LOG.warning("Metaclass[%s]: Not adapting meta method '%s' (%s) "
+        #             "[type=%s, callable=%s, is_property=%s]",
+        #             cls, attr, value, type(value), callable(value),
+        #             isinstance(value, property))
         return value
 
     def debug(cls):
+        """A debug function for a class belonging to this :py:class:`Meta`
+        class.
+
+        """
         print(f"debug: {cls.__name__} with {len(cls._meta_objects)} "
               f"meta objects (id={id(cls._meta_objects)})")
         for i, (meta_object, meta_methods) in enumerate(cls._meta_objects):
-            print(f"debug: ({i}) {meta_object}")
+            print(f"debug: ({i}) {meta_object} "
+                  f"-> {len(meta_methods)} meta methods")

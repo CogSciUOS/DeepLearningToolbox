@@ -37,7 +37,7 @@ LOG.setLevel(logging.DEBUG)
 
 
 class Network(Identifiable, Extendable, Preparable, method='network_changed',
-              changes=['state_changed', 'weights_changed'],
+              changes={'state_changed', 'weights_changed'},
               metaclass=MetaRegister):
     """Abstract Network interface for all frameworks.
 

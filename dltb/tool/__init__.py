@@ -1,4 +1,7 @@
-from .tool import Tool, Processor
+"""Tools for the toolbox.
+
+"""
+from .tool import Tool
 
 Tool.register_key('haar', 'tools.face.opencv', 'DetectorHaar')
 Tool.register_key('ssd', 'tools.face.opencv', 'DetectorSSD')

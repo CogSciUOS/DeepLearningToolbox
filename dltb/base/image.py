@@ -288,7 +288,7 @@ class ImageOperator:
         imwrite(target, self(imread(source)))
 
 
-class ImageTool(Observable, method='image_changed', changes=['image_changed']):
+class ImageTool(Observable, method='image_changed', changes={'image_changed'}):
     """Base class for tools that can iteratively create images:
 
     Design pattern 1 (observer)

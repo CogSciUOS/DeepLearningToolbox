@@ -62,6 +62,7 @@ from util import addons
 from base import BusyObservable, Runner, Controller as BaseController
 from dltb.util.image import imread
 from dltb.base import run
+from dltb.tool import Tool
 
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
@@ -69,8 +70,7 @@ from dltb.base import run
 # FIXME[todo]: this will load tensorflow!
 from network import Network, AutoencoderController, argparse as NetworkArgparse
 # from network.examples import keras, torch
-from datasource import Datasource, Datafetcher, Loop, Data, DataDirectory
-from tools import Tool
+from datasource import Datasource, Datafetcher, Data, DataDirectory
 from tools.train import TrainingController
 from .process import Process
 
@@ -89,11 +89,11 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 class Toolbox(BusyObservable, Datafetcher.Observer,
               method='toolbox_changed',
-              changes=['networks_changed',
+              changes={'networks_changed',
                        'tools_changed',
                        'datasources_changed', 'datasource_changed',
                        'input_changed', 'server_changed', 'shell_changed',
-                       'processes_changed'],
+                       'processes_changed'},
               changeables={
                   'datasource': 'datasource_changed'
               }):
@@ -108,7 +108,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
     be added by calling specific methods.
 
     **Datasources**
-    
+
     The :py:class:`Toolbox` maintains a list of :py:class:`Datasource`s.
 
     The :py:class:`Toolbox` also has a current :py:class:`Datasource`
@@ -201,7 +201,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
     def __init__(self) -> None:
         """Initialize the toolbox.
 
-    
         When running with a GUI, certain concurrency issues arise: The
         GUI should be started quick, showing the user that something
         is happening. It may display some progress indicator, allowing
@@ -227,12 +226,12 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         """Free resources acquired by the toolbox.
         Most important: stop running threads and background processes.
         """
-        #self._uninitialize_logging()
-        #self._uninitialize_exception_handler()
-        #self._uninitialize_processes()
-        #self._uninitialize_tools()
+        # self._uninitialize_logging()
+        # self._uninitialize_exception_handler()
+        # self._uninitialize_processes()
+        # self._uninitialize_tools()
         self._uninitialize_datasources()
-        #self._uninitialize_networks()
+        # self._uninitialize_networks()
 
     @property
     def runner(self) -> Runner:
@@ -488,9 +487,9 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         if change.data_changed:
             self.set_input(data=datafetcher.data)  # data may be None
 
-    ###########################################################################
-    ###                               Input                                 ###
-    ###########################################################################
+    #
+    # Input
+    #
 
     @property
     def input_data(self) -> Data:
@@ -507,8 +506,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
     # FIXME[todo]: we should set input_data busy
     @run
-    def set_input_from_file(self, filename: str, label = None,
-                            description: str = None):
+    def set_input_from_file(self, filename: str,
+                            description: str = None) -> None:
         """Read data from a file and set a new input
         :py:data:`Data` object for this :py:class:`Toolbox`.
         Observers will be notified.
@@ -561,20 +560,20 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         if isinstance(tool, str):
             key = tool
             if key in self._tools:
-                return self._tools[key] # tool is already in this Toolbox
+                return self._tools[key]  # tool is already in this Toolbox
                 # FIXME[concept]: in some situations it may be desirable
                 # to have multiple instances of a tool in the Toolbox,
                 # e.g. multiple activation tools if we want to compare
                 # activations of multiple networks ...
-            
+
             if key == 'activation':
                 # FIXME[hack] ...
                 from tools.activation import Engine as ActivationEngine
                 tool = ActivationEngine(toolbox=self)
                 # FIXME[old]
-                #network_controller = \
+                # network_controller = \
                 #    self._toolbox_controller.autoencoder_controller  # FIXME[hack]
-                #tool.set_network_controller(network_controller)
+                # tool.set_network_controller(network_controller)
 
             elif key == 'lucid':
                 if addons.use('lucid') and False:  # FIXME[todo]
@@ -629,7 +628,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
         Returns
         ------
-        tool: 
+        tool:
             The tool or None, if no tool with this name is contained in
             this :py:class:`Toolbox`.
         """
@@ -640,7 +639,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         """Iterate over the tools registered in this :py:class:`Toolbox`.
         """
         return self._tools.values()
-        
+
     #
     # Command line options
     #
@@ -756,7 +755,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             info_handler = logging.StreamHandler(sys.stderr)
             info_handler.setLevel(logging.INFO)
             info_handler.setFormatter(self.logging_formatter)
-            print(f"Toolbox: outputing info messages from '{args.info}' on {info_handler}")
+            print(f"Toolbox: outputing info messages from '{args.info}' "
+                  "on {info_handler}")
             for module in args.info:
                 logger = logging.getLogger(module)
                 logger.addHandler(info_handler)
@@ -766,7 +766,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             debug_handler = logging.StreamHandler(sys.stderr)
             debug_handler.setLevel(logging.DEBUG)
             debug_handler.setFormatter(self.logging_formatter)
-            print(f"Toolbox: outputing debug messages from '{args.debug}' on {debug_handler}")
+            print(f"Toolbox: outputing debug messages from '{args.debug}' "
+                  "on {debug_handler}")
             for module in args.debug:
                 logger = logging.getLogger(module)
                 logger.addHandler(debug_handler)
@@ -782,7 +783,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             if args.face:
                 for key in ('widerface', '5celeb'):
                     self.add_datasource(key)
-                for key in ('haar',):  # 'mtcnn', 'ssd', 'hog', 'cnn'
+                # 'haar', 'mtcnn', 'ssd', 'hog', 'cnn'
+                for key in ('haar', 'ssd'):
                     # FIXME[todo]: 'cnn' runs really slow on CPU and
                     # blocks the GUI! - we may think of doing
                     # real multiprocessing!
@@ -977,15 +979,15 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
         if self.option('internals'):
             panels.append('internals')
-        #if addons.internals('internals')
+        # if addons.internals('internals')
         # Initialise the "Activation Maximization" panel.
-        #if addons.use('maximization'):
+        # if addons.use('maximization'):
         #    panels.append('maximization')
         if self.option('face'):
             panels.append('face')
-            #wider_faces = Datasource['wider-faces-train']
-            #datasources.append(wider_faces)
-            #self._datasource(wider_faces)
+            # wider_faces = Datasource['wider-faces-train']
+            # datasources.append(wider_faces)
+            # self._datasource(wider_faces)
 
         if self.option('resources'):
             panels.append('resources')
@@ -1297,7 +1299,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
     # FIXME[experimental]: this is experimental code that should not
     # be part of the Toolbox
-    
+
     # FIXME[bug]: a crash of the main python program leaves background
     # processes alive!
     # [such a crash can be caused by sounddevice]
@@ -1326,7 +1328,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
     # as the main process, but a different LWP
     # (light weight process = thread ID)).
 
-    
     def _initialize_processes(self) -> None:
         """
         """
@@ -1436,13 +1437,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
     @staticmethod
     def debug_register():
-        from datasource import Datasource
         Datasource.debug_register()
-
-        from network import Network
         Network.debug_register()
-
-        from tools import Tool
         Tool.debug_register()
         print("\n")
 
@@ -1489,7 +1485,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             self._am_engine = engine_controller
         return engine_controller
 
-
     def hack_load_mnist(self):
         # FIXME[old]: seems not to be used anymore
         """Initialize the dataset.
@@ -1499,7 +1494,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         may be interesting as well.
 
         The data will be flattened (stored in 1D arrays), converted to
-        float32 and scaled to the range 0 to 1. 
+        float32 and scaled to the range 0 to 1.
         """
         if self.dataset is not None:
             return  # already loaded
@@ -1511,49 +1506,52 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         from keras.datasets import mnist
         sys.stderr = stderr
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        
+
         mnist = mnist.load_data()
-        #self.x_train, self.y_train = mnist[0]
-        #self.x_test, self.y_test = mnist[1]
+        # self.x_train, self.y_train = mnist[0]
+        # self.x_test, self.y_test = mnist[1]
         self.dataset = mnist
         self.data = mnist[1]  # FIXME[hack]
 
         # FIXME[hack]: we need a better training concept ...
         from tools.train import Training
         self.training = Training()
-        #self.training.\
+        # self.training.\
         #    set_data(self.get_inputs(dtype=np.float32, flat=True, test=False),
         #             self.get_labels(dtype=np.float32, test=False),
         #             self.get_inputs(dtype=np.float32, flat=True, test=True),
         #             self.get_labels(dtype=np.float32, test=True))
 
-
     @property
     def data(self):
         # FIXME[old]: seems not to be used anymore
         print("FIXME[old]: Toolbox.data should not be used anymore")
-        raise RuntimeError("FIXME[old]: Toolbox.data getter should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.data getter should "
+                           "not be used anymore")
         return self._data
 
     @data.setter
     def data(self, data):
         # FIXME[old]: seems not to be used anymore
         print("FIXME[old]: Toolbox.data should not be used anymore")
-        raise RuntimeError("FIXME[old]: Toolbox.data setter should not be used anymore")
-        self._data = (None, None) if data is None else data 
+        raise RuntimeError("FIXME[old]: Toolbox.data setter should not "
+                           "be used anymore")
+        self._data = (None, None) if data is None else data
 
     @property
     def inputs(self):
         # FIXME[old]: seems not to be used anymore
         print("FIXME[old]: Toolbox.inputs should not be used anymore")
-        raise RuntimeError("FIXME[old]: Toolbox.inputs getter should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.inputs getter should not "
+                           "be used anymore")
         return self._data[0]
 
     @property
     def labels(self):
         # FIXME[old]: used in ./qtgui/panels/autoencoder.py
         print("FIXME[old]: Toolbox.labels should not be used anymore")
-        raise RuntimeError("FIXME[old]: Toolbox.labels getter should not be used anymore")
+        raise RuntimeError("FIXME[old]: Toolbox.labels getter should not "
+                           "be used anymore")
         return self._data[1]
 
     #

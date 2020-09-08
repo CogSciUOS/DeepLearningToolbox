@@ -358,8 +358,8 @@ class SoundWriter:
         return self.Async(self)
 
 
-class SoundPlayer(Observable, method='player_changed', changes=[
-        'state_changed', 'position_changed', 'sound_changed']):
+class SoundPlayer(Observable, method='player_changed', changes={
+        'state_changed', 'position_changed', 'sound_changed'}):
     """A :py:class:`SoundPlayer` can play sounds on a suitable audio
     device.
 
@@ -546,7 +546,7 @@ class SoundPlayer(Observable, method='player_changed', changes=[
         """
 
 
-class SoundRecorder(Observable, changes=['state_changed', 'time_changed'],
+class SoundRecorder(Observable, changes={'state_changed', 'time_changed'},
                     method='recorder_changed'):
     """A :py:class:`SoundRecorder` provides functions for sound
     recording.

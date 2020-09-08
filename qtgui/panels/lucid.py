@@ -33,7 +33,7 @@ class LucidPanel(Panel, QObserver, qobservables={
     fiddle with completely indpendently:
 
     * objectives -- What do you want the model to visualize?
-    
+
     * parameterization -- How do you describe the image?
 
     * transforms -- What transformations do you want your
@@ -44,7 +44,7 @@ class LucidPanel(Panel, QObserver, qobservables={
     --------
     1. Let's visualize another neuron using a more explicit objective:
         obj = objectives.channel("mixed4a_pre_relu", 465)
-        
+
     2. Or we could do something weirder:
        (Technically, objectives are a class that implements addition.)
 
@@ -127,7 +127,7 @@ class LucidPanel(Panel, QObserver, qobservables={
         engine.notify(self)
 
     def initUI(self):
-        
+
         self._imageView = QImageView()
 
         self._layerName = QLabel()
@@ -160,18 +160,17 @@ class LucidPanel(Panel, QObserver, qobservables={
         h2.addWidget(self._numberOfUnits)
         h2.addWidget(self._unitID)
         v1.addLayout(h2)
-        
+
         h1.addLayout(v1)
         h1.addWidget(self._button)
         h1.addWidget(self._buttonAll)
         h1.addWidget(self._buttonStop)
         h1.addStretch()
-        
+
         layout.addLayout(h1)
         layout.addWidget(self._modelView)
 
-
-    def engineChanged(self, engine: LucidEngine,
+    def engine_changed(self, engine: LucidEngine,
                       info: LucidEngine.Change) -> None:
         """Respond to change in the activation maximization Engine.
 
@@ -210,9 +209,6 @@ class LucidPanel(Panel, QObserver, qobservables={
                                      else engine.image[0])
 
 
-
-
-
 from lucid.modelzoo.vision_base import Model as LucidModel
 
 
@@ -220,7 +216,6 @@ class QLucidModelView(QWidget):
     """A Widget to display properties of a Lucid model.  A Lucid model
     represents a specific network trained on a specific dataset.
 
-    
     Attributes
     ----------
     _engine: LucidEngine
@@ -236,9 +231,8 @@ class QLucidModelView(QWidget):
     _image_shape: QLabel
         A label displaying the input shape of the network
         (without batch axis).
-        
     """
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.initUI()
@@ -260,7 +254,7 @@ class QLucidModelView(QWidget):
 
         # create_input: function
         #    Create input tensor.
-        
+
         # dataset: str
         #
         self._dataset = QLabel()
@@ -298,7 +292,7 @@ class QLucidModelView(QWidget):
 
         # model_path: str
         #     'gs://modelzoo/vision/other_models/AlexNet.pb'
-        self._model_path = QLabel()      
+        self._model_path = QLabel()
 
         # mro: function
         #     return a type's method resolution order (as a list)
@@ -307,7 +301,7 @@ class QLucidModelView(QWidget):
         #      post_import(scope)
 
         # show_graph: function
-        
+
         self.layoutUI()
 
     def layoutUI(self) -> None:
@@ -321,7 +315,7 @@ class QLucidModelView(QWidget):
         l1.addRow("Input name", self._input_name)
         l1.addRow("Is BGR", self._is_BGR)
         layout.addLayout(l1)
-        
+
         l1 = QHBoxLayout()
         l2 = QVBoxLayout()
         l2.addWidget(QLabel("Layers:"))
@@ -346,7 +340,7 @@ class QLucidModelView(QWidget):
             self._image_value_range.setText("")
             self._input_name.setText("")
             self._is_BGR.setText("")
-            #self._labels.setText("")
+            # self._labels.setText("")
             self._labels_path.setText("")
             self._model_path.setText("")
         else:
@@ -355,7 +349,7 @@ class QLucidModelView(QWidget):
             self._image_value_range.setText(f"{model.image_value_range}")
             self._input_name.setText(f"{model.input_name}")
             self._is_BGR.setText(f"{getattr(model,'is_BGR','')}")
-            #self._labels.setText("{model.labels}")
+            # self._labels.setText("{model.labels}")
             self._labels_path.setText(f"{model.labels_path}")
             self._layers.addItems([f"{l['name']}: {l['type']}[{l['size']}]"
                                    for l in model.layers])

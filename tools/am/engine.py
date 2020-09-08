@@ -15,35 +15,33 @@ FIXME[todo]: wish list
 
 """
 
+# standard imports
 from collections import OrderedDict
-
 import os
 import datetime
 import time
-
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-
+# third party imports
 import cv2
 import numpy as np
 
-from .config import Config
-
+# toolbox imports
 from base.observer import Observable, change
 from network import Network
-
-from network.tensorflow import Network as TensorflowNetwork
-
-
 # FIXME[hack]: make this network/dataset agnostic!
 from tools.caffe_classes import class_names
+from network.tensorflow import Network as TensorflowNetwork
+from .config import Config
+
+# logging
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 
 
 class Engine(Observable, method='maximization_changed',
-             changes=['engine_changed', 'config_changed', 'network_changed',
-                      'image_changed']):
+             changes={'engine_changed', 'config_changed', 'network_changed',
+                      'image_changed'}):
     """Activation Maximization Engine.
 
     The Engine takes all configuration values from the Config
@@ -127,7 +125,7 @@ class Engine(Observable, method='maximization_changed',
             self._running = running
             # FIXME[hack]: we need a better notification concept!
             #self.change(engine_changed=True)
-            self.notifyObservers(Engine.Change(engine_changed=True))
+            self.notify_observers(Engine.Change(engine_changed=True))
 
     @property
     def network(self) -> Network:
@@ -159,7 +157,7 @@ class Engine(Observable, method='maximization_changed',
         object for the current network is available, prepare the
         recorders and the loss list.
         """
-        logger.info("-Engine._prepare() -- begin")
+        LOG.info("-Engine._prepare() -- begin")
         self._set_status("preparation")
 
         # FIXME[hack]: determine these values automatically!
@@ -175,7 +173,7 @@ class Engine(Observable, method='maximization_changed',
             self._helper = HelperClass(self, self._config, self._network)
 
         if self._helper is None:
-            logger.warning("Engine: maximize activation: No Helper. STOP")
+            LOG.warning("Engine: maximize activation: No Helper. STOP")
             return
 
         self._helper.prepare_maximization1(initialize_variables=False)
@@ -197,13 +195,13 @@ class Engine(Observable, method='maximization_changed',
 
         self._helper.prepare_maximization2()
 
-        logger.debug("STEP 2: initialize image")
+        LOG.debug("STEP 2: initialize image")
         self._image = self.initialize_image()
-        logger.debug(f"STEP 2: image: {self._image.shape}")
+        LOG.debug(f"STEP 2: image: {self._image.shape}")
 
         self._loss_list = np.ones(self._config.LOSS_COUNT) * -100000
 
-        logger.info("-Engine._prepare() -- end")
+        LOG.info("-Engine._prepare() -- end")
 
     def _update_max_steps(self):
         """Change the maximal steps this engine is supposed to run.
@@ -220,7 +218,7 @@ class Engine(Observable, method='maximization_changed',
         """
         if self._helper is not None:
             self._set_status("stopped", False)
-            logger.info("!!! Engine stopped !!!")
+            LOG.info("!!! Engine stopped !!!")
 
     def initialize_image(self) -> np.ndarray:
         """Provide an initial image for optimization.
@@ -253,7 +251,7 @@ class Engine(Observable, method='maximization_changed',
         gradient ascent, until one of the stop criteria is fulfilled.
         
         """
-        logger.info("Engine: maximize activation: BEGIN")
+        LOG.info("Engine: maximize activation: BEGIN")
 
         #
         # some sanity checks
@@ -275,7 +273,7 @@ class Engine(Observable, method='maximization_changed',
         # main part
         #
 
-        logger.debug(f"-Starting computation:")
+        LOG.debug(f"-Starting computation:")
         self._set_status("start")
         t = time.time()  # to meaure computation time
         self._set_status("running")
@@ -283,10 +281,10 @@ class Engine(Observable, method='maximization_changed',
         #
         # get first loss
         #
-        logger.debug("--STEP 1: get first loss (skipped)")
+        LOG.debug("--STEP 1: get first loss (skipped)")
         loss = 0
         #loss = self._helper.network_loss(image)
-        #logger.debug("Loss:", loss)
+        #LOG.debug("Loss:", loss)
         # list containing last Config.LOSS_COUNT losses
         avg_steptime = 0  # step time counter
 
@@ -321,7 +319,7 @@ class Engine(Observable, method='maximization_changed',
                                         axis=self._batch_axis)
             self._take_snapshot(self._iteration, image=snapshot, loss=loss)
             self._record_snapshot()
-            self.notifyObservers(Engine.Change(image_changed=True))
+            self.notify_observers(Engine.Change(image_changed=True))
 
         self._set_status("stopped", False)
 
@@ -333,9 +331,9 @@ class Engine(Observable, method='maximization_changed',
         # average step time
         avg_steptime /= self._iteration
 
-        logger.debug(f"-TensorflowHelper.onMaximization() -- end")
-        logger.debug(f"Computation time: {time.time()-t}")
-        logger.debug(f"image: {self._image.shape}")
+        LOG.debug(f"-TensorflowHelper.onMaximization() -- end")
+        LOG.debug(f"Computation time: {time.time()-t}")
+        LOG.debug(f"image: {self._image.shape}")
 
         #
         # store the result
@@ -343,7 +341,7 @@ class Engine(Observable, method='maximization_changed',
         self.finish = finish
 
         self.change(image_changed=True)
-        logger.info(f"Engine.maximize_activation() -- end")
+        LOG.info(f"Engine.maximize_activation() -- end")
 
     def _take_snapshot(self, iteration: int, image: np.ndarray=None,
                        loss: float=None) -> None:
@@ -486,18 +484,18 @@ class Engine(Observable, method='maximization_changed',
         frameSize = frames.shape[1:3]
         isColor = (frames.ndim==4)
         number_of_frames = self._iteration-1
-        logger.info(f"save_video: preparing {filename} ({fourcc}) ... ")
+        LOG.info(f"save_video: preparing {filename} ({fourcc}) ... ")
         writer = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*fourcc),
                                  fps, frameSize, isColor=isColor)
-        logger.info(f"save_video: writer.isOpened: {writer.isOpened()}")
+        LOG.info(f"save_video: writer.isOpened: {writer.isOpened()}")
         if writer.isOpened():
-            logger.info(f"save_video: writing {number_of_frames} frames ... ")
+            LOG.info(f"save_video: writing {number_of_frames} frames ... ")
             # FIXME[todo]: we need the number of actual frames!
             for frame in range(number_of_frames):
                 writer.write(self._normalizeImage(frames[frame], as_bgr=True))
-        logger.info(f"save_video: releasing the writer")
+        LOG.info(f"save_video: releasing the writer")
         writer.release()
-        logger.info(f"save_video: done")
+        LOG.info(f"save_video: done")
 
     def _normalizeImage(self, image: np.ndarray,
                         as_uint8:bool = True,
@@ -694,7 +692,7 @@ class Engine(Observable, method='maximization_changed',
         # Output
         #
 
-        logger.debug("Classification results following:")
+        LOG.debug("Classification results following:")
         activation = self._helper.network_output(image)
         self.activation = activation
         n = 6
@@ -703,14 +701,16 @@ class Engine(Observable, method='maximization_changed',
 
             top_n = self.get_top_n(dist, n)
 
-            logger.debug(f"Image {batch_index+1} of {activation.shape[batch_axis]}"
-                         f" generated to maximize unit {self._config.UNIT_INDEX}"
-                         f" ({class_names[self._config.UNIT_INDEX]})")
-            logger.debug(f"Winner is '{class_names[top_n[0]]}' at index {top_n[0]}"
-                         f" with prob {dist[top_n[0]]}. Top {n} following:")
+            LOG.debug(f"Image {batch_index+1} of "
+                      f"{activation.shape[batch_axis]} "
+                      f"generated to maximize unit {self._config.UNIT_INDEX} "
+                      f"({class_names[self._config.UNIT_INDEX]})")
+            LOG.debug(f"Winner is '{class_names[top_n[0]]}' "
+                      f"at index {top_n[0]} "
+                      f"with prob {dist[top_n[0]]}. Top {n} following:")
             for j, index in enumerate(top_n):
-                logger.debug(f" {j+1}. {class_names[index]} ({index}): "
-                             f"{dist[index]*100}%")
+                LOG.debug(f" {j+1}. {class_names[index]} ({index}): "
+                          f"{dist[index]*100}%")
 
             #
             # Save the resulting image
@@ -721,8 +721,6 @@ class Engine(Observable, method='maximization_changed',
                               finish, top_n,
                               impath=impath,
                               paramfilename=paramfilename)
-
-
 
 
 class _EngineHelper:

@@ -1,51 +1,79 @@
+"""A :py:class:`Register` is basically an :py:class:`Observable` container,
+that notifies its :py:class:`Observer`s when items are registered or
+unregistered.
 
+"""
 # Generic imports
-from abc import ABCMeta
-from typing import Iterator, Tuple
+from abc import ABCMeta, abstractmethod
+from typing import Iterator, Tuple, Union
 import importlib
 import inspect
-from abc import ABCMeta
 import logging
 
 # Toolbox imports
-from util.error import handle_exception
 from util.debug import debug_object as object
-from .observer import MetaObservable
-from .busy import BusyObservable, busy
+from .observer import Observable, MetaObservable
+from .prepare import Preparable
 from .fail import Failable
 
-
+# Logging
 LOG = logging.getLogger(__name__)
 
 
-class Registrable(object):
+class Registrable(object, metaclass=ABCMeta):
     """A :py:class:`Registrable` is an object that may be put into a
-    register. This basically mean that it has a unique key (accessible
-    via the :py:meth:`key` property).
+    :py:class:`Register`. This basically mean that it has a unique key
+    (accessible via the :py:attr:`key` property).
 
-    Parameters
+    Attributes
     ----------
     key: str
         A (supposed to be unique) key for the new instance.
+    """
+    @property
+    @abstractmethod
+    def key(self):
+        """Get the "public" key used to identify this item in a register.  The
+        key is created upon initialization and should not be changed
+        later on.
 
+        """
+        # to be implemented by subclasses
+
+
+class RegisterItem(Registrable):
+    """A :py:class:`RegisterItem` is a base class for
+    :py:class:`Registrable` objects. It realizes the
+    :py:attr:`key` property by storing the key value as
+    private property.
+
+    Attributes
+    ----------
+    _key: str
+        A (supposed to be unique) key for the new instance.
+
+    Class Attributes
+    ----------------
+    _key_counter: int
+        A counter for generating unique keys.
     """
 
+    _key_counter = 0
+
     def __init__(self, *args, key: str = None, **kwargs) -> None:
-        """Iniitalization of a :py:class:`Registrable`. This will
+        """Iniitalization of a :py:class:`RegisterItem`. This will
         ensure that the object has a key.
         """
         super().__init__(*args, **kwargs)
         self._key = key or self._generate_key()
-        LOG.debug("Registrable: init instance of class %s with key '%s'"
-                  f"{type(self).__name__} with key '{self.key}'")
+        LOG.debug("RegisterItem: init instance of class %s with key '%s'",
+                  type(self).__name__, self.key)
 
     def _generate_key(self) -> str:
         """Generate a key.
         """
-        # FIXME[bug]: this seems not to be a meaningful implementation.
-        self._key_counter = \
-            self._key_counter + 1 if hasattr(self, '_key_counter') else 0
-        return self._key_counter
+        type(self)._key_counter += 1
+        return type(self).__name__ + str(self._key_counter)
 
     @property
     def key(self):
@@ -56,90 +84,141 @@ class Registrable(object):
         """
         return self._key
 
-class RegisterObservable(BusyObservable,
-                         method='register_changed',
-                         changes=['key_added', 'key_changed',
-                                  'class_added', 'class_changed']):
+
+class Register(Observable, method='register_changed',
+               changes={'key_added', 'key_changed', 'key_removed',
+                        'class_added', 'class_changed'}):
     """
 
     **Changes**
-    'key_added'
+    'key_added':
+        A new item was added to this :py:class:`Register`.
     'key_changed'
+        A register item has changed.
+    'key_removed':
+        A key was remove from this :py:class:`Register`.
     """
 
-    # FIXME[hack]: this could be done by notifyObservers ....
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._items = {}
+
+    def add(self, item: Registrable) -> None:
+        """Add a new item to this :py:class:`Register`
+        """
+        key = item.key
+        self._items[key] = item
+        self.register_change(key, 'key_added')
+
+    def remove(self, item: Registrable) -> None:
+        """Remove an item from this :py:class:`Register`
+        """
+        key = item.key
+        del self._items[key]
+        self.register_change(key, 'key_removed')
+
+    def __contains__(self, item: Union[str, Registrable]) -> bool:
+        """Check if the given item is registered.
+
+        Argument
+        --------
+        item: Union[str, Registrable]
+            Either the item or the key.
+        """
+        if isinstance(item, Registrable):
+            item = item.key
+        return item in self._items
+
+    def __getitem__(self, key: str) -> Registrable:
+        """Lookup the item for the given key in this :py:class:`Register`.
+        """
+        return self._items[key]
+
+    def __len__(self) -> int:
+        """The number of items in this register.
+        """
+        return len(self._items)
+
+    def __iter__(self) -> Iterator[Registrable]:
+        """Enumerate the items registered in this :py:class:`Register`.
+        """
+        for item in self._items.values():
+            yield item
+
     def register_change(self, key: str, *args, **kwargs) -> None:
+        """Notify observers on a register change.
+        """
         changes = self.Change(*args, **kwargs)
-        LOG.debug(f"register change on {self.sender}: "
-                  f"{changes} with key='{key}'")
+        LOG.debug("register change on %s: %s with key='%s'",
+                  self.sender, changes, key)
 
         if not changes:
             return
 
-        # FIXME[problem]: it may happen, that the list of observers
-        # changes in reaction to this notification
-        # (e.g. a QRegisterController may not be interested in key changes,
-        # once it can observe the real object).
-        # Such a change will raise a RuntimeError:
-        # "dictionary changed size during iteration".
-        # Hence we make of copy of this dict:
-        for observer, (notify, interests) in list(self._observers.items()):
-            relevant_changes = interests & changes
-            if not relevant_changes:
-                continue
-            try:
-                notify(self.sender, observer,
-                       self.Change(relevant_changes), key=key)
-            except Exception as exception:
-                # We will not deal with exceptions raised during not
-                # notification, but instead use the default error
-                # handling mechanism.
-                handle_exception(exception)
+        self.notify_observers(changes, key=key)
 
 
-class MetaRegistrable(Registrable):
-    """A registrable object that generates keys from a register.x
+class InstanceRegister(Register):
+    """A register for :py:class:`InstanceRegisterItem`s.
     """
 
-    def _generate_key(self) -> str:
-        return (self.__class__.__name__ + "-" +
-                str(len(self._register_key_table)))
-
-
-class MetaRegisterEntry(Failable):  # FIXME[todo]: Busiable
+class InstanceRegisterItem(Failable):  # FIXME[todo]: Busiable
+    """A :py:class:`InstanceRegisterItem` represents information that
+    can be used to create an object. This includes module and
+    class name as well as initialization parameters.
+    """
 
     def __init__(self, key: str = None,
                  module_name: str = None, class_name: str = None,
-                 cls=None, obj=None, args=(), kwargs={},
-                 *_args, **_kwargs) -> None:
+                 cls=None, obj=None, args=(), kwargs=None,
+                 **_kwargs) -> None:
+        # pylint: disable=too-many-arguments
+        # too-many-arguments:
+        #    It is fine to give all these arguments here, as they
+        #    are used to initialize one record of (initialization)
+        #    information.
 
         if not (module_name and class_name) and not cls and not obj:
             raise ValueError("Provide either object or class "
-                             "for MetaRegisterEntry")
+                             "for InstanceRegisterItem")
 
-        super().__init__(*_args, **_kwargs)
+        super().__init__(**_kwargs)
         self.key = key
         self.obj = obj
         self.cls = cls or (obj and type(obj))
         self.module_name = module_name or self.cls.__module__
         self.class_name = class_name or self.cls.__name__
-        self.args, self.kwargs = args, kwargs
+        self.args, self.kwargs = args, (kwargs or {})
 
-    def initialize(self, prepare: bool = False):
+    def initialize(self, prepare: bool = False) -> None:
+        """Initialize this :py:class:`InstanceRegisterItem`.
+        When finished, the register observers will be informed on
+        `key_changed`, and the :py:attr:`initialized` property
+        will be set to `False`.
+        """
         if self.obj is not None:
             return  # Nothing to do
         self.obj = True
         self._prepare_class()
-        message = (f"Initialization of MetaRegisterEntry '{self.key}' "
+        message = (f"Initialization of InstanceRegisterItem '{self.key}' "
                    f"from class {self.module_name}.{self.class_name}")
         with self.failure_manager(logger=LOG, message=message):
             self.obj = self.cls(*self.args, key=self.key, **self.kwargs)
             register = type(self.obj)
             register.register_change(self.obj.key, 'key_changed')
+
         if self.obj is True:
             self.obj = None
+        elif prepare:
+            if isinstance(self.obj, Preparable):
+                self.obj.prepare()
 
-    def uninitialize(self):
+    def uninitialize(self) -> None:
+        """Unitialize this :py:class:`InstanceRegisterItem`.
+        When finished, the register observers will be informed on
+        `key_changed`, and the :py:attr:`initialized` property
+        will be set to `False`.
+        """
         obj = self.obj
         if obj is None:
             return  # nothing to do
@@ -151,17 +230,20 @@ class MetaRegisterEntry(Failable):  # FIXME[todo]: Busiable
 
     @property
     def initialized(self) -> bool:
+        """A flog indicating if this :py:class:`InstanceRegisterItem`
+        is initialized (`True`) or not (`False`).
+        """
         return self.obj is not None and self.obj is not True
 
-    #@staticmethod
+    # @staticmethod
     def _prepare_class(self):
         # FIXME[concept]: we may want to make this part of a class register
         # and inform observers that the status of the class changed
         # if not issubclass(new_class, cls):
         #     raise TypeError(f"Class {new_class} "
         #                     f"is not a subclass of {cls}.")
-        #cls._register_class_table[full_name] = new_class
-        #cls.register_change(class_name, 'class_changed')
+        # cls._register_class_table[full_name] = new_class
+        # cls.register_change(class_name, 'class_changed')
         # FIXME[old]: the docstring needs to be adapted once the concept is fixed!
         """Initialize a (sub)class of the :py:class:`MetaRegister`'s
         base class.  These are the classes that upon initialization
@@ -196,10 +278,32 @@ class MetaRegisterEntry(Failable):  # FIXME[todo]: Busiable
 
     @property
     def busy(self) -> bool:
+        """Check if this :py:class:`InstanceRegisterItem` is busy.
+        """
         return self.obj is True
 
 
-class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME[todo]: ABCMeta:
+class ClassRegister(Register):
+    """A register for :py:class:`ClassRegisterItem`s.
+    """
+
+
+class MetaRegisterItem(RegisterItem):
+    """A registrable object that generates keys from a register.
+    """
+
+    def _generate_key(self) -> str:
+        return (self.__class__.__name__ + "-" +
+                str(len(self.instance_register)))
+
+
+class MetaRegister(MetaObservable, ABCMeta, Observable=Register):
+    # pylint: disable=no-value-for-parameter
+    # no-value-for-parameter:
+    #     we disable this warning as there is actually a bug in pylint,
+    #     not recognizing `cls` as a valid first parameter instead
+    #     of `self` in metaclasses, and hence taking cls.method as
+    #     an unbound call, messing up the whole argument structure.
     """A Metaclass for classes that allows to register instances.
     Instances are registered by a unique key (of type `str`).
 
@@ -220,16 +324,13 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
     attributes (these are considered private properties of the class,
     subject to change, that should be used outside the class):
 
-    _register_key_table: dict
-        A dictionary containing all registered keys. The associated values
-        are either the initialized object for the key, or a tuple
-        of the parameters required to initialize the object:
-        `(module_name, class_name, args, kwargs)`,
-        with `module_name` being the name of the module defining the class
-        `class_name` being the name of the class, and `args`, `kwargs`
-        being the arguments to be passed to the constructor to initialize
-        the object.
-    
+    instance_register: InstanceRegister
+        A InstanceRegister containing all registered keys for the class.
+        The register contains :py:class:`InstanceRegisterItem`s
+        describing all registered instances, including all information
+        required for instantiation. If an instances has been instantiated,
+        `item.obj` will be that instance.
+
     _register_class_table: dict
         A dictionary containing all registered subclasses.
         The keys are fully qualified class names (including the module name).
@@ -251,8 +352,9 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
         initializing, initialized, failure).
     """
 
-    def __new__(mcl, clsname: str, superclasses: Tuple[type],
+    def __new__(mcs, clsname: str, superclasses: Tuple[type],
                 attributedict: dict, **class_parameters) -> None:
+        # pylint: disable=bad-mcs-classmethod-argument
         """A new class of the meta class scheme is defined.
 
         If this is a new base class, we add new class and key
@@ -271,24 +373,25 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
             Addition class parameters specificied in the class
             definition.
         """
-        is_base_class = not any(issubclass(supercls, MetaRegistrable)
+        is_base_class = not any(issubclass(supercls, MetaRegisterItem)
                                 for supercls in superclasses)
         if is_base_class:
-            superclasses += (MetaRegistrable, )
+            superclasses += (MetaRegisterItem, )
         # class_paramters are to be processed by __init_subclass__()
         # of some superclass of the newly created class ...
-        cls = super().__new__(mcl, clsname, superclasses, attributedict,
+        cls = super().__new__(mcs, clsname, superclasses, attributedict,
                               **class_parameters)
         if is_base_class:
-            LOG.info("MetaRegister: new base class "
-                     f"{cls.__module__}.{cls.__name__}")
+            LOG.info("MetaRegister: new base class %s.%s",
+                     cls.__module__, cls.__name__)
             cls._register_base_class = cls
-            cls._register_key_table = {}
             cls._register_class_table = {}
+            cls.instance_register = InstanceRegister()
+            cls.class_register = ClassRegister()
         return cls
 
-    def __init__(cls, clsname: str, superclasses: Tuple[type],
-                 attributedict: dict, **class_parameters) -> None:
+    def __init__(cls, clsname: str, _superclasses: Tuple[type],
+                 _attributedict: dict, **_class_parameters) -> None:
         """Initialize a class declared with this :py:class:`MetaRegister`.
         This initialization will add a private class dictionary to
         hold the registered instances of the class.
@@ -300,6 +403,7 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
         # add the newly initialized class to the class register
         cls_name = cls.__module__ + '.' + cls.__name__
         cls._register_class_table[cls_name] = cls
+
         cls.register_change(cls_name, 'class_added')
 
     def __call__(cls, *args, **kwargs) -> None:
@@ -321,25 +425,30 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
         # instance now. Notice, that this instance may not be fully
         # initialized yet, as __init__() of subclasses has not been
         # finished.
-        if new_entry.key not in cls._register_key_table:
+        if new_entry not in cls.instance_register:
             class_name = '.'.join((cls.__module__, cls.__name__))
-            cls._register_key_table[new_entry.key] = \
-                MetaRegisterEntry(key=new_entry.key,
-                                  class_name=class_name, obj=new_entry,
-                                  args=args, kwargs=kwargs)
+            item = InstanceRegisterItem(key=new_entry.key,
+                                        class_name=class_name, obj=new_entry,
+                                        args=args, kwargs=kwargs)
+            cls.instance_register.add(item)
             cls.register_change(new_entry.key, 'key_added')
         # else:
         #    cls.register_change(new_entry.key, 'key_changed')
 
-        LOG.info("MetaRegister: new instance of class "
-                 f"{type(new_entry).__name__} with key '{new_entry.key}'")
+        LOG.info("MetaRegister: new instance of class %s with key '%s'",
+                 type(new_entry).__name__, new_entry.key)
         return new_entry
 
     @classmethod
-    def observable_name(mcl) -> str:
+    def observable_name(mcs) -> str:
+        # pylint: disable=bad-mcs-classmethod-argument
+        """Provide the name of this Observable.
+        """
         return 'Register'
 
     def register_change(cls, key: str, info) -> None:
+        """Notify observers that the register register has changed.
+        """
         cls._meta_observable.register_change(key, info)
 
     #
@@ -353,12 +462,17 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
 
     @staticmethod
     def add_module_requirement(module: str, requirement: str) -> None:
+        """Add a requirement for the given module.
+        """
         if module not in MetaRegister._module_requirements:
             MetaRegister._module_requirements[module] = []
         MetaRegister._module_requirements[module].append(requirement)
 
     @staticmethod
     def check_module_requirement(module: str) -> bool:
+        """Check if the given module requires other modules, and
+        if these modules can be found.
+        """
         if module not in MetaRegister._module_requirements:
             return True  # no requirements for that module
         for requirement in MetaRegister._module_requirements[module]:
@@ -404,6 +518,9 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
         return cls._register_class_table.get(full_name, None) is not None
 
     def register_get_class(cls, name: str, module: str = None) -> type:
+        """Get the class for the given class name from the class
+        register.
+        """
         full_name = name if module is None else ".".join((module, name))
         subclass = cls._register_class_table.get(full_name, None)
         if subclass is None:
@@ -451,14 +568,14 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
             # to deal with such situations.
             module = importlib.import_module(module_name)
         except ModuleNotFoundError as error:
-            LOG.error(f"Initialization of class '{full_name}' "
-                      f"by {cls.__name__}: import of {module_name} failed: "
-                      f"{error}")
+            LOG.error("Initialization of class '%s' by %s: "
+                      "import of %s failed: %s",
+                      full_name, cls.__name__, module_name, error)
             raise error
         except Exception as exception:
-            LOG.error(f"Initialization of class '{full_name}' "
-                      f"by {cls.__name__}: import of {module_name} failed: "
-                      f"{exception}")
+            LOG.error("Initialization of class '%s' by %s: "
+                      "import of %s failed: %s",
+                      full_name, cls.__name__, module_name, exception)
             raise exception
 
         new_class = getattr(module, class_name)
@@ -501,7 +618,7 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
     def __contains__(cls, key) -> bool:
         """Check if a given key was registered with this class.
         """
-        return key in cls._register_key_table
+        return key in cls.instance_register
 
     def _assert_key(cls, key: str) -> None:
         """Asserts that the given key was registered with this class.
@@ -516,7 +633,7 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
             raise KeyError(f"No key '{key}' registered for class "
                            f"{cls._register_base_class}[{cls.__name__}]."
                            f"Valid keys are: {list(cls.register_keys())}")
-        return cls._register_key_table[key]
+        return cls.instance_register[key]
 
     def key_is_initializable(cls, key: str) -> bool:
         """Check if the given key can be initialized.
@@ -543,7 +660,7 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
         raise KeyError(f"Key '{key}' is not yet initialized.")
 
     def __len__(cls):
-        return len(cls._register_key_table)
+        return len(cls.instance_register)
 
     def register_key(cls, key: str, module_name: str, class_name: str,
                      *args, **kwargs) -> None:
@@ -563,15 +680,15 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
             Arguments to be passed to the constructor when initializing
             the key.
         """
-        if key in cls._register_key_table:
+        if key in cls.instance_register:
             raise ValueError(f"Duplcate registration of {cls.__name__}"
                              f"with key '{key}'.")
 
-        register_entry = MetaRegisterEntry(key=key, module_name=module_name,
-                                           class_name=class_name,
-                                           args=args, kwargs=kwargs)
+        item = InstanceRegisterItem(key=key, module_name=module_name,
+                                    class_name=class_name,
+                                    args=args, kwargs=kwargs)
 
-        cls._register_key_table[key] = register_entry
+        cls.instance_register.add(item)
         cls.register_change(key, 'key_added')
 
     # FIXME[todo]: this is not really busy: we may initialize different(!)
@@ -604,47 +721,15 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
 
         return entry.obj
 
-    def FIXME_OLD_register_initialize_key(cls, key: str) -> object:
-        module_name, class_name, args, kwargs = item
-        new_cls = cls.register_initialize_class(class_name, module_name)
-
-        try:
-            # FIXME[todo]: instantiation may fail - we need a concept
-            # to deal with such situations.
-            LOG.info(f"Initializing register key '{key}': "
-                     f"{new_cls}({args}, {kwargs}), "
-                     f"register[{key}]={cls._register_key_table[key]}")
-            new_instance = new_cls(*args, key=key, **kwargs)
-            LOG.info(f"Initialization of key '{key}' succeeded.")
-        except Exception as exception:
-            LOG.error(f"Initialization of {new_cls.__name__} to obtain "
-                      f"'{key}' of class {cls.__name__} failed: {exception}")
-            raise exception
-
-        if not isinstance(new_instance, cls):
-            LOG.error(f"New object for key '{key}' has wrong type "
-                      f"{type(new_instance)} but should be "
-                      f"a subclass of {cls}.")
-            raise TypeError(f"The object instantiated from key '{key}' "
-                            f"of type {type(new_instance)} "
-                            f"is not an instance of {cls}.")
-        # FIXME[bug]: there seems to be a problem with double
-        # instantiation -
-        cls._register_key_table[new_instance.key] = new_instance
-        if new_instance.key != key:
-            del cls._register_key_table[key]
-            error = ("Inconsistent key value for new instance: "
-                     f"expected '{key}', but got '{new_instance.key}'.")
-            LOG.error(error)
-            raise ValueError(error)
-        cls.register_change(key, 'key_changed')
-
-        return new_instance   
-
-    def _name_for_item(cls, entry) -> str:
+    @staticmethod
+    def _name_for_item(entry) -> str:
+        """Get the name for the given item.
+        """
         return f"({entry.key})" if entry.initialized else f"[{entry.key}]"
 
     def name_for_key(cls, key: str) -> str:
+        """Get the name for the given key.
+        """
         # FIXME[concept]: we need to develop a name concept.
         # The idea of a name would be to have an key as a unique
         # internal identifier and a name for display in user interface
@@ -657,41 +742,33 @@ class MetaRegister(MetaObservable, Observable=RegisterObservable): #, ): # FIXME
         """Iterate all keys registered with this
         :py:class:`MetaRegister`.
         """
-        for key, entry in cls._register_key_table.items():
-            if initialized is None or initialized == entry.initialized:
-                yield key
+        for item in cls.instance_register:
+            if initialized is None or initialized == item.initialized:
+                yield item.key
 
     def register_instances(cls, initialized: bool = None) -> Iterator[object]:
         """Iterate all initialized objects from this
         :py:class:`MetaRegister`.
         """
-        for entry in cls._register_key_table.values():
-            if entry.initialized and (initialized is None or initialized):
-                yield entry.obj
-            elif (not entry.initialized and
+        for item in cls.instance_register:
+            if item.initialized and (initialized is None or initialized):
+                yield item.obj
+            elif (not item.initialized and
                   (initialized is None or not initialized)):
-                yield entry
+                yield item
 
     def items(cls, initialized: bool = None) -> Iterator[Tuple[str, str]]:
         """Iterate pairs of (key, name) for all keys registered with
         this :py:class:`MetaRegister`.
         """
-        for key, entry in cls._register_key_table.items():
-            if initialized is None or initialized == entry.initialized:
-                yield (key, cls._name_for_item(entry))
+        for item in cls.instance_register:
+            if initialized is None or initialized == item.initialized:
+                yield (item.key, cls._name_for_item(item))
 
     def debug_register(cls):
+        """Output debug information for this :py:class:`MetaRegister`.
+        """
         print(f"debug: register {cls.__name__} ")
-        print(f"debug: {len(cls._register_key_table)} keys:")
-        for i, (key, entry) in enumerate(cls._register_key_table.items()):
-            print(f"debug: ({i}) {key}: initialized={entry.initialized}")
-
-
-# FIXME[todo]: read on ABCMeta and abstract classes
-# https://docs.python.org/3/library/abc.html
-# Is this really what we want
-# Application: Datasource
-class ABCMetaRegister(MetaRegister, ABCMeta):
-    """A meta class for abstract register classes.
-    """
-    pass
+        print(f"debug: {len(cls.instance_register)} keys:")
+        for i, item in enumerate(cls.instance_register):
+            print(f"debug: ({i}) {item.key}: initialized={item.initialized}")

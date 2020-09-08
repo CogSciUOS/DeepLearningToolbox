@@ -38,7 +38,7 @@ class AsyncRunner(Runner):
     When working with Qt for instance, it is not possible to update
     the gui from a non-main thread.  So we cannot simply run a thread
     to do expensive computations and have it call
-    :py:meth:`model.Model.notifyObservers` since that call would
+    :py:meth:`model.Model.notify_observers` since that call would
     invoke methods on :py:class:`PyQt5.QWidget`s. We would need some
     way to call back into the main thread, but that one is busy running
     Qt's main loop so the app can respond to further user action. Qt's
@@ -94,7 +94,7 @@ class AsyncRunner(Runner):
         """Callback exectuted on completion of a running task. This
         method must be implemented by subclasses and - together with
         any necessary initialisations in :py:meth:`__init__` - should
-        lead to calling :py:meth:`model.Model.notifyObservers` on the
+        lead to calling :py:meth:`model.Model.notify_observers` on the
         main thread.
 
         Parameters

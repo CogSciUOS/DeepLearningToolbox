@@ -42,16 +42,16 @@ class QtAsyncRunner(AsyncRunner, QObject):
     _completion_signal = pyqtSignal(Observable, object)
 
     def __init__(self):
-        """Connect a signal to :py:meth:`Observable.notifyObservers`."""
+        """Connect a signal to :py:meth:`Observable.notify_observers`."""
         # FIXME[question]: can we use real python multiple inheritance here?
         # (that is just super().__init__(*args, **kwargs))
         AsyncRunner.__init__(self)
         QObject.__init__(self)
-        self._completion_signal.connect(self._notifyObservers)
+        self._completion_signal.connect(self._notify_observers)
 
     def onCompletion(self, future):
         """Emit the completion signal to have
-        :py:meth:`Observable.notifyObservers` called.
+        :py:meth:`Observable.notify_observers` called.
 
         This method is still executed in the runner Thread. It will
         emit a pyqtSignal that is received in the main Thread and
@@ -70,12 +70,12 @@ class QtAsyncRunner(AsyncRunner, QObject):
         except BaseException as exception:
             handle_exception(exception)
 
-    def _notifyObservers(self, observable, info):
+    def _notify_observers(self, observable, info):
         """The method is intended as a receiver of the pyqtSignal.
         It will be run in the main Thread and hence can notify
         the Qt GUI.
         """
-        observable.notifyObservers(info)
+        observable.notify_observers(info)
 
 
 class QDebug:  # FIXME[todo]: derive from (QWidget)
@@ -492,10 +492,7 @@ class QObserver(QAttribute):
             print(f"debug:   ({i}) {key.__name__.split('.')[-2]}: "
                   f"{helper}")
 
-    # FIXME[bug]:
-    #   File "base/observer.py", line 314, in __del__
-    #      AttributeError: 'QObserverHelper' object has no attribute 'unobserve'
-    class QObserverHelper(QObject):
+    class QObserverHelper(QObject, Observable.Observer):
         """A helper class for the :py:class:`QObserver`.
 
         We define the functionality in an extra class to avoid
@@ -512,18 +509,22 @@ class QObserver(QAttribute):
 
         This class has the following attributes:
 
-        _observer: Observer
+        _observer: QObserver
             The actuall Observer that finally should receive the
             notifications.
         _interests: Change
             The changes, the Observer is interested in.
         _change: Change
             The unprocessed changes accumulated so far.
+        _notify: Callable[[Observable, Change], None]
+            The method to call upon notification. This will
+            usually be the specific notification method of the
+            observer.
         """
 
         def __init__(self, observer: Observable.Observer,
                      observable: Observable, interests=None,
-                     notify: Callable=None, **kwargs) -> None:
+                     notify: Callable = None, **kwargs) -> None:
             """Initialization of the QObserverHelper.
             """
             super().__init__(**kwargs)
@@ -533,10 +534,29 @@ class QObserver(QAttribute):
             self._interests = interests
             self._change = None  # accumulated changes
             self._kwargs = {}  # additional arguments provided on notification
-            self._notify = notify
+            self._notify = (observable.notify_method(observer)
+                            if notify is None else notify)
+
+        def observe(self, observable: Observable) -> None:
+            """This method is implemented to comply with the Observer
+            interface, but it is not intended to be used!
+            If you want to observe an Observable in the Qt GUI, use
+            the QObserver and call its :py:meth:`QObserver.observe` method.
+            That will automatically create an :py:class:`QObserverHelper`
+            """
+            raise ValueError("This method is not intended to be called.")
+
+        def unobserve(self, observable: Observable) -> None:
+            """This method is implemented to comply with the Observer
+            interface. It is equivalent to calling
+            self.observer.unobserve(self.observable)
+            """
+            self._observer.unobserve(observable)
 
         def startObservation(self, interests=None,
-                             notify: Callable=None) -> None:
+                             notify: Callable = None) -> None:
+            """Stat the observation.
+            """
             if self._observing:
                 return  # The observation was already started
             self._observing = True
@@ -544,12 +564,12 @@ class QObserver(QAttribute):
                 self._interests = interests
             if notify is not None:
                 self._notify = notify
-            # FIXME[hack/bug]: this should be: notify=self._qNotify ...
-            self._observable.add_observer(self, notify=
-                                          QObserver.QObserverHelper._qNotify,
+
+            # Add this QObserverHelper as an observer to the observable
+            self._observable.add_observer(self, notify=self._qNotify,
                                           interests=self._interests)
-            self.__class__._qNotify(self._observable, self,
-                                    self._interests)
+            # Send out a notifcation on all changes to update the observer
+            self._qNotify(self._observable, self._interests)
 
         def stopObservation(self) -> None:
             if not self._observing:
@@ -557,11 +577,7 @@ class QObserver(QAttribute):
             self._observing = False
             self._observable.remove_observer(self)
 
-        # FIXME[hack/bug]: make this a method, take self as first argument
-        # something like 'observable_changed(self, observable, change)'
-        # Then QObserverHelper could be made an Observer,
-        # e.g. called QObservableWrapper
-        def _qNotify(observable, self, change, **kwargs):
+        def _qNotify(self, observable, change, **kwargs):
             """Notify the Observer about some change. This will
             initiate an asynchronous notification by queueing an
             invocation of :py:meth:_qAsyncNotify in the Qt main event
@@ -598,14 +614,15 @@ class QObserver(QAttribute):
                 self._change |= change
 
         @pyqtSlot(object)
-        def _qAsyncNotify(self, observable):
-            """Process the actual notification. This method is to be invoked in
-            the Qt main event loop, where it can trigger changes to
-            the graphical user interface.
+        def _qAsyncNotify(self, observable: Observable):
+            """Process the actual notification.  This method is
+            to be invoked in the Qt main event loop, where it can
+            trigger changes to the graphical user interface.
 
             This method will simply call the :py:meth:`notify` method
             of the :py:class:`Observable` to notify the actual
             observer.
+
             """
             change = self._change
             kwargs = self._kwargs
@@ -613,17 +630,14 @@ class QObserver(QAttribute):
                 try:
                     self._change = None
                     self._kwargs = {}
-                    if self._notify is None:
-                        observable.notify(self._observer, change, **kwargs)
-                    else:
-                        self._notify(observable, change, **kwargs)
+                    self._notify(observable, change, **kwargs)
                 except Exception as ex:
                     util.error.handle_exception(ex)
 
         def __str__(self) -> str:
-            #f"QObserver({self._observer};"
-            #f"interests={self._interests}, change={self._change})"
-            return (f"observable={self._observable}, "
+            return (f"QObserver[{self._observer}]: "
+                    f"observable={self._observable}, "
+                    f"interests={self._interests} [change={self._change}], "
                     f"observing={self._observing}, "
                     f"notify={self._notify}")
 
@@ -716,19 +730,27 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         self._movie = QMovie(os.path.join('assets', 'busy.gif'))
         self.setMovie(self._movie)
         self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        #self._movie.start()
+        # self._movie.start()
 
     def setView(self, busyView):
         interests = BusyObservable.Change('busy_changed')
         self._exchangeView('_busy', busyView, interests=interests)
 
-    def detector_changed(self, busyBody: BusyObservable,
-                         change: BusyObservable.Change) -> None:
+    def processor_changed(self, busyBody: BusyObservable,
+                          change: BusyObservable.Change) -> None:
         """FIXME[hack]: we should have a callback busy_changed!
         """
-        #print("QBusyWidget.detector_changed")
-        #self._movie.setPaused(not busyBody.busy)
-        #self.setVisible(busyBody.busy)
+        # print("QBusyWidget.processor_changed")
+        # self._movie.setPaused(not busyBody.busy)
+        # self.setVisible(busyBody.busy)
+
+    def tool_changed(self, busyBody: BusyObservable,
+                     change: BusyObservable.Change) -> None:
+        """FIXME[hack]: we should have a callback busy_changed!
+        """
+        # print("QBusyWidget.processor_changed")
+        # self._movie.setPaused(not busyBody.busy)
+        # self.setVisible(busyBody.busy)
 
     def __del__(self):
         self._movie.stop()

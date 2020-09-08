@@ -19,8 +19,8 @@ import lucid.optvis.render as render
 import lucid.optvis.transform as transform
 
 
-class Engine(Observable, method='engineChanged',
-             changes=['engine_changed', 'model_changed', 'unit_changed']):
+class Engine(Observable, method='engine_changed',
+             changes={'engine_changed', 'model_changed', 'unit_changed'}):
     """The Engine is a wrapper around the lucid module.
 
     Attributes
@@ -182,7 +182,7 @@ class Engine(Observable, method='engineChanged',
 
     def _doRun(self, running: bool=True) -> None:
         self.running = running
-        self.notifyObservers(EngineChange(engine_changed=True))
+        self.notify_observers(EngineChange(engine_changed=True))
 
     def start(self):
         self.image = None
@@ -204,7 +204,7 @@ class Engine(Observable, method='engineChanged',
         logger.info("!!! running all:")
         for unit in range(self.layer_units):
             self.unit = unit
-            self.notifyObservers(EngineChange(unit_changed=True))
+            self.notify_observers(EngineChange(unit_changed=True))
             logger.info(f"!!! running unit {unit}")
             obj = objectives.channel(self.layer_id, unit)
             self.image = render.render_vis(self.model, obj)
