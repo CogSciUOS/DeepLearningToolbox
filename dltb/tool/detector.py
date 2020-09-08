@@ -11,6 +11,7 @@ import imutils
 # toolbox imports
 from datasource import Data, Metadata
 from .tool import Tool
+from ..base.image import Image, Imagelike
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -79,11 +80,13 @@ class Detector(Tool):
 
         # do the actual processing
         detections = self._detect(preprocessed_data, **kwargs)
-
         LOG.info("Detector '%s' with %s detections",
                  self.key, detections)
 
-        return detections
+        # do some postprocessing on the results
+        posprocessed_detections = self.postprocess(data, detections)
+
+        return posprocessed_detections
 
     def _detect(self, data: np.ndarray, **kwargs) -> Detections:
         """Do the actual detection.
@@ -102,6 +105,16 @@ class Detector(Tool):
                                   type(self).__name__ +
                                   "' is not implemented (yet).")
 
+    def postprocess(self, data: Data, detections: Detections) -> Detections:
+        """
+        """
+        return self._postprocess(data, detections)
+
+    def _postprocess(self, _data: Data, detections: Detections) -> Detections:
+        """
+        """
+        return detections
+
     #
     # Processor
     #
@@ -119,15 +132,22 @@ class Detector(Tool):
         super()._preprocess_data(data)
         self.add_data_attribute(data, 'detections')
 
-    def _process_data(self, data) -> None:
+    def _process_data(self, data: Data) -> None:
         """Process the given data. This will run the detector on
         the data and add the detection results as new attribute
         'detections'.
         """
         LOG.debug("Processing data %r with detector %s", data, self)
+        # self.detect() includes preprocessing and postprocessing
         detections = self.detect(data)
         self.set_data_attribute(data, 'detections', detections)
         LOG.debug("Detections found 2: %s, %s", self.detections(data), data)
+
+    def _postprocess_data(self, data: Data, detections: Detections) -> None:
+        """
+        """
+        postprocessed_detections = self._postprocess(data, detections)
+        self.set_data_attribute(data, 'detections', postprocessed_detections)
 
     def detections(self, data) -> Metadata:
         """Provide the detections from a data object that was processed
@@ -159,19 +179,29 @@ class ImageDetector(Detector):
 
         return super()._preprocess(array, **kwargs)
 
-    def detect(self, data: Data, **kwargs) -> Detections:
-        """Preprocess the given data and apply the detector.
+    def _postprocess(self, data: Data, detections: Detections) -> Detections:
         """
-        detections = super().detect(data, **kwargs)
-        self.rescale(detections, data.data.shape)
+        """
+        if detections is None:
+            return None
+        
+        # if we have scaled the input data, then we have to apply reverse
+        # scaling to the detections.
+        if self._size is not None:
+            size = data.data.shape
+            resize_ratio = max(self._size[0]/size[0], self._size[1]/size[1])
+            detections.scale(resize_ratio)
+
         return detections
 
-    def rescale(self, detections: Detections, size: Tuple[int, int]) -> None:
-        """Rescale detection made by this detector to some other size.
-
+    def detect_image(self, image: Imagelike, **kwargs) -> Detections:
+        """Apply the detector to the given image.
         """
-        if detections is None or self._size is None or self._size == size:
-            return  # nothing to do
+        return self.detect(Image.as_data(image))
 
-        resize_ratio = max(self._size[0]/size[0], self._size[1]/size[1])
-        detections.scale(resize_ratio)
+    def process_image(self, image: Imagelike, **kwargs) -> Data:
+        """Apply the detector to the given image.
+        """
+        data = Image.as_data(image)
+        self.process(data)
+        return data

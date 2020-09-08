@@ -14,7 +14,14 @@ from datasource import Data
 from .. import thirdparty
 
 
-Imagelike = Union[np.ndarray]
+# Imagelike is intended to be everything that can be used as
+# an image.
+#
+# np.ndarray:
+#    The raw image data
+# str:
+#    A URL.
+Imagelike = Union[np.ndarray, str]
 
 
 class Image:
@@ -27,6 +34,10 @@ class Image:
         """
         if isinstance(image, np.ndarray):
             return image
+        if isinstance(image, str):
+            # FIXME[hack]: avoid circular module dependencies ...
+            from dltb.util.image import imread
+            return imread(image)
         raise NotImplementedError(f"Conversion of {type(image).__module__}."
                                   f"{type(image).__name__} to numpy.ndarray "
                                   "is not implemented")
@@ -39,6 +50,8 @@ class Image:
             return image
         data = Data(Image.as_array(image))
         data.type = Data.TYPE_IMAGE
+        if isinstance(image, str):
+            data.add_attribute('url', image)
         return data
 
 

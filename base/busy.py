@@ -113,7 +113,8 @@ class BusyObservable(FailableObservable, changes={'busy_changed'}):
                 raise RuntimeError("Race condition setting busy thread.")
         elif old_thread is not threading.current_thread():
             # Anogher thread is using this object
-            raise RuntimeError("Object is currently busy.")
+            raise RuntimeError(f"Object {self} is currently busy: "
+                               f"{self._busy}")
 
         LOG.info("busy_start: '%s' -> '%s'", self._busy, message)
         old_busy = self._busy

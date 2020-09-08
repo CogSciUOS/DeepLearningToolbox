@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 # toolbox imports
-from dltb.tool.detector import Detector
+from dltb.tool.detector import ImageDetector as Detector
 from datasource import Metadata
 from util.image import BoundingBox
 

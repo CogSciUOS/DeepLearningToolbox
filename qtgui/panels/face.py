@@ -38,7 +38,7 @@ LOG = logging.getLogger(__name__)
 
 
 class QDetectorWidget(QGroupBox, QObserver, qobservables={
-        Processor: {'process_finished'}}):
+        Processor: {'tool_changed', 'process_finished'}}):
     """A detector widget displays the output of a Detector.
 
     _processor: Processor
@@ -90,15 +90,27 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         self.setLayout(layout)
         self.setCheckable(True)
 
+    def faceDetector(self) -> FaceDetector:
+        """Get the detector currently applied by this
+        :py:class:`QDetectorWidget`.
+
+        Result
+        ------
+        detector: FaceDetector
+            The face detector on `None` if no detector is set.
+        """
+        return self._processor.tool
+
     def setFaceDetector(self, detector: FaceDetector) -> None:
         """Set a new :py:class:`FaceDetector`.
         The face detector will inform us whenever new faces where
         detected.
         """
         detector.timer = True
+        # setting the tool in the processor will indirectly trigger update()
+        # in the main event loop thread.
         self._processor.tool = detector
         self._busy.setView(detector)
-        self.setTitle("None" if detector is None else type(detector).__name__)
         if detector is not None:
             detector.prepare()
 
@@ -109,8 +121,11 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         """
         LOG.debug("QDetectorWidget.processor_changed(%s, %s)",
                   processor.tool, change)
-        if change.process_finished:
-            self.update()
+        if change.tool_changed:
+            detector = processor.tool
+            self.setTitle("None" if detector is None else
+                          type(detector).__name__)
+        self.update()
 
     def setData(self, data: Data) -> None:
         """Set a new :py:class:`Data` object to be displayed by this
@@ -341,9 +356,11 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         self._inputCounter.setText(str(int(self._inputCounter.text())+1))
 
     def setFaceDetector(self, detector: FaceDetector) -> None:
-        """Set the face detector to be used in this Panel
+        """Set the face detector to be used in this :py:class:`FacePanel`.
         """
-        self._detectorViews[0].setFaceDetector(detector)
+        if detector is not self._detectorViews[0].faceDetector:
+            self._detectorViews[0].setFaceDetector(detector)
+            self._toolSelector.setCurrentTool(detector)
 
     def setToolbox(self, toolbox: Toolbox) -> None:
         """Set a new Toolbox.

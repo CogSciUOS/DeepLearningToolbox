@@ -16,7 +16,8 @@ LOG = logging.getLogger(__name__)
 
 
 class Processor(BusyObservable, method='processor_changed',
-                changes={'data_changed', 'process_finished'}):
+                changes={'tool_changed', 'data_changed',
+                         'process_finished'}):
     """A processor can be used to process data with a :py:class:`Tool`.
     The processor will hold a data object to which the tool is
     applied. The results are stored as new attributes of that data

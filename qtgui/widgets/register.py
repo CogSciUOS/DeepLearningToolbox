@@ -208,9 +208,10 @@ class RegisterItemList(QObserver, QDebug,
             The given item is not an element of this
             :py:class:`RegisterItemList`.
         """
-        if not self.contains(item):
-            raise ValueError("Item is not contained in RegisterItemList")
-        self._setCurrentItem(self, item)
+        # FIXME[bug]: contains is not provided by this class!
+        # if not self.contains(item):
+        #    raise ValueError("Item is not contained in RegisterItemList")
+        self._setCurrentItem(item)
 
     #
     # methods to be implemented by subclasses
@@ -1059,7 +1060,6 @@ class QRegisterController(QWidget, QObserver, qobservables={
                       f"emit key_initialized({key})")
                 self.keyInitialized.emit(key)
 
-        
     @protect
     def _onButtonClicked(self, checked: bool) -> None:
         LOG.info("%s.buttonClicked(checked=%r): text=%s, key=%s",

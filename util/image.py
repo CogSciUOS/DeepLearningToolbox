@@ -249,11 +249,63 @@ class BoundingBox(PointsBasedLocation):
     def height(self, height):
         self.y2 = self.y1 + height
 
-    def mark_image(self, image, color=(1,0,0)):
-        image[(self.y1,self.y2),self.x1:self.x2] = color
-        image[self.y1:self.y2,(self.x1,self.x2)] = color
+    def mark_image(self, image: np.ndarray, color=None) -> None:
+        color = color or (0, 255, 0)
+        size = image.shape[1::-1]
+        thickness = max(1, max(size)//300)
+        t1 = thickness//2
+        t2 = (thickness+1)//2
+        x1 = max(int(self.x1), t2)
+        y1 = max(int(self.y1), t2)
+        x2 = min(int(self.x2), size[0]-t1)
+        y2 = min(int(self.y2), size[1]-t1)
+        print(f"mark_image[{self}]: image size={size}"
+              f"shape={image.shape}, {image.dtype}:"
+              f"{image.min()}-{image.max()}, box:({x1}, {y1}) - ({x2}, {y2})")
+        for offset in range(-t2, t1):
+            image[(y1+offset, y2+offset), x1:x2] = color
+            image[y1:y2, (x1+offset, x2+offset)] = color
 
-        
+    def extract(self, image, padding: bool=True,
+                copy: bool=None) -> np.ndarray:
+        """Extract the region described by the bounding box from an image.
+        """
+        image_size = image.shape[1::-1]
+        channels = 1 if image.ndim < 3 else image[2]
+
+        x1, x2 = int(self.x1), int(self.x2)
+        y1, y2 = int(self.y1), int(self.y2)
+        invalid = (x1 < 0 or x2 > image_size[0] or
+                   y1 < 0 or y2 > image_size[1])
+
+        if invalid and padding:
+            copy = True
+        else:
+            # no padding: resize bounding box to become valid
+            x1, x2 = max(x1, 0), min(x2, image_size[0])
+            y1, y2 = max(y1, 0), min(y2, image_size[1])
+            invalid = False
+        width, height = x2 - x1, y2 - y1
+
+        if copy:
+            shape = (width, height) + ((channels, ) if channels > 1 else ())
+            box = np.zeros(shape, type=image.dtype)
+            box[-min(y1, 0):height-max(y2, image_size[1]),
+                -min(x1, 0):height-max(x2, image_size[0])] = \
+                image[max(y1, 0):min(y2, image_size[1]),
+                      max(x1, 0):min(x2, image_size[0])]
+        else:
+            box = image[y1:y2, x1:x2]
+
+        return box
+
+    def __str__(self) -> str:
+        # return (f"BoundingBox at ({self.x}, {self.y})"
+        #         f" of size {self.width} x {self.height}")
+        return (f"BoundingBox from ({self.x1}, {self.y1})"
+                f" to ({self.x2}, {self.y2})")
+
+
 class Region:
     """A region in an image, optionally annotated with attributes.
 
@@ -279,7 +331,7 @@ class Region:
     def location(self):
         return self._location
 
-    def mark_image(self, image, color=(1.0, 0.0, 0.0)):
+    def mark_image(self, image, color=None):
         self._location.mark_image(image, color=color)
 
     def scale(self, factor) -> None:
