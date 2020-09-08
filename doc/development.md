@@ -317,6 +317,23 @@ For some components, their nature is not so clear to me:
 
 # Subpackages of the Deep Learning ToolBox
 
+* `base`: definition of abstract base classes.
+   Should not (directly) require third-party moduls (except `numpy`)
+    nor other parts of the Deep Learning Toolbox, except:
+   - error handling
+   - logging
+   - debugging
+   - thirdparty loader
+* `data`: definition of data and metadata used in the toolbox.
+   May require `base` (for example observable, debug), but should
+   not require any other part of the toolbox and no 
+   third-party modules (except `numpy`)
+* `tool`
+* `datasource`
+* `network`
+* `toolbox`
+* `thirdparty`
+
 ## base
 
 Abstract datastructures to be used by other classes of the toolbox.
@@ -382,3 +399,5 @@ libraries.
 ### config.py
 
 ### directories.py
+
+

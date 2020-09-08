@@ -1,18 +1,35 @@
+"""Implementation of abstract classes using the Qt library
+(module `PyQt5`).
+"""
+
 # standard imports
-import sys
-import importlib
+from threading import Event
 
 # third party imports
+from PyQt5.QtCore import pyqtSlot, QThread
 from PyQt5.QtWidgets import QApplication
-import numpy as np
 
 # toolbox imports
 from qtgui.widgets.image import QImageView
-from ..base.image import ImageDisplay
+from ..base.image import Image, Imagelike, ImageDisplay as BaseImageDisplay
 
 
-class ImageDisplay(ImageDisplay):
+class ImageDisplay(BaseImageDisplay):
     """An image display that uses Qt Widgets to display an image.
+
+    The display can be used in different modes. In standard mode,
+    the widget is shown once the :py:meth:`show` method is called.
+    In loop mode, the widget is shown upon construction and
+    updated each time when :py:meth:`show` is called.  This is
+    intended to be used in a loop, e.g., when reading images from
+    a movie or a webcam.
+
+    Attributes
+    ----------
+    _view: QImageView
+        A widget to display the image.
+    _loop: bool
+        A flag indicating that the display is run in loop mode.
     """
 
     def __init__(self, view: QImageView = None,
@@ -20,16 +37,54 @@ class ImageDisplay(ImageDisplay):
         """
         """
         super().__init__(**kwargs)
-        if loop:
-            print("Creating QApplication")
-            self._application = QApplication(sys.argv)  # FIXME[hack]
+        self._application = QApplication([])
         self._view = view or QImageView()
         self._loop = loop
         if loop:
             self._view.show()
 
-    def show(self, image: np.ndarray, **kwargs) -> None:
-        self._view.setImage(image)
+    def show(self, image: Imagelike, wait_for_key: bool = False,
+             **kwargs) -> None:
+        """Show the given image.
+        """
+        self._view.setData(Image.as_data(image))
         if not self._loop:
             self._view.repaint()
             self._view.show()
+        if wait_for_key:
+            stopped = Event()
+            thread = self.WaitForKeyThread(self._view, stopped)
+            thread.finished.connect(self._application.quit)
+            thread.start()
+            self._application.exec_()
+            stopped.set()
+
+    class WaitForKeyThread(QThread):
+        """An auxiliary class to realize the wait for key behaviour.
+        This has to be a `QThread` (not a python thread), in order
+        to connect the `QImageView.keyPressed` signal
+        """
+
+        def __init__(self, view: QImageView, stopped: Event,
+                     timeout: float = 5.0, **kwargs) -> None:
+            super().__init__(**kwargs)
+            self._view = view
+            self._stopped = stopped
+            self._timeout = timeout
+
+        def run(self):
+            """The code to be run in the thread. This will wait
+            for the `stopped` :py:class:`Event`, either caused
+            by the `keyPressed` signal or abortion of the main
+            event loop.
+            """
+            self._view.keyPressed.connect(self.on_key_pressed)
+            self._stopped.wait(timeout=self._timeout)
+            self._view.keyPressed.disconnect(self.onKeyPressed)
+
+        @pyqtSlot(int)
+        def on_key_pressed(self, _key: int) -> None:
+            """React to keyPressed signals by setting the `_stopped`
+            event.
+            """
+            self._stopped.set()

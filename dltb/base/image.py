@@ -10,7 +10,7 @@ import numpy as np
 
 # toolbox imports
 from base.observer import Observable
-from datasource import Data
+# from datasource import Data  # FIXME[problem]: circular import
 from .. import thirdparty
 
 
@@ -43,12 +43,15 @@ class Image:
                                   "is not implemented")
 
     @staticmethod
-    def as_data(image: Imagelike) -> Data:
+    def as_data(image: Imagelike) -> 'Data':
         """Get image-like objec as :py:class:`Data` object.
         """
+        from datasource import Data  # FIXME[hack]
         if isinstance(image, Data):
             return image
-        data = Data(Image.as_array(image))
+
+        array = Image.as_array(image)
+        data = Data(array)
         data.type = Data.TYPE_IMAGE
         if isinstance(image, str):
             data.add_attribute('url', image)
@@ -67,7 +70,8 @@ class ImageIO:
 
 
 class ImageReader(ImageIO):
-    """
+    """An :py:class:`ImageReader` can read iamges from file or URL.
+    The :py:meth:`read` method is the central method of this class.
     """
 
     def __new__(cls, module: Union[str, List[str]] = None) -> 'ImageReader':
@@ -82,6 +86,11 @@ class ImageReader(ImageIO):
 
 
 class ImageWriter(ImageIO):
+    """An :py:class:`ImageWriter` can write iamges to files or upload them
+    to a given URL.  The :py:meth:`write` method is the central method
+    of this class.
+
+    """
 
     def __new__(cls, module: Union[str, List[str]] = None) -> 'ImageWriter':
         if cls is ImageWriter:
@@ -246,7 +255,7 @@ class ImageResizer:
       skimage.transform.resize gives different results from
       scipy.misc.imresize.
       https://stackoverflow.com/questions/49374829/scipy-misc-imresize-deprecated-but-skimage-transform-resize-gives-different-resu
-   
+ 
       SciPy: scipy.misc.imresize is deprecated in SciPy 1.0.0,
       and will be removed in 1.3.0. Use Pillow instead:
       numpy.array(Image.fromarray(arr).resize())
@@ -477,6 +486,8 @@ class ImageOptimizer(ImageTool):
 
 
 class ImageDisplay(ImageIO, ImageTool.Observer):
+    """An `ImageDisplay` can display images.
+    """
 
     def __new__(cls, module: Union[str, List[str]] = None,
                 **kwargs) -> 'ImageDisplay':
@@ -484,7 +495,19 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
             cls = thirdparty.import_class('ImageDisplay', module=module)
         return super(ImageDisplay, cls).__new__(cls)
 
-    def show(self, image: np.ndarray, **kwargs) -> None:
+    def show(self, image: Imagelike, wait_for_key: bool = False,
+             **kwargs) -> None:
+        """Display the given image.
+
+        Arguments
+        ---------
+        image: Imagelike
+            The image to display. This may be a single image or a
+            batch of images.
+        wait_for_key: bool
+            A flag indicating if the display should pause execution
+            and wait or a key press.
+        """
         raise NotImplementedError(f"{self.__class__.__name__} claims to "
                                   "be an ImageDisplay, but does not implement "
                                   "the show method.")

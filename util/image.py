@@ -10,55 +10,11 @@ import logging
 # third party imports
 import numpy as np
 
+# toolbox imports
+from dltb.base.image import Imagelike
+
 # logging
 LOG = logging.getLogger(__name__)
-
-
-# There are several Python packages around that provide function for
-# image I/O and image manipulation:
-#
-# * imageio:
-#   several image I/O functions, including video and webcam access
-#   Python 3.5+
-#   https://imageio.github.io/
-#   https://github.com/imageio/imageio
-#   https://imageio.readthedocs.io/en/stable/
-#   Version 2.8.0 - February 2020
-#
-# * cv2 (OpenCV):
-#   functionality for image I/O, including video and webcam access (via ffmpeg)
-#   resizing, drawing, ...
-#   https://pypi.org/project/opencv-python
-#   Version 4.2.0.32 - Februar 2020
-#
-# * scikit-image:
-#   Image processing algorithms for SciPy, including IO, morphology, filtering, warping, color manipulation, object detection, etc.
-#   https://scikit-image.org/
-#   https://pypi.org/project/scikit-image/
-#   Version 0.16.2 - October 2019
-#
-# * mahotas
-#   Computer Vision in Python. It includes many algorithms implemented
-#   in C++ for speed while operating in numpy arrays and with a very
-#   clean Python interface.
-#   https://github.com/luispedro/mahotas
-#   https://mahotas.readthedocs.io/en/latest/
-#   Version 1.4.8 - October 2019
-#
-# * imutils: (by Adrian Rosebrock from PyImageSearch)
-#   A series of convenience functions to make basic image processing
-#   functions such as translation, rotation, resizing,
-#   skeletonization, displaying Matplotlib images, sorting contours,
-#   detecting edges, and much more easier with OpenCV
-#   https://github.com/jrosebr1/imutils
-#   Version 0.5.3 - August 2019
-#
-# * Pillow/PIL
-#   Pillow is the friendly PIL fork by Alex Clark and Contributors.
-#   PIL is the Python Imaging Library by Fredrik Lundh and Contributors.
-#   https://pypi.org/project/Pillow/
-#   Version 7.1.0 - April 2020
-
 
 
 try:
@@ -83,11 +39,23 @@ except ImportError:
 
 
 class Location:
+    """A :py:class:`Location` identifies an area in a two-dimensional
+    space.  A typical location is a bounding box (realized by the
+    subclass :py:class:`BoundingBox`), but this abstract definition
+    also allows for alternative ways to describe a location.
+
+    """
 
     def __init__(self, points) -> None:
         pass
 
-    def mark_image(self, image, color=(1,0,0)):
+    def mark_image(self, image: Imagelike, color=(1, 0, 0)):
+        """Mark this :py:class:`Location` in some given image.
+
+        Arguments
+        ---------
+        image:
+        """
         raise NotImplementedError(f"Location {self.__class__.__name__} "
                                   f"does not provide a method for marking "
                                   f"an image.")
@@ -97,7 +65,7 @@ class Location:
                                   f"does not provide a method for scaling.")
 
 
-def grayscaleNormalized(array):
+def grayscaleNormalized(array: np.ndarray):
     """Convert a float array to 8bit grayscale
 
     Parameters
@@ -112,7 +80,6 @@ def grayscaleNormalized(array):
         Array mapped to [0,255]
 
     """
-    import numpy as np
 
     # normalization (values should be between 0 and 1)
     min_value = array.min()
@@ -120,18 +87,25 @@ def grayscaleNormalized(array):
     div = max(max_value - min_value, 1)
     return (((array - min_value) / div) * 255).astype(np.uint8)
 
-class PointsBasedLocation:
 
+class PointsBasedLocation:
+    """A :py:class:`PointsBasedLocation` is a :py:class:`Location`
+    that can be described by points, like a polygon area, or more
+    simple: a bounding box.
+
+    Attributes
+    ----------
     _points: np.ndarray
+    """
 
     def __init__(self, points: np.ndarray) -> None:
         super().__init__()
         self._points = points
 
-    def mark_image(self, image, color=(1,0,0)):
-        for p in self._points:
-            image[max(p[1]-1,0):min(p[1]+1,image.shape[0]),
-                  max(p[0]-1,0):min(p[0]+1,image.shape[1])] = color
+    def mark_image(self, image, color=(1, 0, 0)):
+        for point in self._points:
+            image[max(point[1]-1, 0):min(point[1]+1, image.shape[0]),
+                  max(point[0]-1, 0):min(point[0]+1, image.shape[1])] = color
 
     def scale(self, factor) -> None:
         """Scale the :py:class:`Location`.
@@ -153,18 +127,22 @@ class PointsBasedLocation:
     def __len__(self):
         return len(self._points)
 
-    
+
 class Landmarks(PointsBasedLocation):
+    """Landmarks are an ordered list of points.
+    """
 
     def __len__(self) -> int:
-        return 0 if self._points is None else len(self._points) 
+        return 0 if self._points is None else len(self._points)
 
 
 class BoundingBox(PointsBasedLocation):
+    """A bounding box describes a rectangular arae in an image.
+    """
 
     def __init__(self, x1=None, y1=None, x2=None, y2=None,
                  x=None, y=None, width=None, height=None) -> None:
-        super().__init__(np.ndarray((2,2)))
+        super().__init__(np.ndarray((2, 2)))
         if x1 is not None:
             self.x1 = x1
         elif x is not None:
@@ -187,36 +165,36 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def x1(self):
-        return self._points[0,0]
-    
+        return self._points[0, 0]
+
     @x1.setter
     def x1(self, x1):
-        self._points[0,0] = x1
-        
+        self._points[0, 0] = x1
+
     @property
     def y1(self):
-        return self._points[0,1]
-    
+        return self._points[0, 1]
+
     @y1.setter
     def y1(self, y1):
-        self._points[0,1] = y1
-        
+        self._points[0, 1] = y1
+
     @property
     def x2(self):
-        return self._points[1,0]
-    
+        return self._points[1, 0]
+
     @x2.setter
     def x2(self, x2):
-        self._points[1,0] = x2
+        self._points[1, 0] = x2
 
     @property
     def y2(self):
-        return self._points[1,1]
-    
+        return self._points[1, 1]
+
     @y2.setter
     def y2(self, y2):
-        self._points[1,1] = y2
-        
+        self._points[1, 1] = y2
+
     @property
     def x(self):
         return self.x1
@@ -266,8 +244,8 @@ class BoundingBox(PointsBasedLocation):
             image[(y1+offset, y2+offset), x1:x2] = color
             image[y1:y2, (x1+offset, x2+offset)] = color
 
-    def extract(self, image, padding: bool=True,
-                copy: bool=None) -> np.ndarray:
+    def extract(self, image, padding: bool = True,
+                copy: bool = None) -> np.ndarray:
         """Extract the region described by the bounding box from an image.
         """
         image_size = image.shape[1::-1]
@@ -289,7 +267,7 @@ class BoundingBox(PointsBasedLocation):
 
         if copy:
             shape = (width, height) + ((channels, ) if channels > 1 else ())
-            box = np.zeros(shape, type=image.dtype)
+            box = np.zeros(shape, dtype=image.dtype)
             box[-min(y1, 0):height-max(y2, image_size[1]),
                 -min(x1, 0):height-max(x2, image_size[0])] = \
                 image[max(y1, 0):min(y2, image_size[1]),

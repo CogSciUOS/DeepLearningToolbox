@@ -25,6 +25,12 @@ class Metadata:
     def has_regions(self):
         return self._regions is not None
 
+    def __bool__(self) -> bool:
+        return self._regions is not None and len(self._regions) > 0
+
+    def __len__(self) -> int:
+        return 0 if self._regions is None else len(self._regions)
+
     @property
     def regions(self):
         return self._regions

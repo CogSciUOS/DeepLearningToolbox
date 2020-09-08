@@ -99,6 +99,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
     Signals
     -------
     """
+    keyPressed = pyqtSignal(int)
     modeChanged = pyqtSignal(bool)
 
     def __init__(self, toolbox: Toolbox = None,
@@ -515,6 +516,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         r: toggle the keepAspectRatio flag
         """
         key = event.key()
+        self.keyPressed.emit(key)
+
         if key == Qt.Key_R:
             self.keepAspectRatio = not self.keepAspectRatio
         elif key == Qt.Key_M:
