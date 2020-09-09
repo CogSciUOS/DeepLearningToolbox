@@ -255,7 +255,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                           if self._processed else
                           '<b>Raw input:</b><br>\n')
         if data is not None:
-            array = data.data
+            array = data.array
             self._dataText += (f'Input shape: {array.shape}, '
                                f'dtype={array.dtype}<br>\n')
             self._dataText += ('min = {}, max={}, mean={:5.2f}, '
@@ -270,7 +270,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         a form suitable to be displayed in this :py:class:`QDataInfoBox`.
         """
         if attribute == 'data':
-            return data.data.shape
+            return data.array.shape
         value = getattr(data, attribute)
         if isinstance(value, ClassIdentifier):
             if value.has_label('text'):
@@ -478,7 +478,7 @@ class QDataView(QWidget, QObserver, qobservables={
             return
 
         # we have an image
-        self._imageView.setImage(data.data)
+        self._imageView.setImage(data.array)
         for attribute in data.attributes(batch=False):
             value = getattr(data, attribute)
             if isinstance(value, Region):

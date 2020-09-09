@@ -113,8 +113,8 @@ class DataWebcam(Imagesource, Loop, Snapshot):
             one should first empty the buffer before reading the data.
         """
         LOG.debug("Webcam._get_data(snapshot=%r)", snapshot)
-        data.data = (self._loop_data if self.looping else
-                     self._backend.get_frame(clear_buffer=snapshot))
+        data.array = (self._loop_data if self.looping else
+                      self._backend.get_frame(clear_buffer=snapshot))
         super()._get_snapshot(data, snapshot, **kwargs)
 
     #

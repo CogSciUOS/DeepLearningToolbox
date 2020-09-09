@@ -81,7 +81,7 @@ class Tool(Resource, metaclass=MetaRegister, method='tool_changed'):
         if array is not None:
             return array
 
-        return self._preprocess(data.data, **kwargs)
+        return self._preprocess(data.array, **kwargs)
 
     def _preprocess(self, array: np.ndarray, **_kwargs) -> np.ndarray:
         # pylint: disable=no-self-use
@@ -101,11 +101,11 @@ class Tool(Resource, metaclass=MetaRegister, method='tool_changed'):
         """
         return array
 
-    def add_data_attribute(self, data: Data, name: str,
+    def add_data_attribute(self, data: Data, name: str, value: Any = None,
                            batch: bool = True) -> None:
         """Add a tool specific attribute to a data object.
         """
-        data.add_attribute(self.key + '_' + name, batch=batch)
+        data.add_attribute(self.key + '_' + name, value, batch=batch)
 
     def set_data_attribute(self, data: Data, name: str, value: Any,
                            index: int = None) -> None:
@@ -153,14 +153,15 @@ class Tool(Resource, metaclass=MetaRegister, method='tool_changed'):
         self.add_data_attribute(data, 'preprocessed')
         self.set_data_attribute(data, 'preprocessed',
                                 self.preprocess(data, **kwargs))
-        self.add_data_attribute(data, 'duration')
+        if self.timer:
+            self.add_data_attribute(data, 'duration')
 
     def preprocessed(self, data: Data) -> np.ndarray:
         """Get the tool-specific preprocessed data from a
         :py:class:`Data` object.  This may be `None` if the data object
         has not yet undergone preprocessing.
         """
-        return self.get_data_attribute(data, 'preprocessed', data.data)
+        return self.get_data_attribute(data, 'preprocessed', data.array)
 
     #
     # Processing
@@ -188,8 +189,9 @@ class Tool(Resource, metaclass=MetaRegister, method='tool_changed'):
         if self.timer:
             end = time.time()
             self.set_data_attribute(data, 'duration', end - start)
+        self._postprocess_data(data, **kwargs)
 
-    def _process_data(self, data: Data) -> None:
+    def _process_data(self, data: Data, **kwargs) -> None:
         """Adapt the data.
         To be implemented by subclasses. Subclasses may augment
         the given data object with the result of their processing.
@@ -205,7 +207,7 @@ class Tool(Resource, metaclass=MetaRegister, method='tool_changed'):
             raise ValueError("Use _process_batch to process batch data.")
         self._process_batch(BatchWrapper(data))
 
-    def _process_batch(self, batch: Data) -> None:
+    def _process_batch(self, batch: Data, **kwargs) -> None:
         """Process batch data. The base implementation just
         processes each batch element individually. Subclasses may
         overwrite this to do real batch processing.
@@ -228,3 +230,16 @@ class Tool(Resource, metaclass=MetaRegister, method='tool_changed'):
         and only if the timer was activated.
         """
         return self.get_data_attribute(data, 'duration')
+
+    def _postprocess_data(self, data: Data, **kwargs) -> None:
+        """Postprocess the data. This may result in adding tool specific
+        attributes to the data object.  It is assumed that the data
+        object was successfully processed by :py:meth:`_process_data`
+        before this method is called.
+        
+        Arguments
+        ---------
+        data: Data
+            The data object to be postprocessd.
+        """
+        # to be extended by subclasses

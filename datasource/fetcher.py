@@ -135,8 +135,8 @@ class Datafetcher(BusyObservable, Datasource.Observer,
                      kwargs, self._datasource)
             self._data = self._datasource.get_data(**kwargs)
             LOG.info("Datafetcher: fetched %s",
-                     self._data and self._data.data is not None
-                     and (self._data.is_batch or self._data.data.shape))
+                     self._data and self._data.array is not None
+                     and (self._data.is_batch or self._data.array.shape))
             self.change('data_changed')
 
     def unfetch(self):

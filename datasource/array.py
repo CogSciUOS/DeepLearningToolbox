@@ -86,11 +86,11 @@ class DataArray(Indexed):
 
     def _get_batch(self, data: Data, index: int = None, **kwargs) -> None:
         if index is not None:
-            data.data = self._array[index:index+len(data)]
+            data.array = self._array[index:index+len(data)]
         super()._get_batch(data, **kwargs)
 
     def _get_index(self, data: Data, index: int, **kwargs) -> None:
-        data.data = self._array[index]
+        data.array = self._array[index]
 
 
 

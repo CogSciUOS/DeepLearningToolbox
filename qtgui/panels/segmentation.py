@@ -95,8 +95,8 @@ class SegmentationPanel(Panel, QObserver, qobservables={
             self._imageView1.setData(data)
 
             import PIL.Image
-            if data is not None and data.data is not None:
-                original_im = PIL.Image.fromarray(data.data.astype('uint8'),
+            if data is not None and data.array is not None:
+                original_im = PIL.Image.fromarray(data.array.astype('uint8'),
                                                   'RGB')
                 resized_im, seg_map = self._model.run(original_im)
                 seg_image = label_to_color_image(seg_map).astype(np.uint8)

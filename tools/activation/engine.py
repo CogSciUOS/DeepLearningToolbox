@@ -330,7 +330,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
         self._preprocess_data(data, prefix)
         preprocessed = getattr(data, prefix + 'preprocessed')
         LOG.info("preprocessing data with prefix '%s': %s -> %s", prefix,
-                 data.data.shape, preprocessed.shape)
+                 data.array.shape, preprocessed.shape)
         self._data = data
         self.change(input_changed=True)
 
@@ -380,7 +380,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
         if data is None:
             return  # nothing to do
 
-        values = data.data
+        values = data.array
         values = self._shape_adaptor(values)
         values = self._channel_adaptor(values)
         data.add_attribute(prefix + 'reshaped', values)

@@ -64,8 +64,8 @@ class Noise(Imagesource, Random, Loop, Snapshot):
         """
         shape = shape or self.shape
         distribution = distribution or self.distribution
-        data.data = (np.random.rand(*shape) if distribution == 'uniform' else
-                     np.random.randn(*shape))
+        data.array = (np.random.rand(*shape) if distribution == 'uniform' else
+                      np.random.randn(*shape))
 
     def _get_snapshot(self, data, snapshot: bool = True, **kwargs) -> None:
         self._get_random(data, **kwargs)

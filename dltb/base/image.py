@@ -29,14 +29,28 @@ class Image:
     """
 
     @staticmethod
-    def as_array(image: Imagelike) -> np.ndarray:
-        """Get image-like objec as numpy array.
+    def as_array(image: Imagelike, copy: bool=False) -> np.ndarray:
+        """Get image-like object as numpy array. This may
+        act as the identity function in case `image` is already
+        an array, or it may extract the relevant property, or
+        it may even load an image from a filename.
+
+        Arguments
+        ---------
+        image: Imagelike
+            An image like object to turn into an array.
+        copy: bool
+            A flag indicating if the data should be copied or
+            if the original data is to be returned.
         """
+        # FIXME[hack]: local imports to avoid circular module dependencies ...
+        from dltb.util.image import imread
+        from datasource.data import Data
+        if isinstance(image, Data):
+            image = image.array 
         if isinstance(image, np.ndarray):
-            return image
+            return image.copy()
         if isinstance(image, str):
-            # FIXME[hack]: avoid circular module dependencies ...
-            from dltb.util.image import imread
             return imread(image)
         raise NotImplementedError(f"Conversion of {type(image).__module__}."
                                   f"{type(image).__name__} to numpy.ndarray "
@@ -494,7 +508,7 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         if cls is ImageDisplay:
             cls = thirdparty.import_class('ImageDisplay', module=module)
         return super(ImageDisplay, cls).__new__(cls)
-
+    
     def show(self, image: Imagelike, wait_for_key: bool = False,
              **kwargs) -> None:
         """Display the given image.

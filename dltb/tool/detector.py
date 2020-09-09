@@ -1,7 +1,7 @@
 """Abstract base class for detectors.
 """
 # standard imports
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 import logging
 
 # third party imports
@@ -83,10 +83,9 @@ class Detector(Tool):
         LOG.info("Detector '%s' with %s detections",
                  self.key, detections)
 
-        # do some postprocessing on the results
-        posprocessed_detections = self.postprocess(data, detections)
+        detections = self._adapt_detections(detections, data)
 
-        return posprocessed_detections
+        return detections
 
     def _detect(self, data: np.ndarray, **kwargs) -> Detections:
         """Do the actual detection.
@@ -105,15 +104,11 @@ class Detector(Tool):
                                   type(self).__name__ +
                                   "' is not implemented (yet).")
 
-    def postprocess(self, data: Data, detections: Detections) -> Detections:
-        """
-        """
-        return self._postprocess(data, detections)
-
-    def _postprocess(self, _data: Data, detections: Detections) -> Detections:
-        """
-        """
-        return detections
+    def _adapt_detections(self, detections: Detections,
+                          data: Data) -> Detections:
+        raise NotImplementedError("Detector class '" +
+                                  type(self).__name__ +
+                                  "' is not implemented (yet).")
 
     #
     # Processor
@@ -132,7 +127,7 @@ class Detector(Tool):
         super()._preprocess_data(data)
         self.add_data_attribute(data, 'detections')
 
-    def _process_data(self, data: Data) -> None:
+    def _process_data(self, data: Data, **kwargs) -> None:
         """Process the given data. This will run the detector on
         the data and add the detection results as new attribute
         'detections'.
@@ -142,12 +137,6 @@ class Detector(Tool):
         detections = self.detect(data)
         self.set_data_attribute(data, 'detections', detections)
         LOG.debug("Detections found 2: %s, %s", self.detections(data), data)
-
-    def _postprocess_data(self, data: Data, detections: Detections) -> None:
-        """
-        """
-        postprocessed_detections = self._postprocess(data, detections)
-        self.set_data_attribute(data, 'detections', postprocessed_detections)
 
     def detections(self, data) -> Metadata:
         """Provide the detections from a data object that was processed
@@ -179,20 +168,46 @@ class ImageDetector(Detector):
 
         return super()._preprocess(array, **kwargs)
 
-    def _postprocess(self, data: Data, detections: Detections) -> Detections:
-        """
-        """
+    def _adapt_detections(self, detections: Detections,
+                          data: Data) -> Detections:
+        
         if detections is None:
             return None
         
         # if we have scaled the input data, then we have to apply reverse
         # scaling to the detections.
         if self._size is not None:
-            size = data.data.shape
+            size = data.array.shape
             resize_ratio = max(self._size[0]/size[0], self._size[1]/size[1])
             detections.scale(resize_ratio)
 
         return detections
+    
+    def _postprocess_data(self, data: Data, mark: bool = False,
+                          extract: bool = False, **kwargs) -> None:
+        """Apply different forms of postprocessing to the data object,
+        extending it by additional tool specific attributes.
+
+        Arguments
+        ---------
+        mark: bool
+            Visually mark the detections in a copy of the image and
+            store the result in the data object as the tool
+            specific attribute `marked`.
+        extract: bool
+            Extract a list of image patches corresponding to the
+            detections from the image and store the result in the
+            data object as the tool specific attribute `extractions`.
+        """
+        if mark:
+            self.mark_data(data)
+
+        if extract:
+            self.extract_data(data)
+
+    #
+    # Image specific methods
+    #
 
     def detect_image(self, image: Imagelike, **kwargs) -> Detections:
         """Apply the detector to the given image.
@@ -200,8 +215,144 @@ class ImageDetector(Detector):
         return self.detect(Image.as_data(image))
 
     def process_image(self, image: Imagelike, **kwargs) -> Data:
-        """Apply the detector to the given image.
+        """Create an image data object and process it with this
+        :py:class:`ImageDetector`.
+
+        Result
+        ------
+        The processed data object.
         """
         data = Image.as_data(image)
-        self.process(data)
+        self.process(data, **kwargs)
         return data
+
+    #
+    # Marking detections
+    #
+    
+    def mark_image(self, image: Imagelike, detections: Detections,
+                   copy: bool = True) -> np.ndarray:
+        """Mark the given detections in an image.
+
+        Arguments
+        ---------
+        image: Imagelike
+            The image into which the detections are to be drawn.
+        detections: Detections
+            The detections to draw.
+        copy: bool
+            A flag indicating if detections should be marked in
+            a copy of the image (`True`) or into the original
+            image object (`False`).
+
+        Result
+        ------
+        marked_image: np.ndarray
+            An image in which the given detections are visually marked.
+        """
+        array = Image.as_array(image, copy=copy)
+        if detections:
+            for index, region in enumerate(detections.regions):
+                region.mark_image(array)
+        return array
+
+    def mark_data(self, data: Data, detections: Detections = None) -> None:
+        """Extend the given `Data` image object by a tool specific attribute,
+        called `marked`, holding a copy of the original image in which
+        the detections are marked. This function assumes that the
+        detect has already be applied to the given data object and the
+        detections are stored in a tool specific attribute called
+        `detections`.
+
+        Arguments
+        ---------
+        data: Data
+            The data object do be marked.
+        detections: Detections
+            The detections to mark in the image. If None are provided
+            the detections from the tools specific attribute `detections`
+            is used.
+        """
+        if detections is None:
+            detections = self.detections(data)
+        marked_image = self.mark_image(data.array, detections, copy=True)
+        self.add_data_attribute(data, 'marked', marked_image)
+
+    def marked_image(self, data) -> np.ndarray:
+        """Get a version of the image with visually marked detections.
+        This method assumes that this image has already be stored as
+        an attribute to the data object, e.g., by calling the method
+        :py:meth:`mark_data`, or by provding the argument `mark=True`
+        when calling :py:meth:`process`.
+        """
+        return self.get_data_attribute(data, 'marked')
+
+    #
+    # Extracting detections
+    #
+
+    def extract_from_image(self, image: Imagelike, detections: Detections,
+                           copy: bool = True) -> List[np.ndarray]:
+        """Extract detections as a list of image patches from a given
+        image.
+
+        Arguments
+        ---------
+        image: Imagelike
+            The image into which the detections are to be drawn.
+        detections: Detections
+            The detections to draw.
+        copy: bool
+            A flag indicating if extracted images should be realized
+            as views using the same memory as the original image (False),
+            or if real copies should be created (True). In some situations
+            (e.g., if the detection includes invalid regions outside
+            the image), only copy is valid and will be done
+            no matter the value of this argument.
+
+        Result
+        ------
+        extractions: List[np.ndarray]
+            An list of extracted image regions.
+        """
+        array = Image.as_array(image)
+        extractions = []
+        if detections:
+            for region in detections.regions:
+                extractions.append(region.location.extract(array, copy=copy))
+        return extractions
+
+    def extract_data(self, data: Data,
+                     detections: Detections = None) -> None:
+        """Extend the given `Data` image object by a tool specific attribute,
+        called `extractions`, holding a list of extracted image
+        patches based on the detections done by this
+        :py:class:`ImageDetector`. This function assumes that the
+        detector has already be applied to the given data object and the
+        detections are stored in a tool specific attribute called
+        `detections`.
+
+        Arguments
+        ---------
+        data: Data
+            The data object do be marked.
+        detections: Detections
+            The detections to be extracted from the image. If None are
+            provided the detections from the tools specific
+            data attribute `detections` is used.
+
+        """
+        if detections is None:
+            detections = self.detections(data)
+        extractions = self.extract_from_image(data, detections)
+        self.add_data_attribute(data, 'extractions', extractions)
+
+    def extractions(self, data) -> List[np.ndarray]:
+        """Get a list of image patches extracted from the original image
+        based on detections of this :py:class:ImageDetector`.
+        This method assumes that this list has already been stored as
+        an tool specific attribute `extractions` in the data object,
+        e.g., by calling the method :py:meth:`extract_data`, or by provding
+        the argument `extract=True` when calling :py:meth:`process`.
+        """
+        return self.get_data_attribute(data, 'extractions')

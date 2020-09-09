@@ -11,7 +11,6 @@ import numpy as np
 # toolbox imports
 from base import MetaRegister
 
-
 class Data:
     # pylint: disable=no-member
     # _attributes, data
@@ -26,26 +25,27 @@ class Data:
     TYPE_IMAGE = 1
     TYPE_FACE = 2 | TYPE_IMAGE
 
-    def __init__(self, data=None, datasource=None, batch: int = None) -> None:
+    def __init__(self, array: np.ndarray=None,
+                 datasource=None, batch: int = None) -> None:
         super().__setattr__('_attributes', {})
         if batch is not None:
             super().__setattr__('_batch', batch)
         if datasource is not None:
             self.add_attribute('datasource', datasource)
-        self.add_attribute('data', value=data, batch=True)
+        self.add_attribute('array', value=array, batch=True)
         self.add_attribute('type')
         # FIXME[hack]: should be removed as not all data has to be labeled
         # - but some parts of the program expect a label, e.g,
         # self.label = "no label!"
         #  File ".../qtgui/widgets/inputselector.py", line 225,
         #                                           in datasource_changed
-        #    self._showInfo(data=data.data, label=data.label)
+        #    self._showInfo(data=data.array, label=data.label)
 
     def __bool__(self) -> bool:
         """Check if data has been assigned to this :py:class:`Data`
         structure.
         """
-        return hasattr(self, 'data') and self.data is not None
+        return hasattr(self, 'array') and self.array is not None
 
     def __str__(self) -> str:
         """Provide an informal string representation of this
@@ -59,7 +59,7 @@ class Data:
             if not self:
                 result += "[no data]"
             else:
-                result += f"shape={self.data.shape}, dtype={self.data.dtype}"
+                result += f"shape={self.array.shape}, dtype={self.array.dtype}"
         result += f" with {len(self._attributes)} attributes"
         result += ": " + ", ".join(self._attributes.keys())
         return result
@@ -211,7 +211,7 @@ class BatchDataItem:
         """Check if data has been assigned to this :py:class:`Data`
         structure.
         """
-        return hasattr(self._data, 'data') and self.data is not None
+        return hasattr(self._data, 'array') and self.array is not None
 
     def __getattr__(self, attr) -> Any:
         if attr.startswith('_'):

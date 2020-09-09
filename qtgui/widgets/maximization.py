@@ -1147,7 +1147,7 @@ class QMaximizationControls(QWidget, QObserver, qobservables={
         # network is a classifier an we have selected the last
         # (i.e. output) layer.
         data = Data()
-        data.data = image
+        data.array = image
         data.image = True
         data.description = description
         data.label = self._config.UNIT_INDEX

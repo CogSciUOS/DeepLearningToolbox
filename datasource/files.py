@@ -38,8 +38,8 @@ class DataFiles(Indexed):
         return f'<DataFiles with "{self.prepared and len(self)} files>'
 
     def __len__(self):
-        """The length of a :py:class:`DataDirectory` is the number
-        of files in the directory.
+        """The length of a :py:class:`DataFiles` is the number
+        of files in the filelist.
         """
         return self.prepared and len(self._filenames) or 0
 
@@ -64,7 +64,7 @@ class DataFiles(Indexed):
                 super()._prepeparable())
 
     def _prepared(self) -> bool:
-        """Check if this Directory has been prepared.
+        """Check if this :py:class:`DataFiles` object has been prepared.
         """
         return self._filenames is not None
 
@@ -93,13 +93,13 @@ class DataFiles(Indexed):
             The filename (relative to this directory).
         index: int
             A numerical index of the file. This argument can only be
-            used, if the :py:class:`DataDirectory` has initialized
+            used, if the :py:class:`DataFiles` has initialized
             a filename register.
 
         Raises
         ------
         ValueError:
-            If the index is present, but the :py:class:`DataDirectory`
+            If the index is present, but the :py:class:`DataFiles`
             has no filename register.
         """
         if filename and not data:
@@ -122,7 +122,7 @@ class DataFiles(Indexed):
 
         """
         abs_filename = os.path.join(self.directory, filename)
-        data.data = self.load_datapoint_from_file(abs_filename)
+        data.array = self.load_datapoint_from_file(abs_filename)
         data.filename = abs_filename
         if self._filenames is not None and not hasattr(data, 'index'):
             # FIXME[todo]: This can be improved by reverse lookup table
@@ -133,7 +133,7 @@ class DataFiles(Indexed):
         up data point by its index in the file list.
         """
         if self._filenames is None:
-            raise ValueError(f"Access by index ({index})is disabled: "
-                             "DataDirectory has no filename register")
+            raise ValueError(f"Access by index ({index}) is disabled: "
+                             "no filename register was provided.")
         data.index = index
         self._get_data_from_file(data, self._filenames[index])

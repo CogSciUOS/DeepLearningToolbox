@@ -212,7 +212,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
             self._showMetadata = flag
             self.update()
 
-    def setData(self, data: Data, attribute='data', index: int=0) -> None:
+    def setData(self, data: Data, attribute='array', index: int=0) -> None:
         """Set the data to be displayed by this :py:class:`QImageView`.
         """
         LOG.debug("QImageView.setData(%s, attribute='%s', index=%d): "

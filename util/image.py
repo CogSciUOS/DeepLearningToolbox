@@ -237,19 +237,19 @@ class BoundingBox(PointsBasedLocation):
         y1 = max(int(self.y1), t2)
         x2 = min(int(self.x2), size[0]-t1)
         y2 = min(int(self.y2), size[1]-t1)
-        print(f"mark_image[{self}]: image size={size}"
-              f"shape={image.shape}, {image.dtype}:"
-              f"{image.min()}-{image.max()}, box:({x1}, {y1}) - ({x2}, {y2})")
+        # print(f"mark_image[{self}]: image size={size}"
+        #       f"shape={image.shape}, {image.dtype}:"
+        #       f"{image.min()}-{image.max()}, box:({x1}, {y1}) - ({x2}, {y2})")
         for offset in range(-t2, t1):
             image[(y1+offset, y2+offset), x1:x2] = color
             image[y1:y2, (x1+offset, x2+offset)] = color
 
-    def extract(self, image, padding: bool = True,
+    def extract(self, image: np.ndarray, padding: bool = True,
                 copy: bool = None) -> np.ndarray:
         """Extract the region described by the bounding box from an image.
         """
         image_size = image.shape[1::-1]
-        channels = 1 if image.ndim < 3 else image[2]
+        channels = 1 if image.ndim < 3 else image.shape[2]
 
         x1, x2 = int(self.x1), int(self.x2)
         y1, y2 = int(self.y1), int(self.y2)
@@ -268,8 +268,15 @@ class BoundingBox(PointsBasedLocation):
         if copy:
             shape = (width, height) + ((channels, ) if channels > 1 else ())
             box = np.zeros(shape, dtype=image.dtype)
-            box[-min(y1, 0):height-max(y2, image_size[1]),
-                -min(x1, 0):height-max(x2, image_size[0])] = \
+            # print(f"Extracting[{self}]: image["
+            #       f"{max(y1, 0)}:{min(y2, image_size[1])},"
+            #       f"{max(x1, 0)}:{min(x2, image_size[0])}"
+            #       "] -> box["
+            #       f"{-min(y1, 0)}:{height-max(y2-image_size[1], 0)},"
+            #       f"{-min(x1, 0)}:{width-max(x2-image_size[0], 0)}] "
+            #       f"of shape = {box.shape}")
+            box[max(-y1, 0):height-max(y2-image_size[1], 0),
+                max(-x1, 0):width-max(x2-image_size[0], 0)] = \
                 image[max(y1, 0):min(y2, image_size[1]),
                       max(x1, 0):min(x2, image_size[0])]
         else:

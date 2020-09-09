@@ -13,6 +13,20 @@ from PyQt5.QtWidgets import QApplication
 from qtgui.widgets.image import QImageView
 from ..base.image import Image, Imagelike, ImageDisplay as BaseImageDisplay
 
+class QImageDisplay(QImageView):
+
+    def setThread(self, thread: QThread) -> None:
+        self._thread = thread
+    
+    def closeEvent(self, event):
+        print("Close Event")
+        if self._thread is not None:
+            self._thread.stop()
+            self._thread.wait()
+            self._thread = None
+            print("Waited for thread")
+        print("Ok to close now.")
+
 
 class ImageDisplay(BaseImageDisplay):
     """An image display that uses Qt Widgets to display an image.
@@ -38,13 +52,13 @@ class ImageDisplay(BaseImageDisplay):
         """
         super().__init__(**kwargs)
         self._application = QApplication([])
-        self._view = view or QImageView()
+        self._view = view or QImageDisplay()
         self._loop = loop
         if loop:
             self._view.show()
 
     def show(self, image: Imagelike, wait_for_key: bool = False,
-             **kwargs) -> None:
+             timeout: float = None, **kwargs) -> None:
         """Show the given image.
         """
         self._view.setData(Image.as_data(image))
@@ -53,9 +67,12 @@ class ImageDisplay(BaseImageDisplay):
             self._view.show()
         if wait_for_key:
             stopped = Event()
-            thread = self.WaitForKeyThread(self._view, stopped)
+            thread = self.WaitForKeyThread(self._view, stopped,
+                                           timeout=timeout)
             thread.finished.connect(self._application.quit)
+            self._view.setThread(thread)
             thread.start()
+            self._application.aboutToQuit.connect(thread.onClose)
             self._application.exec_()
             stopped.set()
 
@@ -66,7 +83,7 @@ class ImageDisplay(BaseImageDisplay):
         """
 
         def __init__(self, view: QImageView, stopped: Event,
-                     timeout: float = 5.0, **kwargs) -> None:
+                     timeout: float = None, **kwargs) -> None:
             super().__init__(**kwargs)
             self._view = view
             self._stopped = stopped
@@ -80,11 +97,20 @@ class ImageDisplay(BaseImageDisplay):
             """
             self._view.keyPressed.connect(self.on_key_pressed)
             self._stopped.wait(timeout=self._timeout)
-            self._view.keyPressed.disconnect(self.onKeyPressed)
+            self._view.keyPressed.disconnect(self.on_key_pressed)
 
         @pyqtSlot(int)
         def on_key_pressed(self, _key: int) -> None:
             """React to keyPressed signals by setting the `_stopped`
             event.
             """
+            self.stop()
+
+        @pyqtSlot()
+        def onClose(self):
+            print("Going to close the window")
+            self.stop()
+
+        def stop(self):
             self._stopped.set()
+

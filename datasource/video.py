@@ -95,7 +95,7 @@ class Video(Imagesource, Indexed, Loop):
             The temporal position (point in time) of the frame
             to fetch in seconds (fractions may be given).
         """
-        data.data = self._backend.get_frame_at(time)
+        data.array = self._backend.get_frame_at(time)
         data.index = self._backend.frame
 
     def _get_data(self, data: Data, frame: int = None, time: float = None,
@@ -127,7 +127,7 @@ class Video(Imagesource, Indexed, Loop):
             If no frame is given, the next frame of the video will
             be fetched (advancing the frame number by 1).
         """
-        data.data = self._backend[index]
+        data.array = self._backend[index]
         data.frame = self._backend.frame
         data.index = index or data.frame
         data.time = self._backend.time

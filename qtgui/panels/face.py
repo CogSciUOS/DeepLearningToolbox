@@ -132,7 +132,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         :py:class:`QDetectorWidget`. The data is expected to an image.
 
         """
-        self.setImage(None if not data else data.data, data)
+        self.setImage(None if not data else data.array, data)
 
     def setImage(self, image: np.ndarray, data: Data = None):
         """Set the image to be processed by the underlying detector.

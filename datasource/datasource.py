@@ -8,6 +8,9 @@
 # FIXME[warning]: doc/source/datasource.rst 6
 # WARNING: duplicate object description of datasource.datasource,
 # other instance in datasource, use :noindex: for one of them
+#
+# FIXME[old]: there a still a lot references to "fetch" here which should
+# be removed (also from other files in the datasource directory)
 """
 .. moduleauthor:: Ulf Krumnack
 
@@ -327,7 +330,7 @@ class Imagesource(Datasource):
         """
         super()._get_data(data, **kwargs)
         if data and not self.shape:
-            data.shape = data.data.shape
+            data.shape = data.array.shape
 
 
 class Sectioned(Datasource):
@@ -559,9 +562,8 @@ class Indexed(Random):
     """Instances of this class can be indexed.
     """
 
-    def __getitem__(self, index):
-        self.fetch_index(index=index)
-        return self.get_data()
+    def __getitem__(self, index: int) -> Data:
+        return self.get_data(index=index)
 
     def __len__(self) -> int:
         raise NotImplementedError(f"Subclasses of {Indexed.__name__} "
