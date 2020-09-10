@@ -10,7 +10,7 @@ import imutils
 
 # toolbox imports
 from datasource import Data, Metadata
-from .tool import Tool
+from .tool import Tool, ImageTool
 from ..base.image import Image, Imagelike
 
 # logging
@@ -145,7 +145,7 @@ class Detector(Tool):
         return self.get_data_attribute(data, 'detections')
 
 
-class ImageDetector(Detector):
+class ImageDetector(Detector, ImageTool):
     # pylint: disable=too-many-ancestors
     """A detector to be applied to image data.
     """

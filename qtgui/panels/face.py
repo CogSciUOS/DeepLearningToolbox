@@ -38,8 +38,9 @@ from .panel import Panel
 LOG = logging.getLogger(__name__)
 
 
-class QDetectorWidget(QGroupBox, QObserver, qobservables={
-        Processor: {'tool_changed', 'process_finished'}}):
+class QDetectorWidget(QGroupBox, QObserver,
+        qattributes={Toolbox: False}, qobservables={
+        Processor: {'tool_changed', 'process_finished', 'busy_changed'}}):
     """A detector widget displays the output of a Detector.
 
     _processor: Processor
@@ -84,6 +85,10 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         self._label = QLabel()
         self._busy = QBusyWidget()
 
+        self._toolSelector = QToolSelector()
+        self.addAttributePropagation(Toolbox, self._toolSelector)
+        self._toolSelector.toolSelected.connect(self.onToolSelected)
+
     def _layoutUI(self):
         layout = QVBoxLayout()
         layout.addWidget(self._view)
@@ -91,9 +96,18 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         layout.addWidget(self._batchView)
         layout.addWidget(self._busy)
         layout.addStretch(3)
+        layout.addWidget(self._toolSelector)
         layout.addWidget(self._prepareButton)
         self.setLayout(layout)
         self.setCheckable(True)
+
+    def setProcessor(self, processor: Processor) -> None:
+        """Set the processor observed by this :py:class:`QDetectorWidget`.
+        The widget is initialized with its own private
+        :py:class:`Processor`, so there is usually no reason to call
+        this method directly.
+        """
+        self._busy.setBusyObservable(processor)
 
     def faceDetector(self) -> FaceDetector:
         """Get the detector currently applied by this
@@ -111,12 +125,18 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         The face detector will inform us whenever new faces where
         detected.
         """
+        if detector is self.faceDetector():
+            return  # Nothing to do
+
+        # we want to do timing
         detector.timer = True
+
         # setting the tool in the processor will indirectly trigger update()
         # in the main event loop thread.
         self._processor.tool = detector
-        self._busy.setView(detector)
         self._prepareButton.setPreparable(detector)
+        self._toolSelector.setCurrentTool(detector)
+
         if detector is not None and not detector.busy:
             detector.prepare()
 
@@ -127,11 +147,13 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         """
         LOG.debug("QDetectorWidget.processor_changed(%s, %s)",
                   processor.tool, change)
-        if change.tool_changed:
+        if change.tool_changed or change.busy_changed:
             detector = processor.tool
             self.setTitle("None" if detector is None else
-                          type(detector).__name__)
-        self.update()
+                          (type(detector).__name__ +
+                           (' (busy)' if processor.busy else '')))
+        if change.tool_changed or change.process_finished:
+            self.update()
 
     def setData(self, data: Data) -> None:
         """Set a new :py:class:`Data` object to be displayed by this
@@ -153,6 +175,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         """
         if self._processor.tool is None or not self.isChecked():
             self._view.setData(None)
+            self._batchView.setImages(None)
             self._label.setText("Off.")
             return
 
@@ -174,8 +197,9 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         self._batchView.setImages(detector.extractions(data))
         duration = detector.duration(data) or -1.0
         if detections.has_regions():
-            self._label.setText(f"{len(detections.regions)} faces detected "
-                                f"in {duration:.3f}s")
+            count = len(detections.regions)
+            self._label.setText(f"{count} face{'s' if count >1 else ''} "
+                                f"detected in {duration:.3f}s")
         else:
             self._label.setText(f"Nothing detected in {duration:.3f}s")
 
@@ -185,6 +209,19 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         (de)activated.
         """
         self.update()
+
+    @protect
+    def onToolSelected(self, tool: Tool) -> None:
+        """A slot to be informed if a new Tool is selected.
+
+        Arguments
+        ---------
+        tool: Tool
+            The `tool` is expected to be a face detector, otherwise
+            it will be treated as `None`, meaning this
+            :py:class:`QDetectorWidget` will be deactivated
+        """
+        self.setFaceDetector(tool if isinstance(tool, FaceDetector) else None)
 
 
 class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
@@ -279,9 +316,6 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         self._inputCounter = QLabel("0")
         self._processCounter = QLabel("0")
 
-        self._toolSelector = QToolSelector()
-        self.addAttributePropagation(Toolbox, self._toolSelector)
-        self._toolSelector.toolSelected.connect(self.onToolSelected)
 
         self._detectorViews = []
         for detector in range(2):
@@ -315,7 +349,6 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         row.addWidget(self._processCounter)
         row.addWidget(QLabel("/"))
         row.addWidget(self._inputCounter)
-        row.addWidget(self._toolSelector)
         row.addStretch()
         layout2.addLayout(row)
         layout2.addStretch(1)
@@ -363,27 +396,20 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         # increase the data counter
         self._inputCounter.setText(str(int(self._inputCounter.text())+1))
 
-    def setFaceDetector(self, detector: FaceDetector) -> None:
-        """Set the face detector to be used in this :py:class:`FacePanel`.
-        """
-        if detector is not self._detectorViews[0].faceDetector:
-            self._detectorViews[0].setFaceDetector(detector)
-            self._toolSelector.setCurrentTool(detector)
-
     def setToolbox(self, toolbox: Toolbox) -> None:
         """Set a new Toolbox.
         We are only interested in changes of the input data.
         """
 
         if toolbox is not None:
-            print("FacePanel: new toolbox contains the following detectors:")
+            print("FacePanel: "
+                  "new toolbox contains the following face detectors:")
             detector = None
-            for key in 'haar', 'mtcnn', 'ssd', 'hog', 'cnn':
-                print(f" - {key}: {toolbox.contains_tool(key)}")
-                if toolbox.contains_tool(key):
-                    detector = toolbox.get_tool(key)
-            if detector is not None:
-                self.setFaceDetector(detector)
+            for index, detector in \
+                    enumerate(toolbox.tools_of_type(FaceDetector)):
+                print(f" - {detector.key}")
+                if index < len(self._detectorViews):
+                    self._detectorViews[index].setFaceDetector(detector)
 
         self._dataSelector.setToolbox(toolbox)
         # self._dataView.setToolbox(toolbox)
@@ -404,8 +430,3 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         """
         LOG.debug("Resize event")
         super().resizeEvent(event)
-
-    @protect
-    def onToolSelected(self, tool: Tool) -> None:
-        print(f"Tool selected: {tool}")
-        self.setFaceDetector(tool)

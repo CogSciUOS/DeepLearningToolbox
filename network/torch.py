@@ -524,7 +524,7 @@ from torchvision import transforms
 from .network import Classifier
 from dltb.util.image import imread
 from PIL import Image
-from tools.classify import ImageClassifier
+from dltb.tool.classifier import ImageClassifier
 
 
 class DemoResnetNetwork(ImageClassifier, Classifier):

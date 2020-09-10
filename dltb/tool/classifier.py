@@ -1,6 +1,6 @@
-# Classify input data using a network.
-#
+"""General definitions for classifiers.
 
+"""
 
 # FIXME[concept]: there should be a connection between network
 #   and suitable datasets/labels, i.e., AlexNet should provide
@@ -15,6 +15,7 @@ import numpy as np
 
 # toolbox imports
 from datasource.data import Data, ClassScheme, ClassIdentifier
+from .tool import ImageTool
 
 # FIXME[hack]: instead of prepare_input_image use the network.resize
 # API once it is finished!
@@ -38,17 +39,19 @@ class Classifier:
         The classification scheme applied by this classifier.
 
     _lookup: str
-        The name of the lookup table used to map network outputs to
-        classes of the classification scheme.  The classification scheme
-        has to support this lookup table.
+        The name of the lookup table used to map :py:class:`Classifier`
+        outputs to classes of the :py:class:`ClassScheme`.
+        The classification scheme has to support this lookup table.
 
     """
-    def __init__(self, scheme: Union[ClassScheme, str],
+    def __init__(self, scheme: Union[ClassScheme, str, int],
                  lookup: str = None, **kwargs):
         LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
         super().__init__(**kwargs)
         if isinstance(scheme, str):
             scheme = ClassScheme.register_initialize_key(scheme)
+        elif isinstance(scheme, int):
+            scheme = ClassScheme(10)
         self._scheme = scheme
         self._lookup = lookup
 
@@ -226,7 +229,7 @@ class SoftClassifier(Classifier):
             print(f"  {i}: {index} ({score})")
 
 
-class ImageClassifier(Classifier):
+class ImageClassifier(Classifier, ImageTool):
     """An :py:class:`ImageClassifier` is a classifier for images.
     """
 
@@ -276,7 +279,4 @@ class ImageClassifier(Classifier):
         image_batch = self._image_as_batch(image)
         classes, scores = self.classify(image_batch, top=top)
 
-        if confidence:
-            return classes[0], scores[0]
-        else:
-            return classes[0]
+        return (classes[0], scores[0]) if confidence else classes[0]

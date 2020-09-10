@@ -7,10 +7,10 @@ import imutils.face_utils
 import numpy as np
 
 # toolbox imports
-from ..detector import ImageDetector as BaseDetector
+from ..detector import ImageDetector
 
 
-class Detector(BaseDetector):
+class Detector(ImageDetector):
     # pylint: disable=too-many-ancestors
     """Base class for face detectors.
     """

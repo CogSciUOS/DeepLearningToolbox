@@ -832,25 +832,27 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         # Animated gifs can be obtained from
         # http://www.ajaxload.info/#preview
         self._movie = QMovie(os.path.join('assets', 'busy.gif'))
-        self.setMovie(self._movie)
         self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        # self._movie.start()
-
-    def setView(self, busyView):
-        interests = BusyObservable.Change('busy_changed')
-        self._exchangeView('_busy', busyView, interests=interests)
 
     def busy_changed(self, busyBody: BusyObservable,
                      change: BusyObservable.Change) -> None:
+        """React to a change of business.
         """
-        """
-        print("QBusyWidget.busy_changed")
-        # self._movie.setPaused(not busyBody.busy)
-        # self.setVisible(busyBody.busy)
-    # FIXME[bug]: we should have to define busy_changed!
-    tool_changed = busy_changed
-
+        LOG.debug("QBusyWidget[%s].busy_changed(%s): %s",
+                  busyBody, change, busyBody.busy)
+        self._movie.setPaused(not busyBody.busy)
+        if busyBody.busy:
+            # Setting the text clears any previous content (like
+            # text, picture, etc.)
+            self.setMovie(self._movie)
+        else:
+            # Setting the text clears any previous content (like
+            # picture, movie, etc.)
+            self.setText("Not busy")
 
     def __del__(self):
+        """Free resources used by this :py:class:`QBusyWidget`.
+        """
+        # Make sure the movie stops playing.
         self._movie.stop()
         del self._movie

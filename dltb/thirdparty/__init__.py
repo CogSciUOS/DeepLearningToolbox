@@ -220,21 +220,34 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
     into `sys.sys.meta_path` before those modules are imported.
     """
 
-    def find_module(self, fullname, path=None):
+    def find_spec(self, fullname, path, target=None):
         # keras: we want to use 'tensorflow.keras' instead of keras,
         # when available.
         if fullname == 'keras':
+            LOG.debug("ImportInterceptor['%s']: path=%s, target=%s",
+                      fullname, path, target)
+            
+            keras = None
+            if 'tensorflow.keras' in sys.modules:
+                keras = sys.modules['tensorflow.keras']
+            elif 'tensorflow' in sys.modules:
+                keras = sys.modules['tensorflow'].keras
+            else:
+                module_spec = importlib.util.find_spec('tensorflow.keras')
+                if module_spec is not None:
+                    # Load the module from module_spec.
+                    # Remark: This actually seems not be necessary,
+                    # as for some reason find_spec() already puts
+                    # the module in sys.modules.
+                    keras = importlib.util.module_from_spec(module_spec)
+                    module_spec.loader.exec_module(keras)
 
-            module_spec = importlib.util.find_spec('tensorflow.keras')
-            if module_spec is not None:
-                # Load the module from module_spec. This actually
-                # seems not be necessary, as for some reason find_spec()
-                # already puts the module in sys.modules[].
-                #   module = importlib.util.module_from_spec(module_spec)
-                #   module_spec.loader.exec_module(module)
-                #   sys.modules['keras'] = module
+            if keras is not None:
                 LOG.info("Mapping 'keras' -> 'tensorflow.keras'")
-                sys.modules['keras'] = sys.modules['tensorflow.keras']
+                sys.modules['keras'] = keras
+            else:
+                LOG.info("Not mapping 'keras' -> 'tensorflow.keras'")
+
         return None  # Proceed with the standard procedure ...
 
 

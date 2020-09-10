@@ -640,6 +640,19 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         """
         return self._tools.values()
 
+    def tools_of_type(self, cls: type) -> Iterator[Tool]:
+        """Iterate over the tools registered in this :py:class:`Toolbox`
+        of a given type.
+
+        Arguments
+        ---------
+        cls: type
+            The class of which the tool should be an instance.
+        """
+        for tool in self.tools:
+            if isinstance(tool, cls):
+                yield tool
+
     #
     # Command line options
     #
@@ -700,15 +713,15 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         #
         # Modules
         #
-        parser.add_argument('--advexample',
-                            help='Load the adversarial example module'
-                            ' (experimental!)',
-                            action=addons.UseAddon, default=False)
         parser.add_argument('--internals',
                             help='Open the internals panel (experimental!)',
                             action='store_true', default=False)
         parser.add_argument('--face',
-                            help='Open the face module (experimental!)',
+                            help='Open the face module',
+                            action='store_true', default=False)
+        parser.add_argument('--face-all',
+                            help='Load additional detectors with the '
+                            'face module',
                             action='store_true', default=False)
         parser.add_argument('--resources',
                             help='Open the resources panel',
@@ -716,6 +729,13 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         parser.add_argument('--activations',
                             help='Open the activations panel',
                             action='store_true', default=False)
+        parser.add_argument('--adversarial',
+                            help='Open the adversarial examples panel',
+                            action='store_true', default=False)
+        parser.add_argument('--advexample',
+                            help='Load the adversarial example module'
+                            ' (experimental!)',
+                            action=addons.UseAddon, default=False)
 
         #
         # Debugging
@@ -780,11 +800,17 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         tools.append('activation')
         tools.append('lucid')
         if args is not None:
-            if args.face:
+            if args.face or args.face_all:
                 for key in ('widerface', '5celeb'):
                     self.add_datasource(key)
-                # 'haar', 'mtcnn', 'ssd', 'hog', 'cnn'
-                for key in ('haar', 'ssd'):
+                # 'haar': opencv
+                # 'cnn': opencv
+                # 'ssd': dlib
+                # 'hog': dlib
+                # 'mtcnn': mtcnn (keras)
+                face_detectors = ('haar', 'hog', 'ssd')
+                if args.face_all:
+                    face_detectors += ('mtcnn')  # 'cnn'
                     # FIXME[todo]: 'cnn' runs really slow on CPU and
                     # blocks the GUI! - we may think of doing
                     # real multiprocessing!
@@ -793,6 +819,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                     # https://docs.python.org/3/library/multiprocessing.html
                     # https://stackoverflow.com/questions/10721915/shared-memory-objects-in-multiprocessing
                     # detector = FaceDetector[key] # .create(name, prepare=False)
+                for key in face_detectors: 
                     LOG.info("Toolbox: Initializing detector '%s'", key)
                     detector = Tool.register_initialize_key(
                         key)  # FIXME[todo], busy_async=False)
@@ -994,6 +1021,9 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
         if self.option('activations'):
             panels.append('activations')
+
+        if self.option('adversarial') or self.option('advexample'):
+            panels.append('advexample')
 
         kwargs['panels'] = panels
 

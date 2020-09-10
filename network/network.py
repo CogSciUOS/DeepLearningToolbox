@@ -17,7 +17,7 @@ from datasource.data import ClassScheme, ClassIdentifier
 from base import (Identifiable, Extendable, BusyObservable, Preparable,
                   MetaRegister, busy)
 from .util import convert_data_format
-from tools.classify import SoftClassifier
+from dltb.tool.classifier import SoftClassifier
 from dltb.util.image import imread, imresize
 
 # logging

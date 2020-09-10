@@ -23,8 +23,8 @@ import argparse
 from network import Network
 from network import argparse as NetworkArgparse
 from datasource import Data
-from tools.classify import Classifier
 from datasource.imagenet import ImageNet
+from dltb.tool.classifier import Classifier
 
 # logging
 LOG = logging.getLogger(__name__)

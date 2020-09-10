@@ -40,6 +40,21 @@ The conda version seems somewhat outdated:
 conda install -c menpo dlib
 ```
 
+# Networks
+
+
+## Adversarial examples
+
+### Cleverhans
+
+```sh
+pip install cleverhans
+```
+
+```sh
+conda install -c conda-forge cleverhans
+```
+
 
 # Multimedia
 

@@ -9,11 +9,12 @@ import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten
 
-from network.keras_tensorflow import Classifier as KerasClassifier
+from network import Classifier
+from network.keras_tensorflow import Network as KerasNetwork
 from network.keras import conv_2d
 
 
-class KerasMnistClassifier(KerasClassifier):
+class KerasMnistClassifier(KerasNetwork, Classifier):
     """A simple feed forward network implemented in Keras.
 
     Attributes
@@ -32,7 +33,7 @@ class KerasMnistClassifier(KerasClassifier):
         """Construct a new, convolutional network.
         """
         logger.info(f"New Keras MNIST model")
-        super().__init__(**kwargs)
+        super().__init__(scheme=10, **kwargs)
 
     def _prepare(self) -> None:
         super()._prepare()

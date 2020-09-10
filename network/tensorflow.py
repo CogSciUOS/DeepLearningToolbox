@@ -25,7 +25,7 @@ from .layers.tensorflow_layers import TensorFlowMaxPooling2D as MaxPooling2D
 from .layers.tensorflow_layers import TensorFlowDropout as Dropout
 from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
 from dltb.util.image import imread, imresize
-from tools.classify import ImageClassifier
+from dltb.tool.classifier import ImageClassifier
 
 # logging
 LOG = logging.getLogger(__name__)

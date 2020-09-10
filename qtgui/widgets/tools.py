@@ -115,7 +115,6 @@ class ToolItemList(RegisterItemList, qobservables={
             The given :py:class:`Tool` is not an element of this
             :py:class:`ToolItemList`.
         """
-        print(f"setCurrentTool {self}, {type(self).__name__}")
         self.setCurrentItem(tool)
 
     @protect

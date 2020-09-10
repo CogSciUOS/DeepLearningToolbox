@@ -10,7 +10,7 @@ import imutils.face_utils
 import dlib
 
 # toolbox imports
-from dltb.tool.detector import Detector as FaceDetector
+from dltb.tool.face.detector import Detector as FaceDetector
 from dltb.tool.face.landmarks import Detector as LandmarkDetector, FacialLandmarks68
 from datasource import Metadata
 from util.image import BoundingBox

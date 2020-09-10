@@ -266,19 +266,15 @@ class BoundingBox(PointsBasedLocation):
         width, height = x2 - x1, y2 - y1
 
         if copy:
-            shape = (width, height) + ((channels, ) if channels > 1 else ())
+            shape = (height, width) + ((channels, ) if channels > 1 else ())
             box = np.zeros(shape, dtype=image.dtype)
-            # print(f"Extracting[{self}]: image["
-            #       f"{max(y1, 0)}:{min(y2, image_size[1])},"
-            #       f"{max(x1, 0)}:{min(x2, image_size[0])}"
-            #       "] -> box["
-            #       f"{-min(y1, 0)}:{height-max(y2-image_size[1], 0)},"
-            #       f"{-min(x1, 0)}:{width-max(x2-image_size[0], 0)}] "
-            #       f"of shape = {box.shape}")
-            box[max(-y1, 0):height-max(y2-image_size[1], 0),
-                max(-x1, 0):width-max(x2-image_size[0], 0)] = \
-                image[max(y1, 0):min(y2, image_size[1]),
-                      max(x1, 0):min(x2, image_size[0])]
+            slice_box0 = slice(max(-y1, 0), height-max(y2-image_size[1], 0))
+            slice_box1 = slice(max(-x1, 0), width-max(x2-image_size[0], 0))
+            slice_image0 = slice(max(y1, 0), min(y2, image_size[1]))
+            slice_image1 = slice(max(x1, 0), min(x2, image_size[0]))
+            LOG.debug("Extracting[%s]: image[%s, %s] -> box[%s, %s]", self, 
+                      slice_image0, slice_image1, slice_box0, slice_box1)
+            box[slice_box0, slice_box1] = image[slice_image0, slice_image1]
         else:
             box = image[y1:y2, x1:x2]
 
