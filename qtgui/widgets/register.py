@@ -3,7 +3,7 @@
 """
 
 # standard imports
-from typing import Iterator, Union
+from typing import Iterator, Union, Callable
 import logging
 
 # Qt imports
@@ -512,7 +512,7 @@ class QRegisterListItem(QListWidgetItem, QObserver, qobservables={
 
 class QRegisterList(QListWidget, QObserver, qobservables={
         MetaRegister: MetaRegister.Change.all(),
-        Toolbox: Toolbox.Change.all()}):  # FIXME[todo]: Toolbox changes need to be specified depending on what is displayed in the list
+        Toolbox: set()}):
     """A list displaying the observables listed by a
     :py:class:`Toolbox` or a register, or classes listed in a register.
 
@@ -1132,18 +1132,10 @@ class QPrepareButton(QPushButton, QObserver, qobservables={
         self.clicked.connect(self.onClicked)
         self.update()
 
-    #def setPreparable(self, preparable: Preparable) -> None:
-    #    self._exchangeView('_datasourceController', datasource,
-    #                       interests=self._interests)
-
     def preparable_changed(self, preparable: Preparable,
                            info: Preparable.Change) -> None:
         if info.state_changed:
             self.update()
-
-    # FIXME[hack]: we need a way to specify the change method ...
-    network_changed = preparable_changed
-    datasource_changed = preparable_changed
 
     def setPreparable(self, preparable: Preparable) -> None:
         # FIXME[hack/todo]: setting the preparable should actually

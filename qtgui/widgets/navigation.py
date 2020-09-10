@@ -33,6 +33,11 @@ class QIndexControls(QWidget):
     _indexLabel = None
         a label for information to be shown together with the _indexField
 
+    _one_based: bool
+        A flag indicating if the display is 1-based (instead of the
+        internal 0-based indexing). This only affects the display,
+        not the way the index is reported (which is always 0-based)
+    
     Signals
     -------
     indexChanged:
@@ -45,6 +50,7 @@ class QIndexControls(QWidget):
     def __init__(self, **kwargs) -> None:
         self._index = 0
         self._elements = -1
+        self._one_based = True
         super().__init__(**kwargs)
         self._initUI()
         self._layoutUI()
@@ -94,7 +100,7 @@ class QIndexControls(QWidget):
 
         self.update()
 
-    def _initButton(self, label: str, icon: str=None):
+    def _initButton(self, label: str, icon: str = None):
         button = QPushButton()
         icon = QIcon.fromTheme(icon, QIcon())
         if icon.isNull():
@@ -156,7 +162,11 @@ class QIndexControls(QWidget):
         self._indexField.setEnabled(True)
 
     def _editIndex(self, text):
-        self.setIndex(int(text or 0), True)
+        """Transform the given text into an index value and set
+        this value to be the current index.
+        """
+        index = (int(text or 1) - 1) if self._one_based else int(text or 0)
+        self.setIndex(index, True)
 
     def index(self) -> int:
         return self._index
@@ -200,10 +210,12 @@ class QIndexControls(QWidget):
         # The value of `enabled` may change quickly (e.g. if an underlying
         # object becomes busy due to an index change). While reflecting
         # this change of state seems ok for the buttons, it is harmful for
-        # the QLineEdit, as disabling leads to closing the editor. 
+        # the QLineEdit, as disabling leads to closing the editor.
         self._indexField.setEnabled(have_elements)
-        if int(self._indexField.text() or '0') != self._index:
-            # Avoid setting identical text, as this may change the
-            # cursor position
-            self._indexField.setText(str(self._index) if have_elements else '')
+        text = (str((self._index + 1) if self._one_based else self._index)
+                if have_elements else '')
+        # Avoid setting identical text, as this may change the
+        # cursor position
+        if self._indexField.text() != text:
+            self._indexField.setText(text)
         self._indexLabel.setText(str(self._elements) if have_elements else '*')

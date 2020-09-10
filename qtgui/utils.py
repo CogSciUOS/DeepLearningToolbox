@@ -1,5 +1,5 @@
 # standard imports
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Dict
 import logging
 
 # Qt imports
@@ -137,7 +137,6 @@ class QAttribute(QDebug):
     the getter will be called className() and the setter is called
     setClassName(). There is also a private attribute _className
     for storing the attribute value.
-    FIXME[todo]: we may allow to pass a name for the attribute
 
     Attribute propagation allows to propagate changes of the attribute
     to other objects (provided they implement an appropriate setter).
@@ -154,13 +153,28 @@ class QAttribute(QDebug):
     >>> class QViewWidget(QWidget, QObserver, qattributes={Toolbox: False})
     """
 
+    _qattributes = {}
+    
     @classmethod
-    def _qAttributeGetter(cls, name):
+    def _qAttributeGetter(cls, name: str) -> None:
+        """Add a (private) attribute to the given class and create
+        (public) getter that allows to read out the attribute
+        value.
+
+        Arguments
+        ---------
+        name: str
+            The name for the attribute.
+        """
         attribute_name, getter_name = \
             cls._qAttributeNameFor(name, 'attribute', 'getter')
         LOG.debug("QAttribute: creating new attribute to %s.%s",
                   cls, attribute_name)
+
+        # add the attribue to the class with default value None.
         setattr(cls, attribute_name, None)
+
+        # create a new getter and add it to the class.
         getter = lambda self, observable: getattr(self, attribute_name, None)
         LOG.debug("QAttribute: creating new getter to  %s.%s",
                   cls, getter_name)
@@ -168,6 +182,19 @@ class QAttribute(QDebug):
 
     @classmethod
     def _qAttributeSetter(cls, name):
+        """Create a setter for an attribute an add it to the class.
+        This setter will just call :py:meth:`self._qAttributeSetAttribute`
+        with appropriate arguments.
+
+        If there is already some setter for this attribute defined
+        in the class, it will be renamed. The new setter will call
+        this original setter after it has done its internal work.
+
+        Arguments
+        ---------
+        name: str
+            The name for the attribute.
+        """
         setter_name, orig_setter_name = \
             cls._qAttributeNameFor(name, 'setter', 'orig_setter')
         LOG.debug("QAttribute: creating new setter %s.%s",
@@ -203,17 +230,68 @@ class QAttribute(QDebug):
                     '_qAttributeSet' + name if what == 'orig_setter' else
                     name for what in args)
 
-    def __init_subclass__(cls: type, qattributes={}):
-        for attributeClass, createAttribute in qattributes.items():
-            name = cls._qAttributeName(attributeClass)
-            LOG.debug(f"  {cls.__name__}: "
-                      f"Adding{' getter and' if createAttribute else ''}"
-                      f" setter for name ({attributeClass}): ")
+    @classmethod
+    def _addQAttribute(cls, attributeClass: type, full: bool = True) -> None:
+        """Add an attribute this class.
+
+        This method is intended to be called upon class creation, e.g.
+        from :py:meth:`__init_subclass__`. Later invocation is not
+        recommended.
+
+        Arguments
+        ---------
+        attributeClass: type
+            The type of the attribute to be added. The name of the
+            attribute is derived from the class name.
+        full: bool
+            A boolean value that indicates if this is a full attribute
+            (`True`: getter and setter), or only a forwarder
+            (`False`: just a setter).
+
+        """
+        name = cls._qAttributeName(attributeClass)
+        if attributeClass in cls._qattributes:
+            if full < cls._qattributes[attributeClass]:
+                raise ValueError("Cannot add '{name}' as forwarder "
+                                 "attribute as it is already registered "
+                                 "as full attribute.")
+            if full == cls._qattributes[attributeClass]:
+                return  # nothing to do
+
+        LOG.debug("%s: Adding %s for %s.",
+                  cls, 'getter and setter' if full else 'setter', name)
+        if attributeClass not in cls._qattributes:
             cls._qAttributeSetter(name)
-            if createAttribute:
-                cls._qAttributeGetter(name)
+        if full:
+            cls._qAttributeGetter(name)
+
+        # add the new qattribute to the class' qattribute register
+        if '_qattributes' not in cls.__dict__:  # make sure to use own register
+            cls._qattributes = dict(cls._qattributes)
+        cls._qattributes[attributeClass] = full
+
+    def __init_subclass__(cls: type,
+                          qattributes: Dict[type, bool] = None) -> None:
+        """Intialized a new subclasses of :py:class:`QAttribute`.
+        This will add attributes getters and setters to the new class.
+
+        Arguments
+        ---------
+        qattributes: Dict[type, bool]
+            A dictionary, have the the types of the attributes to
+            be added as keys and boolean value indicating if this
+            is a full attribute. This values are passed to
+            :py:meth:`_addQAttribute` for creating the
+            attributes.
+        """
+        if qattributes is not None:
+            for attributeClass, full in qattributes.items():
+                cls._addQAttribute(attributeClass, full)
 
     def _qAttributeSetAttribute(self, name: str, obj, *args, **kwargs):
+        """A generic attribute setter which is used to realize
+        the setters for attributes added by :py:meth:`_addQAttribute`.
+        """
         LOG.debug(f"_qAttributeSetAttribute({self.__class__.__name__}, "
                   f"'{name}', {type(obj)}, {args}, {kwargs}")
 
@@ -304,38 +382,69 @@ class QObserver(QAttribute):
     ...             self.setNetwork(toolbox.network)
     """
 
+    _qobservables = {}
     # FIXME[concept]: we need some concept to assign observables to helpers
     #_qObserverHelpers: dict = None
 
     @classmethod
-    def _qObserverSetter(cls, name, interests) -> None:
+    def _qObserverSetter(cls, name, interests, observableClass) -> None:
         # FIXME[hack]: here we replace the qAttributeSetter.
         # It would be nicer to find a way to set the correct setter
         # right from the start ...
         setter_name, = cls._qAttributeNameFor(name, 'setter')
-        if cls.__name__ == 'QIndexControls':  # FIXME[debug]
-            print(f" - {name}: {setter_name} - {interests}")
         setter = lambda self, observable, *args, **kwargs: \
             self._qObserverSetAttribute(name, observable, interests,
+                                        notify=observableClass.
+                                        notify_method(self),
                                         *args, **kwargs)
         setattr(cls, setter_name, setter)
 
-    def __init_subclass__(cls: type, qobservables={}, qattributes={}):
-        if cls.__name__ == 'QIndexControls':  # FIXME[debug] 
-            print(f"FIXME[old]: QObserver[{cls.__name__}] .__init_subclass__({cls}, {qobservables}, {qattributes}): {cls.__mro__}")
-        if not qobservables:
-            # FIXME[hack]: we can not really detect if observables
-            # were registered in superclasses!  FIXME[todo]: but we
-            # should - otherwise we could call our own super()-setter
-            # as orig_setter, probably not what we want to do ...  as
-            # an example use the Datasource buttons (QPrepareButton,
-            # QLoopButton, ...), which form a hierarchy derived from
-            # the same base class.
-            print(f"FIXME[old]: QObserver.__init_subclass__({cls}, without qobservables")
-            LOG.warning(f"FIXME[old]: QObserver.__init_subclass__({cls}, without qobservables")
+    @classmethod
+    def _addQObservable(cls, observableClass: type, interests) -> None:
+        # FIXME[todo]: does nothing, only performs sanity checks an
+        # updates the register ...
+        if observableClass in cls._qobservables:
+            if interests < cls._qobservables[observableClass]:
+                raise ValueError("Illegal attempt to to reduce the "
+                                 f"interests for observable {observableClass} "
+                                 f"in class {cls} from "
+                                 f"{cls._qobservables[observableClass]} "
+                                 f"to {interests}")
+            if interests == cls._qobservables[observableClass]:
+                return  # nothing to do
+
+        # add the new qobservable to the class' qobservable register
+        if '_qobservables' not in cls.__dict__:  # make sure to use own register
+            cls._qobservables = dict(cls._qobservables)
+        cls._qobservables[observableClass] = interests
+
+    def __init_subclass__(cls: type, qobservables: dict = None,
+                          qattributes: dict = None, **kwargs) -> None:
+        """Initialization of subclasses of :py:class:`QObserver`.
+
+        Arguments
+        ---------
+        qobservables: dict
+            :py:class:`Observable` classes that can be observed
+            by instances of this py:class:`QObserver`.  Associated
+            values are the changes that the observer is interested in.
+            Each observable is added as a full qattribute, meaning
+            that a private property and a getter/setter pair are
+            automatically added.
+        """
+
+        if qobservables is not None:
+            for observableClass, interests in qobservables.items():
+                cls._addQObservable(observableClass, interests)
+
+        if not cls._qobservables:
+            LOG.warning("Subclassing QObserver to %s without providing any "
+                        "qobservables", cls)
 
         # Add attributes for all observable classes
-        new_qattributes = dict(qattributes)
+        new_qattributes = {} if qattributes is None else dict(qattributes)
+        if qobservables is None:
+            qobservables = {}
         for observableClass in qobservables.keys():
             new_qattributes[observableClass] = True
 
@@ -346,7 +455,7 @@ class QObserver(QAttribute):
         for observableClass, interests in qobservables.items():
             change = observableClass.Change(interests)
             name = cls._qAttributeName(observableClass)
-            cls._qObserverSetter(name, change)
+            cls._qObserverSetter(name, change, observableClass)
             LOG.debug("Updated setter for %s (%s)", observableClass, change)
 
     def _qObservableHelper(self, observableClass: type):  # -> QObserverHelper:
@@ -395,19 +504,22 @@ class QObserver(QAttribute):
 
     def observe(self, observable: Observable, interests=None,
                 notify: Callable = None) -> None:
-        qObserverHelper = self.helperForObservable(observable, create=True)
+        qObserverHelper = \
+            self.helperForObservable(observable, create=True,
+                                     interests=interests, notify=notify)
         qObserverHelper.startObservation(interests=interests, notify=notify)
 
     def unobserve(self, observable, remove: bool = True):
         qObserverHelper = self.helperForObservable(observable, remove=True)
         qObserverHelper.stopObservation()
-
+        
     def _registerView(self, name, interests=None):
         # FIXME[question]: do we have to call this from the main thread
         # if not threading.current_thread() is threading.main_thread():
         #     raise RuntimeError("QObserver._registerView must be called from"
         #                        "the main thread, not " +
         #                        threading.current_thread().name + ".")
+        print("FIXME[old]: _registerView - should not be used anymore")
         if interests is not None:
             key = interests.__class__
             if key not in self._qObserverHelpers:
@@ -418,7 +530,7 @@ class QObserver(QAttribute):
             print(f"WARNING: no interest during registration of {name} for {self} - ignoring registration!")
 
     def _qObserverSetAttribute(self, name: str, new_observable, interests=None,
-                               *args, **kwargs):
+                               notify=None, *args, **kwargs):
         """Exchange an observable. This implies stopping observing the
         old observable and starting to observe the new one.
         """
@@ -441,21 +553,13 @@ class QObserver(QAttribute):
 
         old_observable = getattr(self, attribute, None)
         if new_observable is old_observable:
-            # FIXME[debug]: "setter". see above.
-            # if type(self).__name__ == debug_class:
-            #     print("[setter] 2a: _qObserverSetAttribute: "
-            #           "new observable is old observable")
             return  # nothing to do ...
-
-        # FIXME[debug]: "setter". see above.
-        # if type(self).__name__ == debug_class:
-        #     print(f"[setter] 2b: observe {interests}")
 
         if old_observable is not None:
             self.unobserve(old_observable)
         self._qAttributeSetAttribute(name, new_observable, *args, **kwargs)
         if new_observable is not None:
-            self.observe(new_observable, interests=interests)
+            self.observe(new_observable, interests=interests, notify=notify)
 
     def _exchangeView(self, name: str, new_view, interests=None):
         """Exchange the object (View or Controller) being observed.
@@ -736,21 +840,16 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         interests = BusyObservable.Change('busy_changed')
         self._exchangeView('_busy', busyView, interests=interests)
 
-    def processor_changed(self, busyBody: BusyObservable,
-                          change: BusyObservable.Change) -> None:
-        """FIXME[hack]: we should have a callback busy_changed!
-        """
-        # print("QBusyWidget.processor_changed")
-        # self._movie.setPaused(not busyBody.busy)
-        # self.setVisible(busyBody.busy)
-
-    def tool_changed(self, busyBody: BusyObservable,
+    def busy_changed(self, busyBody: BusyObservable,
                      change: BusyObservable.Change) -> None:
-        """FIXME[hack]: we should have a callback busy_changed!
         """
-        # print("QBusyWidget.processor_changed")
+        """
+        print("QBusyWidget.busy_changed")
         # self._movie.setPaused(not busyBody.busy)
         # self.setVisible(busyBody.busy)
+    # FIXME[bug]: we should have to define busy_changed!
+    tool_changed = busy_changed
+
 
     def __del__(self):
         self._movie.stop()

@@ -5,7 +5,7 @@ unregistered.
 """
 # Generic imports
 from abc import ABCMeta, abstractmethod
-from typing import Iterator, Tuple, Union
+from typing import Iterator, Tuple, Union, Callable
 import importlib
 import inspect
 import logging
@@ -445,6 +445,10 @@ class MetaRegister(MetaObservable, ABCMeta, Observable=Register):
         """Provide the name of this Observable.
         """
         return 'Register'
+
+    @classmethod
+    def notify_method(mcs, observer) -> Callable:
+        return getattr(observer, 'register_changed')
 
     def register_change(cls, key: str, info) -> None:
         """Notify observers that the register register has changed.

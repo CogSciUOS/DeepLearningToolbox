@@ -34,7 +34,8 @@ def busy(message):
     return decorator
 
 
-class BusyObservable(FailableObservable, changes={'busy_changed'}):
+class BusyObservable(FailableObservable, method='busy_changed',
+                     changes={'busy_changed'}):
     """A :py:class:`BusyObservable` object provides configuration data.
     It is an :py:class:Observable, allowing :py:class:Engine and user
     interfaces to be notified on changes.

@@ -28,9 +28,10 @@ from dltb.tool.processor import Processor
 
 # GUI imports
 from ..utils import QObserver, QBusyWidget, protect
-from ..widgets.image import QImageView
+from ..widgets.image import QImageView, QImageBatchView
 from ..widgets.data import QDataSelector
 from ..widgets.tools import QToolSelector
+from ..widgets.register import QPrepareButton
 from .panel import Panel
 
 # logging
@@ -78,6 +79,8 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         * up to four detector views: depicting faces located in the input image
         """
         self._view = QImageView()
+        self._batchView = QImageBatchView()
+        self._prepareButton = QPrepareButton()
         self._label = QLabel()
         self._busy = QBusyWidget()
 
@@ -85,8 +88,10 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         layout = QVBoxLayout()
         layout.addWidget(self._view)
         layout.addWidget(self._label)
+        layout.addWidget(self._batchView)
         layout.addWidget(self._busy)
         layout.addStretch(3)
+        layout.addWidget(self._prepareButton)
         self.setLayout(layout)
         self.setCheckable(True)
 
@@ -111,7 +116,8 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         # in the main event loop thread.
         self._processor.tool = detector
         self._busy.setView(detector)
-        if detector is not None:
+        self._prepareButton.setPreparable(detector)
+        if detector is not None and not detector.busy:
             detector.prepare()
 
     def processor_changed(self, processor: Processor,
@@ -139,7 +145,7 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         """
         self._trueMetadata = data
         if self._processor.ready:
-            self._processor.process(data)
+            self._processor.process(data, extract=True)
         self.update()
 
     def update(self):
@@ -159,11 +165,13 @@ class QDetectorWidget(QGroupBox, QObserver, qobservables={
         self._view.setData(data)
         if detections is None:
             self._label.setText("No detections.")
+            self._batchView.setImages(None)
             return
 
         # FIXME[old/todo]
         # self._view.showAnnotations(self._trueMetadata, detections)
         self._view.setMetadata(detections)
+        self._batchView.setImages(detector.extractions(data))
         duration = detector.duration(data) or -1.0
         if detections.has_regions():
             self._label.setText(f"{len(detections.regions)} faces detected "

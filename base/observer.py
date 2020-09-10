@@ -547,11 +547,12 @@ class Observable(object):
         # This is currently only used by the MetaObservable class.
         return getattr(self, '_sender', self)
 
-    def notify_method(self, observer: Observer) -> Callable:
+    @classmethod
+    def notify_method(cls, observer: Observer) -> Callable:
         """Obtain the method to call for notifiation on the
         given :py:class:Observer.
         """
-        return getattr(observer, type(self)._change_method)
+        return getattr(observer, cls._change_method)
 
     def notify_observers(self, *args, sender=None, debug: bool = False,
                          **kwargs) -> None:

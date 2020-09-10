@@ -1,16 +1,18 @@
+"""QWidgets for displaying images.
+"""
+
 # standard imports
-import sys
+from typing import Union
+import logging
 
 # Generic imports
 import numpy as np
-import logging
 
 # Qt imports
-from PyQt5.QtCore import Qt, QPoint, QSize, QRect
-from PyQt5.QtCore import pyqtSignal, pyqtSlot
+from PyQt5.QtCore import Qt, QPoint, QSize, QRect, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import (QImage, QPainter, QPen, QTransform,
                          QKeyEvent, QMouseEvent)
-from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy
+from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
 
 # toolbox imports
 from toolbox import Toolbox
@@ -23,6 +25,7 @@ from dltb.util.image import imresize, imwrite
 
 # GUI imports
 from ..utils import QObserver, protect
+from .navigation import QIndexControls
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -33,10 +36,10 @@ LOG = logging.getLogger(__name__)
 
 class QImageView(QWidget, QObserver, Toolbox.Observer,
         ActivationEngine.Observer, qobservables={
-            Toolbox: {'input_changed'},
-            ImageTool: {'image_changed'},
-            ActivationEngine: {'activation_changed', 'input_changed',
-                               'unit_changed'}}):
+        Toolbox: {'input_changed'},
+        ImageTool: {'image_changed'},
+        ActivationEngine: {'activation_changed', 'input_changed',
+                           'unit_changed'}}):
     """An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.
@@ -630,3 +633,74 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
             self._processed = processed
             self.modeChanged.emit(processed)
             self._updateImage()
+
+
+class QImageBatchView(QWidget):
+    """A :py:class:`QWidget` to display a batch of images.
+    """
+
+    def __init__(self, images: Union[Data, np.ndarray] = None,
+                 **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._initUI()
+        self._layoutUI()
+        self._images = None
+        self.setImages(images)
+
+    def _initUI(self) -> None:
+        """Initialize the user interface. The essential components
+        are a :py:class:`QImageView` to display an image and
+        some navigation tool to select an image from the batch.
+        """
+        self._imageView = QImageView()
+
+        self._indexControls = QIndexControls()
+        self._indexControls.indexChanged.connect(self.onIndexChanged)
+
+    def _layoutUI(self) -> None:
+        """Layout the widget.
+        """
+        layout = QVBoxLayout()
+        layout.addWidget(self._imageView)
+        layout.addWidget(self._indexControls)
+        self.setLayout(layout)
+
+    def index(self) -> int:
+        """The index of the currently selected image.
+        """
+        return self._indexControls.index()
+
+    def setIndex(self, index: int) -> None:
+        """Set the index of the image to display.
+        """
+        # Update the indexControls if necessary. This will
+        # in turn emit the 'indexChanged' signal, which triggers
+        # this function again.
+        if index != self.index():
+            self._indexControls.setIndex(index)
+        elif (self._images is not None and
+              index >= 0 and index < len(self._images)):
+            self._imageView.setImage(self._images[index])
+        else:
+            self._imageView.setImage(None)
+
+    def setImages(self, images: Union[Data, np.ndarray],
+                  index: int = 0) -> None:
+        """Set the images to be displayed in this
+        :py:class:`QImageBatchView`.
+        """
+        self._images = images
+        if images is not None:
+            self._indexControls.setEnabled(True)
+            self._indexControls.setElements(len(images))
+        else:
+            self._indexControls.setEnabled(False)
+            index = -1
+        self.setIndex(index)
+        self._indexControls.update()
+
+    @protect
+    def onIndexChanged(self, index: int) -> None:
+        """A slot to react to changes of the batch index.
+        """
+        self.setIndex(index)

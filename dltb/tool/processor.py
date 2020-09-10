@@ -78,7 +78,12 @@ class Processor(BusyObservable, method='processor_changed',
     def ready(self) -> bool:
         """Check if this processor is ready for use.
         """
-        return self._tool is not None and (self.processing or True)  # FIXME[todo/states]: self.tool.ready
+        # FIXME[todo/states]: self.tool.ready
+        return (self.processing or
+                (self._tool is not None and
+                 self._tool.prepared and
+                 (not isinstance(self.tool, BusyObservable) or
+                  not self.tool.busy)))
 
     @property
     def processing(self) -> bool:
@@ -86,7 +91,7 @@ class Processor(BusyObservable, method='processor_changed',
         """
         return self._next_data is not None
 
-    def process(self, data: Data) -> None:
+    def process(self, data: Data, **kwargs) -> None:
         """Run a data processing loop. This will set the detector
         into a busy state ("processing"), in which new input data
         are processed until no more new data are provided.
@@ -106,10 +111,10 @@ class Processor(BusyObservable, method='processor_changed',
                  self.tool and self.tool.key, data)
         self._next_data = data
         if not self.busy:
-            self._process()
+            self._process(**kwargs)
 
     @busy("processing")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
-    def _process(self):
+    def _process(self, **kwargs):
         """The implementation of the process loop. This method
         is assumed to run in a background thread. It will
         check the property `_next_data` for fresh data and
@@ -130,7 +135,7 @@ class Processor(BusyObservable, method='processor_changed',
             self._data = data
             self.change(data_changed=True)
             with self.failure_manager(catch=True):
-                self.tool.process(data)
+                self.tool.process(data, **kwargs)
                 self.change(process_finished=True)
             if self._next_data is data:
                 self._next_data = None
