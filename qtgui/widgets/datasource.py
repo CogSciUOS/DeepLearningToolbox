@@ -422,7 +422,8 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
 
     def __init__(self, toolbox: Toolbox = None,
                  datasource: Datasource = None,
-                 datasource_selector: bool = True, **kwargs):
+                 datasource_selector: bool = True,
+                 style: str = 'narrow', **kwargs):
         """Initialization of the :py:class:`QDatasourceNavigator`.
 
         Parameters
@@ -433,7 +434,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         """
         super().__init__(**kwargs)
         self._initUI(datasource_selector)
-        self._layoutUI()
+        self._layoutUI(style)
 
         self.setToolbox(toolbox)
         if datasource is not None:
@@ -471,10 +472,9 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
             self._selector = None
             self._prepareButton = None
 
-    def _layoutUI(self):
-        twoRows = True
+    def _layoutUI(self, style: str) -> None:
         row = QHBoxLayout()
-        row2 = QHBoxLayout() if twoRows else row
+        row2 = QHBoxLayout() if style == 'narrow' else row
         if self._selector is not None:
             row.addWidget(self._selector)
         if self._prepareButton is not None:
@@ -488,7 +488,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         row.addWidget(self._loopButton)
         row.addWidget(self._batchButton)
 
-        if twoRows:
+        if style == 'narrow':
             layout = QVBoxLayout()
             row2.addStretch()
             layout.addLayout(row2)

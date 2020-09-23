@@ -8,10 +8,11 @@ import logging
 
 # Qt imports
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QKeyEvent, QColor
+from PyQt5.QtGui import QKeyEvent, QColor, QPalette
 
 from PyQt5.QtWidgets import (QWidget, QPushButton, QLabel, QRadioButton,
-                             QHBoxLayout, QVBoxLayout, QListWidgetItem)
+                             QHBoxLayout, QVBoxLayout, QListWidgetItem,
+                             QScrollArea, QSizePolicy)
 
 # toolbox imports
 from base.register import Register, RegisterClass, RegisterEntry, Registrable
@@ -449,6 +450,15 @@ class QRegisterClassEntryController(QWidget, QObserver, qobservables={
 
         self._descriptionLabel = QLabel()
         self._descriptionLabel.setWordWrap(True)
+        self._descriptionLabel.setBackgroundRole(QPalette.Base)
+        # self._descriptionLabel.setSizePolicy(QSizePolicy.Ignored,
+        #                                      QSizePolicy.Ignored)
+        # self._descriptionLabel.setScaledContents(True)
+
+        self._scrollArea = QScrollArea()
+        self._scrollArea.setBackgroundRole(QPalette.Dark)
+        self._scrollArea.setWidget(self._descriptionLabel)
+        self._scrollArea.setWidgetResizable(True)
 
     def _layoutUI(self) -> None:
         """Layout the user interface for this
@@ -476,7 +486,8 @@ class QRegisterClassEntryController(QWidget, QObserver, qobservables={
         layout.addLayout(row)
         layout.addWidget(self._errorLabel)
         layout.addStretch()
-        layout.addWidget(self._descriptionLabel)
+        # layout.addWidget(self._descriptionLabel)
+        layout.addWidget(self._scrollArea)
         self.setLayout(layout)
 
     def setRegisterEntry(self, entry: Union[RegisterEntry, str]) -> None:

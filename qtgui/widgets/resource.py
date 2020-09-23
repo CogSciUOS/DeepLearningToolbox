@@ -109,6 +109,7 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
         self.setTitle(title or self._registerClass.__name__)
 
         self._resourceList = self._initResourceList()
+        self._resourceList.setMode('instance')
         self._resourceList.instanceSelected.connect(self.onInstanceSelected)
         self._resourceList.classSelected.connect(self.onClassSelected)
         # self.addAttributePropagation(Toolbox, self._resourceList)
@@ -237,7 +238,7 @@ class QNetworkInspector(QResourceInspector):
         """Set the network for this :py:class:`QNetworkInspector`.
         """
         self.setResource(network)
-    
+
     def _updateResource(self) -> None:
         """React to a change of resource (network) for this
         :py:class:`QNetworkInspector`.
@@ -324,7 +325,7 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         """Initialize the resource view.
         """
         self._datasourceNavigator = \
-            QDatasourceNavigator(datasource_selector=False)
+            QDatasourceNavigator(datasource_selector=False, style='wide')
         self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
         self.addAttributePropagation(Datasource, self._datasourceNavigator)
 

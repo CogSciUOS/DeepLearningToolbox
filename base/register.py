@@ -364,6 +364,7 @@ class InstanceRegisterEntry(ClassRegisterEntry, Stateful.Observer):
             self.obj = self.cls(*self.args, key=self.key, **self.kwargs)
 
         register = type(self.obj).instance_register
+        self.change('state_changed')
         register.register_change(self.obj.key, 'entry_changed')
 
         if prepare and isinstance(self.obj, Preparable):
