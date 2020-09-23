@@ -18,6 +18,7 @@ Datasource.register_key('imagenet-val', 'datasource.imagenet',
 Datasource.register_key('dogsandcats', 'datasource.dogsandcats',
                         'DogsAndCats')
 Datasource.register_key('widerface', 'datasource.widerface', 'WiderFace')
+Datasource.register_key('fgnet', 'datasource.fgnet', 'FGNet')
 Datasource.register_key('Helen', 'datasource.helen', 'Helen')
 Datasource.register_key('Noise', 'datasource.noise', 'Noise',
                         shape=(100, 100, 3))
