@@ -13,7 +13,6 @@ from dltb.thirdparty.tensorflow import v1 as tf
 
 # toolbox imports
 import util
-from datasource.data import ClassScheme
 from . import Network as BaseNetwork, Classifier
 from .exceptions import ParsingError
 from .layers.tensorflow_layers import TensorFlowLayer as Layer

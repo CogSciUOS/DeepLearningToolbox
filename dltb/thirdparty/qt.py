@@ -13,11 +13,12 @@ from PyQt5.QtWidgets import QApplication
 from qtgui.widgets.image import QImageView
 from ..base.image import Image, Imagelike, ImageDisplay as BaseImageDisplay
 
+
 class QImageDisplay(QImageView):
 
     def setThread(self, thread: QThread) -> None:
         self._thread = thread
-    
+
     def closeEvent(self, event):
         print("Close Event")
         if self._thread is not None:

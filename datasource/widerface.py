@@ -10,7 +10,7 @@ import numpy as np
 
 # toolbox imports
 from util.image import BoundingBox, Region, Landmarks
-from .data import Data, ClassScheme
+from dltb.base.data import Data, ClassScheme
 from .datasource import Imagesource, Sectioned
 from .directory import DataDirectory
 
@@ -63,10 +63,22 @@ class WiderFace(DataDirectory, Imagesource, Sectioned,
     # pylint: disable=too-many-ancestors
     """
     http://shuoyang1213.me/WIDERFACE/
+    "Wider Face" is A face detection benchmark consisting of 32,203
+    images with 393,703 labeled faces.
+
+    The faces have wide variability in scale, pose, occlusion.
+    Images are categorized in 61 event class.
+
+    From each class train/validation/test datasets where split
+    in relation 40%/10%/50%.
 
     Attributes
     ----------
-
+    blur: Tuple[str]
+    expression: Tuple[str]
+    illumination: Tuple[str]
+    occlusion: Tuple[str]
+    invalid: Tuple[str]
     """
 
     blur = ('clear', 'normal blur', 'heavy blur')

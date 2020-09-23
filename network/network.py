@@ -13,12 +13,9 @@ import importlib
 import numpy as np
 
 # toolbox imports
-from datasource.data import ClassScheme, ClassIdentifier
-from base import (Identifiable, Extendable, BusyObservable, Preparable,
-                  MetaRegister, busy)
-from .util import convert_data_format
 from dltb.tool.classifier import SoftClassifier
-from dltb.util.image import imread, imresize
+from base import Identifiable, Extendable, Preparable, RegisterClass, busy
+from .util import convert_data_format
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -38,7 +35,7 @@ LOG.setLevel(logging.DEBUG)
 
 class Network(Identifiable, Extendable, Preparable, method='network_changed',
               changes={'state_changed', 'weights_changed'},
-              metaclass=MetaRegister):
+              metaclass=RegisterClass):
     """Abstract Network interface for all frameworks.
 
     The Network API will allow to order the dimensions in data arrays

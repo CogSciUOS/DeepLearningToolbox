@@ -112,4 +112,3 @@ class Resource(Preparable, Failable):
         # raise NotImplementedError("Installation of resources for '" +
         #                           type(self).__name__ +
         #                           "' is not implemented (yet).")
-

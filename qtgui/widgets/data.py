@@ -21,8 +21,9 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
 # toolbox imports
+from dltb.base.data import Data, ClassIdentifier
 from toolbox import Toolbox
-from datasource import Data, Metadata, ClassIdentifier
+from datasource import Metadata
 from datasource import Datasource, Datafetcher
 from util.image import Region, PointsBasedLocation
 from tools.activation import Engine as ActivationEngine

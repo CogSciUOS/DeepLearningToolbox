@@ -115,13 +115,13 @@ class QClassesView(QWidget, QObserver, qobservables={
                 try:
                     self._target = self._datasource.\
                         format_labels(activation.input_label,
-                                      format=self._label_format)
+                                      target=self._label_format)
                 except ValueError:  # Format is not supported by datasource
                     self._target = '?' + str(activation.input_label)
                 try:
                     label_text = str(self._datasource.
                                      format_labels(activation.input_label,
-                                                   format=self._output_format))
+                                                   target=self._output_format))
                 except ValueError:  # Format is not supported by datasource
                     label_text = '?' + str(activation.input_label)
             else:
@@ -147,7 +147,7 @@ class QClassesView(QWidget, QObserver, qobservables={
         #
         if classes is not None and self._datasource is not None:
             labels = self._datasource.\
-                format_labels(classes, format=self._output_format,
+                format_labels(classes, target=self._output_format,
                               origin=self._label_format)
 
         for i in range(self._top_n):

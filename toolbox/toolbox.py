@@ -63,6 +63,7 @@ from base import BusyObservable, Runner, Controller as BaseController
 from dltb.util.image import imread
 from dltb.base import run
 from dltb.tool import Tool
+from dltb.base.data import Data
 
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
@@ -70,7 +71,7 @@ from dltb.tool import Tool
 # FIXME[todo]: this will load tensorflow!
 from network import Network, AutoencoderController, argparse as NetworkArgparse
 # from network.examples import keras, torch
-from datasource import Datasource, Datafetcher, Data, DataDirectory
+from datasource import Datasource, Datafetcher, DataDirectory
 from tools.train import TrainingController
 from .process import Process
 
@@ -1124,7 +1125,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         finally:
             # FIXME[old] ...
             # print("Toolbox: finally stopping the timer ...")
-            # self._gui.stop_timer()
+            # self._gui.stopTimer()
             self._gui = None
         return rc
 

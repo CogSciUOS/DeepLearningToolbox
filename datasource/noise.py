@@ -8,7 +8,7 @@ from typing import Tuple
 import numpy as np
 
 # toolbox imports
-from .data import Data
+from dltb.base.data import Data
 from .datasource import Imagesource, Loop, Snapshot, Random
 
 

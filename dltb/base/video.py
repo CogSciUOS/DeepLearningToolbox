@@ -10,13 +10,7 @@ import threading
 import numpy as np
 
 # toolbox imports
-# FIXME[bug]: circular import
-#  dltb/base/image.py: from datasource import Data
-#  -> datasource/__init__.py: from .video import Video
-#     (we only need Data here: separate data from Datasource!)
-#  -> datasource/video.py: from dltb.base.video import Reader
-#  -> dltb/base/video.py: from .image import ImageOperator
-# from .image import ImageOperator
+from .image import ImageOperator
 from .. import thirdparty
 from ..util.time import time_str
 

@@ -1,32 +1,73 @@
 """
-QNetworkList: a list of networks
+QNetworkListWidget: a list of networks
 
 QNetworkInternals: details of a network
 """
 
 # standard imports
-from typing import Iterator
 import logging
 
 # Qt imports
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QKeyEvent, QPalette
-from PyQt5.QtWidgets import QListWidgetItem
+from PyQt5.QtCore import QCoreApplication, QEvent, pyqtSignal
+from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QPushButton, QLabel
+from PyQt5.QtWidgets import QVBoxLayout
 
 # toolbox imports
 from toolbox import Toolbox
 from network import Network, Layer
+from tools.activation import Engine as ActivationEngine
 
 # GUI imports
-from .register import QRegisterList
+from .register import QRegisterListWidget, QRegisterComboBox
+from .tensorflow import QTensorflowInternals
+from .register import ToolboxAdapter
 from ..utils import QObserver, protect
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class QNetworkList(QRegisterList, qobservables={
-        Toolbox: {'networks_changed'}}):
+class NetworkAdapter(ToolboxAdapter, qobservables={
+        Toolbox: {'network_changed', 'networks_changed'}}):
+    # pylint: disable=abstract-method
+    """A :py:class:`ToolboxAdapter` that is especially interested in
+    :py:class:`Network`.
+    """
+
+    networkSelected = pyqtSignal(object)
+
+    def updateFromToolbox(self) -> None:
+        """Update the list from the :py:class:`Toolbox`.
+        """
+        self.updateFromIterable(self._toolbox.networks)
+
+    def toolbox_changed(self, _toolbox: Toolbox,
+                        change: Toolbox.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to a change in the :py:class:`Toolbox`. The only change
+        of interest is a change of the current network. This
+        will be reflected in the list.
+        """
+        if change.network_changed:  # the current network has changed
+            self._formatAllItems()
+        elif change.networks_changed:  # the list of networks has changed
+            self.updateFromToolbox()
+
+    def currentNetwork(self) -> Network:
+        """The currently selected Network in this
+        :py:class:`NetworkAdapter`.
+        """
+        item = self._currentItem()
+        if self._toolbox is not None:
+            # items are of type Network
+            return item
+
+        # items are of type InstanceRegisterEntry
+        return None if item is None else item.obj
+
+
+class QNetworkListWidget(NetworkAdapter, QRegisterListWidget):
     """A list displaying the :py:class:`Network`s of a
     :py:class:`Toolbox`.
 
@@ -38,40 +79,141 @@ class QNetworkList(QRegisterList, qobservables={
 
     """
 
-    def __init__(self, network: Network = None, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         """
-        Arguments
-        ---------
-        toolbox: Toolbox
-        network: Network
-        parent: QWidget
         """
-        super().__init__(**kwargs)
-        self.setNetwork(network)
-
-    def _toolboxIterator(self, toolbox: Toolbox) -> Iterator:
-        return (((str(data), data) for data in self._toolbox.networks)
-                if self._toolbox else super()._toolboxIterator())
-
-    def setNetwork(self, network: Network = None) -> None:
-        self.setEnabled(network is not None)
-
-    def currentNetwork(self) -> Network:
-        item = self.currentItem()
-        return item and item.data(Qt.UserRole) or None
-
-    def network_changed(self, network: Network,
-                        change: Network.Change) -> None:
-        LOG.debug("QNetworkList.network_changed(%s, %s)", network, change)
+        super().__init__(register=Network.instance_register, **kwargs)
 
     @protect
-    def onItemClicked(self, item: QListWidgetItem):
-        self._network(item.data(Qt.UserRole))
+    def _oncurrentIndexChanged(self, index: int) -> None:
+        """A forward to map item selection to Network selection.
+        """
+        self.networkSelected.emit(self.itemData(index))
 
 
-from .tensorflow import QTensorflowInternals
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
+class QNetworkComboBox(NetworkAdapter, QRegisterComboBox):
+    """A widget to select a :py:class:`network.Network` from a list of
+    :py:class:`network.Network`s.
 
+
+    The class provides the common :py:class:`QComboBox` signals, including
+
+    activated[str/int]:
+        An item was selected (no matter if the current item changed)
+
+    currentIndexChanged[str/int]:
+        An new item was selected.
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        """
+        """
+        super().__init__(register=Network.instance_register, **kwargs)
+        self.currentIndexChanged.connect(self._oncurrentIndexChanged)
+
+    @protect
+    def _oncurrentIndexChanged(self, _index: int) -> None:
+        """A forward to map item selection to Network selection.
+        """
+        self.networkSelected.emit(self.currentNetwork())
+
+    def debug(self) -> None:
+        super().debug()
+        print(f"debug: QNetworkComboBox[{type(self).__name__}]:")
+        print(f"debug:   * Current index: {self.currentIndex()}")
+
+
+#
+# QNetworkBox
+#
+
+
+class QNetworkBox(QLabel, QObserver, qobservables={
+        # FIXME[hack]: check what we are really interested in ...
+        Network: Network.Change.all(),
+        ActivationEngine: ActivationEngine.Change.all()}):
+    """
+    .. class:: QNetworkBox
+
+    A simple widget to display information on a network and a selected
+    layer.
+    """
+
+    def __init__(self, network: Network = None, **kwargs) -> None:
+        """Create a new :py:class:``QNetworkInfoBox``"""
+        super().__init__(**kwargs)
+        self.setWordWrap(True)
+        self._networkText = ''
+        self._layerText = ''
+        self.setNetwork(network)
+
+    def activation_changed(self, model: ActivationEngine,
+                           info: ActivationEngine.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to a change in the :py:class:`ActivationEngine`.
+        """
+        # FIXME[old]
+        if info.network_changed:
+            self.network_changed(model._network, Network.Change.all())
+
+        #
+        # Set Layer info text
+        #
+        layerText = ''
+        #layerId = model._layer
+        layerId = None  # FIXME[old]
+        if False and info.layer_changed:  # FIXME[old]
+            layerText += '<br>\n<br>\n'
+            layerText += '<b>Layer info:</b><br>\n'
+            if layerId:
+                layer = self._network.layer_dict[layerId]
+                layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val)
+                                       for key, val in layer.info.items())
+                layerText += layer_info
+            else:
+                layerText += "No layer selected"
+        self._layerText = layerText
+        self.update()
+
+    def network_changed(self, network: Network,
+                        _change: Network.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to a change of the observed :py:class:`Network`.
+        """
+
+        #
+        # Set Network info text
+        #
+        networkText = ''
+        #networkText += '<b>Network info:</b> '
+        if network is not None:
+            # network_name = type(network).__name__
+            # networkText += 'FIXME[todo]: obtain network information ...'
+            networkText += ('<br>\n<b>class:</b> '
+                            f'{network.__class__.__name__}')
+            networkText += f'<br>\n<b>name:</b> {network}'
+            #if not network.empty():
+            #    networkText += ('<br>\n<b>input layer:</b> '
+            #                     f'{network.input_layer_id()}')
+            #    networkText += ('<br>\n<b>output layer:</b> '
+            #                     f'{network.output_layer_id()}')
+        else:
+            networkText += "No network"
+        self._networkText = networkText
+
+        self.update()
+        #QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
+
+    def paintEvent(self, event):
+        # text = ('<b>Network Info Box</b><br>' +
+        #        self._networkText + self._layerText)
+        # self.setText(text)
+        super().paintEvent(event)
+
+#
+# Network Internals
+#
 
 class QNetworkInternals(QWidget, QObserver, qobservables={
         Network: {'state_changed'}}):
@@ -105,6 +247,8 @@ class QNetworkInternals(QWidget, QObserver, qobservables={
 
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
+        # pylint: disable=invalid-name
+
         LOG.debug("QNetworkInternals.network_changed(%s, %s)", network, change)
         self.update(network)
 
@@ -122,310 +266,6 @@ class QNetworkInternals(QWidget, QObserver, qobservables={
             self._ternsorflowInternals.setGraph(network._graph)
 
 
-###############################################################################
-###                           QNetworkBox                                   ###
-###############################################################################
-
-from network import Network
-from tools.activation import Engine as ActivationEngine
-
-from ..utils import QObserver, protect
-
-from PyQt5.QtCore import QMetaObject, Q_ARG
-from PyQt5.QtWidgets import QLabel
-
-
-class QNetworkBox(QLabel, QObserver, qobservables={
-        # FIXME[hack]: check what we are really interested in ...
-        Network: Network.Change.all(),
-        ActivationEngine: ActivationEngine.Change.all()}):
-    """
-    .. class:: QNetworkBox
-
-    A simple widget to display information on a network and a selected
-    layer.
-    """
-
-    def __init__(self, network: Network = None, **kwargs) -> None:
-        """Create a new :py:class:``QNetworkInfoBox``"""
-        super().__init__(**kwargs)
-        self.setWordWrap(True)
-        self._network_text = ''
-        self._layer_text = ''
-        self.setNetwork(network)
-
-    def activation_changed(self, model: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
-        # FIXME[old]
-        if info.network_changed:
-            self.network_changed(model._network, Network.Change.all())
-
-        #
-        # Set Layer info text
-        #
-        layer_text = ''
-        #layer_id = model._layer
-        layer_id = None  # FIXME[old]
-        if False and info.layer_changed:  # FIXME[old]
-            layer_text += '<br>\n<br>\n'
-            layer_text += '<b>Layer info:</b><br>\n'
-            if layer_id:
-                layer = self._network.layer_dict[layer_id]
-                layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val)
-                                       for key, val in layer.info.items())
-                layer_text += layer_info
-            else:
-                layer_text += "No layer selected"
-        self._layer_text = layer_text
-        self.update()
-
-    def network_changed(self, network: Network,
-                        change: Network.Change) -> None:
-
-        #
-        # Set Network info text
-        #
-        network_text = ''
-        #network_text += '<b>Network info:</b> '
-        if network is not None:
-            network_name = type(network).__name__
-            # network_text += 'FIXME[todo]: obtain network information ...'
-            network_text += ('<br>\n<b>class:</b> '
-                             f'{network.__class__.__name__}')
-            network_text += f'<br>\n<b>name:</b> {network}'
-            #if not network.empty():
-            #    network_text += ('<br>\n<b>input layer:</b> '
-            #                     f'{network.input_layer_id()}')
-            #    network_text += ('<br>\n<b>output layer:</b> '
-            #                     f'{network.output_layer_id()}')
-        else:
-            network_text += "No network"
-        self._network_text = network_text
-
-        self.update()
-        #QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
-
-    def paintEvent(self, event):
-        # text = ('<b>Network Info Box</b><br>' +
-        #        self._network_text + self._layer_text)
-        # self.setText(text)
-        super().paintEvent(event)
-
-
-##############################################################################
-#                                                                            #
-#                               NetworkList                                  #
-#                                                                            #
-##############################################################################
-
-from toolbox import Toolbox
-from network import Network
-from ..utils import QObserver, QDebug
-
-from typing import Dict, Iterable
-
-from .register import RegisterItemList, QRegisterItemComboBox
-
-class NetworkList(RegisterItemList, QDebug, qobservables={
-        Toolbox: {'networks_changed', 'network_changed'},
-        Network: {'state_changed'}}):
-    """
-    There are different ways to use a :py:class:`NetworkList`:
-
-    * Standalone: selectable :py:class:`Network`\ s have to be
-      added and removed explicitly by calling
-      :py:meth:`addNetwork` and :py:class:`removeNetwork`.
-      Standalone can be enabled by calling the :py:meth:`setStandalone`
-      method.
-
-    * Register: directly observing the py:class:`Network` register. The
-      :py:class:`NetworkList` will be updated when new networks
-      are initialized.
-
-    * Toolbox: A :py:class:`Toolbox` can be set with the
-      :py:meth:`setToolbox` method or by providing the toolbox
-      argument to the constructor. This allows to only select
-      networks from the toolbox.
-
-
-    FIXME[todo]:
-    A :py:class:`NetworkList` can be configured to only show a
-    sublist of the actual network list. This is useful when run
-    in Register or Toolbox mode, but only a subset of the available
-    networks shall be presented:
-    * preparation: just show networks that are prepared
-    * superclass: just show networks that are subclasses of a given
-      superclass, e.g., only classifiers.
-    * framework: just show networks using a specific framework like
-      TensorFlow, Torch, or Caffe.
-
-    Attributes
-    ----------
-    _toolbox: Toolbox
-        A :py:class:`Toolbox` providing a list of
-        :py:class:`Network`s. Can be set with :py:meth:`setToolbox`,
-        making the :py:class:`QNetworkSelector` an observer of that
-        :py:class:`Toolbox`, reacting to 'networks_changed' signals.
-
-
-    Parameters
-    ----------
-    FIXME[todo]: we may also restrict the selectable networks
-        (e.g. setting an Autoencoder will only allow to select
-        autoencoders).
-
-    standalone: bool
-        If `True`, the :py:class:`QNetworkSelector` will be run
-        in standalone mode.  Networks have to be added manually.
-    """
-
-    def __init__(self, toolbox: Toolbox = None,
-                 standalone: bool = False, **kwargs) -> None:
-        """Initialization of the :py:class:`QNetworkSelector`.
-
-        """
-        if standalone and toolbox is not None:
-            raise ValueError("No toolbox can be set in standalone mode.")
-        register = Network if toolbox is None and not standalone else None
-        super().__init__(register=register, **kwargs)
-        if toolbox is not None:
-            self.setToolbox(toolbox)
-
-    def addNetwork(self, network: Network) -> None:
-        """Add the given network to this :py:class:`NetworkList`.
-        """
-        if not self.standalone():
-            raise RuntimeError("Explicitly adding networks is only allowed "
-                               "when running in standalone mode.")
-        self._addItem(network)
-
-    def removeNetwork(self, network: Network) -> None:
-        """Remove a network from this :py:class:`NetworkList`.
-        """
-        if not self.standalone():
-            raise RuntimeError("Explicit removal of networks is only allowed "
-                               "when running in standalone mode.")
-        self._addItem(network)
-
-    def standalone(self) -> None:
-        """A flag indicating that this :py:class:`NetworkList` is
-        running in standalone mode.
-        """
-        return self._toolbox is None and self._register is None
-
-    def setStandalone(self) -> None:
-        """Run this :py:class:`NetworkList` in standalone mode.
-        The list can only be changed by calling :py:meth:`addNetwork` and
-        :py:meth:`removeNetwork`.
-        Neither toolbox changes nor changes of the Network MetaRegister
-        are reflected in this list.
-        """
-        self.setToolbox(None)
-        self.setRegister(None)
-
-    def setToolbox(self, toolbox: Toolbox) -> None:
-        print(f"\nWarning: Setting Network Toolbox ({toolbox}) "
-              "is currently disabled ...\n")
-        # palette = QPalette();
-        # palette.setColor(QPalette.Background, Qt.darkYellow)
-        # self.setAutoFillBackground(True)
-        # self.setPalette(palette)
-        if toolbox is not None:
-            if self._register is not None:
-                self.setRegister(None)
-            self._updateFromIterator(toolbox.networks)
-        else:
-            self.setRegister(Network)
-
-    def toolbox_changed(self, toolbox: Toolbox,
-                        change: Toolbox.Change) -> None:
-        """React to changes in the Toolbox. We are only interested
-        when the list of networks has changed, in which case we will
-        update the content of the QComboBox to reflect the available
-        Networks.
-        """
-        # FIXME[bug]: for some reason we receive Network.Change
-        # (instead of Toolbox.Change) changes here
-        print(f"QNetworkSelector.toolbox_changed({change})")
-        # print(f"\nWarning: Network Toolbox changes ({toolbox}, {change}]) "
-        #       "are currently disabled ...\n")
-        # return
-        if change.networks_changed:
-            self._updateFromIterator(toolbox.networks)
-
-    def setNetwork(self, network) -> None:
-        """
-        """
-        self.setEnabled(network is not None)
-
-    def network_changed(self, network: Network,
-                        change: Network.Change) -> None:
-        LOG.debug("QNetworkSelector.network_changed(%s, %s)", network, change)
-
-    def currentNetwork(self) -> Network:
-        """The currently selected :py:class:`Network`.
-        This may be `None` if no network is selected.
-        """
-        return self.currentData()
-
-    def debug(self) -> None:
-        super().debug()
-        LOG.debug("Debug {type(self)}")
-        print(f"debug: NetworkList[{type(self).__name__}]:")
-        if self._toolbox is None:
-            print(f"debug:   * No Toolbox")
-        else:
-            print("debug:   * Toolbox networks:")
-            for network in self._toolbox.networks:
-                print("debug:    -", network)
-        print(f"debug:   * standalone: {self.standalone()}")
-
-
-##############################################################################
-#                                                                            #
-#                            QNetworkSelector                                #
-#                                                                            #
-##############################################################################
-
-class QNetworkSelector(NetworkList, QRegisterItemComboBox):
-    """A widget to select a :py:class:`network.Network` from a list of
-    :py:class:`network.Network`s.
-
-
-    The class provides the common :py:class:`QComboBox` signals, including
-
-    activated[str/int]:
-        An item was selected (no matter if the current item changed)
-
-    currentIndexChanged[str/int]:
-        An new item was selected.
-
-    """
-    def __init__(self, **kwargs) -> None:
-        """Initialization of the :py:class:`QNetworkSelector`.
-
-        Parameters
-        ----------
-        """
-        super().__init__(**kwargs)
-        self.activated[str].connect(self.onActivated)  # FIXME[debug]
-        self.activated[int].connect(self.onActivated)  # FIXME[debug]
-
-    @protect
-    def onActivated(self, name) -> None:
-        """A slot for the `activated` signal
-        """
-        LOG.debug("QNetworkSelector.activated(%s)", name)
-
-    def setNetwork(self, network: Network = None) -> None:
-        super().setNetwork(network)
-        if network is None:
-            self.setCurrentIndex(-1)
-
-    def debug(self) -> None:
-        super().debug()
-        print(f"debug: QNetworkSelector[{type(self).__name__}]:")
-        print(f"debug:   * Current index: {self.currentIndex()}")
 
 
 ##############################################################################
@@ -434,16 +274,6 @@ class QNetworkSelector(NetworkList, QRegisterItemComboBox):
 #                                                                            #
 ##############################################################################
 
-
-from network import Network
-from tools.activation import Engine as ActivationEngine
-
-from ..utils import QObserver, protect
-
-from PyQt5.QtCore import QCoreApplication, QEvent
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
-from PyQt5.QtWidgets import QVBoxLayout, QGridLayout
 
 class QLayerSelector(QWidget, QObserver, qobservables={
         Network: {'state_changed'},
@@ -477,7 +307,7 @@ class QLayerSelector(QWidget, QObserver, qobservables={
     FIXME[old]:
     _activation: ActivationEngine
         Controller for this UI element
-    _current_selected: int
+    _currentSelected: int
         Layer id of the currently selected layer.
 
     Signals
@@ -506,13 +336,13 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         """
         super().__init__(**kwargs)
         self._activation = None  # FIXME[old]
-        self._current_selected = None  # FIXME[old]
+        self._currentSelected = None  # FIXME[old]
         self._exclusive = exclusive
         self._layerButtons = {}
 
         # FIXME[hack]: make a nicer solution and then remove this!
-        self._label_input = None
-        self._label_output = None
+        self.labelInput = None
+        self._labelOutput = None
 
         self.initUI()
         self.layoutUI()
@@ -571,13 +401,13 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         for button in self._layerButtons.values():
             button.deleteLater()
         self._layerButtons = {}
-        if self._label_input is not None:
-            self._label_input.deleteLater()
-            self._label_input = None
-        if self._label_output is not None:
-            self._label_output.deleteLater()
-            self._label_output = None
-        self._current_selected = None
+        if self.labelInput is not None:
+            self.labelInput.deleteLater()
+            self.labelInput = None
+        if self._labelOutput is not None:
+            self._labelOutput.deleteLater()
+            self._labelOutput = None
+        self._currentSelected = None
 
     def _initButtonsFromNetwork(self, network: Network) -> None:
         """Update the buttons to reflect the layers of the
@@ -589,39 +419,39 @@ class QLayerSelector(QWidget, QObserver, qobservables={
             The :py:class:`Network` from which this
             :py:class:`QLayerSelector` can select layers.
         """
-        LOG.info(f"QLayerSelector._initButtonsFromNetwork(%s)", network)
+        LOG.info("QLayerSelector._initButtonsFromNetwork(%s)", network)
         # remove the old network buttons
         self._clearButtons()
 
         layout = self._layerLayout
         if network is None:
-            self._label_input = QLabel("No network")
-            layout.addWidget(self._label_input)
+            self.labelInput = QLabel("No network")
+            layout.addWidget(self.labelInput)
         elif not network.prepared:
-            self._label_input = QLabel(f"Unprepared network '{network.key}'")
-            layout.addWidget(self._label_input)
+            self.labelInput = QLabel(f"Unprepared network '{network.key}'")
+            layout.addWidget(self.labelInput)
         else:
             # add a label describing the network input
-            self._label_input = \
+            self.labelInput = \
                 QLabel(f"input = {self._network.get_input_shape(False)}")
-            layout.addWidget(self._label_input)
+            layout.addWidget(self.labelInput)
 
             # a column of buttons to select the network layer
-            # FIXME[hack]: layer_id vs. layer.id
-            #for layer_id in network.layer_dict.keys():
-            for layer_id, layer in network.layer_dict.items():
-                #button = QPushButton(layer_id, self)
+            # FIXME[hack]: layerId vs. layer.id
+            #for layerId in network.layer_dict.keys():
+            for layer in network.layer_dict.values():
+                #button = QPushButton(layerId, self)
                 button = QPushButton(layer.id, self)
-                #self._layerButtons[layer_id] = button
+                #self._layerButtons[layerId] = button
                 self._layerButtons[layer.id] = button
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
                 button.clicked.connect(self.onLayerButtonClicked)
 
             # add a label describing the network output
-            self._label_output = \
+            self._labelOutput = \
                 QLabel(f"output = {self._network.get_output_shape(False)}")
-            layout.addWidget(self._label_output)
+            layout.addWidget(self._labelOutput)
 
     def _markButton(self, button: QPushButton, state: bool = True) -> None:
         """Mark a button as selected.
@@ -647,7 +477,7 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         LOG.info("QLayerSelector.onLayerButtonClicked(checked=%s): "
                  "sender=%s, current_selected=%s, activation=%s",
                  checked, self.sender().text(),
-                 self._current_selected, self._activation)
+                 self._currentSelected, self._activation)
 
         if self._network is None:
             return
@@ -666,11 +496,11 @@ class QLayerSelector(QWidget, QObserver, qobservables={
 
     def old(self):
 
-        if self._current_selected is not None:
+        if self._currentSelected is not None:
             if self._activation:
-                self._activation.remove_layer(self._current_selected)
-            self._markButton(self._current_selected, False)
-            if self._current_selected == layer:
+                self._activation.remove_layer(self._currentSelected)
+            self._markButton(self._currentSelected, False)
+            if self._currentSelected == layer:
                 layer = None
 
         if layer is not None:
@@ -678,7 +508,7 @@ class QLayerSelector(QWidget, QObserver, qobservables={
                 self._activation.add_layer(layer)
             self._markButton(layer, True)
 
-        self._current_selected = layer
+        self._currentSelected = layer
 
     #
     # ActivationEngine
@@ -690,10 +520,12 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         LOG.info("QLayerSelector.setActivationEngine(activations=%s): "
                  "old activation=%s", activations, self._activation)
         self._networkInfo.setActivationEngine(activations)
-        self._activation = activations  # FIXME[hack]: should be done by QObserver
+        # FIXME[hack]: should be done by QObserver
+        self._activation = activations
 
     def activation_changed(self, activation: ActivationEngine,
                            info: ActivationEngine.Change) -> None:
+        # pylint: disable=invalid-name
         """The QLayerSelector is interested in network related changes, i.e.
         changes of the network itself or the current layer.
         """
@@ -703,7 +535,8 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         # FIXME[design]: The 'network_changed' message can mean that
         # either the current model has changed or that the list of
         # models was altered (or both).
-        if False and info.network_changed:  # FIXME[old]: should be redundant with network.observable_changed
+        # FIXME[old]: should be redundant with network.observable_changed
+        if False and info.network_changed:
             #
             # Respond to network change
             #
@@ -717,29 +550,29 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         return  # FIXME[old]
 
         if ((info.network_changed or info.layer_changed) and
-            activation is not None):
+                activation is not None):
             #
             # Respond to layer change
             #
 
-            layer_id = activation.layer_id
+            layerId = activation.layer_id
             try:
-                layer_index = activation.idForLayer(layer_id)
-            except ValueError as error:
+                layer_index = activation.idForLayer(layerId)
+            except ValueError:
                 print(f"ERROR: {self.__class__.__name__}."
                       "activation_changed(): {error}")
                 layer_index = None
-            if layer_index != self._current_selected:
+            if layer_index != self._currentSelected:
 
                 # unmark the previously active layer
-                if self._current_selected is not None:
-                    oldItem = self._layerButtons[self._current_selected]
+                if self._currentSelected is not None:
+                    oldItem = self._layerButtons[self._currentSelected]
                     self._markButton(oldItem, False)
 
-                self._current_selected = layer_index
-                if self._current_selected is not None:
+                self._currentSelected = layer_index
+                if self._currentSelected is not None:
                     # and mark the new layer
-                    newItem = self._layerButtons[self._current_selected]
+                    newItem = self._layerButtons[self._currentSelected]
                     self._markButton(newItem, True)
 
     #
@@ -751,6 +584,7 @@ class QLayerSelector(QWidget, QObserver, qobservables={
 
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
+        # pylint: disable=invalid-name
         """React to changes of the network.
         """
         if change.state_changed:

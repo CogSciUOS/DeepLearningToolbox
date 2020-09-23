@@ -12,8 +12,7 @@ abstract interfaces defined in `tools`.
 import logging
 
 # Qt imports
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QKeyEvent
+from PyQt5.QtCore import pyqtSignal
 
 # toolbox imports
 from toolbox import Toolbox
@@ -21,15 +20,20 @@ from dltb.tool import Tool
 
 # GUI imports
 from ..utils import protect
-from .register import RegisterItemList, QRegisterItemComboBox
+from .register import QRegisterListWidget, QRegisterComboBox
+from .register import ToolboxAdapter
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class ToolItemList(RegisterItemList, qobservables={
-        Toolbox: {'tools_changed', 'tool_changed'}}):
-    """There are different ways to use a :py:class:`ToolItemList`:
+class ToolAdapter(ToolboxAdapter, qobservables={
+        Toolbox: {'tool_changed', 'tools_changed'}}):
+    # pylint: disable=abstract-method
+    """A :py:class:`ToolboxAdapter` that is especially interested in
+    :py:class:`Tool`.
+
+    There are different ways to use a :py:class:`ToolItemList`:
     * Standalone: selectable :py:class:`Tool`\\ s have to be
       added and removed explicitly by calling
       :py:meth:`addTool` and :py:class:`removeTool`.
@@ -53,107 +57,60 @@ class ToolItemList(RegisterItemList, qobservables={
     ----------
     _toolbox: Toolbox
         A :py:class:`Toolbox` providing a list of
-        :py:class:`Tool`\ s. Can be set with :py:meth:`setToolbox`,
+        :py:class:`Tool`\\ s. Can be set with :py:meth:`setToolbox`,
         making the :py:class:`ToolItemList` an observer of that
         :py:class:`Toolbox`, reacting to 'tools_changed' signals.
 
     """
 
-    def __init__(self, toolbox: Toolbox = None,
-                 tool: Tool = None, **kwargs) -> None:
-        """Initialization of the :py:class:`ToolItemList`.
-
-        Parameters
-        ----------
-        """
-        super().__init__(register=Tool, **kwargs)
-        self.setToolbox(toolbox)
-        self.setTool(tool)
-
-    def setToolbox(self, toolbox: Toolbox) -> None:
-        """Set a :py:class:`Toolbox` from which a list of tools can
-        be obtained.
-        """
-        # palette = QPalette();
-        # palette.setColor(QPalette.Background, Qt.darkYellow)
-        # self.setAutoFillBackground(True)
-        # self.setPalette(palette)
-        return
-        if toolbox is not None:
-            self._updateFromIterator(toolbox.tools)
-        else:
-            self._updateFromIterator(iter(()))
-
-    def toolbox_changed(self, toolbox: Toolbox,
-                        change: Toolbox.Change) -> None:
-        """React to changes in the Toolbox. We are only interested
-        when the list of tools has changed, in which case we will
-        update the content of the QComboBox to reflect the available
-        Tools.
-        """
-        if change.tools_changed:
-            self._updateFromIterator(toolbox.tools)
-
-    def currentTool(self) -> Tool:
-        """Get the currently selected :py:class:`Tool`.
-        This may be `None` if no tool is selected.
-        """
-        return self.currentItem()
-
-    def setCurrentTool(self, tool: Tool) -> None:
-        """Select the given :py:class:`Tool`.
-
-        Arguments
-        ---------
-        tool: Tool
-            The tool to become the currently selected element
-            in this list. `None` will deselect the current element.
-
-        Raises
-        ------
-        ValueError:
-            The given :py:class:`Tool` is not an element of this
-            :py:class:`ToolItemList`.
-        """
-        self.setCurrentItem(tool)
-
-    @protect
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Process key events. The :py:class:`QImageView` supports
-        the following keys:
-
-        r: toggle the keepAspectRatio flag
-        """
-        key = event.key()
-        LOG.debug("ToolItemList.keyPressEvent: key=%d", key)
-
-        if key == Qt.Key_T:  # t = debug toolbox:
-            if self._toolbox is None:
-                print("No Toolbox")
-            else:
-                print("Toolbox tools:")
-                for tool in self._toolbox.tools:
-                    print("tool:", tool)
-        else:
-            super().keyPressEvent(event)
-
-
-class QToolSelector(QRegisterItemComboBox, ToolItemList,
-                    qobservables={Tool: {'state_changed'}}):
-    """A widget to select a :py:class:`Tool` from a list of
-    :py:class:`Tool`\\ s.
-
-    """
     toolSelected = pyqtSignal(object)
 
-    def __init__(self, **kwargs) -> None:
-        """Initialization of the :py:class:`QToolSelector`.
-
-        Parameters
-        ----------
+    def updateFromToolbox(self) -> None:
+        """Update the list from the :py:class:`Toolbox`.
         """
-        super().__init__(**kwargs)
-        self.currentIndexChanged.connect(self._oncurrentIndexChanged)
+        self.updateFromIterable(self._toolbox.tools)
+
+    def toolbox_changed(self, _toolbox: Toolbox,
+                        change: Toolbox.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to a change in the :py:class:`Toolbox`. The only change
+        of interest is a change of the current tool. This
+        will be reflected in the list.
+        """
+        if change.tool_changed:  # the current tool has changed
+            self._formatAllItems()
+        elif change.tools_changed:  # the list of tools has changed
+            self.updateFromToolbox()
+
+    def currentTool(self) -> Tool:
+        """The currently selected Tool in this
+        :py:class:`ToolAdapter`.
+        """
+        item = self._currentItem()
+        if self._toolbox is not None:
+            # items are of type Tool
+            return item
+
+        # items are of type InstanceRegisterEntry
+        return None if item is None else item.obj
+
+
+class QToolListWidget(ToolAdapter, QRegisterListWidget):
+    """A list displaying the :py:class:`Tool`s of a
+    :py:class:`Toolbox`.
+
+    By providing a :py:class:`Toolbox`, the list becomes clickable,
+    and selecting a Tool from the list will set current tool of
+    the :py:class:`Toolbox`, and vice versa, i.e. changing the current
+    tool in the :py:class:`Toolbox` will change the current item in
+    the list.
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        """
+        """
+        super().__init__(register=Tool.instance_register, **kwargs)
 
     @protect
     def _oncurrentIndexChanged(self, index: int) -> None:
@@ -161,31 +118,30 @@ class QToolSelector(QRegisterItemComboBox, ToolItemList,
         """
         self.toolSelected.emit(self.itemData(index))
 
-    def tool_changed(self, tool: Tool, change: Tool.Change) -> None:
-        """React to a change of an observed tool.
+
+class QToolComboBox(ToolAdapter, QRegisterComboBox):
+    """A widget to select a :py:class:`tool.Tool` from a list of
+    :py:class:`tool.Tool`s.
+
+
+    The class provides the common :py:class:`QComboBox` signals, including
+
+    activated[str/int]:
+        An item was selected (no matter if the current item changed)
+
+    currentIndexChanged[str/int]:
+        An new item was selected.
+
+    """
+
+    def __init__(self, **kwargs) -> None:
         """
-        LOG.debug("QToolSelector: tool %s changed %s.",
-                  tool, change)
-        self._updateItems()
-
-    def _addItem(self, item: Tool) -> None:
-        """Add an item to this :py:class:`QRegisterItemComboBox`.
-        It is assumed that the item is not yet contained in this
-        :py:class:`QRegisterItemComboBox`.
         """
-        super()._addItem(item)
-        self.observe(item, interests=Tool.Change('state_changed'))
+        super().__init__(register=Tool.instance_register, **kwargs)
+        self.currentIndexChanged.connect(self._oncurrentIndexChanged)
 
-    def _removeItem(self, item: Tool) -> None:
-        """Remove an item from this :py:class:`QRegisterItemComboBox`.  It is
-        assumed that the item is contained in this
-        :py:class:`QRegisterItemComboBox`, otherwise a
-        :py:class:`ValueError` is raised.
-
+    @protect
+    def _oncurrentIndexChanged(self, _index: int) -> None:
+        """A forward to map item selection to Tool selection.
         """
-        self.unobserve(item)
-        super()._removeItem(item)
-
-    def processor_changed(self, *args, **kwargs) -> None:
-        # FIXME[hack]:
-        print(f"QToolSelector.detector_changed({args}, {kwargs})")
+        self.toolSelected.emit(self.currentTool())

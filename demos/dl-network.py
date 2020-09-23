@@ -4,7 +4,13 @@
 
 .. moduleauthor:: Ulf Krumnack
 
+
 """
+# FIXME[todo]:
+#  - actviation: extract actviation from network
+#  - eval: evaluate network on dataset
+#  - train: train on dataset
+
 # standard imports
 import sys
 import logging

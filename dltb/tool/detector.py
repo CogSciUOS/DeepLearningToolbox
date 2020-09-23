@@ -9,9 +9,11 @@ import numpy as np
 import imutils
 
 # toolbox imports
-from datasource import Data, Metadata
-from .tool import Tool, ImageTool
+from datasource import Metadata
+from ..base.data import Data
 from ..base.image import Image, Imagelike
+from .tool import Tool
+from .image import ImageTool
 
 # logging
 LOG = logging.getLogger(__name__)

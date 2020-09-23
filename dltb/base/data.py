@@ -9,7 +9,8 @@ from collections.abc import Sized
 import numpy as np
 
 # toolbox imports
-from base import MetaRegister
+from base import RegisterClass
+
 
 class Data:
     # pylint: disable=no-member
@@ -25,7 +26,7 @@ class Data:
     TYPE_IMAGE = 1
     TYPE_FACE = 2 | TYPE_IMAGE
 
-    def __init__(self, array: np.ndarray=None,
+    def __init__(self, array: np.ndarray = None,
                  datasource=None, batch: int = None) -> None:
         super().__setattr__('_attributes', {})
         if batch is not None:
@@ -289,7 +290,7 @@ class BatchWrapper:
             setattr(self._data, attribute, value)
 
 
-class ClassScheme(metaclass=MetaRegister):
+class ClassScheme(metaclass=RegisterClass):
     """A :py:class:`ClassScheme` represents a classification scheme.  This
     is essentially a collection of classes.  An actual class is
     referred to by a :py:class:`ClassIdentifier`.

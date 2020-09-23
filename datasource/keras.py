@@ -12,11 +12,69 @@ import importlib.util
 # Python 3; it was merged with pickle. In these cases, fetching the
 # fast version will load the fast one on Python 2 and the merged
 # module in Python 3.""
-from six.moves import cPickle
+# from six.moves import cPickle
+import pickle
 
 # toolbox imports
+from dltb.base.data import ClassScheme
 from .datasource import Imagesource
 from .array import LabeledArray
+
+
+class KerasScheme(ClassScheme):
+    """:py:class:`ClassScheme` for Keras datasources.
+    """
+
+    def __init__(self, *args, name: str = None, variant: str = None,
+                 **kwargs) -> None:
+        """
+
+        Arguments
+        ---------
+        dataset: str
+            The name of the Keras dataset that applies this Scheme.
+        """
+        super().__init__(*args, **kwargs)
+        self._keras_name = name
+        self._variant = variant
+
+    @property
+    def prepared(self) -> bool:
+        """Check if the :py:class:`ImagenetScheme` has been initialized.
+        """
+        return len(self) > 0
+
+    def prepare(self) -> None:
+        """Prepare the labels for a Keras dataset.
+        """
+        if self.prepared:
+            return  # nothing to do ...
+
+        #
+        # Set the labels
+        #
+        if self._keras_name == 'cifar10':
+            self.add_labels([str(i) for i in range(10)], 'text')
+
+        data_utils = importlib.import_module('keras.utils.data_utils')
+
+        # Textual labels are provided in different ways for the different
+        # Keras datasets.
+        if self._keras_name == 'cifar10':
+            path = data_utils.get_file('cifar-10-batches-py', None)
+            with open(os.path.join(path, "batches.meta"), 'rb') as file:
+                meta = pickle.load(file)
+            self.add_labels(meta['label_names'], name='text')
+        elif self._keras_name == 'cifar100':
+            path = data_utils.get_file('cifar-100-python', None)
+            with open(os.path.join(path, "meta"), 'rb') as file:
+                meta = pickle.load(file)
+            if self._variant is None or self._variant == 'fine':
+                self.add_labels(meta['fine_label_names'], 'text')
+            elif self._variant == 'coarse':
+                # there is also 'coarse_label_names' with 20 categories
+                # label [0..100] -> label//5 [0..20]
+                self.add_labels(meta['coarse_label_names'], 'text')
 
 
 class KerasDatasource(LabeledArray, Imagesource):
@@ -34,7 +92,7 @@ class KerasDatasource(LabeledArray, Imagesource):
     **Class Attributes**
 
     KERAS_IDS: list
-        A list of valid names for :py:class:`KerasDatasource`\ s.
+        A list of valid names for :py:class:`KerasDatasource`\\ s.
         For each name there has to exists a package called
         keras.datasets.{name}.
     KERAS_DATA: dict
@@ -82,32 +140,25 @@ class KerasDatasource(LabeledArray, Imagesource):
         ValueError:
             There does not exist a package keras.datasets.{name}.
         """
+        scheme = KerasScheme(name=name)
         super().__init__(key=key or f"{name}-{section}",
                          description=f"Keras Datasoure '{name}-{section}'",
                          **kwargs)
         self._keras_dataset_name = name
         self._section_index = 0 if section == 'train' else 1
+        self._scheme = scheme
+
+    @property
+    def keras_dataset_name(self) -> str:
+        """The name of the Keras dataset.
+        """
+        return self._keras_dataset_name
 
     @property
     def keras_module_name(self) -> str:
         """Fully qualified name of the keras module representing this dataset.
         """
-        return self._keras_module_name(self, 'keras.datasets.' +
-                                       self._keras_dataset_name)
-
-    @staticmethod
-    def _keras_module_name(self, name: str) -> str:
-        """Fully qualified name of the given keras module (either
-        in the `keras` package or in the `tensorflow.keras` reimplementation).
-
-        Arguments
-        ---------
-        name: str
-            The fully qualified keras module name
-            (e.g. `keras.datasets.mnist`)
-        """
-        return 'tensorflow.' + name
-        # return name
+        return 'keras.datasets.' + self._keras_dataset_name
 
     def _preparable(self) -> bool:
         """Check if this Datasource is available.
@@ -118,7 +169,7 @@ class KerasDatasource(LabeledArray, Imagesource):
         """
         module_spec = importlib.util.find_spec(self.keras_module_name)
         return module_spec is not None and super()._preparable
- 
+
     def _prepare(self):
         """Prepare this :py:class:`KerasDatasource`.
         This includes import the corresponding keras module and
@@ -130,9 +181,8 @@ class KerasDatasource(LabeledArray, Imagesource):
         if name not in self.KERAS_DATA:
             module = importlib.import_module(self.keras_module_name)
             self.KERAS_DATA[name] = module.load_data()
-       
-        data = self.KERAS_DATA[name][self._section_index]
-        self._array = data[0]
+
+        self._array, self._labels = self.KERAS_DATA[name][self._section_index]
         self._description = f'keras.datasets.{name}'
 
         if name == 'cifar100':
@@ -141,45 +191,11 @@ class KerasDatasource(LabeledArray, Imagesource):
             # only 20 labels.
             self._variant = 'fine'
 
-    def _prepare_labels(self) -> None:
-        """Prepare the labels for a Keras datasource. Has to be called
-        before the labels can be used.
-        """
-
-        #
-        # Set the labels
-        #
-        name = self._keras_dataset_name
-        data = self.KERAS_DATA[name][self._section_index]
         if name == 'cifar100' and self._variant == 'coarse':
             # FIXME[todo]: we have to find the mapping from "fine"
             # labels to "coarse" labels as provided on
             # https://www.cs.toronto.edu/~kriz/cifar.html
-            super()._prepare_labels(labels=data[1]//5)
-        else:
-            super()._prepare_labels(data[1])
-
-        import_name = self._keras_module_name('keras.utils.data_utils')
-        data_utils = importlib.import_module(import_name)
-
-        # Textual labels are provided in different ways for the different
-        # Keras datasets.
-        name = self._keras_dataset_name
-        if name == 'cifar10':
-            path = data_utils.get_file('cifar-10-batches-py', None)
-            with open(os.path.join(path, "batches.meta"), 'rb') as file:
-                meta = cPickle.load(file)
-            self.add_label_format('text', meta['label_names'])
-        elif name == 'cifar100':
-            path = data_utils.get_file('cifar-100-python', None)
-            with open(os.path.join(path, "meta"), 'rb') as file:
-                meta = cPickle.load(file)
-            if self._variant == 'fine':
-                self.add_label_format('text', meta['fine_label_names'])
-            elif self._variant == 'coarse':
-                # there is also 'coarse_label_names' with 20 categories
-                # label [0..100] -> label//5 [0..20]
-                self.add_label_format('coarse_text', meta['coarse_label_names'])
+            self._labels = self._labels//5
 
     def __str__(self):
         # return Predefined.__str__(self) + ': ' + DataArray.__str__(self)

@@ -16,7 +16,6 @@ from util.error import handle_exception
 # pylint: disable=redefined-builtin
 from util.debug import debug_object as object
 # pylint: enable=redefined-builtin
-from .meta import Metaclass
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -265,21 +264,7 @@ class Observable(object):
 
     Internal Notes
     --------------
-    (1) We want to also allow for :py:class:`Observable` meta classes of
-    :py:class:`Observable` classes. This means, that the `self` argument
-    of methods can refer to an instance or a class. This makes
-    referencing class attributes like `self.Change` complicated,
-    as when applied to a class, the expression may refer to
-    the class attribute (wrong) and not to the meta class atribute
-    (which would be the desired outcome).
-    Patching the `getattr` mechanism is not an option here, as in
-    other situations `Observable.Change` is really meant to provide
-    the attribute of the class, while `MetaObservable.Change`
-    is used for the attribute of the meta class.
-    Hence we use the somewhat lengthy `type(self).Change` to access
-    class attributes, which will work for instances and classes.
-
-    (2) We have to take care when adding/removing observers during
+    (1) We have to take care when adding/removing observers during
     notification, as we are iterating over the observers,
     which may cause a RuntimeError if that dictionary is changed
     during iteration. Options for avoiding this problem:
@@ -296,7 +281,7 @@ class Observable(object):
     """
 
     def __init_subclass__(cls: type, method: str = None, changes: set = None,
-                          changeables: dict = None):
+                          changeables: dict = None, **kwargs):
         """Initialization of subclasses of :py:class:`Observable`.
         Each of this classes will provide some extra class members
         describing the observation (Change, Observer, _change_method).
@@ -317,6 +302,7 @@ class Observable(object):
             observers. This dictionary will be merged with the
             changeables inherited from the super class.
         """
+        super().__init_subclass__(**kwargs)
         LOG.debug("Initializing new Observable class: %s, method=%s, "
                   "changes=%s, changeables=%s",
                   cls, method, changes, changeables)
@@ -347,15 +333,13 @@ class Observable(object):
     _change_method: str = 'observable_changed'
     _changeables: dict = {}
 
-    def __init__(self, *args, sender=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._observers = dict()
         self._observers_new = dict()
         self._observers_lock = threading.RLock()
         self._observers_busy = 0
         self._thread_local = threading.local()
-        if sender is not None:
-            self._sender = sender
 
     def __del__(self):
         """Destructor.
@@ -539,14 +523,6 @@ class Observable(object):
     # Notifications
     #
 
-    @property
-    def sender(self):
-        """The sender. An alternative object to be specifified in
-        notifications as the sender.
-        """
-        # This is currently only used by the MetaObservable class.
-        return getattr(self, '_sender', self)
-
     @classmethod
     def notify_method(cls, observer: Observer) -> Callable:
         """Obtain the method to call for notifiation on the
@@ -554,7 +530,7 @@ class Observable(object):
         """
         return getattr(observer, cls._change_method)
 
-    def notify_observers(self, *args, sender=None, debug: bool = False,
+    def notify_observers(self, *args, debug: bool = False,
                          **kwargs) -> None:
         """Notify all observers of this :py:class:`Observable`
         on the given changes.
@@ -578,8 +554,6 @@ class Observable(object):
         LOG.debug("%s.notify_observers(%s)", type(self).__name__, changes)
         if not changes:
             return
-
-        sender = sender or self.sender
 
         if debug:
             LOG.debug("-- Notifying %d observers on changes: %s",
@@ -618,12 +592,10 @@ class Observable(object):
         self._notify(observation, changes)
 
     def _notify(self, observation: Observation, changes: Change,
-                sender: 'Observable' = None, debug: str = None,
-                **kwargs) -> None:
+                debug: str = None, **kwargs) -> None:
         """Send a notification for an :py:class:`Observation`. This
         essentially invokes `observation.notify` with the observable
-        (self or sender) as first and the relevant changes as second
-        argument.
+        as first and the relevant changes as second argument.
 
         Arguments
         ---------
@@ -633,8 +605,6 @@ class Observable(object):
         changes: Changes
             The changes to report. If these changes do not meet the
             interests of the observation, no notification will be sent.
-        sender: Observable
-            The sender (to be used instead of this Observable).
         debug: str
             A prefix for a debug message to be emitted. A debug message
             will only be emitted if this argument is not `None`.
@@ -647,19 +617,21 @@ class Observable(object):
         if not relevant_changes:
             return  # Nothing to do
 
-        sender = sender or self
-
         # We will catch all exceptions here and handle them with our
         # global exception handler (usually simply logging them), as
         # caller may not be interested in what went wrong on side of
         # the observer.
         # pylint: disable=broad-except
         try:
-            observation.notify(sender, changes, **kwargs)
+            observation.notify(self, changes, **kwargs)
         except Exception as exception:
             # We will not deal with exceptions raised
             # during not notification, but instead use
             # the default error handling mechanism.
+            print(f"Notifying {changes} with method "
+                  f"{observation.notify} failed.")
+            LOG.error("Notifying %s with method %s failed.",
+                      changes, observation.notify)
             handle_exception(exception)
 
     #
@@ -676,73 +648,3 @@ class Observable(object):
                   f"{observation.notify} with ({observation.interests})")
 
 
-class MetaObservable(Metaclass):
-    """Base class for observable meta classes.
-
-    Deriving metaclasses directly from :py:class:`Observable` may
-    cause problems, if the instance classes are also derived from
-    that class. The :py:class:`MetaObservableAn` offers an alternative:
-    instead of deriving from :py:class:`Observable`, the metaclass
-    can derive from :py:class:`MetaObservable` and specify the observable
-    class by the `Observable` class parameter.
-
-    FIXME[todo]: clarify what exactly the problems are that arise when
-    deriving class and metaclass from the same base class.
-    """
-
-    def __init_subclass__(cls, Observable: type = Observable,
-                          **kwargs) -> None:
-        # pylint: disable=arguments-differ,redefined-outer-name
-        # redefined-outer-name:
-        #     We Redefine the name 'Observable' from outer scope
-        #     here as we actually intend to replace the abstract
-        #     base class by some more specific implementation:
-        # arguments-differ:
-        #     FIXME[pylint]: It is not clear to me, why pylint
-        #     complains here.
-        """Initialize subclasses of the :py:class:`MetaObservable`.
-        Those subclasses will have an attribute `Observable` specifying
-        the subclass of :py:class:`Observable` that should be used as
-        Meta
-
-        Arguments
-        ---------
-        cls:
-            The Metaclass to be subclassed. It is assumed that this
-            is a subclass of py:class:`MetaObservable`.
-        Observable:
-            A subclass of :py:class:`Observable` that is to be used
-            as the observable class.
-        """
-        super().__init_subclass__(**kwargs)
-        cls.Observable = Observable
-        cls.Change = Observable.Change
-        cls.Observer = Observable.Observer
-        meta_methods = {'add_observer', 'remove_observer', 'change',
-                        'notify', 'notify_observers', 'notify_method',
-                        'debug'}
-        # FIXME[problem]: BusyObservable not known here
-        # if issubclass(Observable, BusyObservable):
-        meta_methods |= {'busy', 'busy_message', 'busy_start',
-                         'busy_change', 'busy_stop', '_busy_run'}
-        # FIXME[hack]: add_module_requirement is defined in base/register.py
-        # meta_methods |= {'add_module_requirement'}
-        cls._meta_methods = frozenset(meta_methods)
-
-    def __init__(cls, *args, **kwargs) -> None:
-        """Initialize a new instance of this metclass, that
-        is a class object for a subclass of :py:class:`Observable`.
-        """
-        super().__init__(*args, **kwargs)
-        if not hasattr(cls, '_meta_observable'):
-            LOG.info("MetaObservable: class %s is observable", cls)
-            cls._meta_observable = type(cls).Observable(sender=cls)
-            LOG.debug("MetaObservable: %s is observable via "
-                      "meta observabe %s", cls, cls._meta_observable)
-            cls.add_meta_object(cls._meta_observable, cls._meta_methods)
-
-    def debug(cls) -> None:
-        """Debug function for classes belonging to this meta class.
-        """
-        super().debug()
-        cls._meta_observable.debug()

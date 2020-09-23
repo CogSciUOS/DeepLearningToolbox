@@ -19,10 +19,19 @@ import imageio_ffmpeg
 import numpy as np
 
 # toolbox imports
-from ..base import video
+from ..base import image, video
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+class ImageIO(image.ImageReader, image.ImageWriter):
+
+    def read(self, filename: str, **kwargs) -> np.ndarray:
+        return imageio.imread(filename)
+
+    def write(self, image: np.ndarray, filename: str, **kwargs) -> None:
+        imageio.imwrite(filename)
 
 
 class VideoReader(video.FileReader):

@@ -1,4 +1,10 @@
-"""Code related to fetching data from a datasource.
+"""Code related to fetching data from a :py:class:`Datasource`.
+
+A :py:class:`Datafetcher` realizes an asynchronous method for getting
+:py:class:`Data` from a :py:class:`Datasource`.  These methods are
+prefixed by 'fetch' and they will immediatly return, while running a
+background thread to obtain the data. Once data are available,
+observers will receive a `data_changed` notification.
 
 """
 # standard imports
@@ -7,7 +13,7 @@ import logging
 
 # toolbox imports
 from base import busy, BusyObservable
-from .data import Data
+from dltb.base.data import Data
 from .datasource import Datasource, Loop, Snapshot, Random, Indexed
 
 # logging

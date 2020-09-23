@@ -1,21 +1,35 @@
 # standard imports
 from typing import Callable, Iterable, Dict
+import os
 import logging
 
 # Qt imports
-from PyQt5.QtCore import QObject, pyqtSignal, QThreadPool, QRunnable
-from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtCore import (Qt, QObject, QThreadPool, QRunnable,
+                          pyqtSignal, pyqtSlot, QMetaObject, Q_ARG)
+from PyQt5.QtGui import QKeyEvent, QMovie, QHideEvent, QShowEvent
+from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 # toolbox imports
 from toolbox import Toolbox
-from base import Observable, AsyncRunner
+from base import Observable, BusyObservable, AsyncRunner, Preparable
 import util
 from util.error import protect, handle_exception
 
 # logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
+
+
+def qtName(name: str, lower: bool = True) -> str:
+    """Transform a name into the Qt naming style (camelCase).
+    """
+    first, rest = name.split('_', maxsplit=1)
+    if lower and not first[0].islower():
+        first = first[0].lower() + first[1:]
+    elif not lower and first[0].islower():
+        first = first[0].upper() + first[1:]
+    return (first if not rest else
+            first + (''.join(s.capitalize() or '_' for s in rest.split('_'))))
 
 
 class QtAsyncRunner(AsyncRunner, QObject):
@@ -60,10 +74,8 @@ class QtAsyncRunner(AsyncRunner, QObject):
         self._completed += 1
         try:
             result = future.result()
+            # FIXME[what]: what is info, what is observable?
             if result is not None:
-                observable, info = result
-                import threading
-                me = threading.current_thread().name
                 LOG.debug(f"{self.__class__.__name__}.onCompletion():{info}")
                 if isinstance(info, Observable.Change):
                     self._completion_signal.emit(observable, info)
@@ -78,12 +90,15 @@ class QtAsyncRunner(AsyncRunner, QObject):
         observable.notify_observers(info)
 
 
-class QDebug:  # FIXME[todo]: derive from (QWidget)
+class QDebug:
     """The :py:class:`QDebug` is a base class that classes can inherit
     from to provide some debug functionality.  Such classes should
     then implement a :py:meth:`debug` method, which will be called to
     output debug information.
 
+    Note: when deriving from this class, this class should be put
+    before and :py:class:`QWidget` in the list of base classes as
+    otherwise the `QWidget` will catch away all events.
     """
 
     def __init__(self, **kwargs) -> None:
@@ -98,29 +113,26 @@ class QDebug:  # FIXME[todo]: derive from (QWidget)
         t: debug toolbox
         """
         key, text = event.key(), event.text()
-        print(f"debug: QDebug[{type(self).__name__}].keyPressEvent:"
-              f" key={key}, text={text}")
+        print(f"debug: QDebug[{type(self).__name__}].keyPressEvent: "
+              f"key={key}, text={text}")
         if text == '?':
             self.debug()
         elif key == Qt.Key_T:  # Debug Toolbox
             Toolbox.debug_register()
         elif hasattr(super(), 'keyPressEvent'):
             super().keyPressEvent(event)
+        else:
+            event.ignore()
 
     def debug(self) -> None:
+        """Output debug information for this :py:class:`QDebug`.
+        """
         print(f"debug: QDebug[{type(self).__name__}]. MRO:")
         print("\n".join([f"debug:   - {str(cls)}"
                          for cls in type(self).__mro__]))
 
 
-from PyQt5.QtCore import QObject, QMetaObject, pyqtSlot, Q_ARG
-from PyQt5.QtGui import QHideEvent, QShowEvent
-from base.observer import Observable
-from base import MetaRegister
-import threading
-
-
-class QAttribute(QDebug):
+class QAttribute:
     """A :py:class:`QAttribute` can store attributes of specified types.
     It can also propagate changes of these attributes to interested
     parties, usually child widgets of this :py:class:`QAttribute`.
@@ -154,7 +166,7 @@ class QAttribute(QDebug):
     """
 
     _qattributes = {}
-    
+
     @classmethod
     def _qAttributeGetter(cls, name: str) -> None:
         """Add a (private) attribute to the given class and create
@@ -175,7 +187,7 @@ class QAttribute(QDebug):
         setattr(cls, attribute_name, None)
 
         # create a new getter and add it to the class.
-        getter = lambda self, observable: getattr(self, attribute_name, None)
+        getter = lambda self: getattr(self, attribute_name, None)
         LOG.debug("QAttribute: creating new getter to  %s.%s",
                   cls, getter_name)
         setattr(cls, getter_name, getter)
@@ -213,7 +225,8 @@ class QAttribute(QDebug):
         This will be the name provided by the class method
         :py:meth:`observable_name`, which defaults to the class name.
         """
-        name = cls.observable_name()
+        name = (cls.observable_name() if hasattr(cls, 'observable_name')
+                else cls.__name__)
         LOG.debug("QAttribute: Using attribute name '%s' for class '%s'",
                   name, cls.__name__)
         return QAttribute._qAttributeNameFor(name, *args)
@@ -270,8 +283,8 @@ class QAttribute(QDebug):
             cls._qattributes = dict(cls._qattributes)
         cls._qattributes[attributeClass] = full
 
-    def __init_subclass__(cls: type,
-                          qattributes: Dict[type, bool] = None) -> None:
+    def __init_subclass__(cls, qattributes: Dict[type, bool] = None,
+                          **kwargs) -> None:
         """Intialized a new subclasses of :py:class:`QAttribute`.
         This will add attributes getters and setters to the new class.
 
@@ -284,6 +297,7 @@ class QAttribute(QDebug):
             :py:meth:`_addQAttribute` for creating the
             attributes.
         """
+        super().__init_subclass__(**kwargs)
         if qattributes is not None:
             for attributeClass, full in qattributes.items():
                 cls._addQAttribute(attributeClass, full)
@@ -324,7 +338,7 @@ class QAttribute(QDebug):
 
         # (3) finally call the original setter (only if the attribute
         # has really changed)
-        if hasattr(self, orig_setter) and changed:
+        if changed and hasattr(self, orig_setter):
             LOG.debug(f"{type(self).__name__}: "
                       f"calling original setter for attribute '{name}' as "
                       f"{type(self).__name__}.{orig_setter}({obj})")
@@ -384,7 +398,7 @@ class QObserver(QAttribute):
 
     _qobservables = {}
     # FIXME[concept]: we need some concept to assign observables to helpers
-    #_qObserverHelpers: dict = None
+    # _qObserverHelpers: dict = None
 
     @classmethod
     def _qObserverSetter(cls, name, interests, observableClass) -> None:
@@ -414,11 +428,11 @@ class QObserver(QAttribute):
                 return  # nothing to do
 
         # add the new qobservable to the class' qobservable register
-        if '_qobservables' not in cls.__dict__:  # make sure to use own register
+        if '_qobservables' not in cls.__dict__:  # ensure using own register
             cls._qobservables = dict(cls._qobservables)
         cls._qobservables[observableClass] = interests
 
-    def __init_subclass__(cls: type, qobservables: dict = None,
+    def __init_subclass__(cls, qobservables: dict = None,
                           qattributes: dict = None, **kwargs) -> None:
         """Initialization of subclasses of :py:class:`QObserver`.
 
@@ -432,7 +446,10 @@ class QObserver(QAttribute):
             that a private property and a getter/setter pair are
             automatically added.
         """
-
+        # FIXME[bug]: interference of qattributes and qobservables:
+        # if a class has qattributes and qobservables, both will be
+        # treated as qobservables ()
+        
         if qobservables is not None:
             for observableClass, interests in qobservables.items():
                 cls._addQObservable(observableClass, interests)
@@ -449,7 +466,7 @@ class QObserver(QAttribute):
             new_qattributes[observableClass] = True
 
         # Treat all observables as attributes.
-        super().__init_subclass__(qattributes=new_qattributes)
+        super().__init_subclass__(qattributes=new_qattributes, **kwargs)
 
         # Now adjust the setter to be informed of the changes of interest
         for observableClass, interests in qobservables.items():
@@ -459,6 +476,9 @@ class QObserver(QAttribute):
             LOG.debug("Updated setter for %s (%s)", observableClass, change)
 
     def _qObservableHelper(self, observableClass: type):  # -> QObserverHelper:
+        """Obtain the :py:class:`QObserverHelper` for the given type
+        of :py:class:`Obervable`.
+        """
         return self._qObservableHelpers.get(observableClass, None)
 
     def __init__(self, **kwargs):
@@ -466,8 +486,11 @@ class QObserver(QAttribute):
         self._qObserverHelpers = {}
 
     def __del__(self):
-        self.setVisible(False)
-        #super().__del__()
+        # FIXME[bug]: it may happen that this is called even after the
+        # wrapped C/C++ object has already be deleted.
+        # self.setVisible(False)
+        pass
+        # super().__del__()  # FIXME[todo]: check how to del QWidgets ...
 
     def helperForObservable(self, observable: Observable, interests=None,
                             notify: Callable = None, create: bool = False,
@@ -502,17 +525,55 @@ class QObserver(QAttribute):
         for qObserverHelper in self._qObserverHelpers.values():
             qObserverHelper.startObservation()
 
-    def observe(self, observable: Observable, interests=None,
+    def observe(self, observable: Observable,
+                interests: Observable.Change = None,
                 notify: Callable = None) -> None:
+        """Observe an :py:class:`Observable`.
+
+        Note: The type of the observable (currently) has to be
+        suitable for this class, i.e. it is not necessary to declare
+        it with `qobservables` arguments at class definition, but
+        that may change in future.
+
+        Arguments
+        ---------
+        observable: Observable
+            The object to observer.
+        interests:
+            Notification we are interested in.
+        notify: Callable
+            The method to invoke on notification. If none is provided,
+            the default notifiaction method of the observable is used.
+
+        Raises
+        ------
+        TypeError:
+            The observable is of inapropriate type.
+        """
+        if not isinstance(observable, Observable):
+            raise TypeError(f"{type(self).__name__} is trying to observe "
+                            f"a non-observable ({type(observable)})")
         qObserverHelper = \
             self.helperForObservable(observable, create=True,
                                      interests=interests, notify=notify)
         qObserverHelper.startObservation(interests=interests, notify=notify)
 
     def unobserve(self, observable, remove: bool = True):
+        """Stop an ongoing observation.
+
+        Arguments
+        ---------
+        observable: Observable
+            The observable the should no longer be observed.
+        remove: bool
+            A flag indicating if the internal oberservation structure
+            for that observable should be removed. Removal is the
+            default behahviour, but if it is likely that the observable
+            will be observed again, it can be worth keep that structure.
+        """
         qObserverHelper = self.helperForObservable(observable, remove=True)
         qObserverHelper.stopObservation()
-        
+
     def _registerView(self, name, interests=None):
         # FIXME[question]: do we have to call this from the main thread
         # if not threading.current_thread() is threading.main_thread():
@@ -811,14 +872,6 @@ def pyqtThreadedUpdate(method):
     return closure
 
 
-import os
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QLabel
-from PyQt5.QtGui import QMovie
-
-from base import BusyObservable
-
-
 class QBusyWidget(QLabel, QObserver, qobservables={
         BusyObservable: {'busy_changed'}}):
     """A widget indicating a that some component is busy.
@@ -856,3 +909,70 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         # Make sure the movie stops playing.
         self._movie.stop()
         del self._movie
+
+
+class QPrepareButton(QPushButton, QObserver, qobservables={
+        Preparable: {'busy_changed', 'state_changed'}}):
+    """A Button to control a :py:class:`Preparable`, allowing to prepare
+    and unprepare it.
+
+    The :py:class:`QPrepareButton` can observe a
+    :py:class:`Preparable` and adapt its appearance and function based
+    on the state of the datasource.
+
+    """
+    # FIXME[todo]: This could be made a 'QPreaparableObserver'
+
+    def __init__(self, text: str = 'Prepare', **kwargs) -> None:
+        """Initialize the :py:class:`QPrepareButton`.
+
+        Arguments
+        ---------
+        text: str
+            The button label.
+        """
+        super().__init__(text, **kwargs)
+        self.setCheckable(True)
+
+        # We only want to react to button activation by user, not to
+        # change of state via click() slot activation, or because
+        # setChecked() is called. Hence we use the 'clicked' signal,
+        # not 'toggled'!
+        self.clicked.connect(self.onClicked)
+        self.updateState()
+
+    def preparable_changed(self, preparable: Preparable,
+                           info: Preparable.Change) -> None:
+        if info.state_changed:
+            self.updateState()
+
+    def setPreparable(self, preparable: Preparable) -> None:
+        # FIXME[hack/todo]: setting the preparable should actually
+        # sent notification
+        self.updateState()
+
+    @protect
+    def onClicked(self, checked: bool) -> None:
+        """React to a button activation by the user. This will
+        adapt the preparation state of the :py:class:`Datasource`
+        based on the state of the button.
+
+        Arguments
+        ---------
+        checked: bool
+            The new state of the button.
+        """
+        if isinstance(self._preparable, Preparable):
+            if checked and not self._preparable.prepared:
+                self._preparable.prepare()
+            elif not checked and self._preparable.prepared:
+                self._preparable.unprepare()
+
+    def updateState(self) -> None:
+        """Update this :py:class:`QPrepareButton` based on the state of the
+        :py:class:`Datasource`.
+        """
+        enabled = (isinstance(self._preparable, Preparable) and
+                   not self._preparable.busy)
+        self.setEnabled(enabled)
+        self.setChecked(enabled and self._preparable.prepared)

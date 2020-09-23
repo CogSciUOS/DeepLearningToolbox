@@ -12,7 +12,7 @@ import numpy as np
 
 # toolbox imports
 from util.image import Landmarks, Region
-from .data import Data
+from dltb.base.data import Data
 from .datasource import Imagesource
 from .directory import DataDirectory
 

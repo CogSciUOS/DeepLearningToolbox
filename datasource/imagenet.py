@@ -12,7 +12,7 @@ import logging
 import numpy as np
 
 # toolbox imports
-from .data import Data, ClassScheme
+from dltb.base.data import Data, ClassScheme
 from .datasource import Imagesource, Sectioned
 from .directory import DataDirectory
 

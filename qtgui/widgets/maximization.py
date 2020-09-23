@@ -22,8 +22,8 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
+from dltb.base.data import Data
 from toolbox import Toolbox
-from datasource import Data
 from network import Network, Controller as NetworkController
 from tools.am import (Config as MaximizationConfig,
                       Engine as MaximizationEngine,
@@ -31,7 +31,7 @@ from tools.am import (Config as MaximizationConfig,
  
 from ..utils import QObserver, protect
 from .image import QImageView
-from .networkview import QNetworkSelector
+from .networkview import QNetworkComboBox
 from .matplotlib import QMatplotlib
 from .logging import QLogHandler
 
@@ -68,7 +68,7 @@ class QMaximizationConfig(QWidget, QObserver, qobservables={
     _network: NetworkController
         (we need this basically to obtain the number of units in a layer)
 
-    _networkSelector: QNetworkSelector
+    _networkSelector: QNetworkComboBox
         A graphical element to select a Network.
 
     _layerSelector: QComboBox
@@ -175,7 +175,7 @@ class QMaximizationConfig(QWidget, QObserver, qobservables={
         #  while the Layer/Unit may be local, (i.e. different in
         #  "Activations" and "Maximization" panel).
 
-        self._networkSelector = QNetworkSelector()
+        self._networkSelector = QNetworkComboBox()
         
         # in which layer the unit is found. needs to be a key in layer_dict in
         # am_alexnet (LAYER_KEY)

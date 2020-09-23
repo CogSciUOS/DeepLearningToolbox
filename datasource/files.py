@@ -1,10 +1,14 @@
-from .datasource import Indexed, Data
-from util.image import imread
 
+# standard imports
 from typing import List
 import os
-import numpy as np
 from abc import abstractmethod
+
+# toolbox imports
+from dltb.base.data import Data
+from util.image import imread
+from .datasource import Indexed
+
 
 # FIXME[todo]: maybe combined with DataDirectory to profit from
 # common features, like prefetching, caching, etc.

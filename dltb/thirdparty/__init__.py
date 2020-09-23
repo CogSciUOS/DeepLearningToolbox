@@ -17,13 +17,13 @@ import logging
 import importlib
 
 # toolbox imports
-from ..config import config 
+from ..config import config
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-_modules = {
+_MODULES = {
     'imageio': {
         'modules': ['imageio', 'imageio_ffmpeg', 'numpy'],
         'classes': {
@@ -73,6 +73,18 @@ _modules = {
         'classes': {
             'ImageDisplay': 'ImageDisplay'
         }
+    },
+    'mtcnn': {
+        'modules': ['mtcnn', 'tensorflow'],
+        'classes': {
+            'FaceDetector': 'DetectorMTCNN'
+        }
+    },
+    'dlib': {
+        'modules': ['dlib', 'imutils'],
+        'classes': {
+            'FaceDetector': 'DetectorCNN'
+        }
     }
 }
 
@@ -80,28 +92,51 @@ _modules = {
 def modules() -> Iterator[str]:
     """An iterator for names of known thirdparty modules.
     """
-    return _modules.keys()
+    return _MODULES.keys()
 
 
 def classes() -> Iterator[str]:
+    """Iterate class names for which implementations are provided by
+    a third-party module.
+    """
     classnames = set()
-    for description in _modules.values():
+    for description in _MODULES.values():
         if 'classes' in description:
             classnames |= description['classes'].keys()
     return iter(classnames)
 
 
 def module_provides_class(module: str, name: str) -> bool:
-    if module not in _modules:
+    """Check if a third-party module provides an implementation
+    for a given class.
+
+    Arguments
+    ---------
+    module: str
+        Name of the third party module (as used in this toolbox, e.g.
+        `opencv` for the OpenCV module).
+    name: str
+        The name of the abstract Deep Learning Toolbox class that
+        should be implemented by the third party module.
+    """
+    if module not in _MODULES:
         raise KeyError(f"Unknown module name: {module}")
-    description = _modules[module]
+    description = _MODULES[module]
     if 'classes' not in description:
         return False
     return name in description['classes']
 
 
 def modules_with_class(name: str) -> Iterator[str]:
-    for module in _modules:
+    """Iterate names of all third party modules that provide
+    an implementation of a given class.
+
+    Arguments
+    ---------
+    name: str
+        Name of a Deep Learning ToolBox class.
+    """
+    for module in _MODULES:
         if module_provides_class(module, name):
             yield module
 
@@ -115,24 +150,24 @@ def available(module: str) -> bool:
         The name of the thirdparty module
     """
     # Check if we know that module
-    if module not in _modules:
+    if module not in _MODULES:
         raise ValueError(f"Unsupported third party module '{module}'. "
                          f"Valid values are: " +
-                         ', '.join(f"'{name}'" for name in _modules))
-    ok = True
+                         ', '.join(f"'{name}'" for name in _MODULES))
+    found = True
 
     # Check if the module was already imported
     if __name__ + '.' + module in sys.modules:
         return True  # module already loaded
 
     # Check if required third party modules are installed
-    description = _modules[module]
+    description = _MODULES[module]
     if 'modules' in description:
         for name in description['modules']:
             if importlib.util.find_spec(name) is None:
-                ok = False
+                found = False
                 break
-    return ok
+    return found
 
 
 def import_class(name: str, module: Union[str, List[str]] = None):
@@ -154,17 +189,18 @@ def import_class(name: str, module: Union[str, List[str]] = None):
                               "is not available")
         module_name = module
     else:
-        modules = list(modules_with_class(name)) if module is None else module
+        module_list = (list(modules_with_class(name))
+                       if module is None else module)
         module_name = None
-        for candidate in modules:
+        for candidate in module_list:
             if __name__ + '.' + candidate in sys.modules:
                 module_name = candidate
                 break
-            elif available(candidate) and module is None:
+            if available(candidate) and module is None:
                 module_name = candidate
         if module_name is None:
             raise ImportError(f"No third party module providing '{name}' "
-                              f"is available. Checked: {modules}")
+                              f"is available. Checked: {module_list}")
 
     # check if module was already imported:
     module_full_name = f'{__name__}.{module_name}'
@@ -177,37 +213,66 @@ def import_class(name: str, module: Union[str, List[str]] = None):
         module = importlib.import_module(module_full_name)
 
     # get class from module
-    class_name = _modules[module_name]['classes'][name]
+    class_name = _MODULES[module_name]['classes'][name]
     if not hasattr(module, class_name):
         raise AttributeError(f"Third party module '{module.__name__}' "
                              f"has no attribute '{class_name}'.")
     return getattr(module, class_name)
 
 
-def _check_module_config(module: str, attribute: str, value) -> None:
-    if module not in _modules:
+def _check_module_config(module: str, attribute: str) -> None:
+    """Check if the configuration for a third party module contains
+    the given attribute.
+
+    Raises
+    ------
+    ValueError:
+        If the name is not a valid third party module, or if that
+        module does not have the given attribute in its configuration.
+    """
+    if module not in _MODULES:
         raise ValueError(f"Unsupported third party module '{module}'. "
                          f"Valid values are: " +
-                         ', '.join(f"'{name}'" for name in _modules))
-    description = _modules[module]
+                         ', '.join(f"'{name}'" for name in _MODULES))
+    description = _MODULES[module]
     if 'config' not in description:
         raise ValueError(f"Third party module '{module}' "
                          "can not be configured.")
 
-    config = description['config']
-    if attribute not in config:
+    module_config = description['config']
+    if attribute not in module_config:
         raise ValueError(f"Unknown configuration attribute '{attribute}' "
                          f"for third party module '{module}'.")
 
 
-def configure_module(module: str, attribute: str, value) -> None:
+def configure_module(module: str, attribute: str, value: Any) -> None:
+    """Configure a third party module.
+
+    Arguments
+    ---------
+    module: str
+        Name of a third party module.
+    attribute: str
+        Name of a configuration attribute.
+    value: Any
+        The new value for the attribute.
+    """
     _check_module_config(module, attribute)
-    _modules[module]['config'][attribute] = value
+    _MODULES[module]['config'][attribute] = value
 
 
 def module_configuration(module: str, attribute: str) -> Any:
+    """Get a configuration value for a third party module.
+
+    Arguments
+    ---------
+    module: str
+        Name of the third party module
+    attribute: str
+        Configuration attribute.
+    """
     _check_module_config(module, attribute)
-    return _modules[module]['config'][attribute]
+    return _MODULES[module]['config'][attribute]
 
 
 class ImportInterceptor(importlib.abc.MetaPathFinder):
@@ -220,13 +285,17 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
     into `sys.sys.meta_path` before those modules are imported.
     """
 
+    patch_keras: bool = True
+
     def find_spec(self, fullname, path, target=None):
+        """Implementation of the PathFinder API.
+        """
         # keras: we want to use 'tensorflow.keras' instead of keras,
         # when available.
-        if fullname == 'keras':
+        if fullname == 'keras' and self.patch_keras:
             LOG.debug("ImportInterceptor['%s']: path=%s, target=%s",
                       fullname, path, target)
-            
+
             keras = None
             if 'tensorflow.keras' in sys.modules:
                 keras = sys.modules['tensorflow.keras']
@@ -248,12 +317,12 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
             else:
                 LOG.info("Not mapping 'keras' -> 'tensorflow.keras'")
 
-        return None  # Proceed with the standard procedure ...
+        # Proceed with the standard procedure ...
 
 
 # Is the application started from source or is it frozen (bundled)?
 # The PyInstaller bootloader adds the name 'frozen' to the sys module:
-# FIXME[todo]: explain what frozen modules are and implications
+# FIXME[question]: explain what frozen modules are and implications
 # they have for us!
 if hasattr(sys, 'frozen'):
     LOG.info("sys is frozen")
@@ -270,6 +339,9 @@ else:
 #
 
 def warn_missing_dependencies():
+    """Emit warnings concerning missing dependencies, i.e. third party
+    modules not install on this system.
+    """
     module_spec = importlib.util.find_spec('appdirs')
     if module_spec is None:
         LOG.warning(
@@ -294,17 +366,18 @@ def warn_missing_dependencies():
 def list_modules():
     """List the state of registered third party modules.
     """
-    LOG.warn("Status of thirdparty modules:")
+    LOG.warning("Status of thirdparty modules:")
     for name in modules():
-        LOG.warn("module '%s': %s", name, available(name))
+        LOG.warning("module '%s': %s", name, available(name))
 
 
 def list_classes():
     """List classes that are provide by thirdparty modules.
     """
-    LOG.warn("Classes provided by third party modules:")
+    LOG.warning("Classes provided by third party modules:")
     for name in classes():
-        LOG.warn("class '%s': %s", name, ", ".join(modules_with_class(name)))
+        LOG.warning("class '%s': %s", name,
+                    ", ".join(modules_with_class(name)))
 
 
 if config.warn_missing_dependencies:

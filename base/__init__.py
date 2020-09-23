@@ -90,11 +90,11 @@ Examples:
 """
 
 from .types import Extendable, Identifiable
-from .observer import Observable, MetaObservable, change
+from .observer import Observable, change
 from .fail import Failable, FailableObservable
 from .busy import BusyObservable, busy
 from .prepare import Preparable
 from .config import Config
 from .runner import Runner, AsyncRunner
 from .controller import Controller, View, run
-from .register import MetaRegister, InstanceRegisterItem, Registrable
+from .register import RegisterClass, InstanceRegisterEntry, Registrable

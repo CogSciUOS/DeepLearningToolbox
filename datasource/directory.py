@@ -10,7 +10,7 @@ import glob
 import random
 
 # toolbox imports
-from .data import Data, ClassScheme
+from dltb.base.data import Data, ClassScheme
 from .files import DataFiles
 
 

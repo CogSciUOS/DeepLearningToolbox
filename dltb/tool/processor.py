@@ -6,9 +6,9 @@ a :py:class.`Tool`.
 import logging
 
 # toolbox imports
-from datasource import Data
 from base import busy
 from base.busy import BusyObservable
+from ..base.data import Data
 from .tool import Tool
 
 # logging

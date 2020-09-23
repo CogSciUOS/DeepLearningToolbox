@@ -14,8 +14,8 @@ import logging
 import numpy as np
 
 # toolbox imports
-from datasource.data import Data, ClassScheme, ClassIdentifier
-from .tool import ImageTool
+from ..base.data import Data, ClassScheme, ClassIdentifier
+from .image import ImageTool
 
 # FIXME[hack]: instead of prepare_input_image use the network.resize
 # API once it is finished!

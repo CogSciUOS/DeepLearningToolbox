@@ -5,7 +5,7 @@
 import os
 
 # toolbox imports
-from .data import ClassScheme
+from dltb.base.data import ClassScheme
 from .datasource import Imagesource
 from .directory import DataDirectory
 
@@ -51,7 +51,7 @@ class DogsAndCats(DataDirectory, Imagesource):
         description = f"Dogs vs. Cats"
         directory = os.getenv('DOGSANDCATS_DATA', '.')
         scheme = ClassScheme(2, key='dogsandcats')
-        scheme.add_labels('text', ['Cat', 'Dog'])
+        scheme.add_labels(['Cat', 'Dog'], name='text')
         super().__init__(key=key, description=description,
                          directory=directory, scheme=scheme, **kwargs)
 

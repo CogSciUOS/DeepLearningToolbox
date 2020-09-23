@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 
 # toolbox imports
-from ..base import image, video
+from ...base import image, video
 
 # logging
 LOG = logging.getLogger(__name__)

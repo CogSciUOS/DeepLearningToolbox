@@ -15,13 +15,14 @@ from PyQt5.QtGui import (QImage, QPainter, QPen, QTransform,
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
 
 # toolbox imports
+from dltb.base.data import Data
+from dltb.base.image import Image, Imagelike, ImageTool
+from dltb.util.image import imresize, imwrite
 from toolbox import Toolbox
 from tools.activation import Engine as ActivationEngine
-from datasource import Data, Metadata
+from datasource import Metadata
 from util.image import BoundingBox, PointsBasedLocation, Region
 
-from dltb.base.image import ImageTool
-from dltb.util.image import imresize, imwrite
 
 # GUI imports
 from ..utils import QObserver, protect
@@ -225,6 +226,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         self._data = data
         self.setImage(None if data is None else getattr(data, attribute))
 
+    def setImagelike(self, image: Imagelike) -> None:
+        array = Image.as_array(image)
+        self.setImage(array)
+        
     def getImage(self) -> np.ndarray:
         return self._raw
 

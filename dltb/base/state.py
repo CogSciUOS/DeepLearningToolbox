@@ -1,5 +1,8 @@
+"""Base class for classes that have an internal state.
+"""
 
 from base import Observable
+
 
 class Stateful(Observable, method='state_changed', changes={'state_changed'}):
     """Abstract base class for objects that can have different states.

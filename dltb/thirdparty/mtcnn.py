@@ -14,9 +14,9 @@ import mtcnn
 from base import Preparable
 from util.image import BoundingBox
 from datasource import Metadata
-from dltb.tool.face.detector import Detector as FaceDetector
-from dltb.tool.face.landmarks import (Detector as LandmarkDetector,
-                                      FacialLandmarks)
+from ..tool.face.detector import Detector as FaceDetector
+from ..tool.face.landmarks import (Detector as LandmarkDetector,
+                                   FacialLandmarks)
 
 # logging
 LOG = logging.getLogger(__name__)

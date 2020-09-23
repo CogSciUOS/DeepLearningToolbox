@@ -5,7 +5,7 @@
 import numpy as np
 
 # toolbox imports
-from .data import Data
+from dltb.base.data import Data
 from .datasource import Labeled, Indexed
 
 
@@ -81,7 +81,7 @@ class DataArray(Indexed):
     def _get_meta(self, data: Data, **kwargs) -> None:
         """Get data from this :py:class:`Datasource`\\ .
         """
-        data.add_attribute('shape', value=self._array.shape[1:]) 
+        data.add_attribute('shape', value=self._array.shape[1:])
         super()._get_meta(data, **kwargs)
 
     def _get_batch(self, data: Data, index: int = None, **kwargs) -> None:
@@ -91,7 +91,6 @@ class DataArray(Indexed):
 
     def _get_index(self, data: Data, index: int, **kwargs) -> None:
         data.array = self._array[index]
-
 
 
 class LabeledArray(DataArray, Labeled):

@@ -30,13 +30,12 @@ import logging
 # toolbox imports
 # FIXME[todo]: lazy import
 # from util.lazy import lazy_begin, lazy_end
+# from dltb.base.data import Data, ClassScheme, ClassIdentifier
 from . import predefined
-from .data import Data, ClassScheme, ClassIdentifier
 from .meta import Metadata
 from .datasource import (Datasource, Labeled, Random, Sectioned,
                          Loop, Snapshot, Indexed, Imagesource)
 from .fetcher import Datafetcher
-from .controller import View, Controller
 from .array import DataArray, LabeledArray
 from .file import DataFile
 from .files import DataFiles

@@ -10,6 +10,9 @@ Datasource.register_key('mnist-train', 'datasource.keras',
                         'KerasDatasource', name='mnist', section='train')
 Datasource.register_key('mnist-test', 'datasource.keras',
                         'KerasDatasource', name='mnist', section='test')
+Datasource.register_key('cifar10-train', 'datasource.keras',
+                        'KerasDatasource', name='cifar10', section='train')
+
 Datasource.register_key('imagenet-val', 'datasource.imagenet',
                         'ImageNet', section='val')  # section='train'
 Datasource.register_key('dogsandcats', 'datasource.dogsandcats',

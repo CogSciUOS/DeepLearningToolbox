@@ -22,8 +22,9 @@ import threading
 import logging
 
 # toolbox imports
-from dltb.base.video import Reader
-from .datasource import Data, Imagesource, Loop, Snapshot
+from dltb.base.video import Webcam
+from dltb.base.data import Data
+from .datasource import Imagesource, Loop, Snapshot
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -74,10 +75,7 @@ class DataWebcam(Imagesource, Loop, Snapshot):
         """Prepare this Datasource for use.
         """
         super()._prepare()
-        self._backend = Reader(device=self._device)
-        # FIXME[todo]: we need some mechanism to decide which backend to use
-        # self._backend = OpencvWebcamBackend(self._device)
-        # self._backend = ImageioWebcamBackend(self._device)
+        self._backend = Webcam(device=self._device)
 
     def _unprepare(self) -> None:
         """Unprepare this Datasource. This will free resources but

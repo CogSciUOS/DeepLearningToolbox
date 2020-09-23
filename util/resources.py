@@ -233,8 +233,7 @@ from base import BusyObservable, busy, change
 
 
 class Resource(BusyObservable, method='resource_changed',
-               changes={'status_changed'},
-               metaclass=Metaclass):
+               changes={'status_changed'}, metaclass=Metaclass):
     """A :py:class:`Resource` is everything that may be required by a tool.
     This includes specific hardware, software, or data.
 

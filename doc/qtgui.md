@@ -39,7 +39,12 @@ In the Qt graphical user interface we deviate in some points from the
 [general coding standards of the Deep Learning ToolBox](coding.md)
 to conform with the Qt standards:
 * use camel case instead of snake case for methods and attribute names
-
+* Name classes that are derived from `QObject` starting with a
+  capital `Q`, e.g., `QMyWidget`. Notice that it is problematic
+  to derive a Python class from two `QObjects` (at least some additional
+  care hase to be taken - I still have to work out the details). So as
+  a rule of thumb, a class should have at most one `Q`-class as 
+  base class, and if it does so, it will also be a `Q`-class.
 
 ## Problematic aspects
 
@@ -82,7 +87,7 @@ As the QtGUI adopts different coding standards than the rest of the
 project, `pylint` has to be invoked with some special arguments:
 
 ```sh
-pylint --extension-pkg-whitelist=PyQt5 --method-naming-style=camelCase --attr-naming-style=camelCase --variable-naming-style=camelCase [FILE]...
+pylint --rcfile=qtgui/pylintrc [FILE]...
 ```
 
 

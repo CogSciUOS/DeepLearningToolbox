@@ -6,7 +6,7 @@ import logging
 
 # toolbox imports
 from dltb.base.video import Reader
-from .data import Data
+from dltb.base.data import Data
 from .datasource import Indexed, Imagesource, Loop
 
 

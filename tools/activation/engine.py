@@ -9,9 +9,9 @@ import logging
 import numpy as np
 
 # toolbox imports
-from toolbox import Toolbox
+from dltb.base.data import Data
 from dltb.tool import Tool
-from datasource import Data
+from toolbox import Toolbox
 from network import Network, Classifier, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 

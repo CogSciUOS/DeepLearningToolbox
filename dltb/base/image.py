@@ -1,8 +1,26 @@
 """Defintion of abstract classes for image handling.
+
+The central data structure is :py:class:`Image`, a subclass of
+:py:class:`Data`, specialized to work with images.  It provides,
+for example, properties like size and channels.
+
+Relation to other `image` modules in the Deep Learning ToolBox:
+
+* :py:mod:`dltb.util.image`: This defines general functions for image I/O and
+  basic image operations. That module should be standalone, not
+  (directly) requiring other parts of the toolbox (besides util) or
+  third party modules (besides numpy). However, implementation for
+  the interfaces defined there are provided by third party modules,
+  which are automagically loaded if needed.
+
+* :py:mod:`dltb.tool.image`: Extension of the :py:class:`Tool` API to provide
+  a class :py:class:`ImageTool` which can work on `Image` data objects.
+  So that module obviously depends on :py:mod:``dltb.base.image` and
+  it may make use of functionality provided by :py:mod:`dltb.util.image`.
 """
 
 # standard imports
-from typing import Union, List
+from typing import Union, List, Tuple
 from threading import Thread
 
 # third party imports
@@ -10,7 +28,7 @@ import numpy as np
 
 # toolbox imports
 from base.observer import Observable
-# from datasource import Data  # FIXME[problem]: circular import
+from .data import Data
 from .. import thirdparty
 
 
@@ -29,7 +47,7 @@ class Image:
     """
 
     @staticmethod
-    def as_array(image: Imagelike, copy: bool=False) -> np.ndarray:
+    def as_array(image: Imagelike, copy: bool = False) -> np.ndarray:
         """Get image-like object as numpy array. This may
         act as the identity function in case `image` is already
         an array, or it may extract the relevant property, or
@@ -45,9 +63,8 @@ class Image:
         """
         # FIXME[hack]: local imports to avoid circular module dependencies ...
         from dltb.util.image import imread
-        from datasource.data import Data
         if isinstance(image, Data):
-            image = image.array 
+            image = image.array
         if isinstance(image, np.ndarray):
             return image.copy()
         if isinstance(image, str):
@@ -57,14 +74,13 @@ class Image:
                                   "is not implemented")
 
     @staticmethod
-    def as_data(image: Imagelike) -> 'Data':
+    def as_data(image: Imagelike, copy: bool = False) -> 'Data':
         """Get image-like objec as :py:class:`Data` object.
         """
-        from datasource import Data  # FIXME[hack]
-        if isinstance(image, Data):
+        if isinstance(image, Data) and not copy:
             return image
 
-        array = Image.as_array(image)
+        array = Image.as_array(image, copy)
         data = Data(array)
         data.type = Data.TYPE_IMAGE
         if isinstance(image, str):
@@ -269,7 +285,7 @@ class ImageResizer:
       skimage.transform.resize gives different results from
       scipy.misc.imresize.
       https://stackoverflow.com/questions/49374829/scipy-misc-imresize-deprecated-but-skimage-transform-resize-gives-different-resu
- 
+
       SciPy: scipy.misc.imresize is deprecated in SciPy 1.0.0,
       and will be removed in 1.3.0. Use Pillow instead:
       numpy.array(Image.fromarray(arr).resize())
@@ -290,12 +306,25 @@ class ImageResizer:
                                   "be an ImageResizer, but does not implement "
                                   "the resize method.")
 
-    def scale(self, image: np.ndarray, scale, **kwargs) -> np.ndarray:
+    def scale(self, image: np.ndarray,
+              scale: Union[float, Tuple[float, float]],
+              **kwargs) -> np.ndarray:
+        """Scale an image image by a given factor.
+
+        Arguments
+        ---------
+        image:
+            The image to be scaled.
+        scale:
+            Either a single float value being the common
+            scale factor for horizontal and vertical direction, or
+            a pair of scale factors for these two axes.
+        """
         raise NotImplementedError(f"{type(self)} claims to "
                                   "be an ImageResizer, but does not implement "
                                   "the scale method.")
 
-    def crop(self, image: np.ndarray, size, **kwargs) -> np.ndarray:
+    def crop(self, image: np.ndarray, size, **_kwargs) -> np.ndarray:
         # FIXME[todo]: deal with sizes extending the original size
         # FIXME[todo]: allow center/random/position crop
         old_size = image.shape[:2]
@@ -322,6 +351,12 @@ class ImageOperator:
         """
         # FIXME[concept]: this requires the util.image module!
         imwrite(target, self(imread(source)))
+
+    def transform_data(self, image: Image,
+                       target: str, source: str = None) -> None:
+        """Apply image operator to an :py:class:`Image` data object.
+        """
+        image.add_attribute(target, value=self(image.get_attribute(source)))
 
 
 class ImageTool(Observable, method='image_changed', changes={'image_changed'}):
@@ -508,7 +543,7 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         if cls is ImageDisplay:
             cls = thirdparty.import_class('ImageDisplay', module=module)
         return super(ImageDisplay, cls).__new__(cls)
-    
+
     def show(self, image: Imagelike, wait_for_key: bool = False,
              **kwargs) -> None:
         """Display the given image.
@@ -522,20 +557,31 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
             A flag indicating if the display should pause execution
             and wait or a key press.
         """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
+        raise NotImplementedError(f"{type(self).__name__} claims to "
                                   "be an ImageDisplay, but does not implement "
                                   "the show method.")
 
     def image_changed(self, tool, change) -> None:
         self.show(tool.image)
 
+    # FIXME[old/todo]:
     def run(self, tool):
+        """Monitor the operation of a Processor. This will observe
+        the processor and update the display whenever new data
+        are available.
+        """
         self.observe(tool, interests=ImageTool.Change('image_changed'))
         try:
             print("Starting thread")
             thread = Thread(target=tool.loop)
             thread.start()
-            self._application.exec_()
+            # FIXME[old/todo]: run the main event loop of the GUI to get
+            # a responsive interface - this is probably framework
+            # dependent and should be realized in different subclasses
+            # before we can design a general API.
+            # Also we would need some stopping mechanism to end the
+            # display (by key press or buttons, but also programmatically)
+            # self._application.exec_()
             print("Application main event loop finished")
         except KeyboardInterrupt:
             print("Keyboard interrupt.")

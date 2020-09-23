@@ -1,32 +1,26 @@
-# Generic imports
+# standard imports
 import logging
 
+# third party imports
 import numpy as np
 
-
 # Qt imports
-from PyQt5.QtCore import Qt, QPoint, QRect, QSize
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout
 
 # toolbox imports
 from toolbox import Toolbox
-from network import Network
-from datasource import Datasource, Data
+from experiments.deeplab import DeepLabModel
+from experiments.pascal import label_to_color_image
 
 # GUI imports
 from .panel import Panel
-from ..utils import QObserver, protect
-from ..widgets.data import QDataView
+from ..utils import QObserver
 from ..widgets.image import QImageView
-from ..widgets.network import QLayerSelector, QNetworkSelector
-from ..widgets.classesview import QClassesView
 from ..widgets.datasource import QDatasourceNavigator
 
 # logging
 LOG = logging.getLogger(__name__)
 
-from experiments.deeplab import DeepLabModel
-from experiments.pascal import LABEL_NAMES, FULL_COLOR_MAP, label_to_color_image
 
 class SegmentationPanel(Panel, QObserver, qobservables={
         Toolbox: {'input_changed'}}):

@@ -19,19 +19,18 @@ from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel,
 from PyQt5.QtGui import QResizeEvent
 
 # toolbox imports
-from datasource import Data
 from toolbox import Toolbox
+from dltb.base.data import Data
 from dltb.base.image import Image, Imagelike
 from dltb.tool import Tool
 from dltb.tool.face.detector import Detector as FaceDetector
 from dltb.tool.processor import Processor
 
 # GUI imports
-from ..utils import QObserver, QBusyWidget, protect
+from ..utils import QObserver, QBusyWidget, QPrepareButton, protect
 from ..widgets.image import QImageView, QImageBatchView
 from ..widgets.data import QDataSelector
-from ..widgets.tools import QToolSelector
-from ..widgets.register import QPrepareButton
+from ..widgets.tools import QToolComboBox
 from .panel import Panel
 
 # logging
@@ -85,7 +84,7 @@ class QDetectorWidget(QGroupBox, QObserver,
         self._label = QLabel()
         self._busy = QBusyWidget()
 
-        self._toolSelector = QToolSelector()
+        self._toolSelector = QToolComboBox()
         self.addAttributePropagation(Toolbox, self._toolSelector)
         self._toolSelector.toolSelected.connect(self.onToolSelected)
 

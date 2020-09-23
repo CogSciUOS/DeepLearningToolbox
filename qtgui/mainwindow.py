@@ -14,13 +14,13 @@ import collections
 import importlib
 
 # Qt imports
-from PyQt5.QtCore import (Qt, QTimer, QCoreApplication, QThread, QTimerEvent,
+from PyQt5.QtCore import (Qt, QTimer, QThread, QTimerEvent,
                           pyqtSignal, pyqtSlot)
-from PyQt5.QtGui import (QPixmap, QIcon, QDragEnterEvent, QDropEvent,
+from PyQt5.QtGui import (QIcon, QDragEnterEvent, QDropEvent,
                          QCloseEvent, QHideEvent, QShowEvent)
-from PyQt5.QtWidgets import (QMenu, QAction, QMainWindow, QStatusBar,
-                             QTabWidget, QWidget, QLabel, QApplication,
-                             QDesktopWidget, QSystemTrayIcon)
+from PyQt5.QtWidgets import (QMenu, QAction, QMainWindow,
+                             QTabWidget, QLabel, QApplication,
+                             QSystemTrayIcon)
 
 # Toolbox imports
 from base import Runner
@@ -109,7 +109,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         A named tuple (id, label, cls, tooltip, addons). 'id' is a unique
         identifier for this panel and can be used to create or
         access that panel via the :py:meth:`panel` method.
-    
+
     _panelMetas: list
         A list of PanelMeta entries supported by this MainWindow.
 
@@ -118,7 +118,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     _application: QApplication
         The Qt application to which this window belongs
     _toolbox: Toolbox
-        A reference to the Toolbox operated by this MainWindow. 
+        A reference to the Toolbox operated by this MainWindow.
     _runner: QtAsyncRunner
         A dedicated :py:class:`Runner` for this Window.
     _tabs: QTabWidget
@@ -153,15 +153,17 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         PanelMeta('segmentation', 'Segmentation',
                   '.panels.segmentation.SegmentationPanel',
                   'Show the segmentation panel', []),
+        #  FIXME[todo]: if addons.use('lucid'):
         PanelMeta('lucid', 'Lucid',
                   '.panels.lucid.LucidPanel',
-                  'Show the Lucid panel', ['lucid']), #  FIXME[todo]: if addons.use('lucid'):
+                  'Show the Lucid panel', ['lucid']),
         PanelMeta('styletransfer', 'Style transfer',
                   '.panels.styletransfer.StyletransferPanel',
                   'Show the style transfer panel', []),
+        # FIXME[todo]: if addons.use('advexample'):
         PanelMeta('advexample', 'Adv. Examples',
                   '.panels.advexample.AdversarialExamplePanel',
-                  'Show the adversarial example panel', ['advexample']),  # FIXME[todo]: if addons.use('advexample'):
+                  'Show the adversarial example panel', ['advexample']),
         PanelMeta('occlusion', 'Occlusion',
                   '.panels.occlusion.OcclusionPanel',
                   'Show the occlusion panel', []),
@@ -205,15 +207,16 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     # Signal is emitted once the import of a (Panel) module has
     # finished and the Panel is ready for instatiation.
     _panel_import_signal = pyqtSignal(str)  # panel_id
-    
+
     # FIXME[problem]: currently this prints the following message
     # (when calling MainWindow.setWindowIcon('assets/logo.png')):
     # "libpng warning: iCCP: extra compressed data"
     # probably due to some problem with the file 'logo.png'
-    #icon = 'assets/logo.png'
+    # icon = 'assets/logo.png'
     def __init__(self, application: QApplication, toolbox: Toolbox,
-                 title: str='QtPyVis', icon: str='assets/logo.png',
-                 focus: bool=True) -> None:
+                 title: str = 'Deep Learning ToolBox',
+                 icon: str = 'assets/logo.png',
+                 focus: bool = True) -> None:
         """Initialize the main window.
 
         Parameters
@@ -230,6 +233,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         super().__init__()
         self._app = application
         self._timerId = None
+        self._timerIsRunning = False
 
         # FIXME[hack]: a dictionary mapping datasource keys (str) to
         # QActions selecting that datasource in the toolbox
@@ -353,7 +357,8 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
                 continue
             action = QAction(label, self)
             if True:  # datasource == self._toolbox.datasource:
-                action.font().setBold(True)  # FIXME[bug]: seems to have no effect
+                # FIXME[bug]: seems to have no effect
+                action.font().setBold(True)
             action.triggered.connect(slot(id, datasource))
             self._datasourceMenu.addAction(action)
             self._datasources[key] = action
@@ -422,7 +427,10 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
                     break
                 if m.id == meta.id:
                     self._newPanel(meta, index, m.label, show)
-                    panel = None  # FIXME[hack]: panel creation is asynchronous and hence does not really fit in this synchronous function! API should be changed accordingly!
+                    # FIXME[hack]: panel creation is asynchronous and
+                    # hence does not really fit in this synchronous
+                    # function! API should be changed accordingly!
+                    panel = None
                     break
                 if label == m.label:
                     index += 1
@@ -564,7 +572,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         """Callback for saving any application state inb4 quitting."""
         pass
 
-    def showStatusMessage(self, message, timeout: int=2000):
+    def showStatusMessage(self, message, timeout: int = 2000):
         """Hide the normal status indications and display the given message in
         the statusbar for the specified number of milli-seconds .
 
@@ -594,7 +602,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
                         format(resources.gpus[0].mem,
                                resources.gpus[0].mem_total))
         if self._runner is not None:
-            message += (f", Tasks: {self._runner.active_workers}/" 
+            message += (f", Tasks: {self._runner.active_workers}/"
                         f"{self._runner.max_workers}")
         self._statusResources.setText(message)
 
@@ -605,7 +613,8 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     @protect
     def closeEvent(self, event: QCloseEvent) -> None:
         """Callback for [x] button click."""
-        LOG.info("MainWindow: Window button -> exiting the main window now ...")
+        LOG.info("MainWindow: Window button"
+                 " -> exiting the main window now ...")
         self._toolbox.quit()
         LOG.info("MainWindow: toolbox.quit() returned ...")
 
@@ -635,7 +644,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         """Handle Drag and Drop events. The dragEnterEvent is sent to
         check the acceptance of a following drop operation.
         We want to allow dragging in images.
-        
+
         """
         # Images (from the Desktop) are provided as file ULRs
         if event.mimeData().hasUrls():
@@ -645,7 +654,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     def dropEvent(self, e: QDropEvent):
         """Handle Drag and Drop events. The :py:class:`QDropEvent`
         performs the actual drop operation.
-        
+
         We support the following operations: if an Image is dropped,
         we will use it as input image for the :py:class:`Toolbox`.
         """
@@ -688,7 +697,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     # and onSystemTrayMenuAboutToShow is received only on the
     # first click, but no menu is shown.
 
-    def _initSystemTray(self, withMenu: bool=False):
+    def _initSystemTray(self, withMenu: bool = False):
         LOG.info("Initializing the system tray: available: %s, messages: %s",
                  QSystemTrayIcon.isSystemTrayAvailable(),
                  QSystemTrayIcon.supportsMessages())
@@ -704,7 +713,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
             contextMenu = QMenu()
             contextMenu.aboutToShow.connect(self.onSystemTrayMenuAboutToShow)
 
-            actionTest =  QAction('Test', contextMenu)
+            actionTest = QAction('Test', contextMenu)
             actionTest.triggered.connect(self.onSystemTrayMenuActionTriggered)
             systemTrayIcon.setContextMenu(contextMenu)
 
@@ -714,7 +723,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
 
         systemTrayIcon.show()
 
-    #@pyqtSlot()
+    # @pyqtSlot()
     def onSystemTrayActivated(self, signal: int):
         if signal == QSystemTrayIcon.Unknown:
             text = "Unknown reason"
@@ -731,26 +740,26 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
             text = "Illegal value"
         LOG.info("onSystemTrayActivated: %s (%s)", signal, text)
 
-    #@pyqtSlot()
+    # @pyqtSlot()
     def onSystemTrayMenuAboutToShow(self):
         LOG.info("onSystemTrayMenuAboutToShow")
 
-    #@pyqtSlot()
+    # @pyqtSlot()
     def onSystemTrayMenuActionTriggered(self, *args, **kwargs):
         LOG.info("onSystemTrayMenuActionTriggered: %r, %r", args, kwargs)
 
-    #@pyqtSlot()
+    # @pyqtSlot()
     def onSystemTrayMessageClicked(self):
         """React when the message displayed in the system tray using
         showMessage() was clicked by the user.
         """
         LOG.info("onSystemTrayMessageClicked.")
-    
+
     ###########################################################################
     #                               Panels                                    #
     ###########################################################################
 
-    def _panelMeta(self, panel_id: str) -> PanelMeta:
+    def _panelMeta(self, panel_id: str) -> 'PanelMeta':
         """Get the :py:class:`PanelMeta` for a given panel id.
 
         Arguments
@@ -767,8 +776,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
             return next(filter(lambda m: m.id == panel_id, self._panelMetas))
         except StopIteration:
             raise KeyError(f"'{self}' does not know a panel identified "
-                             f"by '{panel_id}'. Known panels are: " +
-                             ", ".join([f"'{m.id}'" for m in self._panelMetas]))
+                           f"by '{panel_id}'. Known panels are: " +
+                           ", ".join([f"'{m.id}'"
+                                      for m in self._panelMetas]))
 
     def _panelTabIndex(self, panel_id: str) -> int:
         """Get the index of a (created) panel in the panel tab widget.
@@ -791,7 +801,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
             module_name = __name__.rsplit('.', 1)[0] + module_name
         return module_name, class_name
 
-    def _newPanel(self, meta, index, label, show: bool=True):
+    def _newPanel(self, meta, index, label, show: bool = True):
         """Create a new panel from panel metadata.
 
         The creation will be split into multiple phases to allow for a
@@ -817,7 +827,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
 
         LOG.debug("Running import %s for Panel '%s'.", meta.cls, meta.id)
         self._runner.runTask(self._importPanel, meta.id)
-        
+
     def _importPanel(self, panel_id: str) -> None:
         module_name, class_name = self._panelModuleAndClass(panel_id)
         LOG.debug("Importing module '%s' for panel '%s'.",
@@ -847,7 +857,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         index = self._panelTabIndex(panel_id)
         meta = self._panelMeta(panel_id)
         dummy = self._tabs.widget(index)
-        #self._tabs.replaceWidget(dummy, panel)
+        # self._tabs.replaceWidget(dummy, panel)
         currentIndex = self._tabs.currentIndex()
         self._tabs.removeTab(index)
         self._tabs.insertTab(index, panel, meta.label)
@@ -865,7 +875,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
 
     def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
         activation_tool = self._toolbox.add_tool('activation')
-        #network = self._toolbox.autoencoder_controller
+        # network = self._toolbox.autoencoder_controller
         network = None
         return ActivationsPanel(toolbox=self._toolbox, network=network,
                                 activation=activation_tool,
@@ -937,7 +947,6 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         action.setStatusTip('Load AlexNet')
         action.triggered.connect(self.onAlexnetTriggered)
         self.actionAlexnet = action
-        
 
     @protect
     def onServerStartTriggered(self, checked: bool) -> None:
@@ -972,7 +981,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
 
     @protect
     def onAlexnetTriggered(self, checked: bool) -> None:
-        Network.register_initialize_key('alexnet-tf') # FIXME[todo]: prepare
+        Network.register_initialize_key('alexnet-tf')  # FIXME[todo]: prepare
 
     ##########################################################################
     #                           FIXME[old]                                   #
@@ -984,17 +993,19 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         from tools.activation import Engine as ActivationEngine
         activationsPanel = self.panel('activations', create=True)
         if activationsPanel is not None:
-            activationsPanel.setController(self._toolbox.get_tool('activation'),
+            activationsPanel.setController(self._toolbox.
+                                           get_tool('activation'),
                                            ActivationEngine.Observer)
             activationsPanel.setController(self._toolbox.datasource,
                                            Datasource.Observer)
 
         maximizationPanel = self.panel('maximization', create=True)
         if maximizationPanel is not None:
-            maximizationPanel.setController(self._toolbox.activation_controller,
+            maximizationPanel.setController(self._toolbox.
+                                            activation_controller,
                                             ActivationEngine.Observer)
 
-    def setLucidEngine(self, engine:'LucidEngine'=None) -> None:
+    def setLucidEngine(self, engine: 'LucidEngine' = None) -> None:
         print("FIXME[old]: MainWindow.setLucidEngine() was called!")
         lucidPanel = self.panel('lucid')
         if lucidPanel is not None:
@@ -1006,13 +1017,12 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         """Set the datasource.
         """
         print("FIXME[old]: MainWindow.setDatasource() was called!")
-        #self._toolbox.datasource = datasource
+        # self._toolbox.datasource = datasource
 
         activationsPanel = self.panel('activations')
         if activationsPanel is not None:
             activationsPanel.setController(self._toolbox.datasource,
                                            Datasource.Observer)
-
 
     # FIXME[old]: the following timer is thread safe in the sense that
     # it uses one-shot timers and it will start the next timer only
@@ -1020,7 +1030,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
     # processing of timer events. Maybe this is a bit safer than our
     # simple implementation, but it is also a bit more complicated.
     # Maybe safe this somewhere for later use.
-    def start_timer(self, timeout: int=1000) -> None:
+    def startTimer(self, timeout: int = 1000) -> None:
         """
         Create a Qtimer that is safe against garbage collection
         and overlapping calls.
@@ -1042,7 +1052,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
         self._timerIsRunning = True
         QTimer.singleShot(timeout, timer_event)
 
-    def stop_timer(self):
+    def stopTimer(self):
         """
         """
         LOG.info("GUI: Stopping the QTimer ...")

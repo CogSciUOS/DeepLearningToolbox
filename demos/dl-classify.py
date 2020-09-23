@@ -22,8 +22,8 @@ import argparse
 # toolbox imports
 from network import Network
 from network import argparse as NetworkArgparse
-from datasource import Data
 from datasource.imagenet import ImageNet
+from dltb.base.data import Data
 from dltb.tool.classifier import Classifier
 
 # logging

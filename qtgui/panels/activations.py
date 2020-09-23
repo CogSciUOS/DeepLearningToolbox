@@ -21,14 +21,14 @@ import util.image
 
 # GUI imports
 from .panel import Panel
-from ..utils import QObserver, protect
+from ..utils import QObserver, QPrepareButton, protect
 from ..widgets.activationview import QActivationView
 from ..widgets.data import QDataSelector, QDataView
 from ..widgets.image import QImageView
-from ..widgets.network import QLayerSelector, QNetworkSelector
+from ..widgets.network import QLayerSelector, QNetworkComboBox
 from ..widgets.classesview import QClassesView
 from ..widgets.datasource import QDatasourceNavigator
-from ..widgets.register import QPrepareButton
+
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
 
     (C) network:
 
-    _networkSelector: QNetworkSelector
+    _networkSelector: QNetworkComboBox
     _networkPrepareButton: QPrepareButton
 
     _layerSelector: QLayerSelector
@@ -218,8 +218,8 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # (C) Network
         #
 
-        # QNetworkSelector: a widget to select a network
-        self._networkSelector = QNetworkSelector()
+        # QNetworkComboBox: a widget to select a network
+        self._networkSelector = QNetworkComboBox()
         self.addAttributePropagation(Toolbox, self._networkSelector)
         # FIXME[note]: the 'activated' signal is emitted on every
         # activation, not just on changes - we use this during development

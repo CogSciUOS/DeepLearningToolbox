@@ -74,10 +74,10 @@ def edit(filename: str, lineno: int=None) -> int:
     return subprocess.call(command, shell=True)
 
 
-class debug_object(object):
+class debug_object:
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         # TypeError: object.__init__() takes no parameters
         if len(args):
             print(f"[type(self).__module].{type(self).__name__}.__init__: "
