@@ -545,8 +545,12 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         return super(ImageDisplay, cls).__new__(cls)
 
     def show(self, image: Imagelike, wait_for_key: bool = False,
-             **kwargs) -> None:
+             timeout: float = None, **kwargs) -> None:
         """Display the given image.
+
+        This method may optionally pause execution until to display
+        the image, if the wait_for_key or timeout arguments are given.
+        If both are given, the first one will stop pausing.
 
         Arguments
         ---------
@@ -556,6 +560,8 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         wait_for_key: bool
             A flag indicating if the display should pause execution
             and wait or a key press.
+        timeout: float
+            Time in seconds to pause execution.
         """
         raise NotImplementedError(f"{type(self).__name__} claims to "
                                   "be an ImageDisplay, but does not implement "
