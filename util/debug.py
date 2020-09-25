@@ -9,8 +9,10 @@ This module collects miscellaneous debugging utilities.
 
 from typing import Any
 import subprocess
+import traceback
 
 from . import error
+
 
 def debug(func):
     """A decorator to trace function calls
@@ -36,6 +38,7 @@ def debug(func):
                 del self._debug_indent
     return closure
 
+
 def debug_exception(func):
     """A decorator to output exceptions raised in a function.
     """
@@ -48,7 +51,13 @@ def debug_exception(func):
     return closure
 
 
-def edit(filename: str, lineno: int=None) -> int:
+def stacktrace() -> None:
+    """Output the stack traceback at the current position.
+    """
+    traceback.print_stack()
+
+
+def edit(filename: str, lineno: int = None) -> int:
     """Open a file in an (external) editor.
 
     Arguments

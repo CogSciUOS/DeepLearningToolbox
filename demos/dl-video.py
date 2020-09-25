@@ -9,6 +9,7 @@
 
 # standard imports
 import os
+import time
 from threading import Event
 from argparse import ArgumentParser
 
@@ -28,15 +29,13 @@ def output_detections(detector: ImageDetector, data: Data,
                       display: ImageDisplay = None, writer=None,
                       wait_for_key: bool = False,
                       timeout: float = None) -> None:
-    detections = detector.detections(data)
     marked_image = detector.marked_image(data)
 
     if display is not None:
         display.show(marked_image, wait_for_key=wait_for_key, timeout=timeout)
 
     if writer is not None:
-        print(type(marked_image))
-        # writer.append_data(marked_image)
+        pass  # writer.append_data(marked_image)
 
 
 def main():
@@ -64,44 +63,44 @@ def main():
             Datasource.register_initialize_key('Webcam')
             webcam = Datasource['Webcam']
             webcam.prepare()
-
             display = ImageDisplay()
-            try:
-                with imageio.get_writer('test.mp4', fps=20) as writer:
-                    for i in range(100):
-                        print(i)
-                        data = webcam.get_data()
-                        detector.process(data, mark=True)
-                        output_detections(detector, data, display=display,
-                                          writer=writer, timeout=1.0)
-                        if display.closed:
-                            break
-            except KeyboardInterrupt:
-                print("stop")
 
-        elif False:
-            display = ImageDisplay()
-            def loop(stopped: Event):
-                with imageio.get_writer('test.mp4', fps=20) as writer:
-                    for i in range(100):
-                        print(i)
-                        data = webcam.get_data()
-                        detector.process(data, mark=True)
-                        output_detections(detector, data, display=display,
-                                          writer=writer)
-                        if stopped.isSet():
-                            break
-            display.run(worker=loop)
+            experiment = 1
+            if experiment == 1:
+                try:
+                    with imageio.get_writer('test.mp4', fps=20) as writer:
+                        for i in range(100):
+                            print(i)
+                            data = webcam.get_data()
+                            detector.process(data, mark=True)
+                            output_detections(detector, data, display=display,
+                                              writer=writer)
+                            if display.closed:
+                                break
+                except KeyboardInterrupt:
+                    print("stop")
 
+            elif experiment == 2:
+                def worker(display):
+                    with imageio.get_writer('test.mp4', fps=20) as writer:
+                        for i in range(100):
+                            print(i)
+                            data = webcam.get_data()
+                            detector.process(data, mark=True)
+                            output_detections(detector, data, display=display,
+                                              writer=writer)
+                            if not display.active:
+                                break
+                display.run(worker=worker, args=(display,))
 
         else:
-        
+
             for url in args.images:
-                if os.path.isdir(url):               
+                if os.path.isdir(url):
                     class MyDatasource(DataDirectory, Imagesource): pass
                     datasource = MyDatasource('images')
                     datasource.prepare()
-                    datafetcher = Datafetcher(datasource)
+                    # datafetcher = Datafetcher(datasource)
                     for data in datasource:
                         detector.process(data, mark=True)
                         output_detections(detector, data)
@@ -112,6 +111,7 @@ def main():
 
     else:
         print("No operation specified.")
+
 
 if __name__ == "__main__":
     main()
