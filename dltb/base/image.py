@@ -544,6 +544,20 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
             cls = thirdparty.import_class('ImageDisplay', module=module)
         return super(ImageDisplay, cls).__new__(cls)
 
+    #
+    # context manager
+    #
+
+    def __enter__(self) -> 'ImageDisplay':
+        return self
+
+    def __exit__(self, _exception_type, _exception_value, _traceback) -> None:
+        pass # FIXME[todo]
+
+    #
+    # public interface
+    #
+
     def show(self, image: Imagelike, wait_for_key: bool = False,
              timeout: float = None, **kwargs) -> None:
         """Display the given image.
@@ -594,3 +608,11 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         tool.stop()
         thread.join()
         print("Thread joined")
+
+    @property
+    def closed(self) -> bool:
+        return False  # FIXME[hack]
+
+    @property
+    def active(self) -> bool:
+        return True  # FIXME[hack]

@@ -9,26 +9,23 @@
 
 # standard imports
 import os
-import time
-from threading import Event
 from argparse import ArgumentParser
 
-# thirdparty imports
-import imageio
-
 # toolbox imports
-from datasource import Datasource, DataDirectory, Datafetcher, Imagesource
+from datasource import Datasource, DataDirectory, Imagesource
 from dltb.base.data import Data
+from dltb.base.image import ImageDisplay
+from dltb.base.video import Reader as VideoReader, Writer as VideoWriter
 from dltb.tool import Tool
 from dltb.tool.detector import ImageDetector
-from dltb.util.image import imshow
-from dltb.thirdparty.qt import ImageDisplay
 
 
 def output_detections(detector: ImageDetector, data: Data,
                       display: ImageDisplay = None, writer=None,
                       wait_for_key: bool = False,
                       timeout: float = None) -> None:
+    """Output detection to display and/or video writer.
+    """
     marked_image = detector.marked_image(data)
 
     if display is not None:
@@ -49,8 +46,10 @@ def main():
                         help='run face detection')
     parser.add_argument('--loop', action='store_true', default=True,
                         help='run in loop mode')
-    parser.add_argument('--webcam', action='store_true', default=True,
+    parser.add_argument('--webcam', action='store_true', default=False,
                         help='feed from the webcam')
+    parser.add_argument('--video', action='store_true', default=False,
+                        help='feed from a video')
     args = parser.parse_args()
 
     if args.detect:
@@ -63,51 +62,54 @@ def main():
             Datasource.register_initialize_key('Webcam')
             webcam = Datasource['Webcam']
             webcam.prepare()
-            display = ImageDisplay()
+            display = ImageDisplay(module='qt')
 
-            experiment = 1
-            if experiment == 1:
-                try:
-                    with imageio.get_writer('test.mp4', fps=20) as writer:
-                        for i in range(100):
-                            print(i)
-                            data = webcam.get_data()
-                            detector.process(data, mark=True)
-                            output_detections(detector, data, display=display,
-                                              writer=writer)
-                            if display.closed:
-                                break
-                except KeyboardInterrupt:
-                    print("stop")
+            try:
+                with VideoWriter(filename='test.mp4',
+                                 fps=3, size=None) as writer:
+                    # FIXME[bug]: fps seems to be ignored by ImageIO writer
+                    for i in range(100):
+                        data = webcam.get_data()
+                        print(i, data.array.shape)
+                        detector.process(data, mark=True)
+                        output_detections(detector, data, display=display,
+                                          writer=writer)
+                        if display.closed:
+                            break
+            except KeyboardInterrupt:
+                print("stop")
 
-            elif experiment == 2:
-                def worker(display):
-                    with imageio.get_writer('test.mp4', fps=20) as writer:
-                        for i in range(100):
-                            print(i)
-                            data = webcam.get_data()
-                            detector.process(data, mark=True)
-                            output_detections(detector, data, display=display,
-                                              writer=writer)
-                            if not display.active:
-                                break
-                display.run(worker=worker, args=(display,))
+        elif args.video:
+            # FIXME[todo]: displays other than 'qt' do not work!
+            display = ImageDisplay(module='qt')  # module='matplotlib'/'opencv'
+            print(type(display))
+            filename = ("/net/store/cv/users/krumnack/"
+                        "Videos/Kids Go To School _ "
+                        "Brother's Birthday Chuns And Friends Make "
+                        "a Birthday Cake Big-R_uvHSE5Giw.mkv")
+            reader = VideoReader(filename)
+            print(type(reader))
+            for frame in reader:
+                marked_frame = detector.mark_image(frame)
+                display.show(marked_frame)
+                if display.closed:
+                    break
 
         else:
-
             for url in args.images:
                 if os.path.isdir(url):
-                    class MyDatasource(DataDirectory, Imagesource): pass
+                    class MyDatasource(DataDirectory, Imagesource):
+                        """Dummy datasource - make this an official class
+                        """
                     datasource = MyDatasource('images')
                     datasource.prepare()
-                    # datafetcher = Datafetcher(datasource)
                     for data in datasource:
                         detector.process(data, mark=True)
                         output_detections(detector, data)
                 else:
                     print(f"Applying detector to {url}")
                     data = detector.process_image(url, mark=True, extract=True)
-                    output_detections(detector, data, extract=True)
+                    output_detections(detector, data)  # , extract=True
 
     else:
         print("No operation specified.")

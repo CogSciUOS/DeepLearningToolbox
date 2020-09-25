@@ -29,7 +29,8 @@ _MODULES = {
         'classes': {
             'ImageReader': 'ImageIO',
             'ImageWriter': 'ImageIO',
-            'VideoReader': 'VideoFileReader',
+            'VideoReader': 'VideoReader',
+            'VideoWriter': 'VideoWriter',
             'Webcam': 'Webcam'
         },
     },

@@ -3,7 +3,7 @@ classes mapping the toolbox API onto the opencv library.
 """
 
 # standard imports
-from typing import Union
+from typing import Union, Iterator
 import logging
 import threading
 
@@ -55,7 +55,7 @@ class OpenCV:
         pass
 
 
-class ImageIO(image.ImageIO):
+class ImageIO(image.ImageReader, image.ImageWriter, image.ImageDisplay):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -146,6 +146,10 @@ class VideoReader(video.Reader):
             self._capture = None
         # super().__del__()
 
+    #
+    # Iterator
+    #
+
     def __next__(self) -> np.ndarray:
         """Get the next frame from the OpenCV Video Capture.
         """
@@ -155,8 +159,13 @@ class VideoReader(video.Reader):
         # ok: signals success of the operation
         # frame: is the image (in BGR!)
         if not ok:
-            raise RuntimeError("VideoHelper object was not prepared.")
+            raise RuntimeError("Error reading frame fom video.")
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    #
+    # FIXME[question]: when is this needed?
+    #
+    
 
     def prepared(self) -> bool:
         return self._capture is not None

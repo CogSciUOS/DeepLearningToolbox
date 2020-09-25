@@ -78,15 +78,16 @@ class VideoReader(video.FileReader):
         The index of the current frame.
     """
 
-    def __init__(self, filename: str) -> None:
-        print(f"self._reader = imageio.get_reader('{filename}')")
+    def __init__(self, filename: str, **kwargs) -> None:
+        self._reader = None
+        super().__init__(filename=filename, **kwargs)
         self._reader = imageio.get_reader(filename)
-        self._meta = self._reader.get_meta_data()
-        self._index = -1
-        if not self._reader:
+        if self._reader is None:
             LOG.error("Opening movie file (%s) failed", filename)
             raise RuntimeError("Creating video reader object for file "
                                f"'{filename}' failed.")
+        self._meta = self._reader.get_meta_data()
+        self._index = -1
         LOG.debug("Reader object: %r", self._reader)
         LOG.info("Video file: %s", filename)
         LOG.info("FFMPEG backend version %s (%s)",
@@ -104,9 +105,17 @@ class VideoReader(video.FileReader):
             del self._reader
             self._reader = None
 
+    #
+    # Iterator
+    #
+            
     def __next__(self) -> np.ndarray:
-        frame = self._reader.get_next_data()
-        self._index += 1
+        try:
+            frame = self._reader.get_next_data()
+            self._index += 1
+        except IndexError as ex:
+            raise StopIteration("IndexError ({ex})")
+
         if frame is None:
             raise RuntimeError("Reading a frame from "
                                "ImageIO Video Reader failed!")
@@ -202,3 +211,30 @@ class Webcam(video.Webcam):
             raise RuntimeError("Reading a frame from "
                                "ImageIO Video Reader failed!")
         return frame
+
+
+class VideoWriter(video.FileWriter):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._writer = None
+
+    def _open(self) -> None:
+        if self._is_opened():
+            raise RuntimeError("Video was already opened.")
+        if self._filename is None:
+            raise RuntimeError("No video filename was provided.")
+        print("Opening:", self._filename, self._fps)
+        self._writer = imageio.get_writer(self._filename, fps=int(self._fps))
+
+    def _is_opened(self) -> bool:
+        return self._writer is not None
+
+    def _close(self) -> None:
+        print("Closing:", self._filename, self._fps)
+        if self._is_opened():
+            self._writer.close()
+            self._writer = None
+        
+    def _write_frame(self, frame: np.ndarray) -> None:
+        writer.append_data(marked_image)

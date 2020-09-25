@@ -232,7 +232,7 @@ class ImageDetector(Detector, ImageTool):
     # Marking detections
     #
     
-    def mark_image(self, image: Imagelike, detections: Detections,
+    def mark_image(self, image: Imagelike, detections: Detections = None,
                    copy: bool = True) -> np.ndarray:
         """Mark the given detections in an image.
 
@@ -252,6 +252,8 @@ class ImageDetector(Detector, ImageTool):
         marked_image: np.ndarray
             An image in which the given detections are visually marked.
         """
+        if detections is None:
+            detections = self._detect(image)
         array = Image.as_array(image, copy=copy)
         if detections:
             for index, region in enumerate(detections.regions):

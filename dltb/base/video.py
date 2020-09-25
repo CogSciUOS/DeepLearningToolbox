@@ -1,5 +1,6 @@
 # standard imports
 from typing import Union, List, Iterator
+from abc import abstractmethod
 import os
 import sys
 import logging
@@ -22,7 +23,7 @@ class Reader:
     """An abstract interface to read videos. A :py:class:`Reader`
     allows to read a video source frame by frame.
     """
-
+    
     def __new__(cls, filename: str = None, device: int = None,
                 module: Union[str, List[str]] = None) -> 'Reader':
         """Create a new Reader.
@@ -38,6 +39,44 @@ class Reader:
 
         video_class = thirdparty.import_class(classname, module=module)
         return super(Reader, video_class).__new__(video_class)
+
+    def __init__(self, module: Union[str, List[str]] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    #
+    # Iterable
+    #
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """Implementation of the :py:class:`Iterable` interface.
+        """
+        return self
+
+    #
+    # Iterator
+    #
+
+    def __next__(self) -> np.ndarray:
+        """Implementation of the :py:class:`Iterator` interface.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} claims to "
+                                  "be a Reader, but does not implement "
+                                  "the __next__ method.")
+
+    @property
+    def time(self) -> float:
+        """Current position in seconds.
+        """
+        # FIXME[hack]: just an approximation - will not work for
+        # variable frame rates ...
+        return self.frame / self.frames_per_second
+
+    @property
+    def time_str(self) -> str:
+        """A string representing the current position in time
+        of this :py:class:`VideoBackend`.
+        """
+        return time_str(self.time)
 
     @staticmethod
     def time_in_seconds(time: Union[float, str]) -> float:
@@ -55,33 +94,6 @@ class Reader:
         elif isinstance(time, str):
             time = float(time)
         return time
-
-    @property
-    def time(self) -> float:
-        """Current position in seconds.
-        """
-        # FIXME[hack]: just an approximation - will not work for
-        # variable frame rates ...
-        return self.frame / self.frames_per_second
-
-    @property
-    def time_str(self) -> str:
-        """A string representing the current position in time
-        of this :py:class:`VideoBackend`.
-        """
-        return time_str(self.time)
-
-    def __iter__(self) -> Iterator[np.ndarray]:
-        """Implementation of the :py:class:`Iterable` interface.
-        """
-        return self
-
-    def __next__(self) -> np.ndarray:
-        """Implementation of the :py:class:`Iterator` interface.
-        """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
-                                  "be a Reader, but does not implement "
-                                  "the __next__ method.")
 
 
 class VideoReader(Reader):
@@ -104,6 +116,17 @@ class VideoReader(Reader):
         raise NotImplementedError(f"{self.__class__.__name__} claims to "
                                   "be a VideoReader, but provides no "
                                   "'__getitem__' method.")
+
+    @property
+    def frame(self) -> int:
+        """The index of the frame the next read will yield.
+        """
+        return self._get_frame()
+
+    @abstractmethod
+    def _get_frame(self) -> int:
+        """Get the index of the frame the next read will yield.
+        """
 
 
 class FileBase:
@@ -207,7 +230,22 @@ class Writer:
     """
     """
 
-    def __init__(self, fps: float, size) -> None:
+    def __new__(cls, filename: str = None,
+                module: Union[str, List[str]] = None, **kwargs) -> 'Writer':
+        """Create a new Reader.
+        """
+
+        if filename is not None:
+            classname = 'VideoWriter'
+        else:
+            raise ValueError("You have to specify either filename or device "
+                             "to create a video Reader object.")
+
+        video_class = thirdparty.import_class(classname, module=module)
+        return super(Writer, video_class).__new__(video_class)
+
+    def __init__(self, fps: float, size, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._fps = fps
         self._size = size
 
@@ -225,9 +263,20 @@ class Writer:
         self.write_frame(frame)
         return self
 
-    def _assert_opened(self) -> None:
-        if not self.opened:
-            raise RuntimeError("VideoWriter is not open.")
+    #
+    # context manager
+    #
+
+    def __enter__(self) -> 'Writer':
+        self._open()
+        return self
+
+    def __exit__(self, _exception_type, _exception_value, _traceback) -> None:
+        self._close()
+
+    #
+    # public interface
+    #
 
     def write_frame(self, frame: np.ndarray, **kwargs) -> None:
         """Check if this :py:class:`VideoWriter` is still open, meaning
@@ -264,6 +313,13 @@ class Writer:
                                   "be a VideoWriter, but provides no "
                                   "'_write_frame' method.")
 
+    def _open(self) -> None:
+        """Make sure the Writer is open, that is, ready to write.
+        If sufficient arguments are given to the constructor, this
+        will be called automatically, otherwise it has to be called
+        explicitly before the first read.
+        """
+
     def _is_opened(self) -> bool:
         """Check if this :py:class:`VideoWriter` is still open, meaning
         that it accepts more frames to be written.
@@ -284,9 +340,21 @@ class Writer:
         # FIXME[todo]: check frame (size, colors, etc)
         return frame  # may be overwrittern by subclasses
 
+    #
+    # private auxiliary methods
+    #
+
+    def _assert_opened(self) -> None:
+        if not self.opened:
+            raise RuntimeError("VideoWriter is not open.")
 
 class VideoWriter(Writer):
     pass  # FIXME[hack]
+
+
+
+class FileWriter(VideoWriter, FileBase):
+    pass # FIXME[hack]
 
 
 class VideoUtils:
