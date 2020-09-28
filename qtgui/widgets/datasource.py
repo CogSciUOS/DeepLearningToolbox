@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton
 from toolbox import Toolbox
 from datasource import Datasource, Datafetcher
 from datasource import Indexed, Random, Snapshot, Loop
-from base.register import RegisterEntry
+from base.register import RegisterEntry, InstanceRegisterEntry
 
 # GUI imports
 from ..utils import QObserver, QPrepareButton, protect
@@ -518,6 +518,8 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         if self._datafetcher is not None:
             self._datafetcher.datasource = datasource
         elif datasource is not None:
+            # the datafetcher will notify all interested parties
+            # (including us) that the datasource has changed.
             self.setDatafetcher(Datafetcher(datasource))
 
     def setDatafetcher(self, datafetcher: Datafetcher) -> None:
@@ -564,9 +566,11 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         the datasource in the QComboBox changes, either through user
         interaction or programmatically.
         """
-        # the datafetcher will notify all interested parties (including us)
-        # that the datasource has changed.
-        self._datafetcher.datasource = datasource
+        # FIXME[hack]: we need a more consistent way of what to store
+        # (Datasource or InstanceRegisterEntry) and what to report ...
+        if isinstance(datasource, InstanceRegisterEntry):
+            datasource = datasource.obj
+        self.setDatasource(datasource)
 
 
 class QDatasourceController(QInstanceRegisterEntryController, qobservables={

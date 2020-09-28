@@ -205,7 +205,9 @@ class TensorflowStyletransferEngine:
 
         # stateless API
         self._optimizer = \
-            tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
+            tf.keras.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
+            # in TensorFlow 2.0, the optimizers have moved to tensorflow.keras
+            # tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
 
         # initialize the model
         self._extractor = StyleContentModel(style_layers, content_layers)

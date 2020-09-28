@@ -94,6 +94,12 @@ class ToolAdapter(ToolboxAdapter, qobservables={
         # items are of type InstanceRegisterEntry
         return None if item is None else item.obj
 
+    def setCurrentTool(self, tool: Tool) -> None:
+        """Make the given Tool the currently selected tool.
+        """
+        # get an InstanceRegisterEntry for the tool
+        item = None if tool is None else Tool.instance_register[tool.key]
+        self._setCurrentItem(item)       
 
 class QToolListWidget(ToolAdapter, QRegisterListWidget):
     """A list displaying the :py:class:`Tool`s of a

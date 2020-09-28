@@ -733,6 +733,10 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         parser.add_argument('--adversarial',
                             help='Open the adversarial examples panel',
                             action='store_true', default=False)
+        parser.add_argument('--styletransfer',
+                            help='Open the style transfer module'
+                            ' (experimental!)',
+                            action='store_true', default=False)
         parser.add_argument('--advexample',
                             help='Load the adversarial example module'
                             ' (experimental!)',
@@ -1025,6 +1029,9 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
         if self.option('adversarial') or self.option('advexample'):
             panels.append('advexample')
+
+        if self.option('styletransfer'):
+            panels.append('styletransfer')
 
         kwargs['panels'] = panels
 

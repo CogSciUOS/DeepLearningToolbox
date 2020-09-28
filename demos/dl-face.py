@@ -68,11 +68,15 @@ def main():
                 datasource.prepare()
                 datafetcher = Datafetcher(datasource)
                 for data in datasource:
-                    detector.process(data, mark=True)
-                    output_detections(detector, data)
+                    print(detector(data))
+                    #detector.process(data, mark=True)
+                    #output_detections(detector, data)
             else:
                 print(f"Applying detector to {url}")
-                data = detector.process_image(url, mark=True, extract=True)
+                # print(detector(url))
+                result = ('detections', 'mark', 'extract')
+                data = detector.process_image(url, result=result) #mark=True, extract=True
+                data.debug()
                 output_detections(detector, data, extract=True)
 
     else:

@@ -1,4 +1,4 @@
-"""A :py:class:`Processor` is intended for asynchronously using
+"""A :py:class:`Worker` is intended for (asynchronously) using
 a :py:class.`Tool`.
 """
 
@@ -15,29 +15,28 @@ from .tool import Tool
 LOG = logging.getLogger(__name__)
 
 
-class Processor(BusyObservable, method='processor_changed',
-                changes={'tool_changed', 'data_changed',
-                         'process_finished'}):
-    """A processor can be used to process data with a :py:class:`Tool`.
-    The processor will hold a data object to which the tool is
+class Worker(BusyObservable, method='worker_changed',
+                changes={'tool_changed', 'data_changed', 'work_finished'}):
+    """A worker can be used to work on data using a :py:class:`Tool`.
+    The worker will hold a data object to which the tool is
     applied. The results are stored as new attributes of that data
     object.
 
-    Processing can be done asynchronously. The processor is observable
-    and will notify observers on the progress. All processors support
+    Working can be done asynchronously. The worker is observable
+    and will notify observers on the progress. All workers support
     the following notifications:
 
     data_changed:
-        The data for processing was changed. The underlying tool
-        has started processing the data, but it may not have finished
+        The data for working was changed. The underlying tool
+        has started working on the data, but it may not have finished
         yet. However, the :py:attr:`data` property will already
         provide the new :py:class:`Data` object.
 
     tool_changed:
-        The :py:class:`Tool` to be used for processing was changed.
+        The :py:class:`Tool` to be used for working was changed.
 
-    process_finished:
-        The processing has finished. The data object will now contain
+    work_finished:
+        The work was finished. The data object will now contain
         the results.
 
     """
@@ -47,11 +46,11 @@ class Processor(BusyObservable, method='processor_changed',
         self._data = None
         self._next_data = None
         self._tool = tool
-        LOG.info("New Processor created: %r", self)
+        LOG.info("New Worker created: %r", self)
 
     @property
     def data(self):
-        """The :py:class:`Data` structure used by the processor.
+        """The :py:class:`Data` structure used by the worker.
         This data will contain results in specific attributes,
         depending on the tool used and its configuration.
         The data also includes the `duration` (in seconds).
@@ -60,15 +59,15 @@ class Processor(BusyObservable, method='processor_changed',
 
     @property
     def tool(self) -> Tool:
-        """The :py:class:`Tool` applied by this :py:class:`Processor`."""
+        """The :py:class:`Tool` applied by this :py:class:`Worker`."""
         return self._tool
 
     @tool.setter
     def tool(self, tool: Tool) -> None:
         """Change the :py:class:`Tool` to be applied by this
-        :py:class:`Processor`.
+        :py:class:`Worker`.
         """
-        LOG.info("Tool changed from %s to %s for processor %r",
+        LOG.info("Tool changed from %s to %s for worker %r",
                  self._tool, tool, self)
         if tool is not self._tool:
             self._tool = tool
@@ -76,46 +75,46 @@ class Processor(BusyObservable, method='processor_changed',
 
     @property
     def ready(self) -> bool:
-        """Check if this processor is ready for use.
+        """Check if this worker is ready for use.
         """
         # FIXME[todo/states]: self.tool.ready
-        return (self.processing or
+        return (self.working or
                 (self._tool is not None and
                  self._tool.prepared and
                  (not isinstance(self.tool, BusyObservable) or
                   not self.tool.busy)))
 
     @property
-    def processing(self) -> bool:
-        """Check if this processor is currently processing data.
+    def working(self) -> bool:
+        """Check if this worker is currently working on data.
         """
         return self._next_data is not None
 
-    def process(self, data: Data, **kwargs) -> None:
-        """Run a data processing loop. This will set the detector
-        into a busy state ("processing"), in which new input data
-        are processed until no more new data are provided.
+    def work(self, data: Data, **kwargs) -> None:
+        """Run a data work loop. This will set the Worker
+        into a busy state ("working"), in which new input data
+        are worked on until no more new data are provided.
         If new data is given, before the previously provided data
-        was processed, the previous data will be skipped.
-        When processing one data item finishes, observers will
-        receive a 'detection_finished' notification, and can obtain
-        the data object including the detections via the
-        :py:meth:`data` property. The detections can be accessed
-        as a data attribute named by the :py:meth:`detector` property.
+        was done, the previous data will be skipped.
+        When working one data item finishes, observers will
+        receive a 'work_finished' notification, and can obtain
+        the data object including the results via the
+        :py:meth:`data` property. The results can be accessed
+        as tool specific data attributes.
 
-        The main motivation for this method is to process data from
+        The main motivation for this method is to work on data from
         a data loop (like a webcam or a video) in real-time, always
-        processing the most recent data available.
+        working on the most recent data available.
         """
-        LOG.info("Processor for Tool '%s' processes data %r",
+        LOG.info("Worker for Tool '%s' works on data %r",
                  self.tool and self.tool.key, data)
         self._next_data = data
         if not self.busy:
-            self._process(**kwargs)
+            self._work(**kwargs)
 
-    @busy("processing")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
-    def _process(self, **kwargs):
-        """The implementation of the process loop. This method
+    @busy("working")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
+    def _work(self, **kwargs):
+        """The implementation of the work loop. This method
         is assumed to run in a background thread. It will
         check the property `_next_data` for fresh data and
         if present, it will hand (a copy) of this data to the
@@ -130,16 +129,17 @@ class Processor(BusyObservable, method='processor_changed',
         while self._next_data is not None:
 
             data = self._next_data
-            LOG.info("Processing next data (%r) with Tool %s.",
+            LOG.info("Working on next data (%r) with Tool %s.",
                      data, self._tool)
             self._data = data
             self.change(data_changed=True)
             with self.failure_manager(catch=True):
-                self.tool.process(data, **kwargs)
-                self.change(process_finished=True)
+                result = self.tool.result + ('duration', )
+                self.tool.apply(data, result=result, **kwargs)
+                self.change(work_finished=True)
             if self._next_data is data:
                 self._next_data = None
-            LOG.info("Processing data (%r/%r) with Tool %s finished.",
+            LOG.info("Working on data (%r/%r) with Tool %s finished.",
                      data, self._data, self._tool)
     # FIXME[bug]: In case of an error, we may also cause some Qt error here:
     #   QObject::connect: Cannot queue arguments of type 'QTextBlock'

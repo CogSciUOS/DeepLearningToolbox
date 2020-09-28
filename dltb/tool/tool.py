@@ -2,9 +2,10 @@
 """
 
 # standard imports
-from typing import Any, Union, Iterator
+from typing import Any, Union, Tuple, Iterator
 import time
 import logging
+from threading import Event
 
 # third party imports
 import numpy as np
@@ -67,129 +68,71 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         """
         super()._prepare(**kwargs)
 
-    def preprocess(self, data: Datalike, **kwargs) -> np.ndarray:
-        """Perform preprocessing necessary to obtain data suitable for
-        for processing with this tool.
-        """
-        if isinstance(data, np.ndarray):
-            return self._preprocess(data, **kwargs)
+    #
+    # Application API
+    #
 
-        if not isinstance(data, Data):
-            ValueError(f"Argment data is of invalid type {type(data)}.")
+    _result: Tuple[str] = ()
+    _internal_arguments: Tuple[str] = ()
+    _internal_result: Tuple[str] = ()
 
-        array = self.preprocessed(data)
-        if array is not None:
-            return array
-
-        return self._preprocess(data.array, **kwargs)
-
-    def _preprocess(self, array: np.ndarray, **_kwargs) -> np.ndarray:
-        # pylint: disable=no-self-use
-        """Preprocess the given data. The default implementation does nothing,
-        it just returns the input data. The method may be implemented
-        by subclasses to do the actual preprocessing.
+    def __call__(self, *args, batch: bool = False, internal: bool = False,
+                 result: Union[str, Tuple[str]] = None,
+                 **kwargs) -> Any:
+        """Apply the tool to the given arguments.
 
         Arguments
         ---------
-        data: np.ndarray
-            The data to be preprocessed.
-
-        Result
-        ------
-        array: np.ndarray
-            The preprocessed data.
+        batch: bool
+            A flag indicating that arguments are given a batch,
+            do batch_processing.
+        internal: bool
+            A flag indicating that arguments are given in internal format,
+            no preprocessing of the given data is required
+        result: Union[str, Tuple[str]]
+            A description of the result values to return. If None is
+            given, the Tools default will be used (if the `internal` flag
+            is set, the internal result will be returned without
+            posprocessing)
         """
-        return array
+        # FIXME[todo]: batch processing:
+        #  - a tool may implement (either or both)
+        #    _process_single()
+        #    _process_batch()
+        # preprocessing, processing and postprocessing have to
+        # deal with this
+        if result is None and not internal:
+            result = self.result
+        elif isinstance(result, str):
+            result = (result, )
 
-    def add_data_attribute(self, data: Data, name: str, value: Any = None,
-                           batch: bool = True) -> None:
-        """Add a tool specific attribute to a data object.
-        """
-        data.add_attribute(self.key + '_' + name, value, batch=batch)
+        # preprocessing
+        data = self._do_preprocess(*args, internal=internal, batch=batch,
+                                   **kwargs)
+        internal_arguments = \
+            self._get_attributes(data, self.internal_arguments)
 
-    def set_data_attribute(self, data: Data, name: str, value: Any,
-                           index: int = None) -> None:
-        """Set a tool specific attribute in a data object.
-        """
-        setattr(data if index is None else data[index],
-                self.key + '_' + name, value)
-
-    def get_data_attribute(self, data: Data, name: str, default: Any = None,
-                           index: int = None) -> Any:
-        """Get a tool specific attribute from a data object.
-        """
-        value = getattr(data if index is None else data[index],
-                        self.key + '_' + name, None)
-        return default if value is None else value
-
-    #
-    # data Preprocessing
-    #
-
-    def preprocess_data(self, data: Data, **kwargs) -> None:
-        """Preprocess the data given data. The preprocessed version of
-        the data is stored in the tool-specific 'preprocessed' attribute
-        of the :py:class:`Data` object.
-
-        Arguments
-        ---------
-        data: Data
-            A :py:class:`Data` object that can be a batch or a single
-            data item.
-
-        """
-        self._preprocess_data(data, **kwargs)
-
-    def _preprocess_data(self, data: Data, **kwargs) -> None:
-        """This method does the actual preprocessing.
-
-        This method may be overwritten by subclasses to add attributes
-        to the data object, without assigning values yet (this can be
-        done in :py:meth:`_process_data` or
-        :py:meth:`_process_batch`). This method may set the data
-        object and notify observers, allowing them to observe how the
-        data object gets filled during processing.
-        """
-        self.add_data_attribute(data, 'preprocessed')
-        self.set_data_attribute(data, 'preprocessed',
-                                self.preprocess(data, **kwargs))
-        if self.timer:
-            self.add_data_attribute(data, 'duration')
-
-    def preprocessed(self, data: Data) -> np.ndarray:
-        """Get the tool-specific preprocessed data from a
-        :py:class:`Data` object.  This may be `None` if the data object
-        has not yet undergone preprocessing.
-        """
-        return self.get_data_attribute(data, 'preprocessed', data.array)
-
-    #
-    # Processing
-    #
-
-    def process(self, data: Data, **kwargs) -> None:
-        """Process the data and adapt the :py:class:`Data` object to
-        hold the results.
-        This method is to be implemented by subclasses.
-        Subclasses may also augment the given data object with
-        intermediate results if requested.
-
-        Arguments
-        ---------
-        data: Data
-            A :py:class:`Data` object that is guaranteed not to be a batch.
-        """
-        self.preprocess_data(data, **kwargs)
-        if self.timer:
+        # processing
+        if 'duration' in result:
             start = time.time()
+
         if data.is_batch:
-            self._process_batch(data, **kwargs)
+            internal_result = self._process(*internal_arguments)
+            # self._process_batch(data, **kwargs)
         else:
-            self._process_data(data, **kwargs)
-        if self.timer:
+            internal_result = self._process(*internal_arguments)
+            # self._process_data(data, **kwargs)
+
+        if 'duration' in result:
             end = time.time()
-            self.set_data_attribute(data, 'duration', end - start)
-        self._postprocess_data(data, **kwargs)
+            data.add_attribute('duration', end - start)
+
+        # postprocessing
+        if internal and result is None:
+            return internal_result
+        self._add_attributes(data, self.internal_result,
+                             internal_result, simplify=True)
+        return self._do_postprocess(data, result)
 
     def _process_data(self, data: Data, **kwargs) -> None:
         """Adapt the data.
@@ -224,6 +167,100 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         for data in batch:
             self._process_data(data)
 
+    def _do_preprocess(self, *args, internal: bool = False,
+                       batch: bool = False, **kwargs) -> Data:
+        if internal:
+            data = Data(batch=batch)
+            self._add_attributes(data, self.internal_arguments, args)
+        else:
+            data = self._preprocess(*args, batch=batch, **kwargs)
+        return data
+
+    def _do_postprocess(self, data: Data, result: Tuple[str]) -> Data:
+
+        for name in result:
+            self._postprocess(data, name)
+
+        return self._get_attributes(data, result, simplify=True)
+
+    @staticmethod
+    def _get_attributes(data: Data, what: Tuple[str],
+                        simplify: bool = False) -> Any:
+        if simplify:
+            if len(what) == 0:
+                return None
+            if len(what) == 1:
+                return getattr(data, what[0])
+        return tuple(getattr(data, arg) for arg in what)
+
+    @staticmethod
+    def _add_attributes(data: Data, what: Tuple[str], args,
+                        simplify: bool = False) -> None:
+        if simplify and len(what) == 0:
+            pass
+        elif simplify and len(what) == 1:
+            data.add_attribute(what[0], args)
+        else:
+            for name, value in zip(what, args):
+                data.add_attribute(name, value)
+
+    #
+    # Private interface (to be implemented by subclasses):
+    #
+
+    def _preprocess(self, *arg, batch: bool = False, **kwargs) -> Data:
+        data = Data(batch=batch)
+        if self.timer:
+            self.add_data_attribute(data, 'start', time.time())
+        return data
+
+    def _process(self, *args, **kwargs) -> Any:
+        raise NotImplementedError()
+
+    def _postprocess(self, data: Data, name: str) -> None:
+        if not hasattr(data, name):
+            raise ValueError(f"Unknown property '{name}' for tool {self}")
+
+    #
+    # data processing
+    #
+    
+    def apply(self, data: Data, *args, result: Union[str, Tuple[str]] = None,
+              **kwargs) -> None:
+        """Apply the tool to the given data object. Results are stored
+        as data attributes.
+        """
+        # FIXME[todo]: batch data ...
+        if result is None:
+            result = self.result
+        values = self(data, *args, result=result, **kwargs)
+        if isinstance(result, str):
+            self.add_data_attribute(data, result, values)
+        elif result is not None:
+            for name, value in zip(result, values):
+                self.add_data_attribute(data, name, value)
+
+    def add_data_attribute(self, data: Data, name: str, value: Any = None,
+                           batch: bool = True) -> None:
+        """Add a tool specific attribute to a data object.
+        """
+        data.add_attribute(self.key + '_' + name, value, batch=batch)
+
+    def set_data_attribute(self, data: Data, name: str, value: Any,
+                           index: int = None) -> None:
+        """Set a tool specific attribute in a data object.
+        """
+        setattr(data if index is None else data[index],
+                self.key + '_' + name, value)
+
+    def get_data_attribute(self, data: Data, name: str, default: Any = None,
+                           index: int = None) -> Any:
+        """Get a tool specific attribute from a data object.
+        """
+        value = getattr(data if index is None else data[index],
+                        self.key + '_' + name, None)
+        return default if value is None else value
+
     def duration(self, data) -> float:
         """Provide the duration (in seconds) the tool needed for processing
         the given data. This property is only available after processing,
@@ -231,66 +268,85 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         """
         return self.get_data_attribute(data, 'duration')
 
-    def _postprocess_data(self, data: Data, **kwargs) -> None:
-        """Postprocess the data. This may result in adding tool specific
-        attributes to the data object.  It is assumed that the data
-        object was successfully processed by :py:meth:`_process_data`
-        before this method is called.
+    #
+    # FIXME[old]:
+    #
 
-        Arguments
-        ---------
-        data: Data
-            The data object to be postprocessd.
+    def preprocess(self, data: Datalike, **kwargs) -> Any:
+        """Perform preprocessing necessary to obtain data suitable for
+        for processing with this tool.
         """
-        # to be extended by subclasses
+        data = self._preprocess(*args, batch=batch, **kwargs)
+
+        if self.internal_arguments is None:
+            return ()
+        if isinstance(self.internal_arguments, str):
+            return (getattr(data, self.internal_arguments),)
+
+        return tuple(getattr(data, arg) for arg in self.internal_arguments)
 
 
 class IterativeTool(Tool):
     """An iterative tool performs its operation as an iterative process.
     """
-
+    
     #
     # public interface
     #
 
-    def __call__(self, data: Datalike, **kwargs) -> Datalike:
+    def _process(self, *arguments, **kwargs) -> Datalike:
         """Apply the tool to the given data. The input data will
         not be modified. The tool specific result will be returned.
         """
-        internal = self._preprocess(data)
-        arguments = self._preprocess_arguments(**kwargs)
-        for internal in self._steps(internal, **arguments):
+        result = None
+        for result in self._steps(*arguments, **kwargs):
             pass
-        return self._postprocess(internal, data)
+        return result
 
-    def step(self, data: Datalike, **kwargs) -> Datalike:
+    def step(self, *args, **kwargs) -> Datalike:
         """Perform a single step of the iterative process.
         """
-        internal = self._preprocess(data)
-        arguments = self._preprocess_arguments(**kwargs)
-        return self._postprocess(self._step(internal, **arguments), data)
+        data = self._do_preprocess(*args, *kwargs)
+        internal_arguments = self._get_attributes(self.internal_arguments)
+        internal_result = self._step(*internal_arguments)
+        self._add_attributes(self.internal_result, internal_result)
+        return self._do_postprocess(data, result)
 
     def steps(self, data: Datalike, **kwargs) -> Iterator[Datalike]:
         """Iterate the steps of the iterative process, providing
         an intermediate result at every step.
         """
-        internal = self.preprocess(data)
-        arguments = self._preprocess_arguments(**kwargs)
-        for internal in self._steps(internal, **arguments):
-            yield self._postprocess(internal, data)
+        data = self._do_preprocess(*args, *kwargs)
+        internal_arguments = self._get_attributes(self.internal_arguments)
+        for internal_result in self._steps(internal, **arguments):
+            self._add_attributes(self.internal_result, internal_result)
+            yield self._do_postprocess(data, result)
 
     #
     # private (internal) methods
     #
 
-    def _step(self, data: Any, **kwargs) -> Any:
+    def _step(self, *arguments) -> Any:
         # to be implemented by subclasses
         raise NotImplementedError()
 
-    def _steps(self, data: Any, **kwargs) -> Iterator[Any]:
-        while True:  # stop criterien (kwargs)
-            data = self._step(data, **kwargs)
+    def _steps(self, *arguments, steps: int = None,
+               stop: Event = None) -> Iterator[Any]:
+        data, arguments = (arguments[0:len(self.internal_result)],
+                           arguments[len(self.internal_result):])
+        while True:
+            data = self._step(*data, *arguments)
             yield data
+            if steps is not None:
+                steps -= 1
+                if steps < 0:
+                    break
+            if stop is not None:
+                if stop.isSet():
+                    break
+            if self._stop_all:
+                break
+            # FIXME[todo]: data specific stop criteria
 
     def process(self, data: Data, **kwargs) -> None:
         """Perform iterative processing on the data object.

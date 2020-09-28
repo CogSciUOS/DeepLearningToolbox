@@ -1,7 +1,7 @@
 """Abstract base class for detectors.
 """
 # standard imports
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Any
 import logging
 
 # third party imports
@@ -33,11 +33,14 @@ class Detector(Tool):
     will differ for specific subclasses (for example an ImageDetector
     typically returns a list of bounding boxes).
     """
-
+    
     #
     # Detector
     #
 
+    def _process(self, data, **kwargs) -> Any:
+        return self._detect(data, **kwargs)
+    
     # FIXME[todo]: working on batches (data.is_batch). Here arises the
     #   question what the result type should be for the functional API
     #   (A): a list/tuple or some iterator, or even another structure
@@ -156,7 +159,53 @@ class ImageDetector(Detector, ImageTool):
         super().__init__(**kwargs)
         self._size = size
 
-    def _preprocess(self, array: np.ndarray, **kwargs) -> np.ndarray:
+    #
+    # Implementation of the private API
+    #
+
+    result: Tuple[str] = ('detections', )
+    internal_arguments: Tuple[str] = ('_data', )
+    internal_result: Tuple[str] = ('_detections', )
+    
+    def _preprocess(self, image: Imagelike, **kwargs) -> Data:
+        data = super()._preprocess(image, **kwargs)
+        data.add_attribute('_data', data.scaled)
+        return data
+
+    def _postprocess(self, data: Data, name: str) -> None:
+        # FIXME[todo]: batch processing
+        if name == 'detections':
+            if hasattr(data, '_detections'):
+                detections = data._detections
+                if self._size is not None and hasattr(data, 'image'):
+                    size = data.image.shape
+                    resize_ratio = max(self._size[0]/size[0],
+                                       self._size[1]/size[1])
+                    detections.scale(resize_ratio)
+            else:
+                detections = None    
+            data.add_attribute('detections', detections)
+
+        elif name == 'mark':
+            if not hasattr(data, 'detections'):
+                self._postprocess('detections', values)
+            data.add_attribute(name, self.mark_image(data.image,
+                                                     data.detections))
+
+        elif name == 'extract':
+            if not hasattr(data, 'detections'):
+                self._postprocess('detections', values)
+            data.add_attribute(name, self.extract_from_image(data.image,
+                                                             data.detections))
+
+        else:
+            super()._postprocess(data, name)
+
+    #
+    # FIXME[old]:
+    #
+
+    def _preprocess_old(self, array: np.ndarray, **kwargs) -> np.ndarray:
         """Preprocess the image. This will resize the image to the
         target size of this tool, if such a size is set.
         """
@@ -225,7 +274,7 @@ class ImageDetector(Detector, ImageTool):
         The processed data object.
         """
         data = Image.as_data(image)
-        self.process(data, **kwargs)
+        self.apply(data, **kwargs)
         return data
 
     #
@@ -280,7 +329,7 @@ class ImageDetector(Detector, ImageTool):
         if detections is None:
             detections = self.detections(data)
         marked_image = self.mark_image(data.array, detections, copy=True)
-        self.add_data_attribute(data, 'marked', marked_image)
+        self.add_data_attribute(data, 'mark', marked_image)
 
     def marked_image(self, data) -> np.ndarray:
         """Get a version of the image with visually marked detections.
@@ -289,7 +338,7 @@ class ImageDetector(Detector, ImageTool):
         :py:meth:`mark_data`, or by provding the argument `mark=True`
         when calling :py:meth:`process`.
         """
-        return self.get_data_attribute(data, 'marked')
+        return self.get_data_attribute(data, 'mark')
 
     #
     # Extracting detections
@@ -349,7 +398,7 @@ class ImageDetector(Detector, ImageTool):
         if detections is None:
             detections = self.detections(data)
         extractions = self.extract_from_image(data, detections)
-        self.add_data_attribute(data, 'extractions', extractions)
+        self.add_data_attribute(data, 'extract', extractions)
 
     def extractions(self, data) -> List[np.ndarray]:
         """Get a list of image patches extracted from the original image
@@ -359,4 +408,4 @@ class ImageDetector(Detector, ImageTool):
         e.g., by calling the method :py:meth:`extract_data`, or by provding
         the argument `extract=True` when calling :py:meth:`process`.
         """
-        return self.get_data_attribute(data, 'extractions')
+        return self.get_data_attribute(data, 'extract')

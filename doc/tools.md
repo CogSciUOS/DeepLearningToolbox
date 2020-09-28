@@ -8,11 +8,41 @@ use cases.  Hence the `Tool` class provides three different interfaces.
 
 ### Functional API
 
+```python
+tool(datalike, arguments, result=(...))
+```
+
+### The internal API
+
+The flag `internal` signals, that `value` and `arguments` are given
+in an internal (preprocessed) format, ready to be passed to the internal
+implemenation of the tool.
+```python
+tool(value, arguments, internal=True)
+```
+
 
 ### Data API
 
+```python
+tool.apply(data, arguments, result=(...))
+```
 
-### The internal API
+The `Data` API is for example used by the `Worker`. An example
+can be found at the "Face Panel".
+
+
+## The result argument
+
+The result argument allows to specify what result should be returned.
+Each tool provides a list of potential results and the result argument
+can name the results the caller is interested in.
+* the result is returned as a singleton or a tuple according to the
+  specification in the result argument.
+* in case of `Data` processing, the results are stored as data atttributes
+* each tool has a default result value, which will be used if no result
+  argument is specified
+* the prefix `_` is used for internal values.
 
 
 ## Internal state
@@ -49,7 +79,7 @@ are three modes of a worker:
 * data: data is provided as a `Data` object, which is stored as a
 `data` attribute of the worker.
 
-Furthermore, a worker provides means to queue data to process them
+Furthermore, a worker provides means to queue data to work on them
 sequentially.
 
 
@@ -86,14 +116,42 @@ these preprocessing operations should be applied:
 
 A tool implements pre- and postprocessing by specific (private)
 methods:
-* `_preprocess`: maps data to the internal format that can be passed
-  to `_process`.
-* `_postpropcess`: maps the result from the internal format to the
-  input format. This method should also be supplied with the original
-  input data so that it is able to derive the desired format.
-  
+* `_preprocess`: creates a `Data` object and fills it with values that
+  may be used for processing and postprocessing.
+* `_process`: apply the tool to the preprocessed data.
+* `_postprocess`: maps the result from the internal format to the
+  output format. This method fills gets the same `Data` object,
+  to which the desired values should be added. The object also
+  provides additional information that can be used for doing
+  the postprocessing.
 
 
+```python
+
+class MyTool(Tool):
+
+    result: Tuple[str] = ('my_result', 'duration')
+    internal_arguments: Tuple[str] = ('_preprocessed', )
+    internal_result: Tuple[str] = ('_result, )
+
+    def _preprocess(data: Datalike, arg1: Any = None, **kwargs) -> Data:
+        # return preprocessed data and arguments that can
+        # be passed to process()
+        data = super()._preprocess(*args, **kwargs)
+        data.add_attribute('mean', data.data.mean())
+        return data
+        
+    def _process(self, preprocessed) -> Any:
+        # the actual processing
+        # return processed data in internal format
+        return preprocessed**2
+        
+    def _postprocess(data: Data, name: str) -> None:
+        if name == 'my_result':
+            data.add_attribute(name, data.mean)
+        else:
+            super()._postprocess(data, name)
+```
 
 # Iterative Tools
 

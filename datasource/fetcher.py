@@ -64,9 +64,10 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
     def __init__(self, datasource: Datasource = None,
                  frames_per_seccond: float = None, **kwargs) -> None:
-        super().__init__(**kwargs)
         self._data = None
-        self._datasource = datasource
+        self._datasource = None
+        super().__init__(**kwargs)
+        self.datasource = datasource
 
         #
         # Loop specific variables
@@ -94,7 +95,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         self._datasource = datasource
         if datasource is not None:
             interests = Datasource.Change('busy_changed', 'state_changed')
-            self.observe(datasource, interests)
+            self.observe(datasource, interests, notify=self.datasource_changed)
         self._data = None
         self.change('data_changed', 'datasource_changed')
         if self.ready:

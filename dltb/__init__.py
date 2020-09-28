@@ -1,5 +1,6 @@
 """Central initialization file of the Deep Learning ToolBox (dltb).
 """
+import os
 
 # The config module is the central interface for configuring the
 # Deep Learning ToolBox. It is imported as one of the first modules,
@@ -15,5 +16,5 @@ from . import thirdparty
 
 # FIXME[hack]: used by models/styltransfer
 directories = {
-    'data': '/space/home/ulf/data'
+    'data': os.path.join(os.environ.get('WORK', '.'), 'dltb-data')
 }

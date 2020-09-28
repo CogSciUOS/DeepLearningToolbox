@@ -11,7 +11,8 @@ import numpy as np
 
 # toolbox imports
 from .tool import Tool
-from ..base.image import Imagelike
+from ..base.data import Data
+from ..base.image import Image, Imagelike
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class ImageTool(Tool):
             min_scale_y = max(self._min_size[1] / size[1], 1.)
             min_scale = max(min_scale_x, min_scale_y)
         else:
-            max_scale = 0.0
+            min_scale = 0.0
 
         if self._max_size is not None:
             max_scale_x = min(self._max_size[0] / size[0], 1.)
@@ -131,3 +132,10 @@ class ImageTool(Tool):
             return padded_image
 
         return scaled_image
+
+    def _preprocess(self, image: Imagelike, *args, **kwargs) -> Data:
+        array = Image.as_array(image)
+        data = super()._preprocess(self, array, *args, **kwargs)
+        data.add_attribute('image', array)
+        data.add_attribute('scaled', self.fit_image(array))
+        return data

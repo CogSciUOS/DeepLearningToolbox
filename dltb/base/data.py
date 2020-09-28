@@ -36,7 +36,8 @@ class Data(Observable, method='data_changed'):
     TYPE_FACE = 2 | TYPE_IMAGE
 
     def __init__(self, array: np.ndarray = None,
-                 datasource=None, batch: int = None) -> None:
+                 datasource=None, batch: int = None, **kwargs) -> None:
+        super().__init__(**kwargs)
         super().__setattr__('_attributes', {})
         if batch is not None:
             super().__setattr__('_batch', batch)
@@ -96,6 +97,12 @@ class Data(Observable, method='data_changed'):
             yield self[i]
 
     def __setattr__(self, attr: str, val: Any) -> None:
+        """
+        """
+        if attr[0] == '_':
+            super().__setattr__(attr, val)
+            return
+
         if attr not in self._attributes:
             raise AttributeError(f"Data has no attribute '{attr}'.")
         if self._attributes[attr]:  # batch attribute
@@ -198,7 +205,18 @@ class Data(Observable, method='data_changed'):
         """
         print(f"Data object ({id(self)})")
         for name, is_batch in self._attributes.items():
-            print(f" - {name}[{is_batch}]: {type(getattr(self, name, None))}")
+            value = getattr(self, name, None)
+            if value is None:
+                info = 'None'
+            elif isinstance(value, np.ndarray):
+                info = f"ndarray{value.shape} [{value.dtype}]"
+            elif isinstance(value, int):
+                info = f"{value} (int)"
+            elif isinstance(value, str):
+                info = f"'{value}' (str)"
+            else:
+                info = f"{type(value)}"
+            print(f" - {name}[{is_batch}]: {info}")
 
 
 class BatchDataItem:

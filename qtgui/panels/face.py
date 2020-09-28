@@ -24,7 +24,7 @@ from dltb.base.data import Data
 from dltb.base.image import Image, Imagelike
 from dltb.tool import Tool
 from dltb.tool.face.detector import Detector as FaceDetector
-from dltb.tool.processor import Processor
+from dltb.tool.worker import Worker
 
 # GUI imports
 from ..utils import QObserver, QBusyWidget, QPrepareButton, protect
@@ -39,10 +39,10 @@ LOG = logging.getLogger(__name__)
 
 class QDetectorWidget(QGroupBox, QObserver,
         qattributes={Toolbox: False}, qobservables={
-        Processor: {'tool_changed', 'process_finished', 'busy_changed'}}):
+        Worker: {'tool_changed', 'work_finished', 'busy_changed'}}):
     """A detector widget displays the output of a Detector.
 
-    _processor: Processor
+    _worker: Worker
     _view: QImageView
     _label: QLabel
     _busy: QBusyWidget
@@ -63,7 +63,7 @@ class QDetectorWidget(QGroupBox, QObserver,
         self._trueMetadata = None
         self._initUI()
         self._layoutUI()
-        self.setProcessor(Processor(detector))
+        self.setWorker(Worker(detector))
         self.toggled.connect(self.onToggled)
         LOG.info("New QDetectorWidget[%s] initialized: detector=%s",
                  type(self), detector)
@@ -100,13 +100,13 @@ class QDetectorWidget(QGroupBox, QObserver,
         self.setLayout(layout)
         self.setCheckable(True)
 
-    def setProcessor(self, processor: Processor) -> None:
-        """Set the processor observed by this :py:class:`QDetectorWidget`.
+    def setWorker(self, worker: Worker) -> None:
+        """Set the worker observed by this :py:class:`QDetectorWidget`.
         The widget is initialized with its own private
-        :py:class:`Processor`, so there is usually no reason to call
+        :py:class:`Worker`, so there is usually no reason to call
         this method directly.
         """
-        self._busy.setBusyObservable(processor)
+        self._busy.setBusyObservable(worker)
 
     def faceDetector(self) -> FaceDetector:
         """Get the detector currently applied by this
@@ -117,41 +117,43 @@ class QDetectorWidget(QGroupBox, QObserver,
         detector: FaceDetector
             The face detector on `None` if no detector is set.
         """
-        return self._processor.tool
+        return self._worker.tool
 
     def setFaceDetector(self, detector: FaceDetector) -> None:
         """Set a new :py:class:`FaceDetector`.
         The face detector will inform us whenever new faces where
         detected.
         """
+
         if detector is self.faceDetector():
             return  # Nothing to do
 
         # we want to do timing
-        detector.timer = True
+        if detector is not None:
+            detector.timer = True
 
-        # setting the tool in the processor will indirectly trigger update()
+        # setting the tool in the worker will indirectly trigger update()
         # in the main event loop thread.
-        self._processor.tool = detector
+        self._worker.tool = detector
         self._prepareButton.setPreparable(detector)
         self._toolSelector.setCurrentTool(detector)
 
         if detector is not None and not detector.busy:
             detector.prepare()
 
-    def processor_changed(self, processor: Processor,
-                          change: Processor.Change) -> None:
+    def worker_changed(self, worker: Worker,
+                       change: Worker.Change) -> None:
         # pylint: disable=invalid-name
         """React to changes in the observed :py:class:`FaceDetector`.
         """
-        LOG.debug("QDetectorWidget.processor_changed(%s, %s)",
-                  processor.tool, change)
+        LOG.debug("QDetectorWidget.worker_changed(%s, %s)",
+                  worker.tool, change)
         if change.tool_changed or change.busy_changed:
-            detector = processor.tool
+            detector = worker.tool
             self.setTitle("None" if detector is None else
                           (type(detector).__name__ +
-                           (' (busy)' if processor.busy else '')))
-        if change.tool_changed or change.process_finished:
+                           (' (busy)' if worker.busy else '')))
+        if change.tool_changed or change.work_finished:
             self.update()
 
     def setData(self, data: Data) -> None:
@@ -162,24 +164,24 @@ class QDetectorWidget(QGroupBox, QObserver,
         self.setImage(None if not data else data.array, data)
 
     def setImage(self, image: np.ndarray, data: Data = None):
-        """Set the image to be processed by the underlying detector.
+        """Set the image to be worked on by the underlying detector.
         """
         self._trueMetadata = data
-        if self._processor.ready:
-            self._processor.process(data, extract=True)
+        if self._worker.ready:
+            self._worker.work(data, extract=True)
         self.update()
 
     def update(self):
         """Update the display of this :py:class:`QDetectorWidget`.
         """
-        if self._processor.tool is None or not self.isChecked():
+        if self._worker.tool is None or not self.isChecked():
             self._view.setData(None)
             self._batchView.setImages(None)
             self._label.setText("Off.")
             return
 
-        detector = self._processor.tool
-        data = self._processor.data
+        detector = self._worker.tool
+        data = self._worker.data
         detections = detector.detections(data)
         LOG.debug("QDetectorWidget.update(): data = %s", data)
         LOG.debug("QDetectorWidget.update(): detections = %s", detections)
