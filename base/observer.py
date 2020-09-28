@@ -648,3 +648,9 @@ class Observable(object):
                   f"{observation.notify} with ({observation.interests})")
 
 
+class Changeable(Observable):
+    # observers can register to a specific set of chhanges (strings)
+    #
+    pass  # FIXME[todo]: spell out the Changeable concept
+    # there may be closed (fixed set, e.g. specific actions) and open
+    # (open set, e.g., data attributes, or register entries) changeables

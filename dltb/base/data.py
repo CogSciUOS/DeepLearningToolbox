@@ -2,17 +2,26 @@
 """
 
 # standard imports
-from typing import Any, Iterable
+from typing import Any, Union, Iterable
 from collections.abc import Sized
 
 # third party imports
 import numpy as np
 
 # toolbox imports
-from base import RegisterClass
+from base import RegisterClass, Observable
 
 
-class Data:
+# Datalike is intended to be everything that can be used as data.
+#
+# np.ndarray:
+#    The raw data array.
+# str:
+#    A URL.
+Imagelike = Union[np.ndarray, str]
+
+
+class Data(Observable, method='data_changed'):
     # pylint: disable=no-member
     # _attributes, data
     """A piece of data, either single datum or a batch of data.

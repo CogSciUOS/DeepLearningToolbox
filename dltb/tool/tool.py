@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Any, Union
+from typing import Any, Union, Iterator
 import time
 import logging
 
@@ -53,8 +53,8 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         to the :py:class:`Data` object during processing.
     """
 
-    def __init__(self, timer: bool = False, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, timer: bool = False, **kwargs):
+        super().__init__(**kwargs)
         self.timer = timer
         LOG.info("New tool: %s (%s)", self.key, type(self).__name__)
 
@@ -243,3 +243,64 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
             The data object to be postprocessd.
         """
         # to be extended by subclasses
+
+
+class IterativeTool(Tool):
+    """An iterative tool performs its operation as an iterative process.
+    """
+
+    #
+    # public interface
+    #
+
+    def __call__(self, data: Datalike, **kwargs) -> Datalike:
+        """Apply the tool to the given data. The input data will
+        not be modified. The tool specific result will be returned.
+        """
+        internal = self._preprocess(data)
+        arguments = self._preprocess_arguments(**kwargs)
+        for internal in self._steps(internal, **arguments):
+            pass
+        return self._postprocess(internal, data)
+
+    def step(self, data: Datalike, **kwargs) -> Datalike:
+        """Perform a single step of the iterative process.
+        """
+        internal = self._preprocess(data)
+        arguments = self._preprocess_arguments(**kwargs)
+        return self._postprocess(self._step(internal, **arguments), data)
+
+    def steps(self, data: Datalike, **kwargs) -> Iterator[Datalike]:
+        """Iterate the steps of the iterative process, providing
+        an intermediate result at every step.
+        """
+        internal = self.preprocess(data)
+        arguments = self._preprocess_arguments(**kwargs)
+        for internal in self._steps(internal, **arguments):
+            yield self._postprocess(internal, data)
+
+    #
+    # private (internal) methods
+    #
+
+    def _step(self, data: Any, **kwargs) -> Any:
+        # to be implemented by subclasses
+        raise NotImplementedError()
+
+    def _steps(self, data: Any, **kwargs) -> Iterator[Any]:
+        while True:  # stop criterien (kwargs)
+            data = self._step(data, **kwargs)
+            yield data
+
+    def process(self, data: Data, **kwargs) -> None:
+        """Perform iterative processing on the data object.
+        After each step, the relevant attributes of the data object
+        are updated (and interested observers are informed.
+
+        """
+        self.preprocess_data(data)
+        preprocessed = self.get_data_attribute(data, 'preprocessed')
+        arguments = self._preprocess_arguments(**kwargs)
+        # FIXME[concept]: there should be a way to interrupt the process
+        for intermediate in self._steps(preprocessed, **arguments):
+            self._postprocess_data(data, intermediate)

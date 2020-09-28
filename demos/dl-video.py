@@ -40,16 +40,12 @@ def main():
     """
 
     parser = ArgumentParser(description='Deep learning based face processing')
-    parser.add_argument('images', metavar='IMAGE', type=str, nargs='+',
+    parser.add_argument('video', metavar='VIDEO', type=str, nargs='*',
                         help='an image to use')
     parser.add_argument('--detect', action='store_true', default=True,
                         help='run face detection')
-    parser.add_argument('--loop', action='store_true', default=True,
-                        help='run in loop mode')
-    parser.add_argument('--webcam', action='store_true', default=False,
-                        help='feed from the webcam')
-    parser.add_argument('--video', action='store_true', default=False,
-                        help='feed from a video')
+    parser.add_argument('--output', type=str,
+                        help='write output in the given video file')
     args = parser.parse_args()
 
     if args.detect:

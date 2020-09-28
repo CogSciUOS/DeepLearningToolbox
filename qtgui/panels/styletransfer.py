@@ -6,6 +6,7 @@ Email: krumnack@uni-osnabrueck.de
 
 # Generic imports
 import logging
+import os
 
 # third party imports
 import imageio
@@ -15,15 +16,66 @@ import tensorflow as tf
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton
 
 # toolbox imports
-from models.styletransfer import StyletransferData, StyletransferTool
+import dltb
+from models.styletransfer import StyletransferTool
 
 # GUI imports
 from .panel import Panel
 from ..utils import protect
-from ..widgets import QImageView
+from ..widgets.image import QImageView
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+class StyletransferData:
+    """Provide data for style transfer.
+
+    Attributes
+    ----------
+
+    _content: dict
+        mapping of content names to filenames
+
+    _styles: dict
+        mapping of style names to filenames
+    """
+
+    venice_url = \
+        ('https://facts.uk/wp-content/uploads/2020/02/'
+         'facts-about-Venice-Italy-1920x1080.jpg')
+
+    starry_night_url = \
+        ('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/'
+         'Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/'
+         '1920px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg')
+
+    def __init__(self) -> None:
+        self._styletransfer_dir = \
+            os.path.join(dltb.directories['data'], 'styletransfer')
+        self._content = {}
+        self._content_dir = os.path.join(self._styletransfer_dir, 'content')
+        self._styles = {}
+        self._style_dir = os.path.join(self._styletransfer_dir, 'style')
+
+    def add_content_image(self, name: str, url) -> None:
+        suffix = os.path.splitext(url)[1]
+        filename = os.path.join(self._content_dir, name) + suffix
+        self._content[name] = tf.keras.utils.get_file(filename, url)
+
+    def add_style_image(self, name: str, url) -> None:
+        suffix = os.path.splitext(url)[1]
+        filename = os.path.join(self._style_dir, name) + suffix
+        self._styles[name] = tf.keras.utils.get_file(filename, url)
+
+    def prepare(self):
+        os.makedirs(self._style_dir, exist_ok=True)
+        self.add_style_image('starry_night', self.starry_night_url)
+        print(f"starry_night: {self._styles['starry_night']}")
+
+        os.makedirs(self._content_dir, exist_ok=True)
+        self.add_content_image('venice', self.venice_url)
+        print(f"venice: {self._content['venice']}")
 
 
 class StyletransferPanel(Panel):
@@ -40,7 +92,7 @@ class StyletransferPanel(Panel):
         self._contentView = QImageView()
         self._styleView = QImageView()
         self._imageView = QImageView()
-        self._button = QPushButton("Start/Stop")
+        self._button = QPushButton("Initialize")
         self._button.clicked.connect(self.onButtonClicked)
 
     def _initLayout(self) -> None:
@@ -61,6 +113,9 @@ class StyletransferPanel(Panel):
             self._imageView.observe(self._engine)
             self._contentView.setImage(self._engine.content)
             self._styleView.setImage(self._engine.style)
+            self._button.setText("Start/Stop")
+        else:
+            self._button.setText("Initialize")
 
     @protect
     def onButtonClicked(self, checked: bool) -> None:

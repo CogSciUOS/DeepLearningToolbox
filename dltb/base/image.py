@@ -42,7 +42,7 @@ from .. import thirdparty
 Imagelike = Union[np.ndarray, str]
 
 
-class Image:
+class Image(Data):
     """A collection of image related functions.
     """
 
@@ -86,6 +86,12 @@ class Image:
         if isinstance(image, str):
             data.add_attribute('url', image)
         return data
+
+    def __init__(self, image: Imagelike = None, array: np.ndarray = None,
+                 **kwargs) -> None:
+        if image is not None:
+            array = self.as_array(image)
+        super().__init__(array=array, **kwargs)
 
 
 class ImageIO:

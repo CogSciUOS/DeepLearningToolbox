@@ -11,3 +11,9 @@ from .config import config
 # This should be done before those libraries are imported for the
 # first time.
 from . import thirdparty
+
+
+# FIXME[hack]: used by models/styltransfer
+directories = {
+    'data': '/space/home/ulf/data'
+}
