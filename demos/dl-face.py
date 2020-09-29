@@ -12,7 +12,7 @@ from argparse import ArgumentParser
 import os
 
 # toolbox imports
-from datasource import DataDirectory, Datafetcher, Imagesource
+from datasource import ImageDirectory
 from dltb.base.data import Data
 from dltb.tool import Tool
 from dltb.tool.detector import ImageDetector
@@ -21,6 +21,8 @@ from dltb.util.image import imshow
 
 def output_detections(detector: ImageDetector, data: Data,
                       extract: bool = False) -> None:
+    """Output detections in textual and graphical form.
+    """
     detections = detector.detections(data)
     marked_image = detector.marked_image(data)
 
@@ -62,15 +64,13 @@ def main():
         print(f"Detector: {detector} [prepared={detector.prepared}]")
 
         for url in args.images:
-            if os.path.isdir(url):               
-                class MyDatasource(DataDirectory, Imagesource): pass
-                datasource = MyDatasource('images')
+            if os.path.isdir(url):
+                datasource = ImageDirectory('images')
                 datasource.prepare()
-                datafetcher = Datafetcher(datasource)
                 for data in datasource:
                     print(detector(data))
-                    #detector.process(data, mark=True)
-                    #output_detections(detector, data)
+                    # detector.process(data, mark=True)
+                    # output_detections(detector, data)
             else:
                 print(f"Applying detector to {url}")
                 # print(detector(url))
@@ -81,6 +81,7 @@ def main():
 
     else:
         print("No operation specified.")
+
 
 if __name__ == "__main__":
     main()

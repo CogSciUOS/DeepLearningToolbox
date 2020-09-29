@@ -13,6 +13,7 @@ import numpy as np
 from .tool import Tool
 from ..base.data import Data
 from ..base.image import Image, Imagelike
+from ..util.image import imscale
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ LOG = logging.getLogger(__name__)
 # FIXME[design]: there is also a class dltb.base.image.ImageTool
 # -> it would make sense to combine these classes
 class ImageTool(Tool):
+    # pylint: disable=abstract-method
     """Abstract base class for tools that operate on images.
     Several convenience methods are provided by this class.
     """
@@ -90,7 +92,7 @@ class ImageTool(Tool):
         if min_scale <= 1. <= max_scale:
             # The image fits into the desired size
             return image
-        
+
         if min_scale <= max_scale:
             # Choose the scale closest to 1.
             scale = max_scale if max_scale < 1. else min_scale
@@ -119,17 +121,17 @@ class ImageTool(Tool):
             scale_x = min_scale_x if min_scale_x < 1. else max_scale_x
             scale_y = min_scale_y if min_scale_y < 1. else max_scale_y
 
-        scaled_image = imscale(image, scale_x=scale_x, scale_y=scale_y)
+        scaled_image = imscale(image, scale=(scale_x, scale_y))
 
         if self._resize_policy == 'pad':
             # FIXME[todo]: do padding
             padded_image = scaled_image
             return padded_image
-        
+
         if self._resize_policy == 'pad':
             # FIXME[todo]: do cropping
             cropped_image = scaled_image
-            return padded_image
+            return cropped_image
 
         return scaled_image
 
@@ -137,5 +139,6 @@ class ImageTool(Tool):
         array = Image.as_array(image)
         data = super()._preprocess(self, array, *args, **kwargs)
         data.add_attribute('image', array)
-        data.add_attribute('scaled', self.fit_image(array))
+        if self._min_size is not None or self._max_size is not None:
+            data.add_attribute('scaled', self.fit_image(array))
         return data

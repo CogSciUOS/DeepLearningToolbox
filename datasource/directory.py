@@ -12,6 +12,7 @@ import random
 # toolbox imports
 from dltb.base.data import Data, ClassScheme
 from .files import DataFiles
+from .datasource import Imagesource
 
 
 class DataDirectory(DataFiles):
@@ -154,3 +155,8 @@ class DataDirectory(DataFiles):
         subdir = random.choice(self._subdirs)
         name = random.choice(os.listdir(os.path.join(self.directory, subdir)))
         self._get_data_from_file(data, os.path.join(subdir, name))
+
+
+class ImageDirectory(DataDirectory, Imagesource):
+    """Images read from a directory.
+    """

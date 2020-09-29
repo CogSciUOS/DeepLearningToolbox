@@ -21,7 +21,7 @@ from base import RegisterClass, Observable
 Imagelike = Union[np.ndarray, str]
 
 
-class Data(Observable, method='data_changed'):
+class Data(Observable, method='data_changed', changes={'data_changed'}):
     # pylint: disable=no-member
     # _attributes, data
     """A piece of data, either single datum or a batch of data.
@@ -114,6 +114,7 @@ class Data(Observable, method='data_changed'):
                                  f"to batch attribute '{attr}' "
                                  f"of length {len(self)}")
         super().__setattr__(attr, val)
+        self.notify_observers(self.Change('data_changed'), attribute=attr)
 
     @property
     def is_batch(self) -> bool:

@@ -16,7 +16,8 @@ LOG = logging.getLogger(__name__)
 
 
 class Worker(BusyObservable, method='worker_changed',
-                changes={'tool_changed', 'data_changed', 'work_finished'}):
+             changes={'tool_changed', 'data_changed',
+                      'work_step', 'work_finished'}):
     """A worker can be used to work on data using a :py:class:`Tool`.
     The worker will hold a data object to which the tool is
     applied. The results are stored as new attributes of that data
@@ -34,6 +35,13 @@ class Worker(BusyObservable, method='worker_changed',
 
     tool_changed:
         The :py:class:`Tool` to be used for working was changed.
+
+    work_step:
+        A work step was done. This will only happen, if the tool
+        is an :py:class`IterativeTool` and that `stepwise=True`
+        argument has been given. More fine grained tracking
+        of the work process can be obtained by observing the
+        :py:class:`Data` object itself.
 
     work_finished:
         The work was finished. The data object will now contain
@@ -113,7 +121,7 @@ class Worker(BusyObservable, method='worker_changed',
             self._work(**kwargs)
 
     @busy("working")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
-    def _work(self, **kwargs):
+    def _work(self, stepwise: bool = True, **kwargs):
         """The implementation of the work loop. This method
         is assumed to run in a background thread. It will
         check the property `_next_data` for fresh data and
@@ -135,7 +143,13 @@ class Worker(BusyObservable, method='worker_changed',
             self.change(data_changed=True)
             with self.failure_manager(catch=True):
                 result = self.tool.result + ('duration', )
-                self.tool.apply(data, result=result, **kwargs)
+                if stepwise:
+                    for values in self.tool.steps(data, result=result,
+                                                  **kwargs):
+                        self.tool.add_data_attributes(data, result, values)
+                        self.change(work_step=True)
+                else:
+                    self.tool.apply(data, result=result, **kwargs)
                 self.change(work_finished=True)
             if self._next_data is data:
                 self._next_data = None

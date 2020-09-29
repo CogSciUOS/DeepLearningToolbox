@@ -24,7 +24,7 @@ def imread(filename: str, **kwargs) -> np.ndarray:
 
 
 def imwrite(filename: str, image: np.ndarray, **kwargs) -> None:
-    """
+    """Write an image to given file.
     """
     global _writer
     if _writer is None:
@@ -34,7 +34,7 @@ def imwrite(filename: str, image: np.ndarray, **kwargs) -> None:
 
 
 def imshow(image: np.ndarray, **kwargs) -> None:
-    """
+    """Show the given image.
     """
     global _display
     if _display is None:
@@ -42,7 +42,8 @@ def imshow(image: np.ndarray, **kwargs) -> None:
     _display.show(image, **kwargs)
 
 
-def imresize(image: np.ndarray, size: Tuple[int, int], **kwargs) -> np.ndarray:
+def imresize(image: np.ndarray, size: Tuple[int, int],
+             **kwargs) -> np.ndarray:
     """Resize the given image. The result will be a new image
     of the specified size.
 
@@ -50,11 +51,23 @@ def imresize(image: np.ndarray, size: Tuple[int, int], **kwargs) -> np.ndarray:
     global _resizer
     if _resizer is None:
         _resizer = ImageResizer()
-    return _resizer.resize(image, size, **kwargs)
+    return _resizer.scale(image, size, **kwargs)
+
+
+def imscale(image: np.ndarray, scale: Union[float, Tuple[float, float]],
+            **kwargs) -> np.ndarray:
+    """Scale the given image. The result will be a new image
+    scaled by the specified scale.
+
+    """
+    global _resizer
+    if _resizer is None:
+        _resizer = ImageResizer()
+    return _resizer.scale(image, scale, **kwargs)
 
 
 def imimport(img: Union[np.ndarray, str], dtype=np.uint8,
-             size=None, none_size=None, **kwargs) -> np.ndarray:
+             size=None, none=None, **kwargs) -> np.ndarray:
     """Convert a given argument into an image, that is a numpy array.
 
     The import may be adapted by providing additional arguments. The
@@ -103,7 +116,7 @@ def imimport(img: Union[np.ndarray, str], dtype=np.uint8,
         return imread(img)
     if img is None:
         if size is None:
-            size = none_size
+            size = none
         if size is None:
             raise ValueError("No size was specified when importing None image")
         if none == 'random':
