@@ -3,7 +3,7 @@ classes mapping the toolbox API onto the opencv library.
 """
 
 # standard imports
-from typing import Union, Iterator
+from typing import Union, Iterator, Tuple, List
 import logging
 import threading
 
@@ -328,6 +328,31 @@ class Webcam(video.Webcam, VideoReader):
     _capture: cv2.VideoCapture
         A capture object
     """
+
+    _devices: Tuple = None
+    
+    @classmethod
+    def devices(cls, update: bool = False) -> List[int]:
+        """Obtain a list of available devices.
+        """
+        if cls._devices is not None and not update:
+            return list(cls._devices)
+
+        max_device = 10
+        devices = []
+        for index in range(max_device):
+            try:
+                print("A")
+                cap = cv2.VideoCapture(index)
+                print("B", cap)
+                if not cap.read()[0]:
+                    break
+                print("C", cap)
+                devices.append(index)
+            finally:
+                cap.release()
+        cls._devices = tuple(devices)
+        return devices
 
     def __init__(self, device: int = 0, **kwargs) -> None:
         """Constructor for this :py:class:`WebcamBackend`.

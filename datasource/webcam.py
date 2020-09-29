@@ -96,6 +96,8 @@ class DataWebcam(Imagesource, Loop, Snapshot):
         """Get metadata for some data.
         """
         data.add_attribute('timestamp', batch=True)
+        data.add_attribute('backend', f"{type(self._backend).__module__}."
+                           f"{type(self._backend).__name__}", batch=False)
         super()._get_meta(data, **kwargs)
 
     def _get_snapshot(self, data, snapshot: bool = True, **kwargs) -> None:

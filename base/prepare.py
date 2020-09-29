@@ -21,9 +21,32 @@ Thread. It may also fail if resources are not available.
 Classes that realize the idea of preparation should inherit from
 :py:class:`Preparable` and overwrite the relevant methods.
 """
-
+from typing import Any
 
 from .busy import BusyObservable, busy
+
+
+class Preparator:
+    """A class adding an aditional argument `prepare` to the class
+    instantiation process, indicating preparation on construction.
+
+    """
+    # FIXME[todo]: does not work yet - this may be done by
+    # creating a meta class, but creating to many metaclasses
+    # also reduces plugability
+
+    def __init__(self, *args, prepare: bool = False, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        if prepare:
+            self.prepare()
+
+    def __getattribute__(self, name: str) -> Any:
+        print(f"catched '{name}' for {type(self)}")
+        # FIXME[problem]: __init__ seems not to be looked up
+        # by __getattribute__().
+        if name == '__init__':
+            print(f"catched __init__ for {type(self)}")
+        return super().__getattribute__(name)
 
 
 # FIXME[todo]: make this an abstract class
@@ -49,7 +72,7 @@ class Preparable(BusyObservable, method='preparable_changed',
     :py:meth:`_prepared`.
 
     """
-
+    
     def __del__(self) -> None:
         """Before deleting an object make sure it is unprepared.
         Unpreparing frees all resources that may be aquired by
@@ -179,3 +202,4 @@ class Preparable(BusyObservable, method='preparable_changed',
         this method (combining their state `with super._preparable()`).
         """
         return True
+
