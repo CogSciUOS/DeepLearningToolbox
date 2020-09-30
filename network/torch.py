@@ -1,15 +1,31 @@
-from __future__ import absolute_import
-from typing import List
 
-from collections import OrderedDict
+# Some torch remarks:
+# * x.cpu() and x.cuda() is the old (pre 0.4) and now deprecated way
+#   for assigning computations to devices. The modern (now recommended)
+#   way is to say x.to('cpu') or x.to('cuda:0')
+#
+# Questions:
+# * what does torch.cuda.synchronize() do?
+
+# standard imports
+from __future__ import absolute_import  # FIXME[question]: what is this?
+from typing import Tuple
+import logging
+
 import importlib.util
+
+# third party imports
 import numpy as np
 
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+# toolbox imports
 from . import Network as BaseNetwork
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 # FIXME[todo]: check docstrings
@@ -20,9 +36,9 @@ from . import Network as BaseNetwork
 
 
 class Network(BaseNetwork):
-    """
-    A class implmeenting the network interface (BaseNetwork)
-    to access feed forward networks implemented in (py)Torch.
+    """A class implmenting the network interface (BaseNetwork) to access
+    feed forward networks implemented in (py)Torch.  This is
+    essentially a wrapper around a :py:class:`torch.nn.Module`.
 
     Some general remarks on (py)torch:
 
@@ -38,14 +54,44 @@ class Network(BaseNetwork):
       key by which they have been registered in the parent Module
       under the property _name. These names will also function
       as layer_id to identify individual layers from the outside.
+
+
+    Properties
+    ----------
+
+    torch_module: :py:class:`torch.nn.Module`
+
+    Arguments
+    ---------
+    cls: Union[type, str, Tuple[str, str]]
+        Either a sublcass of :py:class:`torch.nn.Module` or a str
+        containing a fully qualified class name (module + class) or
+        a pair consisting of the name of a python file (`.py`) and
+        a name of a class defined in that file.
     """
 
+    # _model: the underlying torch.nn.Module
     _model: nn.Module
+
+    # _input_shapes: a dictionary mapping layer names to input_shapes
     _input_shapes: dict = None
     _output_shapes: dict = None
     _hooks: dict = {}
 
-    def __init__(self, *args, **kwargs):
+    # _python_class: a sublcass of :py:class:`torch.nn.Module`
+    _python_class: type = None
+    # _torch_filename: name of the weights file (either .pth or .pth.tar)
+    _torch_filename: str = None
+
+    # _use_cude: use cuda if available
+    _use_cuda: bool = False
+
+    # _train_mode: run model in train mode (True) or eval mode (False)
+    _train_mode: bool = False
+
+    def __init__(self, *args, cuda: bool = True, train: bool = False,
+                 input_shape: Tuple[int, int] = None,
+                 **kwargs):
         """
         Load Torch model.
 
@@ -54,60 +100,73 @@ class Network(BaseNetwork):
         model_file
             Path to the .h5 model file.
         """
-
-        i = 0
-        data_loaded = False
+        super().__init__(**kwargs)
 
         #
         # Try to get a model:
         #
 
-        if len(args) < 1:
-            raise TypeError("TorchNetwork requires at least one argument")
+        if len(args) > 0:
 
-        if isinstance(args[i], nn.Module):
-            self._model = args[i]
-            i += 1
-        elif isinstance(args[i], str) and args[i].endswith(".pth.tar"):
-            self._model = torch.load(args[i])
-            data_loaded = True
-            i += 1
-        elif isinstance(args[i], str) and args[i].endswith(".py"):
-            spec = importlib.util.spec_from_file_location('torchnet', args[i])
-            net_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(net_module)
-            net_class_name = kwargs.get('network_class', 'Net')
-            net_class = getattr(net_module, net_class_name)
-            self._model = net_class()
-            i += 1
+            if isinstance(args[0], nn.Module):
+                self._model = args[0]
+            elif isinstance(args[0], str) and args[0].endswith(".pth.tar"):
+                self._torch_filename = args[0]
+            elif (isinstance(args[0], Tuple) and len(args[0] == 2) and
+                  args[0][0].endswith(".py")):
+                spec = importlib.util.spec_from_file_location('torchnet',
+                                                              args[0][0])
+                net_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(net_module)
+                net_class_name = kwargs.get('network_class', 'Net')
+                net_class = getattr(net_module, net_class_name)
+                self._python_class = net_class()
+            else:
+                raise ValueError("Invalid arguments for "
+                                 "constructing a TorchNetwork")
+
+        if cuda and not torch.cuda.is_available():
+            LOG.warning("torch CUDA is not available, "
+                        "resorting to GPU computation")
+            cuda = False
+        self._use_cuda = cuda
+        self._train_mode = train
+        self._input_shape = input_shape
+
+    def _prepare(self) -> None:
+
+        if self._model is None:
+            if not self._torch_filename:
+                raise ValueError("No filename provided for loading "
+                                 "torch model")
+
+            if self._torch_filename.endswith(".pth.tar"):
+                self._model = torch.load(self._torch_filename)
+            elif (self._torch_filename.endswith(".pth") and
+                  self._python_class is not None):
+                self._model = self._python_class()
+                self._model.load_state_dict(torch.load(self._torch_filename))
+            else:
+                raise ValueError("Invalid filene '{self._torch_filename}' "
+                                 "for loading torch model.")
+
+        # activate cuda (gpu support) if available
+        if self._use_cuda:
+            self._model.to('cuda')  # 'cuda:0'
+
+        # set train/eval mode
+        if self._train_mode:
+            self._model.train()
         else:
-            raise ValueError("Invalid arguments for "
-                             "constructing a TorchNetwork")
+            self._model.eval()
 
-        #
-        # Load model parameter if specified:
-        #
-
-        if i < len(args) and not data_loaded:
-            if isinstance(args[i], str) and args[i].endswith(".pth"):
-                self._model.load_state_dict(torch.load(args[i]))
-
-        # FIXME[todo]: set training/test state
-        # self._model.train()
-        # self._model.eval()
-
-        # FIXME[todo]: activate gpu support if available
-        self._use_cuda = torch.cuda.is_available() and kwargs.get('use_cuda',
-                                                                  True)
-        # if self._use_cuda:
-        #    self._model.cuda()
-
-        if 'input_shape' in kwargs:
-            self._compute_layer_shapes(kwargs['input_shape'])
+        # compute input shapes for all layers
+        if self._input_shape is not None:
+            self._compute_layer_shapes(self._input_shape)
 
     def _compute_layer_shapes(self, input_shape: tuple) -> None:
         """Compute the input and output shapes of all layers.
-        The shapes are determined by probagating some dummy input through
+        The shapes are determined by propagating some dummy input through
         the network.
 
         input_shape:
@@ -527,7 +586,7 @@ from PIL import Image
 from dltb.tool.classifier import ImageClassifier
 
 
-class DemoResnetNetwork(ImageClassifier, Classifier):
+class DemoResnetNetwork(ImageClassifier, Classifier, Network):
     """An experimental Torch Network based on ResNet.
 
     https://pytorch.org/hub/pytorch_vision_resnet/
@@ -535,11 +594,8 @@ class DemoResnetNetwork(ImageClassifier, Classifier):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(scheme='ImageNet', lookup='torch', **kwargs)
-        self._model = None
 
     def _prepare(self) -> None:
-        # FIXME[todo]: super()._prepare()
-        self._scheme.prepare()
 
         self._model = torch.hub.load('pytorch/vision:v0.6.0',
                                      'resnet18', pretrained=True)
@@ -552,10 +608,8 @@ class DemoResnetNetwork(ImageClassifier, Classifier):
         #                        'resnet101', pretrained=True)
         # model = torch.hub.load('pytorch/vision:v0.6.0',
         #                        'resnet152', pretrained=True)
-        self._model.eval()
-
-        if torch.cuda.is_available():
-            self._model.to('cuda')
+        self._scheme.prepare()
+        super()._prepare()
 
         self._preprocess_image = transforms.Compose([
             transforms.Resize(256),
@@ -581,6 +635,10 @@ class DemoResnetNetwork(ImageClassifier, Classifier):
             image_batch = image_batch.to('cuda')
 
         return image_batch
+
+    #
+    # Implementation of the SoftClassifier interface
+    #
 
     def class_scores(self, inputs: np.ndarray) -> np.ndarray:
         with torch.no_grad():
