@@ -1,5 +1,4 @@
 # standard imports
-from __future__ import absolute_import  # support for Python 2 code
 from collections import OrderedDict  # new in version 2.7
 import sys
 import os

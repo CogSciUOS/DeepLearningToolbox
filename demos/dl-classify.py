@@ -22,6 +22,7 @@ import argparse
 # toolbox imports
 from network import Network
 from network import argparse as NetworkArgparse
+from datasource import Datasource
 from datasource.imagenet import ImageNet
 from dltb.base.data import Data
 from dltb.tool.classifier import Classifier
@@ -30,23 +31,74 @@ from dltb.tool.classifier import Classifier
 LOG = logging.getLogger(__name__)
 del logging
 
+class Evaluator:
+    class bcolors:
+        HEADER = '\033[95m'
+        OKBLUE = '\033[94m'
+        OKGREEN = '\033[92m'
+        WARNING = '\033[93m'
+        FAIL = '\033[91m'
+        BOLD = '\033[1m'
+        UNDERLINE = '\033[4m'
+        ENDC = '\033[0m'
 
-correct = 0
-error = 0
+    def __init__(self, classifier: Classifier = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._classifier = classifier
+        self._correct = 0
+        self._error = 0
+        self._correct5= 0
+        self._total = 0
 
-def accuracy(classifier: Classifier, data: Data, top: int = None) -> float:
-    image = classifier._image_as_batch(data.filename)
-    scores = classifier.class_scores(image)
-    label, confidence = classifier.top_classes(scores)
-    label, confidence = label[0], confidence[0]  # FIXME[hack]: extend to batch ...
-    rank, score = classifier.class_rank(scores[0], data.label)  # FIXME[hack]: extend to batch ...
-    print(f"{data.filename}: "
-          f"{label.label('text')} vs. {data.label.label('text')}, "
-          f"rank={rank}")
-    global correct, error
-    correct += int(label == data.label)
-    error += int(label != data.label)
-    print(f"correct={correct}, error={error}, accuracy={correct/(correct+error)*100:.2f}%")
+    def accuracy(self, data: Data, top: int = None) -> float:
+        # FIXME[todo]: batch processing
+        # batch = self._classifier._image_as_batch(data.array)
+        # FIXME[error]: network/torch.py
+        #   image_tensor = self._preprocess_image(image)
+        # expects PIL Image
+        batch = self._classifier._image_as_batch(data.filename)
+        scores = self._classifier.class_scores(batch)
+        label, confidence = self._classifier.top_classes(scores)
+        label, confidence = label[0], confidence[0]  # FIXME[hack]: extend to batch ...
+        rank, score = self._classifier.class_rank(scores[0], data.label)  # FIXME[hack]: extend to batch ...
+        if label == data.label:
+            text = (self.bcolors.OKGREEN + 'correct' + self.bcolors.ENDC +
+                    f": '{label.label('text')}' (confidence={confidence:.3f})")
+        elif rank < 5:
+            text = (self.bcolors.OKBLUE + 'top-5' + self.bcolors.ENDC +
+                    f": '{label.label('text')}' vs. '{data.label.label('text')}', "
+                    f"rank={rank+1}")
+        else:
+            text = (self.bcolors.FAIL + 'error' + self.bcolors.ENDC +
+                    f": '{label.label('text')}' vs. '{data.label.label('text')}', "
+                    f"rank={rank+1}")
+        print(f"{data.filename}: {text}")
+        global correct, correct5, error, total
+        self._correct += int(label == data.label)
+        self._correct5 += rank <= 5
+        self._error += int(label != data.label)
+        self._total += 1
+        print(f"total={self._total}, correct={self._correct}, "
+              f"correct5={self._correct5}, error={self._error}, "
+              f"accuracy={self._correct/self._total*100:.2f}%, "
+              f"top-5 accuracy={self._correct5/self._total*100:.2f}%\r",
+              end='')
+
+    def evaluate(self, datasource: Datasource) -> None:
+        # for _ in range(3):
+        while True:
+            try:
+                data = datasource.get_random()
+                if len(data.shape) != 3:
+                    continue
+                self.accuracy(data)
+            except RuntimeError as error:
+                print(f"error procesing {data.filename} {data.shape}: {error}")
+                raise
+            except KeyboardInterrupt:
+                print(f"error procesing {data.filename} {data.shape}")
+                print("Keyboard interrupt")
+                break
 
 
 def main():
@@ -56,6 +108,7 @@ def main():
     parser.add_argument('--evaluate', action='store_true', default=False,
                         help='evaluate the classifier on the given datasource')
     NetworkArgparse.prepare(parser)
+    parser.add_argument('image', metavar='IMAGE', nargs='*')
     args = parser.parse_args()
 
     network = NetworkArgparse.network(args)
@@ -64,34 +117,29 @@ def main():
         return
 
     if args.evaluate:
+        evaluator = Evaluator(network)
         imagenet = ImageNet()
         imagenet.prepare()
+        evaluator.evaluate(imagenet)
 
-        # for _ in range(3):
-        while True:
-            try:
-                data = imagenet.get_random()
-                if len(data.shape) != 3:
-                    continue
-                accuracy(network, data)
-            except KeyboardInterrupt:
-                print("Keyboard interrupt")
-                break
     else:
-        filenames = ['images/elephant.jpg', 'dog.jpg']
+        # filenames = ['images/elephant.jpg', 'dog.jpg']
 
-        for filename in filenames:
+        for filename in args.image:
             label = network.classify_image(filename)
-            print(f"{filename}: {label.label('text')}")
+            print(f"classify_image('{filename}'): {label.label('text')}")
 
             label, score = network.classify_image(filename, confidence=True)
-            print(f"{filename}: {label.label('text'), score}")
+            print(f"classify_image('{filename}', confidence=True): "
+                  f"{label.label('text'), score}")
 
             labels = network.classify_image(filename, top=5)
-            print(f"{filename}: {[label.label('text') for label in labels]}")
+            print(f"classify_image('{filename}', top=5): "
+                  f"{[label.label('text') for label in labels]}")
 
             labels, scores = network.classify_image(filename, top=5,
                                                     confidence=True)
+            print(f"classify_image('{filename}', top=5, confidence=True): ")
             for i, (label, score) in enumerate(zip(labels, scores)):
                 print(f"({i+1}) {label.label('text')} ({score*100:.2f}%)")
 
@@ -116,8 +164,8 @@ def main_old():
 
     # Output network information
     print("network input shape: {}".format(network.get_input_shape()))
-    for layer_id in network.layer_dict:
-        print(layer_id)
+    for layer in network:
+        print(layer.get_id())
 
     print(type(network._input_placeholder))
     import tensorflow as tf

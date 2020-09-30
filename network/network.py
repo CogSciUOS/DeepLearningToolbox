@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Tuple, Any, Union, List, Iterable
+from typing import Tuple, Any, Union, List, Iterator
 from collections import OrderedDict
 import functools
 import operator
@@ -23,6 +23,10 @@ LOG.setLevel(logging.DEBUG)
 
 
 # FIXME[design]: we should decide on some points:
+#
+#  * there is some confusion about the ordering of channels and
+#    we should provide a general strategy how to deal with this.
+#    also reporting batch size ...
 #
 #  * provide some information on the loaded_network
 #     - version of the framework
@@ -153,13 +157,57 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         self._data_format = data_format
         self.layer_dict = None
 
+    #
+    # Sized interface
+    #
+
+    def __len__(self) -> int:
+        """The length of a network is the number of layers.
+        """
+        return len(self.layer_dict)
+
+    def __iter__(self) -> Iterator['Layer']:
+        """Iterate the layers of the network.
+        """
+        return iter(self.layer_dict.values())
+
+    def __contains__(self, key: Any) -> bool:
+        """Check if the network contains the given layer.
+        """
+        if isinstance(key, str):
+            return key in self.layer_dict
+        elif isinstance(key, Identifiable):
+            return key.get_id() in self.layer_dict
+        return False
+
+    def __getitem__(self, key: Any) -> 'Layer':
+        """Obtain the given layer from this :py:class:`Network`.
+        """
+        if isinstance(key, str):
+            return self.layer_dict[key]
+        elif isinstance[key, int]:
+            return list(self.layer_dict.items())[key]
+        elif isinstance(key, Identifiable):
+            return self.layer_dict[key.get_id()]
+        raise KeyError(f"No layer for key '{key}' in network.")
+    
+    #
+    # Preparation
+    #
+        
     def _prepare(self):
         super()._prepare()
         #
         # Create the layer representation.
         #
 
-        # fill the layer dictionary
+        self._prepare_layers()
+
+    def _prepare_layers(self) -> None:
+
+        # default implementation: create a layer_dict
+        # subclasses may overwrite this to provide a different layer
+        # mechanism.
         self.layer_dict = self._create_layer_dict()
 
         # connect layers in the dictionary
@@ -271,7 +319,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             activations = activations[0]
         return activations
 
-    def layers(self) -> Iterable['Layer']:
+    def layers(self) -> Iterator['Layer']:
         return self.layer_dict.values()
 
     def get_layer_info(self, layername):
@@ -460,7 +508,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             ## Only width and height, so we will add the channel information
             ## from the loaded_network input.
             input_shape = (1, *input_shape, network_input_channels)
-        elif len(input_shape.shape) == 3:
+        elif len(input_shape) == 3:
             if input_shape[-1] == network_input_channels:
                 ## channel information is provided, add batch
                 input_shape = (1, *input_shape)
@@ -851,6 +899,17 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
 
+
+    #
+    # Information
+    #
+
+    def summary(self) -> None:
+        print(f"Network[{type(self)}] with {len(self)} layers:")
+        for index, layer in enumerate(self):
+            print(f"({index:3}) {layer.get_id():20}: "
+                  f"{layer.input_shape} -> {layer.output_shape}")
+
     # FIXME[concept]: we need some training concept ...
 
     def get_trainer(self, training):
@@ -949,6 +1008,7 @@ class Classifier(SoftClassifier, Network):
         # output = sess.run(network_output_tensor,
         #                   feed_dict={network_input_tensor:inputs})
         # However, we do not allow this yet!
+        print(f"network.Classifier.class_scores: inputs={type(inputs)}")
         inputs = np.asarray(inputs)
         outputs = self.get_activations(self.output_layer_id(), inputs)
         return outputs

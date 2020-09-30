@@ -38,10 +38,7 @@ def main():
         logging.error("No network was specified.")
         return
 
-    print(network)
-    print(type(network))
-    # print("len:", len(network))
-    print("layer_dict:", network.layer_dict)
+    network.summary()
 
     import network.torch
     if isinstance(network, network.torch.Network):

@@ -4,12 +4,30 @@
 #   for assigning computations to devices. The modern (now recommended)
 #   way is to say x.to('cpu') or x.to('cuda:0')
 #
+# * There is a simple functional API allowing to apply a network or layer
+#   (torch.nn.Module) to same data (Tensor): module(data)
+#   - Tensor vs. Variable:
+#     for Pytorch prior to 0.4.0, Variable and Tensor were two different
+#     things. With Pytorch 0.4.0 Variable and Tensor have been merged.
+#   - volatile is deprecated:
+#     for Pytorch prior to 0.4.0 the volatile=True flag could be used
+#     to signal that all intermediate results can be dropped
+#
 # Questions:
+# * what is a torch.autograd.Variable?
+# * what does the option volatile mean?
 # * what does torch.cuda.synchronize() do?
+# * how to acces the module name?
+#    [name for name in dir(module) if 'name' in name] evaluates to
+#    ['_get_name', '_named_members', '_tracing_name', 'named_buffers',
+#      'named_children', 'named_modules', 'named_parameters']
+#   name = module._get_name()
+#   it seems that not modules but only submodules have names ...
+
 
 # standard imports
-from __future__ import absolute_import  # FIXME[question]: what is this?
-from typing import Tuple
+from typing import Tuple, Union, Iterable
+from collections import OrderedDict
 import logging
 
 import importlib.util
@@ -22,7 +40,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 # toolbox imports
-from . import Network as BaseNetwork
+from . import Network as BaseNetwork, Layer as BaseLayer
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -33,6 +51,73 @@ LOG = logging.getLogger(__name__)
 # FIXME[todo]: need to clean up
 
 # FIXME[todo]: cuda activation (if available)
+
+
+class Layer(BaseLayer):
+    """A torch :py:class:`Layer` encapsulates a
+    :py:class:`torch.nn.Module` that should be considered as
+    one layer.
+
+    _input_shape: Tuple
+        A tuple holding the expected input shape for this layer.
+        this is ordered (batch, ..., channels).
+        The batch size is not included, undetermined values
+        are set to None.
+    _output_shape: Tuple
+        A tuple holding the expected input shape for this layer.
+        this is ordered (batch, ..., channels).
+        The batch size is not included, undetermined values
+        are set to None.
+    """
+
+    def __init__(self, module: nn.Module, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._module = module
+
+        # FIXME[todo]: Estimate the input shape
+        first_shape = None
+        last_shape = None
+        # print(f"{type(module)}:")
+        for parameter in module.parameters():
+            # print('  -', parameter.shape)
+            if first_shape is None:
+                first_shape = parameter.shape
+            last_shape = parameter.shape
+        if first_shape is not None:
+            self._input_shape = \
+                ((None,) * (len(first_shape)-1) + (first_shape[1],)
+                 if len(first_shape) > 1 else (None, first_shape[0]))
+            self._output_shape = \
+                (None,) * (len(last_shape)-1) + (last_shape[0],)
+        else:
+            self._input_shape = None
+            self._output_shape = None
+
+        # print(f"Created new torch layer: {self} ({type(module)}): "
+        #       f"{self.input_shape}, {self.output_shape}")
+
+    def adapt_shapes(self, module: nn.Module,
+                     input: torch.Tensor, output: torch.Tensor) -> None:
+        input_shape = input[0].size()
+        output_shape = output.size()
+        self._input_shape = (None, *input_shape[2:], input_shape[1])
+        self._output_shape = (None, *output_shape[2:], output_shape[1])
+
+    @property
+    def input_shape(self) -> Tuple[int, ...]:
+        """The shape of the tensor that is input to the layer,
+        including the batch axis.
+        The channel will be channel last.
+        """
+        return self._input_shape
+
+    @property
+    def output_shape(self) -> Tuple[int, ...]:
+        """The shape of the tensor that is output to the layer,
+        including the batch axis.
+        The channel will be channel last.
+        """
+        return self._output_shape
 
 
 class Network(BaseNetwork):
@@ -83,8 +168,8 @@ class Network(BaseNetwork):
     # _torch_filename: name of the weights file (either .pth or .pth.tar)
     _torch_filename: str = None
 
-    # _use_cude: use cuda if available
-    _use_cuda: bool = False
+    # _device: the device to perform computations on ('cpu', 'cuda', or 'cuda0')
+    _device: torch.device = None
 
     # _train_mode: run model in train mode (True) or eval mode (False)
     _train_mode: bool = False
@@ -128,8 +213,11 @@ class Network(BaseNetwork):
         if cuda and not torch.cuda.is_available():
             LOG.warning("torch CUDA is not available, "
                         "resorting to GPU computation")
-            cuda = False
-        self._use_cuda = cuda
+        if cuda:
+            self._device = torch.device('cuda')  # 'cuda:0'
+        else:
+            self._device = torch.device('cpu')
+
         self._train_mode = train
         self._input_shape = input_shape
 
@@ -150,9 +238,7 @@ class Network(BaseNetwork):
                 raise ValueError("Invalid filene '{self._torch_filename}' "
                                  "for loading torch model.")
 
-        # activate cuda (gpu support) if available
-        if self._use_cuda:
-            self._model.to('cuda')  # 'cuda:0'
+        self._model.to(self._device)
 
         # set train/eval mode
         if self._train_mode:
@@ -160,15 +246,61 @@ class Network(BaseNetwork):
         else:
             self._model.eval()
 
+        super()._prepare()
+
+    def _prepare_layers(self) -> None:
+        super()._prepare_layers()
+        print("LAYER IDS:", self.layer_ids)
+
         # compute input shapes for all layers
         if self._input_shape is not None:
             self._compute_layer_shapes(self._input_shape)
+        else:
+            # FIXME[todo]: think of a general strategy to compute layer
+            # sizes (may be done backward from the last dense layer)
+            # In case of a fully convolutional network, there is no
+            # fixed layer shape.
+            NotImplementedError("Automatic determination of input shapes "
+                                "for torch models is not implemented yet.")
+        print("INPUT SHAPE:", self._input_shape)
+
+    def _create_layer_dict(self) -> OrderedDict:
+        """Create the mapping from layer ids to layer objects.
+
+        Returns
+        -------
+
+        """
+        layer_dict = {}
+        self._add_to_layer_dict(layer_dict, self._model, recurse=True)
+        return layer_dict
+
+    def _add_to_layer_dict(self, layer_dict: dict, module: nn.Module,
+                           recurse: Union[bool, int] = False) -> None:
+        """Add the given module to the layer dictionary
+        """
+        for index, (name, child) in enumerate(module.named_children()):
+            # print(f"adding layer: ", index, name, type(child))
+            layer_dict[name] = Layer(module=child, network=self, id=name)
+
+    def _layer_for_module(self, module: nn.Module) -> Layer:
+        """Get the layer representing the given torch module.
+        """
+        for layer in self._layer_dict.values():
+            if module is layer._module:
+                return layer
+        raise ValueError(f"Module {type(module)} ({module._get_name()}) "
+                         "is not a Layer of this Network.")
 
     def _compute_layer_shapes(self, input_shape: tuple) -> None:
         """Compute the input and output shapes of all layers.
         The shapes are determined by propagating some dummy input through
         the network.
 
+        This method will fill the private attributes _input_shapes
+        and _output_shapes, mapping layer names to the respective
+        shape.
+        
         input_shape:
             The shape of an input sample. May or may not include batch (B)
             or channel (C) dimension. If so, channel should be last, i.e.
@@ -179,53 +311,73 @@ class Network(BaseNetwork):
         # Torch convolution follows the channel first scheme, that is
         # the shape of a 2D convolution is (batch, channel, height, width).
         torch_input_shape = tuple(input_shape[_] for _ in [0, 3, 1, 2])
-
+        print(input_shape, " -> ", torch_input_shape)
+        
         self._input_shapes = {}
         self._output_shapes = {}
         self._prepare_hooks(self._shape_hook)
-        self._model(Variable(torch.zeros(*torch_input_shape), volatile=True))
+        # Send dummy data through the network to determine input and
+        # output shapes of layers
+        self._model(torch.zeros(*torch_input_shape, device=self._device))
         self._remove_hooks()
 
-    def _get_number_of_input_channels(self) -> int:
-        """Get the number of input channels for this network.
-        This is the number of channels each input given to the network
-        should have.  Usually this coincides with the number of
-        channels in the first layer of the network.
+        self._prepare_layer_hooks(Layer.adapt_shapes)
+        # Send dummy data through the network to determine input and
+        # output shapes of layers
+        self._model(torch.zeros(*torch_input_shape, device=self._device))
+        self._remove_hooks()
 
-        Returns
-        -------
-        int
-            The number of input channels or 0 if the network does not
-            have input channels.
+    def _prepare_layer_hooks(self, hook,
+                             layers: Iterable[Layer] = None) -> None:
+        if layers is None:
+            layers = self
+        for layer in layers:
+            module = layer._module
+            bound_hook = getattr(layer, hook.__name__)
+            self._hooks[module] = module.register_forward_hook(bound_hook)
+        
+    def _prepare_hooks(self, hook, modules=None) -> None:
+        """Add hooks to the specified layers.
         """
-        first = self._get_first_layer()
-        return first.in_channels if self.layer_is_convolutional(first) else 0
+        if modules is None:
+            modules = self.layer_ids
 
-    def _prepare_hooks(self, hook, layer_ids=None) -> None:
+        for module in modules:
+            if isinstance(module, Layer):
+                name = module.get_id()
+                module = module._module
+            elif isinstance(module, str) and module in self.layer_dict:
+                name = module
+                module = self.layer_dict[module]._module
+            elif isinstance(module, nn.Module):
+                name = str(module)  # FIXME[hack]
+            else:
+                raise ValueError(f"Illegal module specification: {module}")
+            module._name = name  # FIXME[hack]
+            self._hooks[module] = module.register_forward_hook(hook)
 
-        if layer_ids is None:
-            layer_ids = self.layer_ids
+    def _remove_hooks(self, modules=None) -> None:
+        if modules is None:
+            modules = list(self._hooks.keys())
 
-        for id in layer_ids:
-            module = self._model._modules[id]
-            module._name = id  # FIXME[hack]: how to acces the module name?
-            self._hooks[id] = module.register_forward_hook(hook)
-
-    def _remove_hooks(self, layer_ids=None) -> None:
-        if layer_ids is None:
-            layer_ids = list(self._hooks.keys())
-        for id in layer_ids:
-            self._hooks[id].remove()
-            del self._hooks[id]
+        for module in modules:
+            if isinstance(module, Layer):
+                module = module._module
+            elif isinstance(module, str) and module in self.layer_dict:
+                module = self.layer_dict[module]._module
+            elif not isinstance(module, nn.Module):
+                raise ValueError(f"Illegal module specification: {module}")
+            self._hooks[module].remove()
+            del self._hooks[module]
 
     def _shape_hook(self, module, input, output):
         name = module._name  # FIXME[hack]: how to acces the module name?
         # input[0].size() will be (N, C, H, W) -> store (H ,W, C)
         input_shape = input[0].size()
-        self._input_shapes[name] = (*input_shape[2:], input_shape[1])
+        self._input_shapes[name] = (None, *input_shape[2:], input_shape[1])
         # output.size() will be (N, C, H, W) -> store (C, H ,W)
         output_shape = output.size()
-        self._output_shapes[name] = (*output_shape[2:], output_shape[1])
+        self._output_shapes[name] = (None, *output_shape[2:], output_shape[1])
 
     def _activation_hook(self, module, input, output):
         name = module._name  # FIXME[hack]: how to acces the module name?
@@ -265,6 +417,21 @@ class Network(BaseNetwork):
             The first layer of this network.
         """
         return self._get_layer(self.layer_ids[0])
+
+    def _get_number_of_input_channels(self) -> int:
+        """Get the number of input channels for this network.
+        This is the number of channels each input given to the network
+        should have.  Usually this coincides with the number of
+        channels in the first layer of the network.
+
+        Returns
+        -------
+        int
+            The number of input channels or 0 if the network does not
+            have input channels.
+        """
+        first = self._get_first_layer()
+        return first.in_channels if self.layer_is_convolutional(first) else 0
 
     @property
     def layer_ids(self) -> list:
@@ -552,10 +719,6 @@ class Network(BaseNetwork):
         torch_samples = torch.from_numpy(_input_samples)
         torch_input = Variable(torch_samples, volatile=True)
 
-        # FIXME[todo]: use GPU
-        # if self._use_cuda:
-        #    torch_input = torch_input.cuda()
-
         # prepare to record the activations
         self._activations = {}
         self._prepare_hooks(self._activation_hook, _layer_ids)
@@ -581,8 +744,7 @@ class Network(BaseNetwork):
 from typing import Union
 from torchvision import transforms
 from .network import Classifier
-from dltb.util.image import imread
-from PIL import Image
+from dltb.base.image import Image, Imagelike
 from dltb.tool.classifier import ImageClassifier
 
 
@@ -593,7 +755,9 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
     """
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(scheme='ImageNet', lookup='torch', **kwargs)
+        super().__init__(scheme='ImageNet', lookup='torch',
+                         input_shape=(224, 244, 3),  # FIXME[hack]: can be different
+                         **kwargs)
 
     def _prepare(self) -> None:
 
@@ -611,6 +775,9 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
         self._scheme.prepare()
         super()._prepare()
 
+        # Construct an image preprocessing function using torch.transforms.
+        # Notice that (at least resize) expects as input a PIL image
+        # (not a numpy.ndarray).
         self._preprocess_image = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -619,10 +786,10 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
                                  std=[0.229, 0.224, 0.225]),
         ])
 
-    def _image_as_batch(self, image: Union[str, np.ndarray]) -> np.ndarray:
-        if isinstance(image, str):
-            # image = imread(image)
-            image = Image.open(image)
+    def _image_as_batch(self, image: Imagelike) -> np.ndarray:
+
+        # the _preprocess_image function expects as input a PIL image!
+        image = Image.as_pil(image)
 
         # image should be PIL Image. Got <class 'numpy.ndarray'>
         image_tensor = self._preprocess_image(image)
@@ -641,6 +808,8 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
     #
 
     def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+        print(f"torch.Resnet.class_scores: inputs={type(inputs)},"
+              f" {inputs.shape}")
         with torch.no_grad():
             logits = self._model(inputs)
 

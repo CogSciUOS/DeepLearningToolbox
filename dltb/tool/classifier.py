@@ -7,7 +7,7 @@
 #   class labels, even if not applied to ImageNet data
 
 # standard imports
-from typing import Union, Tuple
+from typing import Union, Tuple, Any
 import logging
 
 # third party imports
@@ -19,6 +19,7 @@ from .image import ImageTool
 
 # FIXME[hack]: instead of prepare_input_image use the network.resize
 # API once it is finished!
+from dltb.base.image import Imagelike, Image
 from dltb.util.image import imread, imresize
 
 # logging
@@ -44,6 +45,11 @@ class Classifier:
         The classification scheme has to support this lookup table.
 
     """
+
+    _result: Tuple[str] = ('identifier')
+    _internal_arguments: Tuple[str] = ('_inputs')
+    _internal_result: Tuple[str] = ('identifier')
+
     def __init__(self, scheme: Union[ClassScheme, str, int],
                  lookup: str = None, **kwargs):
         LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
@@ -60,7 +66,7 @@ class Classifier:
         """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
         """
         return self._scheme
-
+    
     @property
     def class_scheme_lookup(self) -> str:
         """The lookup table to be used to map the (internal) results of this
@@ -81,6 +87,7 @@ class Classifier:
         super()._prepare()
         self._scheme.prepare()
 
+        
     def preprocess(self, data: Data) -> None:
         """Preprocess the given data to a format suitable to be processed by
         this :py:class:`Classifier`. The actual operations to be
@@ -91,7 +98,7 @@ class Classifier:
         """
         pass
 
-    def classify(self, inputs: np.ndarray, top: int = None):
+    def classify(self, inputs: np.ndarray):
         """Output the top-n classes for given batch of inputs.
 
         Arguments
@@ -104,18 +111,52 @@ class Classifier:
         classes:
             A list of class-identifiers or a
             list of tuples of class identifiers.
-        score:
-            If top is None, a one-dimensial array of confidence values or
-            otherwise a two-dimension array providing the top highest
-            confidence values for each input item.
         """
+        return self(inputs)
+
+    #
+    # Private processor API
+    #
+
+    def _preprocess(self, inputs: np.ndarray, *args, **kwargs) -> np.ndarray:
+        """A :py:class:`SoftClassifier` maps input data to class scores.
+        """
+        data = super()._preprocess(inputs, *args, **kwargs)
+        if inputs is not None:
+            data.add_attribute('_inputs', Data.as_array(inputs))
+        return data
+    
+    def _process(self, inputs: np.ndarray) -> np.ndarray:
+        """A :py:class:`SoftClassifier` maps input data to class scores.
+        """
+        # return the class scores
         raise NotImplementedError()
 
 
 class SoftClassifier(Classifier):
 
-    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+    _result: Tuple[str] = ('scores')
+    _internal_arguments: Tuple[str] = ('_inputs')
+    _internal_result: Tuple[str] = ('scores')
+
+    def _process(self, inputs: np.ndarray) -> np.ndarray:
+        """A :py:class:`SoftClassifier` maps input data to class scores.
+        """
+        # return the class scores
         raise NotImplementedError()
+    
+    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+        """Compute all class scores. The output array will have one entry for
+        each class of the classification scheme.
+
+        Arguments
+        ---------
+        inputs: np.ndarray
+            The input data, either a single data point or a batch of data.
+        """
+        # FIXME[concept]: we need a way to determine if inputs are single or
+        # batch!
+        return self(inputs)
 
     def classify(self, inputs: np.ndarray, top: int = None):
         """Output the top-n classes for given batch of inputs.
@@ -135,7 +176,7 @@ class SoftClassifier(Classifier):
             otherwise a two-dimension array providing the top highest
             confidence values for each input item.
         """
-        return self.top_classes(self.class_scores(inputs), top=top)
+        return self.top_classes(self(inputs), top=top)
 
     #
     # Utilities
@@ -233,14 +274,20 @@ class ImageClassifier(Classifier, ImageTool):
     """An :py:class:`ImageClassifier` is a classifier for images.
     """
 
-    def preprocess_image(self, image: np.ndarray) -> np.ndarray:
+    def preprocess_image(self, image: Imagelike) -> Any:
         """Preprocess a single image to be in a format that
         can be used as input for this :py:class:`ImageClassifier`.
         This may include resizing the image, as well centering and
-        standardization.
+        standardization, or adding a batch dimension.
         """
-        # FIXME[todo]: concept ...
-        return image
+        return self._preprocess(Image.as_array(image))
+
+    def _preprocess(self, image, *arg, **kwargs) -> Data:
+        data = super()._preprocess(image, *arg, **kwargs)
+        if image is not None:
+            image = np.expand_dims(image, axis=0)
+            self.add_data_attribute(data, 'image', image)
+        return data
 
     def _image_as_batch(self, image: Union[str, np.ndarray]) -> np.ndarray:
         if isinstance(image, str):

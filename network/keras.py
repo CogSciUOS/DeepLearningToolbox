@@ -1,6 +1,5 @@
 
 # standard imports
-from __future__ import absolute_import
 from types import ModuleType, FunctionType
 from typing import List
 from collections import OrderedDict

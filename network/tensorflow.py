@@ -1,6 +1,5 @@
 
 # standard imports
-from __future__ import absolute_import
 from typing import Union
 from collections import OrderedDict
 import os

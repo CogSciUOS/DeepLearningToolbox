@@ -387,7 +387,6 @@ class Sectioned(Datasource):
 
     def __init_subclass__(cls, sections: AbstractSet[str] = None,
                           **kwargs) -> None:
-        print(f"*************** Sectioned.__init_subclass__({kwargs}): sections={sections}")
         super().__init_subclass__(**kwargs)
         if sections is not None:
             cls.sections = sections

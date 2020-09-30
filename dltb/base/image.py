@@ -31,6 +31,8 @@ from base.observer import Observable
 from .data import Data
 from .. import thirdparty
 
+# FIXME[hack]: there should be not third-party module here
+import PIL.Image
 
 # Imagelike is intended to be everything that can be used as
 # an image.
@@ -73,6 +75,25 @@ class Image(Data):
                                   f"{type(image).__name__} to numpy.ndarray "
                                   "is not implemented")
 
+    @staticmethod
+    def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image:
+       # the _preprocess_image function expects as input a PIL image!
+        if isinstance(image, PIL.Image.Image):
+            return image
+        if isinstance(image, str):
+            return PIL.Image.open(image)
+        
+        if isinstance(image, np.ndarray):
+            if issubclass(image.dtype.type, np.float):
+                image = (image*255).astype('uint8')
+            elif image.dtype != np.uint8:
+                image = numpy_image.astype('uint8')
+            return Image.fromarray(image, 'RGB')
+
+        raise NotImplementedError(f"Conversion of {type(image).__module__}."
+                                  f"{type(image).__name__} to PIL.Image "
+                                  "is not implemented")
+    
     @staticmethod
     def as_data(image: Imagelike, copy: bool = False) -> 'Data':
         """Get image-like objec as :py:class:`Data` object.
@@ -307,10 +328,24 @@ class ImageResizer:
             cls = thirdparty.import_class('ImageResizer', module=module)
         return super(ImageResizer, cls).__new__(cls)
 
-    def resize(self, image: np.ndarray, size, **kwargs) -> np.ndarray:
-        raise NotImplementedError(f"{type(self)} claims to "
-                                  "be an ImageResizer, but does not implement "
-                                  "the resize method.")
+    def resize(self, image: np.ndarray,
+               size: Tuple[int, int], **kwargs) -> np.ndarray:
+        """Resize an image to the given size.
+
+        Arguments
+        ---------
+        image:
+            The image to be scaled.
+        size:
+            The target size.
+        """
+        if type(self).scale is ImageResizer.scale:
+            raise NotImplementedError(f"{type(self)} claims to be an "
+                                      "ImageResizer, but does not implement "
+                                      "the resize method.")
+        image_size = image.shape[:2]
+        scale = (size[0]/image_size[0], size[1]/image_size[1])
+        return self.scale(image, scale=scale)
 
     def scale(self, image: np.ndarray,
               scale: Union[float, Tuple[float, float]],
@@ -326,9 +361,17 @@ class ImageResizer:
             scale factor for horizontal and vertical direction, or
             a pair of scale factors for these two axes.
         """
-        raise NotImplementedError(f"{type(self)} claims to "
-                                  "be an ImageResizer, but does not implement "
-                                  "the scale method.")
+        if type(self).resize is ImageResizer.resize:
+            raise NotImplementedError(f"{type(self)} claims to be an "
+                                      "ImageResizer, but does not implement "
+                                      "the scale method.")
+
+        if isinstance(scale, float):
+            scale = (scale, scale)
+
+        image_size = image.shape[:2]
+        size = (int(image_size[0] * scale[0]), int(image_size[1] * scale[1]))
+        return self.resize(image, size=size, **kwargs)
 
     def crop(self, image: np.ndarray, size, **_kwargs) -> np.ndarray:
         # FIXME[todo]: deal with sizes extending the original size

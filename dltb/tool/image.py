@@ -69,6 +69,12 @@ class ImageTool(Tool):
 
         self._resize_policy = resize_policy
 
+    @property
+    def input_size(self) -> Tuple[int,int]:
+        """Get the input size on which this ImageTool operates.
+        """
+        return self._min_size
+
     def fit_image(self, image: Imagelike, policy: str = None) -> np.ndarray:
         """Resize the image to be suitable for processing with
         this :py:class:`ImageTool`.

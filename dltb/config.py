@@ -6,6 +6,6 @@ class Config:
     pass
 
 config = Config()
-config.warn_missing_dependencies = True
+config.warn_missing_dependencies = False
 
-config.thirdparty_info = True
+config.thirdparty_info = False

@@ -16,7 +16,7 @@ checkpoint = os.path.join('models', 'example_tf_alexnet',
 loaded_network = TensorFlowNetwork(checkpoint=checkpoint)
 
 #print(loaded_network._sess.graph.get_operations())
-print(loaded_network.layer_dict)
+loaded_network.summary()
 
 import numpy as np
 from scipy.misc import imread
@@ -30,7 +30,7 @@ for arg in sys.argv[1:]:
 
 # Assuming the first op is the input.
 network_input_tensor = loaded_network._sess.graph.get_operations()[0].outputs[0]
-network_output_tensor = loaded_network.layer_dict['dense_3'].activation_tensor
+network_output_tensor = loaded_network['dense_3'].activation_tensor
 
 from imagenet_classes import class_names
 

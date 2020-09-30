@@ -51,7 +51,7 @@ def imresize(image: np.ndarray, size: Tuple[int, int],
     global _resizer
     if _resizer is None:
         _resizer = ImageResizer()
-    return _resizer.scale(image, size, **kwargs)
+    return _resizer.resize(image, size, **kwargs)
 
 
 def imscale(image: np.ndarray, scale: Union[float, Tuple[float, float]],
