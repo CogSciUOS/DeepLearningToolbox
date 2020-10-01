@@ -321,6 +321,30 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
         # Proceed with the standard procedure ...
 
 
+#
+# Post import hooks
+#
+
+# FIXME[hack]: check if there is a better way of doing this ...
+import builtins
+_builtin_import = builtins.__import__
+
+def _import_adapter(name, globals=None, locals=None, fromlist=(), level=0):
+    already_imported = name in sys.modules
+
+    module = _builtin_import(name, globals=globals, locals=locals,
+                             fromlist=fromlist, level=level)
+
+    if not already_imported:
+        if name == 'PIL.Image' or name == 'torchvision':
+            importlib.import_module('.pil', __name__)
+        elif name == 'torch':
+            importlib.import_module('.torch', __name__)
+    return module
+
+builtins.__import__ = _import_adapter
+
+
 # Is the application started from source or is it frozen (bundled)?
 # The PyInstaller bootloader adds the name 'frozen' to the sys module:
 # FIXME[question]: explain what frozen modules are and implications

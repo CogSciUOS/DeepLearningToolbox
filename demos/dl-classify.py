@@ -52,15 +52,10 @@ class Evaluator:
 
     def accuracy(self, data: Data, top: int = None) -> float:
         # FIXME[todo]: batch processing
-        # batch = self._classifier._image_as_batch(data.array)
-        # FIXME[error]: network/torch.py
-        #   image_tensor = self._preprocess_image(image)
-        # expects PIL Image
-        batch = self._classifier._image_as_batch(data.filename)
-        scores = self._classifier.class_scores(batch)
+        scores = self._classifier.class_scores(data)
         label, confidence = self._classifier.top_classes(scores)
-        label, confidence = label[0], confidence[0]  # FIXME[hack]: extend to batch ...
-        rank, score = self._classifier.class_rank(scores[0], data.label)  # FIXME[hack]: extend to batch ...
+        rank, score = self._classifier.class_rank(scores, data.label)
+
         if label == data.label:
             text = (self.bcolors.OKGREEN + 'correct' + self.bcolors.ENDC +
                     f": '{label.label('text')}' (confidence={confidence:.3f})")
@@ -142,6 +137,9 @@ def main():
             print(f"classify('{filename}', top=5, confidence=True): ")
             for i, (label, score) in enumerate(zip(labels, scores)):
                 print(f"({i+1}) {label.label('text')} ({score*100:.2f}%)")
+
+            scores = network.class_scores(filename)
+            print(f"class_scores('{filename}': {scores.shape}")
 
 # import tensorflow as tf
 # if tf.test.gpu_device_name():

@@ -84,11 +84,9 @@ Worker classes
 """
 
 # standard imports
-from typing import Tuple, Any, AbstractSet
+from typing import Tuple, Any, Dict, Callable, AbstractSet
 from abc import abstractmethod, ABC
-import os
 import time
-import pickle
 import random
 import logging
 import threading
@@ -124,10 +122,28 @@ class Datasource(Preparable, FailableObservable, # ABC,
 
     random selection: select a random element from the dataset.
 
+    Loaders
+    -------
+    It is possible to specify different (thirdparty) loaders for
+    loading data from filenames or URLs.
+
+    >>> datasouce.set_loader(loader=imread, kind='array', auto=True)
+    >>> datasouce.set_loader(loader=PIL.Image.open, kind='pil', auto=True)
+    >>> datasouce.set_loader(auto=False)
+
     Attributes
     ----------
     _description : str
         Short description of the dataset
+
+    Data loaders can be set globally, but they may be overwritten
+    by subclasses or instances if desired.
+
+    _loaders: Dict[str, Callable[[str], Any]] = {}
+    _loader: Callable[[str], Any] = None
+    _loader_kind: str = None
+    _loader_auto: bool = True
+
 
     Changes
     -------
@@ -156,14 +172,10 @@ class Datasource(Preparable, FailableObservable, # ABC,
     _id: str = None
     _metadata = None
 
-    # FIXME[hack]: we should put this in the util package!
-    try:
-        from appdirs import AppDirs
-        appname = "deepvis"  # FIXME: not the right place to define here!
-        appauthor = "krumnack"
-        _appdirs = AppDirs(appname, appauthor)
-    except ImportError:
-        _appdirs = None
+    _loaders: Dict[str, Callable[[str], Any]] = {}
+    _loader: Callable[[str], Any] = None
+    _loader_kind: str = None
+    _loader_auto: bool = True
 
     def __init__(self, description: str = None, **kwargs) -> None:
         """Create a new Datasource.
@@ -264,10 +276,59 @@ class Datasource(Preparable, FailableObservable, # ABC,
         return self._description
 
     #
-    # Utilities
+    # Data loader
     #
 
-    @abstractmethod
+    def set_loader(self, loader: Callable[[str], Any] = None,
+                   kind: str = None, auto: bool = None) -> None:
+        """Set the data loader to be used by this :py:class:`Datasource`.
+
+        Arguments
+        ---------
+        loader: Callable[[str], Any]
+            A function invoked to load data from a filename (or URL).
+            The default (`None`) signals that the loader should be
+            determined from the `kind` argument (if given). If no
+            other parameter is given, data loading will be disabled
+            completely.
+        kind: str
+            The kind of data delivered by the loader ('array' for
+            numpy arrays, or 'pil' for PIL images). This is at the same
+            time the attribute name by which the data is stored in the
+            :py:class:`Data` object.
+        auto: bool
+            This flag indicates if data should be automatically loaded
+            if possible (if a filename or url is available).
+        """
+        if loader is None:
+            if kind is None and auto is None:
+                self._loader = None
+            elif kind is not None:
+                self._loader = self._loader_for_kind(kind)
+        else:
+            if kind is None:
+                raise ValueError("No 'kind' was specified for data loader.")
+            self._loader = loader
+
+        if kind is not None:
+            self._loader_kind = kind
+
+        if auto is not None:
+            self._loader_auto = auto
+
+    @classmethod
+    def add_loader(cls, kind: str, loader: Callable[[str], Any]) -> None:
+        """Add a new data loader to this Datasource.
+        """
+        cls._loaders[kind] = loader
+
+    def _loader_for_kind(self, kind: str) -> Callable[[str], Any]:
+        """Automatically determine a dataloader for a given kind of
+        data. Additional dataloaders can be added by calling
+        :py:meth:`add_loader`.
+        """
+        return self._loaders[kind]
+
     def load_datapoint_from_file(self, filename: str) -> np.ndarray:
         """Load a single datapoint from a file.
         This method should be implemented by subclasses.
@@ -282,49 +343,16 @@ class Datasource(Preparable, FailableObservable, # ABC,
         datapoint
             The datapoint loaded from file.
         """
-
-    def _read_cache(self, cache: str) -> Any:
-        """Load data from a cache file.
-
-        Arguments
-        ---------
-        cache: str
-            The chache filename to be used. If not an absolute path,
-            the method place it relative to the default cache directory
-            of this application.
-
-        Result
-        ------
-        data: Any
-            The data read from the file.
-        """
-        if cache is None or self._appdirs is None:
-            return None
-        cache_filename = os.path.join(self._appdirs.user_cache_dir, cache)
-        LOG.info("Trying to load cache file '%s'", cache_filename)
-        if not os.path.isfile(cache_filename):
-            return None
-        return pickle.load(open(cache_filename, 'rb'))
-
-    def _write_cache(self, cache: str, data: Any) -> None:
-        """Write data into a cache file.
-
-        Arguments
-        ---------
-        cache: str
-            The chache filename to be used. If not an absolute path,
-            the method place it relative to the default cache directory
-            of this application.
-        data: Any
-            The data to be written to the cache file.
-        """
-        if cache is None or self._appdirs is None:
-            return  # we can not determine a cache file
-        cache_filename = os.path.join(self._appdirs.user_cache_dir, cache)
-        LOG.info("Writing filenames to %s", cache_filename)
-        if not os.path.isdir(self._appdirs.user_cache_dir):
-            os.makedirs(self._appdirs.user_cache_dir)
-        pickle.dump(data, open(cache_filename, 'wb'))
+        if self._loader is None:
+            raise ValueError("No data loader was specified for Datasource "
+                             f"{self} to load file '{filename}'.")
+        try:
+            return imread(filename)
+        except ValueError:
+            # FIXME[bug]: error reporting (on console) does not work
+            print(f"Error reading image file '{filename}'")
+            LOG.error("Error reading image file '%s'", filename)
+            raise
 
 
 class Imagesource(Datasource):
@@ -336,27 +364,9 @@ class Imagesource(Datasource):
         super().__init__(**kwargs)
         self.shape = shape
 
-    def load_datapoint_from_file(self, filename: str) -> np.ndarray:
-        """Load a single datapoint, that is an image, from a file.
-
-        Arguments
-        ---------
-        filename: str
-            The absolute image filename. The file may be in any format
-            supported by :py:meth:`imread`.
-
-        Returns
-        ------
-        image
-            The image loaded from file.
-        """
-        try:
-            return imread(filename)
-        except ValueError:
-            # FIXME[bug]: error reporting (on consoloe) does not work
-            print(f"Error reading image file '{filename}'")
-            LOG.error("Error reading image file '%s'", filename)
-            raise
+    _loaders: Dict[str, Callable[[str], Any]] = {'array': imread}
+    _loader: Callable[[str], Any] = imread
+    _loader_kind: str = 'array'
 
     def _get_meta(self, data: Data, **kwargs) -> None:
         """Set the image metdata for the :py:class:`data`.
@@ -375,7 +385,7 @@ class Imagesource(Datasource):
 
 
 class Sectioned(Datasource):
-    # pylint: disable=too-few-public-methods
+    # pylint: disable=too-few-public-methods,abstract-method
     """A :py:class:`Datasource` with multiple sections (like `train`, `val`,
     `test`, etc.). A subclass of :py:class:`Sectioned` may provide a
     set of section labels via the `sections` class parameter.
@@ -693,6 +703,7 @@ class Indexed(Random):
 
 
 class Labeled(Datasource):
+    # pylint: disable=abstract-method
     """A :py:class:`Datasource` that provides labels for its data.
     The labels will be stored in a data (batch) attribute called
     `label`.

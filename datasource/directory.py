@@ -12,6 +12,7 @@ import random
 # toolbox imports
 from dltb.base.data import Data
 from dltb.tool.classifier import ClassScheme
+from dltb.util import read_cache, write_cache
 from .files import DataFiles
 from .datasource import Imagesource
 
@@ -92,10 +93,10 @@ class DataDirectory(DataFiles):
             Name of a cache file to store the list of filenames.
         """
         super()._prepare(**kwargs)
-        self._filenames = filenames_cache and self._read_cache(filenames_cache)
+        self._filenames = filenames_cache and read_cache(filenames_cache)
         if self._filenames is None:
             self._prepare_filenames()
-            self._write_cache(filenames_cache, self._filenames)
+            write_cache(filenames_cache, self._filenames)
 
     def _unprepare(self) -> None:
         self._filenames = None

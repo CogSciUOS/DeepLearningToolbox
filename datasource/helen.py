@@ -13,6 +13,7 @@ import numpy as np
 # toolbox imports
 from util.image import Landmarks, Region
 from dltb.base.data import Data
+from dltb.util import read_cache, write_cache
 from .datasource import Imagesource
 from .directory import DataDirectory
 
@@ -135,7 +136,7 @@ class Helen(DataDirectory, Imagesource):
 
         cache_file = ('helen_annotations_'
                       f'{str(self._load_annotations).lower()}.p')
-        self._annotations = self._read_cache(cache_file)
+        self._annotations = read_cache(cache_file)
         if self._annotations is not None:
             return  # we have loaded the annotations from the cache file
 
@@ -161,7 +162,7 @@ class Helen(DataDirectory, Imagesource):
                 image_name, landmarks = self._load_annotation(abs_annotation)
                 self._annotations[image_name] = \
                     landmarks if self._load_annotations else name
-        self._write_cache(cache_file, self._annotations)
+        write_cache(cache_file, self._annotations)
 
     @staticmethod
     def _load_annotation(filename: str) -> Tuple[str, Landmarks]:

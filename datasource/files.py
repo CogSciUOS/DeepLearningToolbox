@@ -75,9 +75,9 @@ class DataFiles(Indexed):
     # FIXME[todo]: concept - provide some idea how the filelist can be
     # prepared (including cache files)- combine this with DataDirectory
 
-    ##
+    #
     # Data
-    ##
+    #
 
     def _get_meta(self, data: Data, filename: str = None, **kwargs) -> None:
         if filename is not None and not data.datasource_argument:
@@ -86,6 +86,8 @@ class DataFiles(Indexed):
         data.add_attribute('filename', batch=True)
         if self._filenames is not None:
             data.add_attribute('index', batch=True)
+        if self._loader_kind != 'array':
+            data.add_attribute(self._loader_kind, batch=True)
         super()._get_meta(data, **kwargs)
 
     def _get_data(self, data: Data, filename: str = None, **kwargs) -> None:
@@ -126,7 +128,8 @@ class DataFiles(Indexed):
 
         """
         abs_filename = os.path.join(self.directory, filename)
-        data.array = self.load_datapoint_from_file(abs_filename)
+        setattr(data, self._loader_kind,
+                self.load_datapoint_from_file(abs_filename))
         data.filename = abs_filename
         if self._filenames is not None and not hasattr(data, 'index'):
             # FIXME[todo]: This can be improved by reverse lookup table

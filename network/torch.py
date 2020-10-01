@@ -13,6 +13,10 @@
 #     for Pytorch prior to 0.4.0 the volatile=True flag could be used
 #     to signal that all intermediate results can be dropped
 #
+# * Some transformation functions seem to rely on thirdparty libraries.
+#   For example image transformations, like torchvision.transforms.Resize(),
+#   rely on PIL.Image (pillow library).
+#
 # Questions:
 # Q: what is a torch.autograd.Variable?
 # Q: what does torch.cuda.synchronize() do?

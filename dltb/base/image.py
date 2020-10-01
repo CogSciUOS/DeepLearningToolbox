@@ -31,8 +31,23 @@ from base.observer import Observable
 from .data import Data
 from .. import thirdparty
 
-# FIXME[hack]: there should be not third-party module here
-import PIL.Image
+
+# FIXME[todo]: create an interface to work with different image/data formats
+# (as started in dltb.thirdparty.pil)
+# * add a way to specify the default format for reading images
+#   - in dltb.util.image.imread(format='pil')
+#   - for Imagesources
+# * add on the fly conversion for Data objects, e.g.
+#   data.pil should
+#   - check if property pil already exists
+#   - if not: invoke Image.as_pil(data)
+#   - store the result as property data.pil
+#   - return it
+# * this method could be extended:
+#   - just store filename and load on demand
+#   - compute size on demand
+#
+
 
 # Imagelike is intended to be everything that can be used as
 # an image.
@@ -61,7 +76,7 @@ class Image(Data):
             An image like object to turn into an array.
         copy: bool
             A flag indicating if the data should be copied or
-            if the original data is to be returned.
+            if the original data is to be returned (if possible).
         """
         # FIXME[hack]: local imports to avoid circular module dependencies ...
         from dltb.util.image import imread
@@ -73,25 +88,6 @@ class Image(Data):
             return imread(image)
         raise NotImplementedError(f"Conversion of {type(image).__module__}."
                                   f"{type(image).__name__} to numpy.ndarray "
-                                  "is not implemented")
-
-    @staticmethod
-    def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image:
-       # the _preprocess_image function expects as input a PIL image!
-        if isinstance(image, PIL.Image.Image):
-            return image
-        if isinstance(image, str):
-            return PIL.Image.open(image)
-        
-        if isinstance(image, np.ndarray):
-            if issubclass(image.dtype.type, np.float):
-                image = (image*255).astype('uint8')
-            elif image.dtype != np.uint8:
-                image = numpy_image.astype('uint8')
-            return Image.fromarray(image, 'RGB')
-
-        raise NotImplementedError(f"Conversion of {type(image).__module__}."
-                                  f"{type(image).__name__} to PIL.Image "
                                   "is not implemented")
     
     @staticmethod
