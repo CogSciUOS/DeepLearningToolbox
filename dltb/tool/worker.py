@@ -121,7 +121,7 @@ class Worker(BusyObservable, method='worker_changed',
             self._work(**kwargs)
 
     @busy("working")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
-    def _work(self, stepwise: bool = True, **kwargs):
+    def _work(self, stepwise: bool = False, **kwargs):
         """The implementation of the work loop. This method
         is assumed to run in a background thread. It will
         check the property `_next_data` for fresh data and

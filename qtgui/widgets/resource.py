@@ -33,7 +33,17 @@ LOG = logging.getLogger(__name__)
 
 class QRegisterController(QStackedWidget):
     """A :py:class:`QRegisterController` combines two controller,
-    one class controller and one instance controller.
+    one class controller and one instance controller. Only one
+    of them can be active at a time, and switching between them
+    is done by either setting a :py:class:`ClassRegisterEntry`
+    or an :py:class:`InstanceRegisterEntry`, respectively.
+
+    The class controller allows to create a new instance of a class.
+
+    The instance controller allows to instantiate an uninitialized
+    instance and the prepare or unprepare that instance, once it has
+    been initialized.
+
     """
 
     def __init__(self,
@@ -80,7 +90,8 @@ class QRegisterController(QStackedWidget):
 class QResourceInspector(QGroupBox, QObserver, qattributes={
         Toolbox: False, RegisterClass: False}, qobservables={
             InstanceRegisterEntry: {'state_changed'}}):
-    """A Widget allowing to inspect a type of widget. It provides a list
+    """A Widget allowing to inspect a resource (this is essentially
+    a :py:class:`RegisterClass`). It provides a list
     to select a resource, a controller allowing basic operations like
     preparation, and a view for displaying its properties.
 
@@ -141,7 +152,7 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
         row.addWidget(self._resourceController)
         layout.addLayout(row)
         layout.addWidget(self._resourceView)
-        layout.addStretch()
+        #layout.addStretch()
         self.setLayout(layout)
 
     def setToolbox(self, toolbox: Toolbox) -> None:  # FIXME[old]
@@ -176,6 +187,8 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
         """The currently observed :py:class:`InstanceRegisterEntry`
         has changed.
         """
+        LOG.info("QResourceInspector.state_changed: key='%s' [info=%s]",
+                 entry.key, info)
         if info.state_changed:
             self.setResource(entry.obj)
 
@@ -250,34 +263,6 @@ class QNetworkInspector(QResourceInspector):
         self._networkBox.setNetwork(network)
         self._networkInternals.setNetwork(network)
 
-    @protect
-    def onInstanceSelected(self, entry: InstanceRegisterEntry) -> None:
-        """A slot for reacting to network key selection in a network selection
-        widget. If the corresponding :py:class:`Network` is initialized,
-        it will be set as the current network in this
-        :py:class:`QNetworkInspector`, otherwise an initialization element
-        will be shown.
-
-        """
-        LOG.info("QNetworkInspector.onNetworkKeySelected: key='%s' -> %s",
-                 entry.key, entry.obj)
-        # self.setNetwork(network, key)
-
-        # FIXME[hack]
-        # if self._toolbox is not None and network is not None:
-        #    LOG.info("QNetworkInspector: add network %s to toolbox", network)
-        #    self._toolbox.add_network(network)
-
-    @protect
-    def onClassSelected(self, entry: ClassRegisterEntry) -> None:
-        """A slot for reacting to network class selection in a network class
-        selection widget.  This will switch the resource controller
-        into class mode and display the selected class.
-        """
-        self.setNetwork(None)
-        # FIXME[old]: is this still needed?
-        # self._resourceController.setClass(key)
-
 
 class QDatasourceInspector(QResourceInspector, qattributes={
         Datasource: False, Datafetcher: False}):
@@ -329,14 +314,14 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
         self.addAttributePropagation(Datasource, self._datasourceNavigator)
 
-        self._dataView = QDataView()
+        self._dataView = QDataView(style='wide')
         self._dataView.setDatafetcher(self._datasourceNavigator.datafetcher())
         self.addAttributePropagation(Datafetcher, self._dataView)
 
         datasourceView = QWidget()
         layout = QVBoxLayout()
         layout.addWidget(self._datasourceNavigator)
-        layout.addWidget(self._dataView, stretch=20)
+        layout.addWidget(self._dataView)
         datasourceView.setLayout(layout)
         return datasourceView
 

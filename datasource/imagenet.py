@@ -12,7 +12,8 @@ import logging
 import numpy as np
 
 # toolbox imports
-from dltb.base.data import Data, ClassScheme
+from dltb.base.data import Data
+from dltb.tool.classifier import ClassScheme, Classifier
 from .datasource import Imagesource, Sectioned
 from .directory import DataDirectory
 
@@ -145,6 +146,15 @@ class ImagenetScheme(ClassScheme):
             LOG.error("ImageNet class names not found. "
                       "Make sure that '%s' is available.", classes_txt)
             raise
+
+
+class ImagenetClassifier(Classifier):
+    """A classifier using the Imagenet :py:class:`ClassScheme`.
+    """
+
+    def __init__(self, **kwargs) -> None:
+        scheme = ClassScheme.register_initialize_key('ImageNet')
+        super().__init__(scheme=scheme, **kwargs)
 
 
 class ImageNet(DataDirectory, Imagesource, Sectioned,

@@ -30,7 +30,6 @@ import logging
 # toolbox imports
 # FIXME[todo]: lazy import
 # from util.lazy import lazy_begin, lazy_end
-# from dltb.base.data import Data, ClassScheme, ClassIdentifier
 from . import predefined
 from .meta import Metadata
 from .datasource import (Datasource, Labeled, Random, Sectioned,

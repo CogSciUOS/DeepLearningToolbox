@@ -169,7 +169,7 @@ class ImageDetector(Detector, ImageTool):
     
     def _preprocess(self, image: Imagelike, **kwargs) -> Data:
         data = super()._preprocess(image, **kwargs)
-        data.add_attribute('_data', data.scaled)
+        data.add_attribute('_data', getattr(data, 'scaled', data.image))
         return data
 
     def _postprocess(self, data: Data, name: str) -> None:

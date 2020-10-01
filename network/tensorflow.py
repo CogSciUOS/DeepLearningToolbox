@@ -22,8 +22,7 @@ from .layers.tensorflow_layers import TensorFlowConv2D as Conv2D
 from .layers.tensorflow_layers import TensorFlowMaxPooling2D as MaxPooling2D
 from .layers.tensorflow_layers import TensorFlowDropout as Dropout
 from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
-from dltb.util.image import imread, imresize
-from dltb.tool.classifier import ImageClassifier
+from dltb.util.image import imresize
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -774,7 +773,7 @@ class Network(BaseNetwork):
         return tuple(self.get_input_tensor().shape.as_list())
 
 
-class Alexnet(ImageClassifier, Classifier, Network):
+class Alexnet(Classifier, Network):
     """
     AlexNet trained on ImageNet data (TensorFlow).
     """
@@ -828,15 +827,3 @@ class Alexnet(ImageClassifier, Classifier, Network):
         image[:, :, 0], image[:, :, 2] = image[:, :, 2], image[:, :, 0]
         return image
 
-    def _image_as_batch(self, image: Union[str, np.ndarray]) -> np.ndarray:
-        if isinstance(image, str):
-            # FIXME[todo]: general resizing/preprocessing strategy for networks
-            size = self.get_input_shape(include_batch=False,
-                                        include_channel=False)
-            image = imread(image)  # , size=size
-
-        image = self.preprocess_image(image)
-
-        # add batch dimension
-        image = np.expand_dims(image, axis=0)
-        return image

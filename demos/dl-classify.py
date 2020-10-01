@@ -126,20 +126,20 @@ def main():
         # filenames = ['images/elephant.jpg', 'dog.jpg']
 
         for filename in args.image:
-            label = network.classify_image(filename)
-            print(f"classify_image('{filename}'): {label.label('text')}")
+            label = network.classify(filename)
+            print(f"classify('{filename}'): {label.label('text')}")
 
-            label, score = network.classify_image(filename, confidence=True)
-            print(f"classify_image('{filename}', confidence=True): "
+            label, score = network.classify(filename, confidence=True)
+            print(f"classify('{filename}', confidence=True): "
                   f"{label.label('text'), score}")
 
-            labels = network.classify_image(filename, top=5)
-            print(f"classify_image('{filename}', top=5): "
+            labels = network.classify(filename, top=5)
+            print(f"classify('{filename}', top=5): "
                   f"{[label.label('text') for label in labels]}")
 
-            labels, scores = network.classify_image(filename, top=5,
-                                                    confidence=True)
-            print(f"classify_image('{filename}', top=5, confidence=True): ")
+            labels, scores = network.classify(filename, top=5,
+                                              confidence=True)
+            print(f"classify('{filename}', top=5, confidence=True): ")
             for i, (label, score) in enumerate(zip(labels, scores)):
                 print(f"({i+1}) {label.label('text')} ({score*100:.2f}%)")
 

@@ -21,7 +21,8 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
 # toolbox imports
-from dltb.base.data import Data, ClassIdentifier
+from dltb.base.data import Data
+from dltb.tool.classifier import ClassIdentifier
 from toolbox import Toolbox
 from datasource import Metadata
 from datasource import Datasource, Datafetcher
@@ -140,7 +141,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         If a datafetcher is set, the :py:class:`QDataInfoBox` will display
         the currently selected data item of that :py:class:`Datafetcher`.
         """
-        LOG.debug("QDataView.setDatafetcher: %s -> %s",
+        LOG.debug("QDataInfoBox.setDatafetcher: %s -> %s",
                   self._datafetcher, datafetcher)
         if datafetcher is not None:
             self.setToolbox(None)
@@ -314,12 +315,12 @@ class QDataView(QWidget, QObserver, qobservables={
     through the batch.
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, style: str = 'high', **kwargs) -> None:
         super().__init__(**kwargs)
         self._data = None
         self._attributes = []
         self._initUI()
-        self._layoutUI()
+        self._layoutUI(style)
 
     def _initUI(self):
         """Initialize the user interface of this :py:class:`QDataView`.
@@ -336,28 +337,25 @@ class QDataView(QWidget, QObserver, qobservables={
         self._batchNavigator = QBatchNavigator()
         self._batchNavigator.indexChanged.connect(self.onIndexChanged)
 
-    def _layoutUI(self):
-        """Initialize the user interface of this :py:class:`QDataView`.
-        """
+    def _layoutUI(self, style: str) -> None:  # style='high'/'wide'
         # FIXME[layout]
         # layout.setSpacing(0)
         # layout.setContentsMargins(0, 0, 0, 0)
-        self._dataInfo.setMinimumWidth(200)
+        # self._dataInfo.setMinimumWidth(200)
         # keep image view square (FIXME[question]: does this make
         # sense for every input?)
-        self._imageView.heightForWidth = lambda w: w
-        self._imageView.hasHeightForWidth = lambda: True
+        #self._imageView.heightForWidth = lambda w: w
+        #self._imageView.hasHeightForWidth = lambda: True
 
         # FIXME[todo]: make this span the whole width
-        #self.setMinimumWidth(1200)
+        self.setMinimumWidth(1200)
 
         dataInfo = QVBoxLayout()
         dataInfo.addWidget(self._dataInfo)
         dataInfo.addWidget(self._batchNavigator)
         self._batchNavigator.hide()
 
-        orientation = 'vertical'
-        if orientation == 'vertical':
+        if style == 'high':
             # vertical layout: image above info
             layout = QVBoxLayout()
             row = QHBoxLayout()
@@ -367,11 +365,11 @@ class QDataView(QWidget, QObserver, qobservables={
             layout.addLayout(row)
             layout.addLayout(dataInfo)
         else:
-            # horizontal layout: image left of info
+            # style == 'wide': horizontal layout: image left of info
             layout = QHBoxLayout()
-            self._imageView.setMinimumSize(400, 400)
-            layout.addWidget(self._imageView)
             layout.addLayout(dataInfo)
+            # self._imageView.setMinimumSize(400, 400)
+            layout.addWidget(self._imageView)
 
         self.setLayout(layout)
 

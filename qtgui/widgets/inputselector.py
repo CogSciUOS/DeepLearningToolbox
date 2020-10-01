@@ -3,12 +3,11 @@ from typing import Any
 
 # Qt imports
 from PyQt5.QtWidgets import QWidget, QGroupBox, QHBoxLayout
-from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy
+from PyQt5.QtWidgets import QSizePolicy
 
 # toolbox imports
-from dltb.base.data import Data, ClassIdentifier
 from toolbox import Toolbox
-from datasource import Datasource, Random, Indexed
+from datasource import Datasource, Random
 from util.image import Region, PointsBasedLocation
 
 # GUI imports

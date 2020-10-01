@@ -14,15 +14,16 @@
 #     to signal that all intermediate results can be dropped
 #
 # Questions:
-# * what is a torch.autograd.Variable?
-# * what does the option volatile mean?
-# * what does torch.cuda.synchronize() do?
-# * how to acces the module name?
+# Q: what is a torch.autograd.Variable?
+# Q: what does torch.cuda.synchronize() do?
+#
+# Q: how to acces the module name?
 #    [name for name in dir(module) if 'name' in name] evaluates to
 #    ['_get_name', '_named_members', '_tracing_name', 'named_buffers',
 #      'named_children', 'named_modules', 'named_parameters']
-#   name = module._get_name()
-#   it seems that not modules but only submodules have names ...
+#    name = module._get_name()
+# A: it seems that not modules have not name. Only submodules can
+#    be registered with a name ...
 
 
 # standard imports
@@ -38,9 +39,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from torchvision import transforms
 
 # toolbox imports
-from . import Network as BaseNetwork, Layer as BaseLayer
+from dltb.base.data import Data
+from dltb.base.image import Imagelike, Image
+from . import Network as BaseNetwork, Layer as BaseLayer, Classifier
+
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -250,7 +255,6 @@ class Network(BaseNetwork):
 
     def _prepare_layers(self) -> None:
         super()._prepare_layers()
-        print("LAYER IDS:", self.layer_ids)
 
         # compute input shapes for all layers
         if self._input_shape is not None:
@@ -262,7 +266,6 @@ class Network(BaseNetwork):
             # fixed layer shape.
             NotImplementedError("Automatic determination of input shapes "
                                 "for torch models is not implemented yet.")
-        print("INPUT SHAPE:", self._input_shape)
 
     def _create_layer_dict(self) -> OrderedDict:
         """Create the mapping from layer ids to layer objects.
@@ -300,7 +303,9 @@ class Network(BaseNetwork):
         This method will fill the private attributes _input_shapes
         and _output_shapes, mapping layer names to the respective
         shape.
-        
+
+        Arguments
+        ---------
         input_shape:
             The shape of an input sample. May or may not include batch (B)
             or channel (C) dimension. If so, channel should be last, i.e.
@@ -311,8 +316,7 @@ class Network(BaseNetwork):
         # Torch convolution follows the channel first scheme, that is
         # the shape of a 2D convolution is (batch, channel, height, width).
         torch_input_shape = tuple(input_shape[_] for _ in [0, 3, 1, 2])
-        print(input_shape, " -> ", torch_input_shape)
-        
+
         self._input_shapes = {}
         self._output_shapes = {}
         self._prepare_hooks(self._shape_hook)
@@ -741,14 +745,8 @@ class Network(BaseNetwork):
                 if isinstance(layer_ids, list)
                 else self._activations[layer_ids])
 
-from typing import Union
-from torchvision import transforms
-from .network import Classifier
-from dltb.base.image import Image, Imagelike
-from dltb.tool.classifier import ImageClassifier
 
-
-class DemoResnetNetwork(ImageClassifier, Classifier, Network):
+class DemoResnetNetwork(Classifier, Network):
     """An experimental Torch Network based on ResNet.
 
     https://pytorch.org/hub/pytorch_vision_resnet/
@@ -772,7 +770,6 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
         #                        'resnet101', pretrained=True)
         # model = torch.hub.load('pytorch/vision:v0.6.0',
         #                        'resnet152', pretrained=True)
-        self._scheme.prepare()
         super()._prepare()
 
         # Construct an image preprocessing function using torch.transforms.
@@ -786,7 +783,7 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
                                  std=[0.229, 0.224, 0.225]),
         ])
 
-    def _image_as_batch(self, image: Imagelike) -> np.ndarray:
+    def _image_as_batch(self, image: Imagelike) -> torch.Tensor:
 
         # the _preprocess_image function expects as input a PIL image!
         image = Image.as_pil(image)
@@ -798,31 +795,49 @@ class DemoResnetNetwork(ImageClassifier, Classifier, Network):
         image_batch = image_tensor.unsqueeze(0)
 
         # move the input and model to GPU for speed if available
-        if torch.cuda.is_available():
-            image_batch = image_batch.to('cuda')
+        image_batch = image_batch.to(self._device)
 
         return image_batch
+
+    def _postprocess_scores(self, scores: torch.Tensor,
+                            unbatch: bool = False) -> np.ndarray:
+        """
+        Arguments
+        ---------
+
+        unbatch: bool
+            A flag indicating if the data should be unbatched.
+        """
+        if unbatch:
+            if scores.shape[0] != 1:
+                raise ValueError("Cannot unbatch scores "
+                                 f"with batch size {scores.shape[0]}")
+            scores = scores[0]
+        scores = scores.to('cpu')
+        scores = scores.numpy()
+        return scores
+
+    #
+    # Implementation of the Tool/SoftClassifier interface (not used yet)
+    #
+
+    def _preprocess(self, image: Imagelike, *args, **kwargs) -> Data:
+        data = super(self, image=None, *args, **kwargs)
+        data.add_attribute('image', self._image_as_batch(image))
+        return data
 
     #
     # Implementation of the SoftClassifier interface
     #
 
-    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
-        print(f"torch.Resnet.class_scores: inputs={type(inputs)},"
-              f" {inputs.shape}")
+    def _class_scores(self, inputs: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             logits = self._model(inputs)
-
         # Tensor of shape 1000, with confidence scores over Imagenet's
         # 1000 classes
         # print(output[0])
 
         # The output has unnormalized scores. To get probabilities,
-        # you can run a softmax on it.
-        outputs = torch.nn.functional.softmax(logits, dim=1)
-
-        if torch.cuda.is_available():
-            outputs = outputs.cpu()
-
-        outputs = outputs.numpy()
-        return outputs
+        # we run a softmax on it.
+        scores = torch.nn.functional.softmax(logits, dim=1)
+        return scores

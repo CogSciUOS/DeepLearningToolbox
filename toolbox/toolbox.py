@@ -674,10 +674,12 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         #
         parser.add_argument('--cpu', help='Do not attempt to use GPUs',
                             action='store_true', default=False)
-        parser.add_argument('--framework', help='The framework to use.',
-                            choices=['keras-tensorflow', 'keras-theano',
-                                     'torch'],
-                            default='keras-tensorflow')
+        # FIXME[old]: this option has been integrated into
+        # NetworkArgparse
+        # parser.add_argument('--framework', help='The framework to use.',
+        #                     choices=['keras-tensorflow', 'keras-theano',
+        #                              'torch'],
+        #                     default='keras-tensorflow')
         parser.add_argument('--shell', help='Run the toolbox shell',
                             action='store_true', default=False)
 

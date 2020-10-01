@@ -629,7 +629,8 @@ class QInitializeButton(QPrepareButton):
             super().updateState()
 
 
-class QInstanceRegisterEntryController(QRegisterClassEntryController):
+class QInstanceRegisterEntryController(QRegisterClassEntryController,
+            qobservables={InstanceRegisterEntry: {'state_changed'}}):
     """A controller for an :py:class:`InstanceRegisterEntry`. This
     controller allows to instantiate and initialize a registered
     instance of a class.
@@ -689,4 +690,24 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController):
         if not self._registerEntry.initialized:
             # initialize the class object represented by the current entry
             self._button.setEnabled(False)
+            self._button.setText("Initializing")
+            print("QInstanceRegisterEntryController: Initializing ...")
             self._registerEntry.initialize()
+
+    def setRegisterEntry(self, entry: Union[RegisterEntry, str]) -> None:
+        """Set a new :py:class:`ClassRegisterEntry` to control.
+
+        Arguments
+        ---------
+        entry: Union[RegisterEntry, str]
+            Either a subclass of the register class or the
+            (fully qualified) name of such a class.
+        """
+        super().setRegisterEntry(entry)
+        # FIXME[hack]: set the observable InstanceRegisterEntry ...
+        self.setInstanceRegisterEntry(self._registerEntry)
+
+    # FIXME[todo]: should be entry_changed?
+    def state_changed(self, entry: InstanceRegisterEntry,
+                      change: InstanceRegisterEntry.Change) -> None:
+        self.update()

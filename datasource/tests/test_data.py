@@ -1,6 +1,7 @@
 from unittest import TestCase
 
-from ..data import Data, ClassScheme
+from dltb.base.data import Data
+from dltb.tool.classifier import ClassScheme
 
 
 class TestData(TestCase):

@@ -16,7 +16,7 @@ import importlib.util
 import pickle
 
 # toolbox imports
-from dltb.base.data import ClassScheme
+from dltb.tool.classifier import ClassScheme
 from .datasource import Imagesource
 from .array import LabeledArray
 

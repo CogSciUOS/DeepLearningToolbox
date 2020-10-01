@@ -163,7 +163,7 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
                        result: Union[str, Tuple[str]] = None,
                        **kwargs) -> Data:
         if result is None and not internal:
-            result = self.result
+            result = self._result
         elif isinstance(result, str):
             result = (result, )
 
@@ -178,8 +178,7 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
             data.add_attribute('start_', time.time())
         return data
 
-    def _do_postprocess(self, data: Data) -> Data:
-
+    def _do_postprocess(self, data: Data) -> Any:
         result = data.result_
         for name in result:
             self._postprocess(data, name)
@@ -237,7 +236,7 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         """
         # FIXME[todo]: batch data ...
         if result is None:
-            result = self.result
+            result = self._result
         values = self(data, *args, result=result, **kwargs)
         if isinstance(result, str):
             self.add_data_attribute(data, result, values)
@@ -279,6 +278,19 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         and only if the timer was activated.
         """
         return self.get_data_attribute(data, 'duration')
+
+
+class BatchTool(Tool):
+
+    def _do_preprocess(self, *args, internal: bool = False,
+                       batch: bool = False,
+                       result: Union[str, Tuple[str]] = None,
+                       **kwargs) -> Data:
+        data = self._do_preprocess(*args, internal, batch, result, **kwargs)
+        return data
+
+    def _do_postprocess(self, data: Data) -> Any:
+        return super()._do_postprocess(data)
 
 
 class IterativeTool(Tool):
@@ -370,7 +382,7 @@ class IterativeTool(Tool):
 
         """
         if result is None:
-            result = self.result
+            result = self._result
         if result is None:
             result = ()
         elif isinstance(result, str):

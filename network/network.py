@@ -13,6 +13,9 @@ import importlib
 import numpy as np
 
 # toolbox imports
+from dltb.base.data import Data, Datalike
+from dltb.base.image import Image, Imagelike
+from dltb.tool import Tool
 from dltb.tool.classifier import SoftClassifier
 from base import Identifiable, Extendable, Preparable, RegisterClass, busy
 from .util import convert_data_format
@@ -829,7 +832,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         self._check_layer_is_convolutional(layer_id)
         raise NotImplementedError
 
-    def get_layer_padding(self, layer_id) -> (int,int):
+    def get_layer_padding(self, layer_id) -> (int, int):
         """The padding for the cross-correlation/convolution operation, i.e,
         the number of rows/columns (on both sides) by which the input
         is extended (padded with zeros) before the operation is
@@ -899,6 +902,15 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         if not self.layer_is_convolutional(layer_id):
             raise ValueError('Not a convolutional layer: {}'.format(layer_id))
 
+    #
+    # Pre- and postprocessing
+    #
+
+    def preprocess(self, inputs: Any) -> Any:
+        return inputs
+
+    def postprocess(self, outputs: Any) -> Any:
+        return outputs
 
     #
     # Information
@@ -915,7 +927,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     def get_trainer(self, training):
         return Trainer(training, self)
 
-        
+
 class Trainer:
     """
 
@@ -1002,16 +1014,55 @@ class Classifier(SoftClassifier, Network):
                              f"classification scheme: {output_shape} output "
                              f"units vs. {len(self._scheme)} classes")
 
-    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+    #
+    # Implementation of teh SoftClassifier API
+    #
+
+    def class_scores(self, data: Datalike) -> np.ndarray:
+        """Implementation of the :py:class:`SoftClassifier` interface.
+        """
+        data_internal = self._image_as_batch(data)
+        scores_internal = self._class_scores(data_internal)
+        scores = self._postprocess_scores(scores_internal, unbatch=True)
+        return scores
+
+    def _image_as_batch(self, image: Imagelike) -> np.ndarray:
+        # size = self.get_input_shape(include_batch=False,
+        #                             include_channel=False)
+        # FIXME[todo]: general resizing/preprocessing strategy for networks
+        image = Image.as_array(image)  # , size=size
+        image = self.preprocess_image(image)
+
+        # add batch dimension
+        image = np.expand_dims(image, axis=0)
+        return image
+
+    def _class_scores(self, inputs: np.ndarray) -> np.ndarray:
         # FIXME[todo]: at least in tensorflow it seems possible to feed
         # a list of inputs!
         # output = sess.run(network_output_tensor,
         #                   feed_dict={network_input_tensor:inputs})
         # However, we do not allow this yet!
-        print(f"network.Classifier.class_scores: inputs={type(inputs)}")
+        # print(f"network.Classifier.class_scores: inputs={type(inputs)}")
         inputs = np.asarray(inputs)
-        outputs = self.get_activations(self.output_layer_id(), inputs)
-        return outputs
+        scores = self.get_activations(self.score_layer, inputs)
+        return scores
+
+    def _postprocess_scores(self, scores: np.ndarray,
+                            unbatch: bool = False) -> np.ndarray:
+        """
+        Arguments
+        ---------
+
+        unbatch: bool
+            A flag indicating if the data should be unbatched.
+        """
+        if unbatch:
+            if scores.shape[0] != 1:
+                raise ValueError("Cannot unbatch scores "
+                                 f"with batch size {scores.shape[0]}")
+            scores = scores[0]
+        return scores
 
 class Autoencoder(Network, method='network_changed'):
 
@@ -1135,3 +1186,36 @@ class AutoencoderController(NetworkController):
     def sample(self, inputs=None, codes=None):
         if codes is None and inputs is not None:
             codes = self._network.encode(inputs, batch_size=self._batch_size)
+
+
+class NetworkTool(Tool):
+
+    _result: Tuple[str] = ('outputs')
+    _internal_arguments: Tuple[str] = ('inputs_')
+    _internal_result: Tuple[str] = ('outputs_')
+
+    @property
+    def network(self) -> Network:
+        return self._network
+
+    @network.setter
+    def network(self, network: Network) -> None:
+        self._network = Network
+
+    def _preprocess(self, inputs, *args, **kwargs) -> Data:
+        data = super()._preprocess(*args, **kwargs)
+        if inputs is not None:
+            data.add_attribute('_inputs', self._network.preprocess(inputs))
+        return data
+
+    def _process(self, inputs: Any) -> Any:
+        """Default operation: propagate data through the network.
+        """
+        output_layer = self._network.output_layer_id()
+        return self._network.get_activations(output_layer, inputs)
+
+    def _postprocess(self, data: Data, what: str) -> None:
+        if what == 'outputs':
+            data.add_attribute(what, self._network.postprocess(data.outputs_))
+        elif not hasattr(data, what):
+            raise ValueError(f"Unknown property '{what}' for tool {self}")

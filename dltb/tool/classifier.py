@@ -7,27 +7,235 @@
 #   class labels, even if not applied to ImageNet data
 
 # standard imports
-from typing import Union, Tuple, Any
+from typing import Union, Tuple, Iterable, Any
+from abc import abstractmethod, ABC
 import logging
 
 # third party imports
 import numpy as np
 
 # toolbox imports
-from ..base.data import Data, ClassScheme, ClassIdentifier
+from base import RegisterClass, Preparable
+from ..base.data import Data, Datalike
+from ..base.image import Imagelike, Image
+from ..util.image import imread, imresize
+from .tool import Tool
 from .image import ImageTool
 
 # FIXME[hack]: instead of prepare_input_image use the network.resize
 # API once it is finished!
-from dltb.base.image import Imagelike, Image
-from dltb.util.image import imread, imresize
 
 # logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
 
-class Classifier:
+class ClassScheme(metaclass=RegisterClass):
+    """A :py:class:`ClassScheme` represents a classification scheme.  This
+    is essentially a collection of classes.  An actual class is
+    referred to by a :py:class:`ClassIdentifier`.
+
+    In addition to the collection of classes, a
+    :py:class:`ClassScheme` can also provide one or multiple lookup
+    tables that allow to map numerical class indices or textual class
+    labels to classes and vice versa. There will always be a default
+    table to be used, but all lookup operation will provide an
+    optional argument to specify an alternative lookup table to be
+    used. Lookup tables can be added to a :py:class:`ClassScheme`
+    using the method :py:meth:`add_labels`.
+
+
+    Attributes
+    ----------
+
+    _length: int
+        The number of classes in this :py:class:`ClassIdentifier`.
+
+    _lookup: Dict[str, Any]
+        Lookup tables mapping labels to classes. Keys are names
+        of lookup tables and values the actual tables. Each lookup
+        table is either an array (in case of numerical labels)
+        or `dict` in case that labels are strings.
+
+    _labels: Dict[str, Any]
+        Lookup tables for mapping classes to labels.
+        Keys are the name of the table (the same as in _lookup) and
+        values are mappings from classes to class labels.
+
+    _no_class: ClassIdentifier
+        The class representing the invalid class (no class)
+        FIXME[todo]: currently not used!
+    """
+
+    def __init__(self, length: int = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._length = length
+        self._labels = {}
+        self._lookup = {}
+        self._no_class = None
+
+    def __len__(self):
+        return self._length
+
+    def identifier(self, index: Any, lookup: str = None) -> 'ClassIdentifier':
+        """Get an :py:class:`ClassIdentifier` for the given index.
+
+        Arguments
+        ---------
+        index:
+            An index from which the :py:class:`ClassIdentifier` is
+            constructed.
+        lookup: str
+            The name of a lookup table to get the canonical value
+            for the given index.
+        """
+        return ClassIdentifier(self.get_label(index, lookup=lookup), self)
+
+    def get_label(self, index: Any, name: str = 'default',
+                  lookup: str = None) -> Any:
+        """Look up a label from this :py:class:`ClassScheme`.
+        """
+        # FIXME[hack]:
+        # 1) allow for more iterables than just lists
+        #    (e.g., tuples, ndarrays)
+        # 2) do it more efficently
+        if isinstance(index, list):
+            if lookup is not None:
+                index = [self._lookup[lookup][i] for i in index]
+            if name == 'default':
+                return index
+            return [self._labels[name][i] for i in index]
+
+        if isinstance(index, tuple):
+            if lookup is not None:
+                index = tuple(self._lookup[lookup][i] for i in index)
+            if name == 'default':
+                return index
+            return tuple(self._labels[name][i] for i in index)
+
+        if lookup is not None:
+            index = self._lookup[lookup][index]
+        return index if name == 'default' else self._labels[name][index]
+
+    def has_label(self, name: str = 'default') -> bool:
+        """Check if this :py:class:`ClassScheme` supports the given
+        labeling format.
+
+        Arguments
+        ---------
+        name: str
+            The name of the labeling format.
+        """
+        return name == 'default' or name in self._labels
+
+    def add_labels(self, values: Iterable, name: str = 'default',
+                   lookup: bool = False) -> None:
+        """Add a label set to this :py:class:`ClassScheme`.
+
+        Arguments
+        ---------
+        values:
+            Some iterable providing the labels in the order of this
+            :py:class:`ClassScheme`.
+        name: str
+            The name of the label set. This name has to be used when
+            looking up labels in this label set.
+        lookup: bool
+            A flag indicating if a reverse lookup table shall be created
+            for this label.
+        """
+        if isinstance(values, np.ndarray):
+            pass  # take the given numpy array
+        else:
+            values = list(values)
+        if self._length is None:
+            self._length = len(values)
+        elif self._length != len(values):
+            raise ValueError("Wrong number of class labels: "
+                             f"expected {self._length}, got {len(values)}")
+
+        self._labels[name] = values
+        if lookup:
+            if isinstance(values, np.ndarray) and values.max() < 2*len(self):
+                self._lookup[name] = np.zeros(values.max()+1, dtype=np.int)
+                self._lookup[name][values] = np.arange(0, values.size)
+            else:
+                self._lookup[name] = \
+                    {val: idx for idx, val in enumerate(values)}
+
+
+ClassScheme.register_key('ImageNet', 'datasource.imagenet',
+                         'ImagenetScheme')
+ClassScheme.register_key('WiderFace', 'datasource.widerface',
+                         'WiderfaceScheme')
+
+
+class ClassIdentifier(int):
+    # pylint: disable=no-member
+    # _scheme
+    """An identifier for a class in a classification scheme.
+    A class identifier is usually refered to as "class label".
+
+    Arguments
+    ---------
+    value: Any
+        A value identifying the class. This may be the numerical
+        class index, or any label which can be mapped to such
+        a value by a reverse lookup table of the
+        :py:class:`ClassScheme`.
+    scheme: ClassScheme
+        The classification scheme according to which this
+        identifier is used.
+
+    Raises
+    ------
+    ValueError:
+        If the value is not a valid label in the
+        :py:class:`ClassScheme`.
+    """
+
+    def __new__(cls, value: Any, scheme: ClassScheme = None,
+                lookup: str = None) -> None:
+        """Create a new class number.
+
+        """
+        if lookup is not None:
+            if scheme is None:
+                raise ValueError(f"No scheme provided for lookup of {value}")
+            self = scheme.identifier(value, lookup=lookup)
+        else:
+            self = super().__new__(cls, value)
+            self._scheme = scheme
+        return self
+
+    def label(self, name: str = None) -> Any:
+        """Get the label for this class number.
+
+        Arguments
+        ---------
+        name: str
+            The name of the labeling format.
+
+        Raises
+        ------
+        KeyError:
+            The given name is not a valid labeling for the ClassScheme.
+        """
+        return self._scheme.get_label(self, name)
+
+    def has_label(self, name: str = None) -> bool:
+        """Check if the :py:class:`ClassIdentifier` has a
+        label of the given labeling format.
+
+        Arguments
+        ---------
+        name: str
+            The name of the labeling format.
+        """
+        return self._scheme and self._scheme.has_label(name)
+
+
+class Classifier(ABC, Preparable):
     """A :py:class:`Classifier` is associated with a classification
     scheme, describing the set of classes ("labels").  Output units of
     the network have to be mapped to the class labels.
@@ -46,10 +254,6 @@ class Classifier:
 
     """
 
-    _result: Tuple[str] = ('identifier')
-    _internal_arguments: Tuple[str] = ('_inputs')
-    _internal_result: Tuple[str] = ('identifier')
-
     def __init__(self, scheme: Union[ClassScheme, str, int],
                  lookup: str = None, **kwargs):
         LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
@@ -66,7 +270,7 @@ class Classifier:
         """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
         """
         return self._scheme
-    
+
     @property
     def class_scheme_lookup(self) -> str:
         """The lookup table to be used to map the (internal) results of this
@@ -75,7 +279,7 @@ class Classifier:
         """
         return self._lookup
 
-    def _prepare(self, **kwargs) -> None:
+    def _prepare(self) -> None:
         """Prepare this :py:class:`Classifier`.
 
         Raises
@@ -87,24 +291,14 @@ class Classifier:
         super()._prepare()
         self._scheme.prepare()
 
-        
-    def preprocess(self, data: Data) -> None:
-        """Preprocess the given data to a format suitable to be processed by
-        this :py:class:`Classifier`. The actual operations to be
-        performed depend on the requirements of the
-        :py:class:`Classifier` and have to be implemented by the
-        classifier.
-
-        """
-        pass
-
-    def classify(self, inputs: np.ndarray):
+    @abstractmethod
+    def classify(self, inputs: Datalike) -> ClassIdentifier:
         """Output the top-n classes for given batch of inputs.
 
         Arguments
         ---------
         inputs: np.ndarray
-            A batch of input data to classify.
+            A data point or a batch of input data to classify.
 
         Results
         -------
@@ -112,40 +306,17 @@ class Classifier:
             A list of class-identifiers or a
             list of tuples of class identifiers.
         """
-        return self(inputs)
-
-    #
-    # Private processor API
-    #
-
-    def _preprocess(self, inputs: np.ndarray, *args, **kwargs) -> np.ndarray:
-        """A :py:class:`SoftClassifier` maps input data to class scores.
-        """
-        data = super()._preprocess(inputs, *args, **kwargs)
-        if inputs is not None:
-            data.add_attribute('_inputs', Data.as_array(inputs))
-        return data
-    
-    def _process(self, inputs: np.ndarray) -> np.ndarray:
-        """A :py:class:`SoftClassifier` maps input data to class scores.
-        """
-        # return the class scores
-        raise NotImplementedError()
 
 
 class SoftClassifier(Classifier):
+    """A :py:class:`SoftClassifier` maps an input item to score vector
+    describing the confidence with which the item belongs to the
+    corresponding class of a classification scheme.
 
-    _result: Tuple[str] = ('scores')
-    _internal_arguments: Tuple[str] = ('_inputs')
-    _internal_result: Tuple[str] = ('scores')
+    """
 
-    def _process(self, inputs: np.ndarray) -> np.ndarray:
-        """A :py:class:`SoftClassifier` maps input data to class scores.
-        """
-        # return the class scores
-        raise NotImplementedError()
-    
-    def class_scores(self, inputs: np.ndarray) -> np.ndarray:
+    @abstractmethod
+    def class_scores(self, inputs: Datalike) -> np.ndarray:
         """Compute all class scores. The output array will have one entry for
         each class of the classification scheme.
 
@@ -156,9 +327,11 @@ class SoftClassifier(Classifier):
         """
         # FIXME[concept]: we need a way to determine if inputs are single or
         # batch!
-        return self(inputs)
 
-    def classify(self, inputs: np.ndarray, top: int = None):
+    def classify(self, inputs: Datalike, top: int = None,
+                 confidence: bool = False) -> Union[ClassIdentifier,
+                                                    Tuple[ClassIdentifier]]:
+        # pylint: disable=arguments-differ
         """Output the top-n classes for given batch of inputs.
 
         Arguments
@@ -171,12 +344,14 @@ class SoftClassifier(Classifier):
         classes:
             A list of class-identifiers or a
             list of tuples of class identifiers.
-        score:
-            If top is None, a one-dimensial array of confidence values or
+        score (optional):
+            If top is None, a one-dimensional array of confidence values or
             otherwise a two-dimension array providing the top highest
             confidence values for each input item.
         """
-        return self.top_classes(self(inputs), top=top)
+        scores = self.class_scores(inputs)
+        top_classes, top_scores = self.top_classes(scores, top=top)
+        return (top_classes, top_scores) if confidence else top_classes
 
     #
     # Utilities
@@ -210,7 +385,11 @@ class SoftClassifier(Classifier):
         #
         # compute the top n class scores
         #
+        unbatch = scores.ndim == 1
+        if unbatch:
+            scores = scores[np.newaxis]
 
+        # scores has shape (batch, classes)
         batch = np.arange(len(scores))
         if top is None:
             top_indices = np.argmax(scores, axis=-1)
@@ -225,18 +404,30 @@ class SoftClassifier(Classifier):
 
         # FIXME[hack]: best would be, if ClassIdentifier could deal with
         # numpy.int. Until this is possible, we will use lists of int.
-        class_identifiers = []
-        for indices in top_indices:
-            if top is None:
-                identifiers = \
-                    self._scheme.identifier(indices, lookup=self._lookup)
-            else:
-                identifiers = \
-                    [self._scheme.identifier(cls, lookup=self._lookup)
-                     for cls in indices]
-            class_identifiers.append(identifiers)
+        if scores.ndim == 1:  # no batch data
+            class_identifiers = \
+                (self._scheme.identifier(top_indices, lookup=self._lookup)
+                 if top is None else
+                 [self._scheme.identifier(cls, lookup=self._lookup)
+                  for cls in top_indices])
+        else:
+            class_identifiers = []
+            for indices in top_indices:
+                if top is None:
+                    identifiers = \
+                        self._scheme.identifier(indices, lookup=self._lookup)
+                else:
+                    identifiers = \
+                        [self._scheme.identifier(cls, lookup=self._lookup)
+                         for cls in indices]
+                class_identifiers.append(identifiers)
 
-        return class_identifiers, scores[batch, top_indices.T].T
+        scores = scores[batch, top_indices.T].T
+        if unbatch:
+            class_identifiers = class_identifiers[0]
+            scores = scores[0]
+
+        return class_identifiers, scores
 
     def class_rank(self, scores: np.ndarray,
                    label: ClassIdentifier) -> (int, float):
@@ -265,65 +456,8 @@ class SoftClassifier(Classifier):
         return rank, score
 
     def print_classification(self, scores: np.ndarray, top: int = 5):
-        top_indices, top_scores = self.top_classes()
+        """Output the classification scores.
+        """
+        top_indices, top_scores = self.top_classes(scores, top=top)
         for i, (index, score) in enumerate(zip(top_indices, top_scores)):
             print(f"  {i}: {index} ({score})")
-
-
-class ImageClassifier(Classifier, ImageTool):
-    """An :py:class:`ImageClassifier` is a classifier for images.
-    """
-
-    def preprocess_image(self, image: Imagelike) -> Any:
-        """Preprocess a single image to be in a format that
-        can be used as input for this :py:class:`ImageClassifier`.
-        This may include resizing the image, as well centering and
-        standardization, or adding a batch dimension.
-        """
-        return self._preprocess(Image.as_array(image))
-
-    def _preprocess(self, image, *arg, **kwargs) -> Data:
-        data = super()._preprocess(image, *arg, **kwargs)
-        if image is not None:
-            image = np.expand_dims(image, axis=0)
-            self.add_data_attribute(data, 'image', image)
-        return data
-
-    def _image_as_batch(self, image: Union[str, np.ndarray]) -> np.ndarray:
-        if isinstance(image, str):
-            # FIXME[todo]: general resizing/preprocessing strategy for networks
-            size = self.get_input_shape(include_batch=False,
-                                        include_channel=False)
-            image = imread(image)  # , size=size
-            image = imresize(image, size=size)
-
-        # add batch dimension
-        image = np.expand_dims(image, axis=0)
-        return image
-
-    def classify_image(self, image: Union[str, np.ndarray],
-                       top: int = None, confidence: bool = False
-                       ) -> Union[ClassIdentifier, Tuple[ClassIdentifier]]:
-        """Classify the given image.
-
-        Arguments
-        ---------
-        image: Union[str, np.ndarray]
-            The image to classify, either as image filename or as
-            numpy array.
-        top: int
-            Number of top classification results to report. If not provided,
-            the single best class will be returned
-
-        Result
-        ------
-        class or classes:
-            Either a single class or a tuple of the top best matches.
-        confidence(s) (optional):
-            If the confidence argument is True, the corresponding confidence
-            value (or a tuple of confidence values).
-        """
-        image_batch = self._image_as_batch(image)
-        classes, scores = self.classify(image_batch, top=top)
-
-        return (classes[0], scores[0]) if confidence else classes[0]

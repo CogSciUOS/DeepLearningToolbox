@@ -5,7 +5,7 @@
 import os
 
 # toolbox imports
-from dltb.base.data import ClassScheme
+from dltb.tool.classifier import ClassScheme
 from .datasource import Imagesource
 from .directory import DataDirectory
 

@@ -10,7 +10,8 @@ import glob
 import random
 
 # toolbox imports
-from dltb.base.data import Data, ClassScheme
+from dltb.base.data import Data
+from dltb.tool.classifier import ClassScheme
 from .files import DataFiles
 from .datasource import Imagesource
 
