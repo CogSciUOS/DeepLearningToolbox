@@ -4,7 +4,9 @@ See https://github.com/netaz/caffe2any/blob/master/topology.py for some inspirat
 from dltb.network import layer as layers
 from caffe.proto import caffe_pb2
 import google.protobuf.text_format
-from dltb.network.network import remove_batch_dimension, transpose_channel_axis
+from dltb.network.network import remove_batch_dimension,
+from dltb.util.array import adapt_data_format,
+from dltb.util.array import DATA_FORMAT_CHANNELS_LAST as channels_last
 from functools import wraps
 
 def channels_last(shape_fn):
@@ -23,8 +25,7 @@ def channels_last(shape_fn):
     def wrapper(*args, **kwargs):
         shape = shape_fn(*args, **kwargs)
         if len(shape) > 2:
-            shape = transpose_channel_axis(shape,
-                                           output_format='channels_last')
+            shape = adapt_data_format(shape, output_format=channels_last)
         return shape
     return wrapper
 

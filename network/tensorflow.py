@@ -1,6 +1,6 @@
 
 # standard imports
-from typing import Union
+from typing import Union, List
 from collections import OrderedDict
 import os
 import re
@@ -25,6 +25,7 @@ from .layers.tensorflow_layers import TensorFlowDropout as Dropout
 from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
 from dltb.base.image import Image, Imagelike
 from dltb.util.image import imresize
+from dltb.util.array import DATA_FORMAT_CHANNELS_LAST
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -178,6 +179,11 @@ class Network(BaseNetwork):
 
     keras_name_regex = re.compile(r'(.)([A-Z][a-z0-9]+)')
 
+    # TensorFlow uses channels last as data format by default.
+    # This can however be changed by the user.
+    _internal_format: str = DATA_FORMAT_CHANNELS_LAST
+
+
     def __init__(self, checkpoint=None, graph_def=None, session=None, **kwargs):
         """Initialize a TensorFlow network.
 
@@ -213,11 +219,6 @@ class Network(BaseNetwork):
         self._init_checkpoint = checkpoint
         self._init_session = session
 
-
-        # TensorFlow uses channels last as data format by
-        # default. This can however be changed by the user.
-        # FIXME[todo]: make this more flexible.        
-        kwargs['channel_axis'] = 'channels_last'
         super().__init__(**kwargs)
 
     def _prepare(self):
@@ -711,8 +712,8 @@ class Network(BaseNetwork):
     # Network operations
     #
 
-    def _get_activations(self, input_samples: np.ndarray,
-                         layer_ids: list) -> list:
+    def _get_activations(self, inputs: tf.Tensor,
+                         layer_ids: list) -> List[tf.Tensor]:
         """
         Parameters
         ----------
@@ -723,11 +724,17 @@ class Network(BaseNetwork):
         -------
 
         """
+        LOG.debug("TensorflowNetwork[%s]._get_activations: "
+                  "inputs[%s]: %s (%s, %s), layers=%s", self.key,
+                  type(inputs).__name__,
+                  None if inputs is None else inputs.shape,
+                  self._internal_format,
+                  None if inputs is None else inputs.dtype, layer_ids)
+
         # Get the tensors that actually hold the activations.
-        activation_tensors = []
-        for layer_id in layer_ids:
-            activation_tensors.append(self[layer_id].activation_tensor)
-        return self._feed_input(activation_tensors, input_samples)
+        activation_tensors = \
+            [self[layer_id].activation_tensor for layer_id in layer_ids]
+        return self._feed_input(activation_tensors, inputs)
 
     def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
         net_input_tensors = []

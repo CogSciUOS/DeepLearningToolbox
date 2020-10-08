@@ -12,6 +12,7 @@ import numpy as np
 from network import Network, Classifier, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from ..base.data import Data
+from ..util.array import DATA_FORMAT_CHANNELS_FIRST
 from . import Tool, Worker
 
 # logging
@@ -57,7 +58,8 @@ class ActivationTool(Tool, Network.Observer):
 
     """
 
-    def __init__(self, network: Network = None, **kwargs):
+    def __init__(self, network: Network = None, data_format: str = None,
+                 **kwargs) -> None:
         """Create a new ``Engine`` instance.
 
         Parameters
@@ -70,11 +72,19 @@ class ActivationTool(Tool, Network.Observer):
         # adapters
         self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
         self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
-        self._channel_axis = 'channels_first'
+        self._data_format = data_format
 
         # network related
         self._network = None
         self.network = network
+
+    @property
+    def data_format(self) -> str:
+        if self._data_format is not None:
+            return self._data_format
+        if self._network is not None:
+            return self._network.data_format
+        return None
 
     #
     # network
@@ -166,21 +176,37 @@ class ActivationTool(Tool, Network.Observer):
             super()._postprocess(data, what)
 
     def data_activations(self, data: Data, layer: Layer = None,
-                         unit: int = None) -> np.ndarray:
+                         unit: int = None,
+                         data_format: str = None) -> np.ndarray:
         """Get the precomputed activation values for the current
         :py:class:`Data`.
         """
         activations = self.get_data_attribute(data, 'activations')
+        if data_format is None or unit is not None:
+            data_format = self.data_format
+
         if layer is None:
-            return activations
+            if data_format is self.data_format:
+                return activations
+            return list(map(lambda activation:
+                            adapt_data_format(activation, input_format=
+                                              self._data_format,
+                                              output_format=data_format),
+                            activations))
         if isinstance(layer, Layer):
             layer = layer.id
         activations = activations[layer]
+
+        if data_format is not self.data_format:
+            activations = adapt_data_format(activations,
+                                            input_format=self.data_format,
+                                            output_format=data_format)
+
         if unit is None:
             return activations
-        if self._network.channel_axis == Network.CHANNEL_AXIS_FIRST:
-            return activations[unit]
-        return activations[..., unit]
+
+        return (activations[unit] if data_format == DATA_FORMAT_CHANNELS_FIRST
+                else activations[..., unit])
 
 
 class ActivationWorker(Worker):
@@ -230,7 +256,7 @@ class ActivationWorker(Worker):
         """Set the layers for which activations shall be computed.
 
         """
-        self._fixed_layers = layers
+        self._fixed_layers = layers if instance(layers, list) else list(layers)
         self._update_layers()
 
     def add_layer(self, layer: Union[str, Layer]) -> None:
@@ -274,12 +300,19 @@ class ActivationWorker(Worker):
             self.work(self._data)
 
     def _apply_tool(self, data: Data, **kwargs) -> None:
+        """Apply the :py:class:`ActivationTool` on the given data.
+        """
         self.tool.apply(self, data, layers=self._layer_ids, **kwargs)
 
-    def activations(self, layer: Layer = None, unit: int = None) -> np.ndarray:
+    def activations(self, layer: Layer = None, unit: int = None,
+                    data_format: str = None) -> np.ndarray:
         """Get the precomputed activation values for the current
         :py:class:`Data`.
         """
-        activations = self._tool.data_activations(self._data, layer, unit)
-        print("activations:", len(activations) if layer is None else activations.shape)
-        return self._tool.data_activations(self._data, layer, unit)
+        activations = \
+            self._tool.data_activations(self._data, layer=layer, unit=unit,
+                                        data_format=data_format)
+        LOG.debug("ActivationWorker.activations(%s,unit=%s,data_format=%s):"
+                  " %s", layer, unit, data_format, 
+                  len(activations) if layer is None else activations.shape)
+        return activations

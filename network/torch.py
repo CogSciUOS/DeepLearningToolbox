@@ -51,6 +51,7 @@ from dltb.base.image import Image, Imagelike, ImageAdapter
 from dltb.network.network import Network as BaseNetwork
 from dltb.network.network import ImageNetwork as BaseImageNetwork
 from dltb.network import layer as Base
+from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 from . import Layer as BaseLayer, Classifier
 
 
@@ -87,7 +88,7 @@ class Layer(Base.Layer):
     """
 
     def __new__(cls, module: nn.Module, **kwargs) -> None:
-        print(f"torch: new Layer with {type(module)}")
+        LOG.info(f"torch: new Layer with type %s", type(module))
         if isinstance(module, nn.Conv2d):
             cls = Conv2D
         elif isinstance(module, nn.Sequential):
@@ -222,6 +223,22 @@ class Conv2D(NeuralLayer, StridingLayer, Base.Conv2D):
         return self._module.kernel_size
 
     @property
+    def strides(self):
+        return self._module.stride
+
+    @property
+    def padding(self):
+        # FIXME[todo]: here torch stores the actual number of pixels
+        # that are padded in both directions. This allows for a more
+        # fine grained controll than just 'SAME'
+        return 'SAME'
+
+    @property
+    def dilation(self):
+        print(f"torch.Conv2D: dilation={self._module.dilation}")
+        return self._module.dilation
+
+    @property
     def filters(self):
         return self.output_shape[1]
 
@@ -288,7 +305,7 @@ class Network(BaseNetwork):
     """
 
     # pytorch expects channel first (batch,channel,height,width)
-    _channel_internal = BaseNetwork.CHANNEL_AXIS_FIRST
+    _internal_format = DATA_FORMAT_CHANNELS_FIRST
 
     # _model: the underlying torch.nn.Module
     _model: nn.Module
@@ -807,6 +824,11 @@ class Network(BaseNetwork):
                          layer_ids) -> List[torch.Tensor]:
         """Compute layer activations.
         """
+        LOG.debug("TorchNetwork[%s]._get_activations: "
+                  "inputs[%s]: %s (%s, %s), layers=%s", self.key,
+                  type(inputs).__name__,
+                  getattr(inputs, 'shape', '?'), self._internal_format,
+                  getattr(inputs, 'dtype', '?'), layer_ids)
 
         # prepare to record the activations
         self._activations = {}
@@ -825,45 +847,51 @@ class Network(BaseNetwork):
         return list(self._activations.values())
 
     def _transform_input(self, inputs: np.ndarray,
-                         channel_axis: str) -> np.ndarray:
+                         **kwargs) -> Tuple[torch.Tensor, bool, bool]:
+        """
+        Transform input data from the public interface (using numpy arrays)
+        into the internal representation (`torch.Tensor`).
+        
+        Arguments
+        ---------
+        inputs: np.ndarray
+            The input data.
 
+        data_format: str
+            The format of the input data. If `None`,
+            the default format of the network (according to
+            :py:prop:`data_format` is assumed).
+
+        Result
+        ------
+        internal: torch.Tensor
+            The data in the internal format
+
+        batched: bool
+            A flag indicating that a batch dimension was added.
+
+        internalized: bool
+            A flag indicating if the data was actively transformed
+            into the internal format (torch.Tensor). This is `True`,
+            if an active transformation was performed and `False`
+            if the given `inputs` were already a `torch.Tensor`.
+        """
+        
         if isinstance(inputs, torch.Tensor):
-            is_internal = True
+            # The data seems already to be in interal format. 
+            internalized = False
+            batched = False
+
         else:
-            is_internal = False
+            inputs, batched, internalized = \
+                super()._transform_input(inputs, **kwargs)
+            internalized = True
+            
             inputs = torch.from_numpy(inputs)
             inputs = inputs.to(self._device)
             inputs = Variable(inputs)
 
-        shape = self.get_input_shape()
-        if len(inputs.shape) == len(shape):
-            is_batch = True
-        elif len(inputs.shape) == len(shape) - 1:
-            inputs = inputs.unsqueeze(0)
-            is_batch = False
-        else:
-            raise ValueError(f"Invalid input of shape {inputs.shape} "
-                             f"for network with imput shape {shape}")
-
-        channel_index = -1 if self._channel_internal == 'channels_last' else 1
-        channels = shape[channel_index]
-
-        if channels == inputs.shape[channel_index]:
-            # channel_swap = False
-            pass
-        elif (self._channel_internal == 'channels_last' and
-              inputs.shape[1] == channels):
-            # channel_swap = True
-            inputs = inputs.permute(0, 2, 3, 1)
-        elif (self._channel_internal == 'channels_first' and
-              inputs.shape[-1] == channels):
-            # channel_swap = True
-            inputs = inputs.permute(0, 3, 1, 2)
-        else:
-            raise ValueError(f"Cannot find channels ({channels}) "
-                             f"in input of show {inputs.shape}")
-
-        return inputs, is_batch, is_internal
+        return inputs, batched, internalized
 
     # FIXME[old]:
     def _old_postprocess(self, layer_ids, input_samples):

@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import QWidget, QToolTip
 import util.image
 from network import Layer
 from dltb.tool.activation import ActivationWorker
+from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 from ..utils import QObserver, protect
 
 # logging
@@ -359,8 +360,15 @@ class QActivationView(QWidget, QObserver, qobservables={
                 # when this code is executed. In this case a
                 # TypeError ('NoneType' object is not subscriptable)
                 # is raised. We may adapt the worker to avoid this.
-                activations = worker.activations(self._layer)
-            except (ValueError, TypeError):
+
+                # for convolution we want activation to be `channels_first`
+                # that is of shape (output_channels, width, height)
+                activations = worker.activations(self._layer, data_format=
+                                                 DATA_FORMAT_CHANNELS_FIRST)
+            except (ValueError, TypeError) as error:
+                from util.error import print_exception
+                #LOG.warning("QActivationView.worker_changed: error=%s", error)
+                print_exception(error)
                 activations = None
             LOG.debug("QActivationView.worker_changed: type=%s",
                       type(activations))
@@ -373,12 +381,6 @@ class QActivationView(QWidget, QObserver, qobservables={
 
             if activations is not None:
                 self._isConvolution = (activations.ndim == 3)
-
-                if self._isConvolution:
-                    # for convolution we want activtation to be of shape
-                    # (output_channels, width, height) but it comes in
-                    # (width, height, output_channels)
-                    activations = activations.transpose([2, 0, 1])
 
                 # this is a uint8 array, globally normalized
                 activations = util.image.grayscaleNormalized(activations)

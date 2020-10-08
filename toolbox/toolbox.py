@@ -68,7 +68,8 @@ from dltb.base.data import Data
 
 # FIXME[todo]: this will load tensorflow!
 from dltb.network import Network, argparse as NetworkArgparse
-from network import AutoencoderController
+# FIXME[old]: make AutoencoderController a tool
+#from network import AutoencoderController
 # from network.examples import keras, torch
 from datasource import Datasource, Datafetcher, DataDirectory
 from tools.train import TrainingController
@@ -1477,11 +1478,15 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
     #
 
     @property
-    def autoencoder_controller(self) -> AutoencoderController:
+    def autoencoder_controller(self) -> 'AutoencoderController':
+        if True:
+            raise NotImplementedError("The AutoencoderController is "
+                                      "currently not working")
         controller = getattr(self, '_autoencoder_controller', None)
-        if controller is None:
-            controller = AutoencoderController(runner=self._runner)
-            self._autoencoder_controller = controller
+        # FIXME[update]: make the AutoencoderController a Tool/Network
+        # if controller is None:
+        #     controller = AutoencoderController(runner=self._runner)
+        #     self._autoencoder_controller = controller
         return controller
 
     @property

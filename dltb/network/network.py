@@ -18,6 +18,7 @@ from ..base.data import Data, Datalike
 from ..base.image import Imagelike, ImageExtension
 from ..tool import Tool
 from ..tool.classifier import SoftClassifier
+from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
 from base import Identifiable, Extendable, Preparable
 
 # logging
@@ -85,17 +86,18 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     To stay flexible, we introdude two properties to adapt this
     behaviour:
 
-    _channel_axis:
+    _data_format:
         The format for data passed to the network via the public
         interface. Also data returned by public methods, like
-        :py:meth:`get_activations` will be in that format.
+        :py:meth:`get_activations` will be in that format (unless
+        explicitly requested otherwise).
 
-    _channel_internal:
+    _internal_format:
         The internal data format used by the underlying implementation.
         This is the format expected and returned by all internal
         methods like :py:meth:`_get_activations`.
 
-    Public methods may in addition accept an optional `channel_axis`
+    Public methods may in addition accept an optional `data_format`
     argument, allowing to overwrite the :py:class:`Network`s default.
 
     .. note::
@@ -165,10 +167,10 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
     # ------------ Public interface ----------------
 
-    CHANNEL_AXIS_FIRST = 'channels_first'
-    CHANNEL_AXIS_LAST = 'channels_last'
+    _data_format: str = DATA_FORMAT_CHANNELS_LAST
 
-    _channel_axis: str = 'channels_last'  # or 'channels_first'
+    # should be set in subclasses based on the underlying engine
+    _internal_format: str = None
     # network/tests/test_network.py
     # ./network/tensorflow.py
     # ./network/torch.py
@@ -183,14 +185,14 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # FIXME[todo]: channel ordering is relevant when processing
     # actiations
 
-    def __init__(self, id=None, channel_axis: str = None,
+    def __init__(self, id=None, data_format: str = None,
                  **kwargs) -> None:
         """
 
         Parameters
         ----------
         **kwargs
-            channel_axis: {'channels_last', 'channels_first'}
+            data_format: {DATA_FORMAT_CHANNELS_LAST, 'channels_first'}
                 The place of the color channels in the tensors.
         """
         LOG.debug("Network.__init__: %s [%s]", kwargs, self.__class__.__mro__)
@@ -202,17 +204,17 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
         # Every loaded_network should know which data format it is using.
         # Default is channels_last.
-        if channel_axis is not None:
-            self._channel_axis = channel_axis
+        if data_format is not None:
+            self._data_format = data_format
         self.layer_dict = None
 
     @property
-    def channel_axis(self) -> str:
-        return self._channel_axis
+    def data_format(self) -> str:
+        return self._data_format
 
-    @channel_axis.setter
-    def channel_axis(self, axis: str) -> None:
-        self._channel_axis = axis
+    @data_format.setter
+    def data_format(self, axis: str) -> None:
+        self._data_format = axis
 
     #
     # Sized interface
@@ -297,7 +299,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # @busy("getting activations")
     def get_activations(self, inputs: np.ndarray,
                         layer_ids: Any = None,
-                        channel_axis: str = 'channels_last',
+                        data_format: str = None,
                         image: bool = False
                         ) -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
@@ -313,9 +315,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         layer_ids:
             The layers the activations should be fetched for. Single
             layer_id or list of layer_ids.
-        channel_axis: {'channels_last', 'channels_first'}
+        data_format: {DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST}
             The format in which the data is provided.
-            Either "channels_first" or "channels_last".
         image: bool
             The data provided are an image.
 
@@ -325,20 +326,27 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         (input_samples, image_height, image_width, feature_maps).
 
         """
-        internal, is_batch, is_internal = \
-            self._transform_input(inputs, channel_axis)
+        LOG.debug("Network[%s].get_activations: inputs[%s]: %s (%s, %s), "
+                  "layers=%s", self.key, type(inputs).__name__,
+                  getattr(inputs, 'shape', '?'), data_format,
+                  getattr(inputs, 'dtype', '?'), layer_ids)
+        internal, batched, internalized = \
+            self._transform_input(inputs, data_format)
 
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
 
         # Transform the input_sample appropriate for the loaded_network.
-        LOG.debug("Transforming input data from %s to %s.",
-                  inputs.shape, channel_axis)
+        LOG.debug("Network[%s]: internal[%s]: %s (%s, %s)",
+                  self.key, type(internal).__name__,
+                  getattr(internal, 'shape', '?'), self._internal_format,
+                  getattr(internal, 'dtype', '?'))
         activations = self._get_activations(internal, layer_ids)
 
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, channel_axis,
-                                               is_batch, is_internal)
+        activations = [self._transform_outputs(activation, data_format,
+                                               unbatch=batched,
+                                               internal=not internalized)
                        for activation in activations]
         # If it was just asked for the activations of a single layer,
         # return just an array.
@@ -348,7 +356,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
     def get_net_input(self, layer_ids: Any,
                       input_samples: np.ndarray,
-                      channel_axis: str = 'channels_last'
+                      data_format: str = DATA_FORMAT_CHANNELS_LAST
                       ) -> Union[np.ndarray, List[np.ndarray]]:
         """Gives the net input (inner product + bias) values of the network
         for given layers and an input sample.
@@ -373,12 +381,13 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
         # Transform the input_sample appropriate for the loaded_network.
-        internal, is_batch, is_internal = \
-            self._transform_input(input_samples, channel_axis)
+        internal, batched, internalized = \
+            self._transform_input(input_samples, data_format)
         activations = self._compute_net_input(layer_ids, input_samples)
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, channel_axis,
-                                               is_batch, is_internal)
+        activations = [self._transform_outputs(activation, data_format,
+                                               unbatch=batched,
+                                               internal=not internalized)
                        for activation in activations]
         # If it was just asked for the activations of a single layer,
         # return just an array.
@@ -431,7 +440,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # ---------------------- Private helper functions -------------------------
 
     def _transform_input(self, inputs: np.ndarray,
-                         channel_axis: str) -> np.ndarray:
+                         data_format: str = None) -> np.ndarray:
         """Fills up the ranks of the input, e.g. if no batch size was
         specified and converts the input to the data format of the model.
 
@@ -439,7 +448,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         ----------
         inputs
             The inputs fed to the network.
-        channel_axis: {'channels_last', 'channels_first'}
+        data_format: {DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST}
             The data format of inputs.
 
         Returns
@@ -451,48 +460,46 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         is_internal: bool
             The data was already given in the internal format.
         """
-        is_internal = True
+        internalized = False
 
-        shape = self.get_input_shape()
-        if len(inputs.shape) == len(shape):
-            is_batch = True
-        elif len(inputs.shape) == len(shape) - 1:
-            inputs = inputs[np.newaxis]
-            is_batch = False
+        if len(self.input_shape) == data.ndim:
+            batched = False
+        elif len(self.input_shape) == data.ndim + 1:
+            batched = True
         else:
-            raise ValueError(f"Invalid input of shape {inputs.shape} "
-                             f"for network with imput shape {shape}")
+            ValueError("Number of data dimension ({data.ndim}) does "
+                       "not fit network input shape (self.input_shape)")
 
-        channel_index = -1 if self._channel_axis == 'channels_last' else 1
-        channels = shape[channel_index]
+        if data_format is None:
+            data_format = self.data_format
+        inputs = adapt_data_format(inputs, input_format=data_format,
+                                   output_format=self._internal_format,
+                                   add_batch=batched)
 
-        if channels == inputs.shape[channel_index]:
-            # channel_swap = False
-            pass
-        elif (self._channel_axis == 'channels_last' and
-              inputs.shape[1] == channels):
-            # channel_swap = True
-            inputs = inputs.transpose((0, 2, 3, 1))
-        elif (self._channel_axis == 'channels_first' and
-              inputs.shape[-1] == channels):
-            # channel_swap = True
-            inputs = inputs.transpose((0, 3, 1, 2))
-        else:
-            raise ValueError(f"Cannot find channels ({channels}) "
-                             f"in input of show {inputs.shape}")
-
-        return inputs, is_batch, is_internal
+        return inputs, batched, internalized
 
     def _transform_outputs(self, outputs: np.ndarray,
-                           channel_axis: str,
-                           batch: bool, internal: bool) -> np.ndarray:
+                           data_format: str,
+                           unbatch: bool = False,
+                           internal: bool = False) -> np.ndarray:
         """Convert output values into a desired data format.
+
+        Arguments
+        ---------
+        unbatch: bool
+            The output data are expected be a single item instead of
+            a batch. If `True` the batch axis is removed, given it
+            is single-dimensional (only one sample in batch).
+        internal: bool
+            The outputs are expected to be in internal format, that
+            is, no transformations (except those that is explicitly
+            requested by other flags) are applied.
         """
         if not internal:
-            outputs = transpose_channel_axis(outputs,
-                                             input_format=self._channel_axis,
-                                             output_format=channel_axis)
-        if not batch:
+            outputs = adapt_data_format(outputs,
+                                        input_format=self._data_format,
+                                        output_format=data_format)
+        if unbatch:
             outputs = outputs[0]
         return outputs
 
@@ -504,9 +511,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         ----------
         inputs
             The inputs fed to the network.
-        channel_axis: {'channels_last', 'channels_first'}
+        data_format: {DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST}
             The data format to transform to.
-
 
         Returns
         -------
@@ -675,18 +681,14 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
                         include_channel: bool = True) -> tuple:
         """Get the shape of the input data for the network.
         """
-        shape = self._get_input_shape()
-        if include_batch and include_channel:
-            return shape
-        if include_channel:  # and not include_batch
-            return shape[1:]
-        if not include_batch:  # and not include_channel
-            return (shape[1:-1] if self._channel_axis == 'channels_last'
-                    else shape[2:])
-        # include_batch and not include_channel
-        if self._channel_axis == 'channels_last':
-            return shape[:-1]
-        return (shape[0],) + shape[2:]
+        output_format = \
+            self.data_format if include_channel else DATA_FORMAT_CHANNELS_LAST
+        shape = adapt_data_format(self._get_input_shape(),
+                                  input_format=self._internal_format,
+                                  output_format=self.data_format,
+                                  remove_batch=not include_batch)
+
+        return shape if include_channel else shape[:-1]
 
     def _get_input_shape(self) -> tuple:
         return self.get_layer_input_shape(self.input_layer_id())
@@ -1059,7 +1061,7 @@ class ImageNetwork(ImageExtension, base=Network):
     # more flexible)
     def get_activations(self, inputs: Imagelike,
                         layer_ids: Any = None,
-                        channel_axis: str = 'channels_last'
+                        data_format: str = DATA_FORMAT_CHANNELS_LAST
                         ) -> Union[np.ndarray, List[np.ndarray]]:
 
         LOG.debug("ImageNetwork.getActivations(%s, %s)",
@@ -1075,8 +1077,8 @@ class ImageNetwork(ImageExtension, base=Network):
         activations = self._get_activations(internal, layer_ids)
 
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, channel_axis,
-                                               False, False)
+        activations = [self._transform_outputs(activation, data_format,
+                                               unbatch=True, internal=False)
                        for activation in activations]
         LOG.debug("ImageNetwork: activations=%s", activations[0].shape)
         # If it was just asked for the activations of a single layer,
@@ -1237,78 +1239,3 @@ def remove_batch_dimension(shape: tuple) -> tuple:
     return shape
 
 
-def transpose_channel_axis(array_or_shape: Union[np.ndarray, tuple],
-                           input_format: str = None, output_format: str = None
-                           ) -> Union[np.ndarray, tuple]:
-    """Convert channel first to channel last format or vice versa.
-
-    Parameters
-    ----------
-    array_or_shape
-        The array or shape tuple to be converted. Needs to be at least rank 3.
-
-    input_format
-        Either 'channels_first' or 'channels_last'. If not given, opposite
-        of `output_format` is used.
-
-    output_format
-        Either 'channels_first' or 'channels_last'. If not given, opposite
-        of `input_format` is used.
-
-    Returns
-    -------
-    The converted numpy array.
-
-    """
-    is_tuple = False
-    # Check inputs.
-    if isinstance(array_or_shape, np.ndarray):
-        if array_or_shape.ndim < 3:
-            # raise ValueError('Tensor needs to be at least of rank 3
-            # but is of rank {}.'.format(array_or_shape.ndim))
-            # Non-image arrays don't have to be converted.
-            return array_or_shape
-    elif isinstance(array_or_shape, tuple):
-        # Convert to list for assignment later, but set a flag to
-        # remember it was a tuple.
-        array_or_shape = list(array_or_shape)
-        is_tuple = True
-        if len(array_or_shape) < 3:
-            # raise ValueError('Shape needs to be at least of rank 3
-            # but is of rank {}.'.format(len(array_or_shape)))
-            return array_or_shape
-    else:
-        raise TypeError("Input must be either tuple or ndarray "
-                        f"but is {type(array_or_shape)}")
-    # Do the conversion based on the arguments.
-    if input_format == output_format:
-        # No conversion needed to same input and output format.
-        return array_or_shape
-    elif ((input_format == 'channels_first' and
-           output_format == 'channels_last') or
-          (input_format == 'channels_first' and output_format is None) or
-          (input_format is None and output_format == 'channels_last')):
-        if isinstance(array_or_shape, np.ndarray):
-            return np.moveaxis(array_or_shape, 1, -1)
-        elif is_tuple:
-            num_channels = array_or_shape[1]
-            del array_or_shape[1]
-            array_or_shape.append(num_channels)
-            array_or_shape[-1] = num_channels
-            return tuple(array_or_shape)
-    elif ((input_format == 'channels_last'
-           and output_format == 'channels_first') or
-          (input_format == 'channels_last' and output_format is None) or
-          (input_format is None and output_format == 'channels_first')):
-        if isinstance(array_or_shape, np.ndarray):
-            return np.moveaxis(array_or_shape, -1, 1)
-        elif is_tuple:
-            num_channels = array_or_shape[-1]
-            del array_or_shape[-1]
-            array_or_shape[1].insert(1, num_channels)
-            return tuple(array_or_shape)
-    else:
-        raise ValueError("Data format must be either 'channels_last' "
-                         "or 'channels_first,' but is "
-                         f"input_format='{input_format}' and "
-                         f"output_format='{output_format}'")

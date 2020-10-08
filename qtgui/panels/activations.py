@@ -18,6 +18,7 @@ from toolbox import Toolbox
 from network import Network
 from datasource import Datasource
 import util.image
+from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 
 # GUI imports
 from .panel import Panel
@@ -164,7 +165,8 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._initUI()
         self._layoutUI()
 
-        self._activationTool = ActivationTool()
+        self._activationTool = \
+            ActivationTool(data_format=DATA_FORMAT_CHANNELS_FIRST)
         worker = ActivationWorker(tool=self._activationTool)
         self.setActivationWorker(worker)
 
@@ -451,6 +453,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # of the network input layer in format ((x1,y1), (x2,y2))
         field = self._receptiveField
         network = self.network()
+        print(f"AcivationsPanel: receptive field={field}, network: {network.get_input_shape(False, False)}")
         if field is None or network is None:
             self._imageView.setReceptiveField(None, None)
         else:
@@ -488,6 +491,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         else:
             point = (position.x(), position.y())
             self._receptiveField = layer.receptive_field(point)
+        print(f"AcivationsPanel: New receptive field is: {self._receptiveField}")
         self.updateReceptiveField()
 
     @protect

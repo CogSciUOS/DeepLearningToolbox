@@ -12,6 +12,7 @@ from tempfile import NamedTemporaryFile
 
 # toolbox imports
 from network.exceptions import ParsingError
+from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 
 from . import Network as BaseNetwork
 from .layers import caffe_layers
@@ -40,6 +41,8 @@ class Network(BaseNetwork):
 
     _TRANSFORMATION_LAYER_TYPES = {'Pooling', 'Flatten', 'Dropout'}
 
+    # Caffe uses channels first as data format.
+    _internal_format = DATA_FORMAT_CHANNELS_FIRST
 
     def __init__(self, **kwargs):
         """
@@ -52,8 +55,6 @@ class Network(BaseNetwork):
             model_weights
                 Path the .caffemodel weights file.
         """
-        # Caffe uses channels first as data format.
-        kwargs['channel_axis'] = 'channels_first'
         self.protonet = self._remove_inplace(kwargs['model_def'])
         # Write the new protobuf model definition to a file, so it can be read to create a caffe net.
         # This would probably not be necessary with boost > 1.58, see https://stackoverflow.com/a/34172374/4873972

@@ -13,6 +13,7 @@ from PyQt5.QtCore import Qt, QPoint, QSize, QRect, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import (QImage, QPainter, QPen, QTransform,
                          QKeyEvent, QMouseEvent)
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
+from PyQt5.QtWidgets import QToolTip
 
 # toolbox imports
 from dltb.base.data import Data
@@ -54,6 +55,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         the raw input data, or the data actually fed to the network.
     _showMetadata: bool
         A flag indicating if metadata should be shown if available.
+    _toolTipActive : bool
+        A flag indicating whether tooltips shoould be shown.
     """
     """A :py:class:`QImageView` to display the input image of the
     Toolbox.
@@ -115,6 +118,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
         self._data = None
         self._image = None
+        self._activation = None
         self._marks = None
         self._receptiveField = None
         self._overlay = None
@@ -128,6 +132,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._showMetadata = True
 
         self._processed = False  
+        self._toolTipActive = False
+        self.setToolTip(False)
 
         self.modeChanged.connect(self.onModeChanged)
 
@@ -207,6 +213,22 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         if self._showMetadata != flag:
             self._showMetadata = flag
             self.update()
+
+    def setToolTip(self, active: bool = True) -> None:
+        """Turn on/off the tooltips for this Widget.
+        The tooltip will display the index and value for the matrix
+        at the current mouse position.
+
+        Parameters
+        ----------
+        active: bool
+            Will turn the tooltips on or off.
+        """
+        self._toolTipActive = active
+        self.setMouseTracking(self._toolTipActive)
+
+        if not self._toolTipActive:
+            QToolTip.hideText()
 
     def setData(self, data: Data, attribute='array', index: int=0) -> None:
         """Set the data to be displayed by this :py:class:`QImageView`.
@@ -373,6 +395,27 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._regions.append(region)
         self.update()
 
+    def transform(self) -> QTransform:
+        if self._image is None:
+            return None
+
+        w = self._image.width()
+        h = self._image.height()
+        # scale maximally while maintaining aspect ratio
+        w_ratio = self.width() / w
+        h_ratio = self.height() / h
+        if self._keepAspect:
+            w_ratio = min(w_ratio, h_ratio)
+            h_ratio = w_ratio
+        # the rect is created such that it is centered on the
+        # current widget pane both horizontally and vertically
+        x = (self.width() - w * w_ratio) // 2
+        y = (self.height() - h * h_ratio) // 2
+        transform = QTransform()
+        transform.translate(x, y)
+        transform.scale(w_ratio, h_ratio)
+        return transform
+
     @protect
     def paintEvent(self, event):
         """Process the paint event by repainting this Widget.
@@ -388,22 +431,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
         # Compute the transformation
         if self._image is not None:
-            w = self._image.width()
-            h = self._image.height()
-            # scale maximally while maintaining aspect ratio
-            w_ratio = self.width() / w
-            h_ratio = self.height() / h
-            if self._keepAspect:
-                w_ratio = min(w_ratio, h_ratio)
-                h_ratio = w_ratio
-            # the rect is created such that it is centered on the
-            # current widget pane both horizontally and vertically
-            x = (self.width() - w * w_ratio) // 2
-            y = (self.height() - h * h_ratio) // 2
-            transform = QTransform()
-            transform.translate(x, y)
-            transform.scale(w_ratio, h_ratio)
-            painter.setTransform(transform)
+            painter.setTransform(self.transform())
 
         self._drawImage(painter)
         self._drawReceptiveField(painter)
@@ -518,7 +546,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         key = event.key()
         self.keyPressed.emit(key)
 
-        if key == Qt.Key_R:
+        # Space will toggle display of tooltips
+        if key == Qt.Key_Space:
+            self.setToolTip(not self._toolTipActive)
+        elif key == Qt.Key_R:
             self.keepAspectRatio = not self.keepAspectRatio
         elif key == Qt.Key_M:
             self.showMetadata = not self.showMetadata
@@ -526,6 +557,58 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self.setMode(not self._processed)
         else:
             super().keyPressEvent(event)
+
+    # Attention: The mouseMoveEvent() is only called for regular mouse
+    # movements, if mouse tracking is explicitly enabled for this
+    # widget by calling self.setMouseTracking(True).  Otherwise it may
+    # be called on dragging.
+    @protect
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """Process mouse movements.  If tooltips are active, information on
+        mouse pointer position are displayed.
+
+        Parameters
+        ----------
+        event: QMouseEvent
+            The mouse event, providing local and global coordinates.
+        """
+        if not self._toolTipActive:
+            return
+
+        position = event.pos()
+        size = self.size()
+        text = f"Screen position: {(position.x(), position.y())}"
+        text += f" in {size.width()}x{size.height()}"
+
+        if self._image is None:
+            text += "\nNo image"
+        else:
+            image_size = self._image.size()
+
+        transform = self.transform()
+        if transform is None:
+            text += "\nNo transformation"
+        elif not transform.isInvertible():
+            text += "\nTransformation not invertible"
+        else:
+            inverted, _invertible = transform.inverted()
+            image_rect = QRect(0, 0, image_size.width(), image_size.height())
+            projected_image_rect = transform.mapRect(image_rect)
+            projected_image_size = projected_image_rect.size()
+            text += (f"\nScreen image size: {projected_image_size.width()}x"
+                     f"{projected_image_size.height()}")
+
+            image_position = inverted.map(position)
+            text += (f"\nScreen image position: "
+                     f"({image_position.x()}, {image_position.y()})"
+                     f" in {image_size.width()}x{image_size.height()}")
+
+        if self._overlay is None:
+            text += "\nNo activation"
+        else:
+            text += f"\nActivation shape: {self._overlay.size()}"
+
+        QToolTip.showText(event.globalPos(), text)
 
     #
     # ImageTool.Observer

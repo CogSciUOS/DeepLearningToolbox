@@ -152,13 +152,18 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self.setData(datafetcher.data)
 
     def _updateInfo(self):
-        if self._processed:
-            data = self._data.input_data
+        if self._data is None:
+            data = None
+            label = None
+            description = None
         else:
-            data = self._data.raw_input_data
-        label = getattr(data, 'label', None)
-        description = getattr(data, 'description', "No description"
-                              if self._toolbox else "No toolbox")
+            if self._processed:
+                data = self._data.input_data
+            else:
+                data = self._data.raw_input_data
+                label = getattr(data, 'label', None)
+                description = getattr(data, 'description', "No description"
+                                      if self._toolbox else "No toolbox")
         self._showInfo(data=data, label=label, description=description)
 
     #
