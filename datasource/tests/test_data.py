@@ -7,7 +7,7 @@ from dltb.tool.classifier import ClassScheme
 class TestData(TestCase):
 
     def setUp(self):
-        self.imagenet_scheme = ClassScheme.register_initialize_key('ImageNet')
+        self.imagenet_scheme = ClassScheme['ImageNet']
         self.imagenet_scheme.prepare()
 
     def test_data1(self):

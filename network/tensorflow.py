@@ -12,7 +12,8 @@ from dltb.thirdparty.tensorflow import v1 as tf
 
 # toolbox imports
 import util
-from . import Network as BaseNetwork, Classifier
+from dltb.network.network import Network as BaseNetwork
+from dltb.network.network import ImageNetwork, Classifier
 from .exceptions import ParsingError
 from .layers.tensorflow_layers import TensorFlowLayer as Layer
 from .layers.tensorflow_layers import TensorFlowNeuralLayer as NeuralLayer
@@ -22,6 +23,7 @@ from .layers.tensorflow_layers import TensorFlowConv2D as Conv2D
 from .layers.tensorflow_layers import TensorFlowMaxPooling2D as MaxPooling2D
 from .layers.tensorflow_layers import TensorFlowDropout as Dropout
 from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
+from dltb.base.image import Image, Imagelike
 from dltb.util.image import imresize
 
 # logging
@@ -215,7 +217,7 @@ class Network(BaseNetwork):
         # TensorFlow uses channels last as data format by
         # default. This can however be changed by the user.
         # FIXME[todo]: make this more flexible.        
-        kwargs['data_format'] = 'channels_last'        
+        kwargs['channel_axis'] = 'channels_last'
         super().__init__(**kwargs)
 
     def _prepare(self):
@@ -709,7 +711,8 @@ class Network(BaseNetwork):
     # Network operations
     #
 
-    def _compute_activations(self, layer_ids: list, input_samples: np.ndarray) -> list:
+    def _get_activations(self, input_samples: np.ndarray,
+                         layer_ids: list) -> list:
         """
         Parameters
         ----------
@@ -723,7 +726,7 @@ class Network(BaseNetwork):
         # Get the tensors that actually hold the activations.
         activation_tensors = []
         for layer_id in layer_ids:
-            activation_tensors.append(self.layer_dict[layer_id].activation_tensor)
+            activation_tensors.append(self[layer_id].activation_tensor)
         return self._feed_input(activation_tensors, input_samples)
 
     def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
@@ -773,7 +776,7 @@ class Network(BaseNetwork):
         return tuple(self.get_input_tensor().shape.as_list())
 
 
-class Alexnet(Classifier, Network):
+class Alexnet(Classifier, ImageNetwork, Network):
     """
     AlexNet trained on ImageNet data (TensorFlow).
     """
@@ -805,25 +808,17 @@ class Alexnet(Classifier, Network):
         LOG.debug("alexnet: prepare")
         self._online()
 
-        LOG.debug("alexnet: Load Class Names")
-        # from datasource import Datasource
-        # imagenet = Datasource.register_initialize_key('imagenet-val')
-        # self.set_labels(imagenet, format='caffe')
-        LOG.debug("alexnet: Done")
-
-        # FIXME[old]:
-        #
-        # if toolbox.contains_tool('activation'):
-        #    tool = self.get_tool('activation')
-        #    tool.set_network(network)
-
-    def preprocess_image(self, image: np.ndarray) -> np.ndarray:
+    def image_to_internal(self, image: Imagelike) -> np.ndarray:
         """
         """
-        # image = (image[0][:, :, :3]).astype(np.float32)
-        image = image[:, :, :3].astype(np.float32)
+        # FIXME[todo]: check out the correct preprocessing for AlexNet
+        # with the current approach the accuracy is only around 30%
+        image = Image.as_array(image)
+        image = image[:, :, :3].astype(np.float32)  # /256.
         image = imresize(image, (227, 227))
         image = image - image.mean()
         image[:, :, 0], image[:, :, 2] = image[:, :, 2], image[:, :, 0]
-        return image
+        return image[np.newaxis]
 
+    def internal_to_image(self, internal: tf.Tensor) -> np.ndarray:
+        return internal[0].numpy()

@@ -76,8 +76,8 @@ class ExperimentsPanel(Panel):
         elif self._data is None:
             activations = None
         else:
-            activations = self._network.get_activations([self._layer],
-                                                        self._data)[0]
+            activations = self._network.get_activations(self._data,
+                                                        [self._layer])[0]
 
         # FIXME[todo]: we actually need activation of two subsequent layers
         self.connections_view.setActivation(activations,activations)

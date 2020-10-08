@@ -27,7 +27,6 @@ from toolbox import Toolbox
 from datasource import Metadata
 from datasource import Datasource, Datafetcher
 from util.image import Region, PointsBasedLocation
-from tools.activation import Engine as ActivationEngine
 
 # GUI imports
 from ..utils import QObserver, protect
@@ -41,8 +40,7 @@ LOG = logging.getLogger(__name__)
 
 class QDataInfoBox(QWidget, QObserver, qobservables={
         Datafetcher: {'data_changed'},
-        Toolbox: {'input_changed'},
-        ActivationEngine: {'input_changed'}}):
+        Toolbox: {'input_changed'}}):
     # FIXME[concept]: should we forbid simultanous observation of
     # datafetcher and toolbox?
     """A :py:class:`QDataInfoBox` displays information on a piece of
@@ -66,12 +64,10 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     _toolbox: Toolbox = None
     _datafetcher: Datafetcher = None
     """
-    _activation: ActivationEngine = None  # FIXME[why]?
     _processed: bool = False
 
     def __init__(self, toolbox: Toolbox = None,
-                 datafetcher: Datafetcher = None,
-                 activation: ActivationEngine = None, **kwargs):
+                 datafetcher: Datafetcher = None, **kwargs) -> None:
         '''Create a new QDataInfoBox.
 
         parent: QWidget
@@ -85,7 +81,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self._showInfo()
         self.setToolbox(toolbox)
         self.setDatafetcher(datafetcher)
-        self.setActivationEngine(activation)
 
     def _initUI(self):
         '''Initialise the UI'''
@@ -108,7 +103,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         layout.addLayout(layout1)
         layout.addWidget(self._dataLabel)
         self.setLayout(layout)
-        
+
     #
     # Toolbox.Observer
     #
@@ -156,25 +151,11 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                   datafetcher, change)
         self.setData(datafetcher.data)
 
-    #
-    # ActivationEngine.Observer
-    #
-
-    # FIXME[hack]: what are we trying to achieve here?
-    def activation_changed(self, _engine: ActivationEngine, info):
-        # pylint: disable=invalid-name
-        """React to changes of the activation engine.
-        """
-        if info.input_changed:
-            self._updateInfo()
-
     def _updateInfo(self):
-        if self._activation is None:
-            data = self._toolbox.input_data if self._toolbox else None
-        elif self._processed:
-            data = self._activation.input_data
+        if self._processed:
+            data = self._data.input_data
         else:
-            data = self._activation.raw_input_data
+            data = self._data.raw_input_data
         label = getattr(data, 'label', None)
         description = getattr(data, 'description', "No description"
                               if self._toolbox else "No toolbox")
@@ -204,7 +185,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         # description = getattr(data, 'description', None)
         # self._showInfo(data=data, description=description)
 
-        self._metaText = "<b>Input Data:</b><br>\n"
+        self._metaText = f"<b>Input Data ({type(data).__name__}):</b><br>\n"
         if data:
             for attribute in data.attributes(batch=False):
                 value = self._attributeValue(data, attribute)
@@ -248,7 +229,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                   description: str = ''):
         """Show info for the given (image) data.
         """
-        self._metaText = '<b>Input image:</b><br>\n'
+        self._metaText = f'<b>Input image ({type(data).__name__}):</b><br>\n'
         self._metaText += f'Description: {description}<br>\n'
         if label is not None:
             self._metaText += f'Label: {label}<br>\n'

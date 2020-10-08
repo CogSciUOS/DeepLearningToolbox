@@ -6,33 +6,34 @@
 
 """
 
-# FIXME[clean]: This code is taken from
-# "models/example_tf_alexent/test_alexnet.py". Remove that file once
-# this test script is working.
-
-
 # standard imports
-import os
-import sys
 import logging
 import argparse
 
 # third party imports
 
 # toolbox imports
-from network import Network
-from network import argparse as NetworkArgparse
 from datasource import Datasource
 from datasource.imagenet import ImageNet
 from dltb.base.data import Data
-from dltb.tool.classifier import Classifier
+from dltb.tool.classifier import Classifier, ImageClassifier
+from dltb.network import argparse as NetworkArgparse
 
 # logging
 LOG = logging.getLogger(__name__)
-del logging
+
 
 class Evaluator:
-    class bcolors:
+    """A :py:class:`Evaluator` for :py:class:`Classifier`.
+
+    The :py:class:`Evaluator` counts corect and top-correct values,
+    allowing to compute accuracy.
+    """
+
+    class Bcolors:
+        # pylint: disable=too-few-public-methods
+        """Escape codes for color output.
+        """
         HEADER = '\033[95m'
         OKBLUE = '\033[94m'
         OKGREEN = '\033[92m'
@@ -47,56 +48,71 @@ class Evaluator:
         self._classifier = classifier
         self._correct = 0
         self._error = 0
-        self._correct5= 0
+        self._correct_top = 0
         self._total = 0
 
     def accuracy(self, data: Data, top: int = None) -> float:
+        """Compute accuracy values for the given data and add them
+        to the counters.
+        """
         # FIXME[todo]: batch processing
         scores = self._classifier.class_scores(data)
-        label, confidence = self._classifier.top_classes(scores)
-        rank, score = self._classifier.class_rank(scores, data.label)
+        label, confidence = self._classifier.top_classes(scores, top=top)
+        rank, _score = self._classifier.class_rank(scores, data.label)
 
         if label == data.label:
-            text = (self.bcolors.OKGREEN + 'correct' + self.bcolors.ENDC +
+            text = (self.Bcolors.OKGREEN + 'correct' + self.Bcolors.ENDC +
                     f": '{label.label('text')}' (confidence={confidence:.3f})")
-        elif rank < 5:
-            text = (self.bcolors.OKBLUE + 'top-5' + self.bcolors.ENDC +
-                    f": '{label.label('text')}' vs. '{data.label.label('text')}', "
+        elif top is not None and rank < top:
+            text = (self.Bcolors.OKBLUE + f'top-{top}' + self.Bcolors.ENDC +
+                    f": '{label.label('text')}' vs. "
+                    f"'{data.label.label('text')}', "
                     f"rank={rank+1}")
         else:
-            text = (self.bcolors.FAIL + 'error' + self.bcolors.ENDC +
-                    f": '{label.label('text')}' vs. '{data.label.label('text')}', "
+            text = (self.Bcolors.FAIL + 'error' + self.Bcolors.ENDC +
+                    f": '{label.label('text')}' vs. "
+                    f"'{data.label.label('text')}', "
                     f"rank={rank+1}")
         print(f"{data.filename}: {text}")
-        global correct, correct5, error, total
         self._correct += int(label == data.label)
-        self._correct5 += rank <= 5
         self._error += int(label != data.label)
         self._total += 1
-        print(f"total={self._total}, correct={self._correct}, "
-              f"correct5={self._correct5}, error={self._error}, "
-              f"accuracy={self._correct/self._total*100:.2f}%, "
-              f"top-5 accuracy={self._correct5/self._total*100:.2f}%\r",
-              end='')
+        if top is not None:
+            self._correct_top += rank <= top
 
-    def evaluate(self, datasource: Datasource) -> None:
-        # for _ in range(3):
+    def print_status(self, top: int = None, end: str = '') -> None:
+        """Print the current status of this :py:class:`Evaluator`.
+        """
+        print(f"total={self._total}, correct={self._correct}, " +
+              ('' if top is None else f"correct-{top}={self._correct_top}, ") +
+              f"error={self._error}, "
+              f"accuracy={self._correct/self._total*100:.2f}%, " +
+              ('' if top is None else f"top-{top} accuracy="
+               f"{self._correct_top/self._total*100:.2f}%") + "\r", end=end)
+
+    def evaluate(self, datasource: Datasource, top: int) -> None:
+        """Run an evaluation loop.
+        """
         while True:
             try:
                 data = datasource.get_random()
                 if len(data.shape) != 3:
                     continue
-                self.accuracy(data)
+                self.accuracy(data, top)
+                self.print_status(top)
             except RuntimeError as error:
                 print(f"error procesing {data.filename} {data.shape}: {error}")
                 raise
             except KeyboardInterrupt:
                 print(f"error procesing {data.filename} {data.shape}")
                 print("Keyboard interrupt")
+                self.print_status(top, end='\n')
                 break
 
 
 def main():
+    """The main program.
+    """
 
     parser = \
         argparse.ArgumentParser(description='Deep-learning based classifiers')
@@ -119,6 +135,12 @@ def main():
 
     else:
         # filenames = ['images/elephant.jpg', 'dog.jpg']
+        # "laska.png", "poodle.png"
+        #filename = 'images/elephant.jpg'
+        #label = network.classify_image(filename)
+        #print(filename, label.label('text'))
+        print("{type(network).__name__} is subclass of ImageClassifier:",
+              isinstance(network, ImageClassifier))
 
         for filename in args.image:
             label = network.classify(filename)
@@ -140,67 +162,6 @@ def main():
 
             scores = network.class_scores(filename)
             print(f"class_scores('{filename}': {scores.shape}")
-
-# import tensorflow as tf
-# if tf.test.gpu_device_name():
-#    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-# else:
-#    print("Please install GPU version of TF")
-# print(tf.list_devices())
-# print(tf.test.is_built_with_cuda())
-
-
-from datasource.files import DataFiles
-
-
-def main_old():
-    #
-    # Load the network
-    #
-
-    network = Network.register_initialize_key('alexnet-tf')
-
-    # Output network information
-    print("network input shape: {}".format(network.get_input_shape()))
-    for layer in network:
-        print(layer.get_id())
-
-    print(type(network._input_placeholder))
-    import tensorflow as tf
-    tensor = tf.get_default_graph().get_tensor_by_name('xw_plus_b:0')
-    print("tensor is ", tensor)
-    print("tensor[0] is ", tensor[0])
-
-    #
-    # Load input data
-    #
-    images = []
-    if len(sys.argv) > 1:
-        # "laska.png", "poodle.png"
-        data_files = DataFiles(sys.argv[1:])
-        images.extend(map(network.preprocess_image, data_files))
-
-    if 'IMAGENET_DATA' in os.environ:
-        imagenet = ImageNet()
-        for _ in range(3):
-            images.append(network.preprocess_image(imagenet.random()))
-
-    print(len(images))
-
-    #
-    # Classify
-    #
-    if len(images) > 0:
-        # The following requires OpenCV to be compiled against
-        # some GUI toolkit, which is not the case for a conda
-        # installation.
-        # for index, image in enumerate(images):
-        #    cv2.imshow('image' + str(index), image)
-
-        network.classify(images, top=5)
-
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

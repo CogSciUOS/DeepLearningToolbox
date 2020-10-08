@@ -9,7 +9,7 @@ This module contains a base definition for the :py:class:`Config` class.
 # standard imports
 from typing import Any
 
-from base.observer import Observable, change
+from dltb.base.observer import Observable, change
 
 
 class Config(Observable, method='configChanged', changes={'config_changed'}):

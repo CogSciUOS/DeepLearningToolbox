@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton
 from toolbox import Toolbox
 from datasource import Datasource, Datafetcher
 from datasource import Indexed, Random, Snapshot, Loop
-from base.register import RegisterEntry, InstanceRegisterEntry
+from dltb.base.register import RegisterEntry, InstanceRegisterEntry
 
 # GUI imports
 from ..utils import QObserver, QPrepareButton, protect
@@ -62,7 +62,7 @@ class DatasourceAdapter(ToolboxAdapter, qobservables={
         elif change.datasources_changed:  # the list of datasources has changed
             self.updateFromToolbox()
 
-    def currentDatasource(self) -> Datasource:
+    def datasource(self) -> Datasource:
         """The currently selected Datasource in this
         :py:class:`QDatasourceList`.
         """
@@ -73,6 +73,14 @@ class DatasourceAdapter(ToolboxAdapter, qobservables={
 
         # items are of type InstanceRegisterEntry
         return None if item is None else item.obj
+
+    def setDatasource(self, datasource: Datasource) -> None:
+        """Set the current :py:class:`Datasource`.
+        """
+        if datasource is None:
+            self._setCurrentItem(None)
+        else:
+            self._setCurrentText(datasource.key)
 
 
 class QDatasourceListWidget(DatasourceAdapter, QRegisterListWidget):
@@ -132,7 +140,7 @@ class QDatasourceComboBox(DatasourceAdapter, QRegisterComboBox):
     def _oncurrentIndexChanged(self, _index: int) -> None:
         """A forward to map item selection to Datasource selection.
         """
-        self.datasourceSelected.emit(self.currentDatasource())
+        self.datasourceSelected.emit(self.datasource())
 
 
 class QDatafetcherObserver(QObserver, qobservables={
@@ -440,7 +448,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         if datasource is not None:
             self.setDatasource(datasource)
         elif self._selector is not None:
-            self.setDatasource(self._selector.currentDatasource())
+            self.setDatasource(self._selector.datasource())
 
     def _initUI(self, selector: bool = True) -> None:
         """Initialize the user interface.
@@ -468,6 +476,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
             self.addAttributePropagation(Toolbox, self._selector)
 
             self._prepareButton = QPrepareButton()
+            self.addAttributePropagation(Datasource, self._selector)
         else:
             self._selector = None
             self._prepareButton = None

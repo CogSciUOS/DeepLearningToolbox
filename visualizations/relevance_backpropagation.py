@@ -1,4 +1,4 @@
-from network.network import Network as BaseNetwork
+from dltb.network import Network as BaseNetwork
 import numpy as np
 
 class RelevanceBackpropagation:
@@ -12,7 +12,7 @@ class RelevanceBackpropagation:
         last_layer_id = self._network.get_layer_id_list()[-1]
         activations = []
         for idx, layer_id in reversed(list(enumerate(self._network.get_layer_id_list()))):
-            activations.append(self._network.get_activations(layer_id, input_sample))
+            activations.append(self._network.get_activations(input_sample, layer_id))
 
         return self._compute_relevance_heatmap(activations)
 

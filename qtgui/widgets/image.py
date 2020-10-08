@@ -19,7 +19,6 @@ from dltb.base.data import Data
 from dltb.base.image import Image, Imagelike, ImageTool
 from dltb.util.image import imresize, imwrite
 from toolbox import Toolbox
-from tools.activation import Engine as ActivationEngine
 from datasource import Metadata
 from util.image import BoundingBox, PointsBasedLocation, Region
 
@@ -35,12 +34,9 @@ LOG = logging.getLogger(__name__)
 # FIXME[todo]: add docstrings!
 # FIXME[todo]: rename: QImageView is an old name ...
 
-class QImageView(QWidget, QObserver, Toolbox.Observer,
-        ActivationEngine.Observer, qobservables={
+class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         Toolbox: {'input_changed'},
-        ImageTool: {'image_changed'},
-        ActivationEngine: {'activation_changed', 'input_changed',
-                           'unit_changed'}}):
+        ImageTool: {'image_changed'}}):
     """An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.
@@ -60,7 +56,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
         A flag indicating if metadata should be shown if available.
     """
     """A :py:class:`QImageView` to display the input image of the
-    Toolbox or ActivationEngine.
+    Toolbox.
 
 
     **Toolbox.Observer:**
@@ -106,8 +102,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
     keyPressed = pyqtSignal(int)
     modeChanged = pyqtSignal(bool)
 
-    def __init__(self, toolbox: Toolbox = None,
-                 activation: ActivationEngine = None, **kwargs) -> None:
+    def __init__(self, toolbox: Toolbox = None, **kwargs) -> None:
         """Construct a new :py:class:`QImageView`.
 
         Arguments
@@ -138,9 +133,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
 
         self._toolbox: Toolbox = None
         self.setToolbox(toolbox)
-
-        self._activation = None
-        self.setActivationEngine(activation)
         
         #
         # Prepare the context Menu
@@ -550,19 +542,16 @@ class QImageView(QWidget, QObserver, Toolbox.Observer,
     @protect
     def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
         if info.input_changed:
-            # Just use the image from the Toolbox if no ActivationEngine
-            # is available - otherwise we will use the image(s) from the
-            # ActivationEngine (which will inform us via activation_changed ...)
-            if self._activation is None:
-                self._updateImage()
-                self.setMask(None)
-                
+            self.setData(toolbox.input_data)
+
     #
     # ActivationEngine.Observer
     #
 
-    def activation_changed(self, engine: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
+    # FIXME[old]
+    def activation_changed(self, engine, #: ActivationEngine,
+                           info # : ActivationEngine.Change
+                           ) -> None:
         """The :py:class:`QImageView` is interested in the
         input iamges, activations and units.
         """

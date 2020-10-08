@@ -91,6 +91,7 @@ class DataArray(Indexed):
 
     def _get_index(self, data: Data, index: int, **kwargs) -> None:
         data.array = self._array[index]
+        super()._get_index(data, index, **kwargs)
 
 
 class LabeledArray(DataArray, Labeled):

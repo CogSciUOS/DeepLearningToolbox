@@ -94,18 +94,18 @@ def networks(args: Namespace) -> Iterator[Network]:
     #     networks.append('torch-network')
 
     if args.list_networks:
-        print("Known networks:", ", ".join(Network.register_keys()))
+        print("Known networks:", ", ".join(Network.instance_register.keys()))
 
     if args.network:
-        yield Network.register_initialize_key(args.network)
+        yield Network[args.network]
     if args.alexnet:
-        yield Network.register_initialize_key('alexnet-tf')
+        yield Network['alexnet-tf']
     if args.resnet:
         for framework in frameworks:
             if framework == 'torch':
-                yield Network.register_initialize_key('resnet-torch')
+                yield Network['resnet-torch']
             elif framework == 'keras':
-                yield Network.register_initialize_key('resnet-keras')
+                yield Network['resnet-keras']
             else:
                 continue
             break

@@ -9,14 +9,14 @@ import logging
 
 # Qt imports
 from PyQt5.QtCore import QCoreApplication, QEvent, pyqtSignal
+from PyQt5.QtGui import QPaintEvent
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QPushButton, QLabel
 from PyQt5.QtWidgets import QVBoxLayout
 
 # toolbox imports
 from toolbox import Toolbox
-from network import Network, Layer
-from tools.activation import Engine as ActivationEngine
+from dltb.network import Network, Layer
 
 # GUI imports
 from .register import QRegisterListWidget, QRegisterComboBox
@@ -33,14 +33,29 @@ class NetworkAdapter(ToolboxAdapter, qobservables={
     # pylint: disable=abstract-method
     """A :py:class:`ToolboxAdapter` that is especially interested in
     :py:class:`Network`.
+
+    Signals
+    -------
+
+    networkSelected(Network):
+        The signal is sent whenever a new :py:class:`Network` is selected.
+        The selected :py:class:`Network` may be `None`, indicating that
+        currently no network is selected.
     """
 
     networkSelected = pyqtSignal(object)
 
+    def __init__(self, **kwargs) -> None:
+        """
+        """
+        super().__init__(register=Network.instance_register, **kwargs)
+
     def updateFromToolbox(self) -> None:
         """Update the list from the :py:class:`Toolbox`.
         """
-        self.updateFromIterable(self._toolbox.networks)
+        self.updateFromIterable(map(lambda network:
+                                    self._register[network.key],
+                                    self._toolbox.networks))
 
     def toolbox_changed(self, _toolbox: Toolbox,
                         change: Toolbox.Change) -> None:
@@ -49,22 +64,40 @@ class NetworkAdapter(ToolboxAdapter, qobservables={
         of interest is a change of the current network. This
         will be reflected in the list.
         """
-        if change.network_changed:  # the current network has changed
-            self._formatAllItems()
-        elif change.networks_changed:  # the list of networks has changed
+        # if change.network_changed:  # the current network has changed
+        #     self._formatAllItems()
+        if change.networks_changed:  # the list of networks has changed
             self.updateFromToolbox()
 
-    def currentNetwork(self) -> Network:
+    def network(self) -> Network:
         """The currently selected Network in this
         :py:class:`NetworkAdapter`.
         """
-        item = self._currentItem()
-        if self._toolbox is not None:
-            # items are of type Network
-            return item
-
         # items are of type InstanceRegisterEntry
+        item = self._currentItem()
         return None if item is None else item.obj
+
+    def setNetwork(self, network: Network) -> None:
+        """Set the current :py:class:`Network`.
+        """
+        if isinstance(network, str):
+            network = self._register[network]
+        elif isinstance(network, Network):
+            network = self._register[network.key]
+        self._setCurrentItem(network)
+
+    @protect
+    def _oncurrentIndexChanged(self, _index: int) -> None:
+        """A forward to map item selection to Network selection.
+        """
+        self.networkSelected.emit(self.network())
+
+    def debug(self) -> None:
+        super().debug()
+        print(f"debug: NetworkAdapter[{type(self).__name__}]:")
+        print(f"debug:   * Current key: {type(self._currentItem().key)}, "
+              f"type: {type(self._currentItem())}, "
+              f"network: {type(self.network())}")
 
 
 class QNetworkListWidget(NetworkAdapter, QRegisterListWidget):
@@ -82,13 +115,12 @@ class QNetworkListWidget(NetworkAdapter, QRegisterListWidget):
     def __init__(self, **kwargs) -> None:
         """
         """
-        super().__init__(register=Network.instance_register, **kwargs)
+        super().__init__(**kwargs)
 
-    @protect
-    def _oncurrentIndexChanged(self, index: int) -> None:
-        """A forward to map item selection to Network selection.
-        """
-        self.networkSelected.emit(self.itemData(index))
+    def debug(self) -> None:
+        super().debug()
+        print(f"debug: QNetworkListWidget[{type(self).__name__}]:")
+        print(f"debug:   * Current index: {self.currentRow()}")
 
 
 class QNetworkComboBox(NetworkAdapter, QRegisterComboBox):
@@ -109,14 +141,8 @@ class QNetworkComboBox(NetworkAdapter, QRegisterComboBox):
     def __init__(self, **kwargs) -> None:
         """
         """
-        super().__init__(register=Network.instance_register, **kwargs)
+        super().__init__(**kwargs)
         self.currentIndexChanged.connect(self._oncurrentIndexChanged)
-
-    @protect
-    def _oncurrentIndexChanged(self, _index: int) -> None:
-        """A forward to map item selection to Network selection.
-        """
-        self.networkSelected.emit(self.currentNetwork())
 
     def debug(self) -> None:
         super().debug()
@@ -131,8 +157,7 @@ class QNetworkComboBox(NetworkAdapter, QRegisterComboBox):
 
 class QNetworkBox(QLabel, QObserver, qobservables={
         # FIXME[hack]: check what we are really interested in ...
-        Network: Network.Change.all(),
-        ActivationEngine: ActivationEngine.Change.all()}):
+        Network: Network.Change.all()}):
     """
     .. class:: QNetworkBox
 
@@ -148,34 +173,6 @@ class QNetworkBox(QLabel, QObserver, qobservables={
         self._layerText = ''
         self.setNetwork(network)
 
-    def activation_changed(self, model: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
-        # pylint: disable=invalid-name
-        """React to a change in the :py:class:`ActivationEngine`.
-        """
-        # FIXME[old]
-        if info.network_changed:
-            self.network_changed(model._network, Network.Change.all())
-
-        #
-        # Set Layer info text
-        #
-        layerText = ''
-        #layerId = model._layer
-        layerId = None  # FIXME[old]
-        if False and info.layer_changed:  # FIXME[old]
-            layerText += '<br>\n<br>\n'
-            layerText += '<b>Layer info:</b><br>\n'
-            if layerId:
-                layer = self._network.layer_dict[layerId]
-                layer_info = '\n'.join('<b>{}</b>: {}<br>'.format(key, val)
-                                       for key, val in layer.info.items())
-                layerText += layer_info
-            else:
-                layerText += "No layer selected"
-        self._layerText = layerText
-        self.update()
-
     def network_changed(self, network: Network,
                         _change: Network.Change) -> None:
         # pylint: disable=invalid-name
@@ -186,14 +183,14 @@ class QNetworkBox(QLabel, QObserver, qobservables={
         # Set Network info text
         #
         networkText = ''
-        #networkText += '<b>Network info:</b> '
+        # networkText += '<b>Network info:</b> '
         if network is not None:
             # network_name = type(network).__name__
             # networkText += 'FIXME[todo]: obtain network information ...'
             networkText += ('<br>\n<b>class:</b> '
                             f'{network.__class__.__name__}')
             networkText += f'<br>\n<b>name:</b> {network}'
-            #if not network.empty():
+            # if not network.empty():
             #    networkText += ('<br>\n<b>input layer:</b> '
             #                     f'{network.input_layer_id()}')
             #    networkText += ('<br>\n<b>output layer:</b> '
@@ -203,9 +200,11 @@ class QNetworkBox(QLabel, QObserver, qobservables={
         self._networkText = networkText
 
         self.update()
-        #QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
+        # QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent):
+        """Process a QPaintEvent
+        """
         # text = ('<b>Network Info Box</b><br>' +
         #        self._networkText + self._layerText)
         # self.setText(text)
@@ -276,8 +275,7 @@ class QNetworkInternals(QWidget, QObserver, qobservables={
 
 
 class QLayerSelector(QWidget, QObserver, qobservables={
-        Network: {'state_changed'},
-        ActivationEngine: {'layer_changed'}}):
+        Network: {'state_changed'}}):
     """A simple widget to display information on a network and select a
     layer.
 
@@ -335,7 +333,6 @@ class QLayerSelector(QWidget, QObserver, qobservables={
             The parent argument is sent to the QWidget constructor.
         """
         super().__init__(**kwargs)
-        self._activation = None  # FIXME[old]
         self._currentSelected = None  # FIXME[old]
         self._exclusive = exclusive
         self._layerButtons = {}
@@ -475,9 +472,8 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         the engine.
         """
         LOG.info("QLayerSelector.onLayerButtonClicked(checked=%s): "
-                 "sender=%s, current_selected=%s, activation=%s",
-                 checked, self.sender().text(),
-                 self._currentSelected, self._activation)
+                 "sender=%s, current_selected=%s",
+                 checked, self.sender().text(), self._currentSelected)
 
         if self._network is None:
             return
@@ -494,37 +490,10 @@ class QLayerSelector(QWidget, QObserver, qobservables={
 
         self.layerClicked.emit(layer.id, select)
 
-    def old(self):
-
-        if self._currentSelected is not None:
-            if self._activation:
-                self._activation.remove_layer(self._currentSelected)
-            self._markButton(self._currentSelected, False)
-            if self._currentSelected == layer:
-                layer = None
-
-        if layer is not None:
-            if self._activation:
-                self._activation.add_layer(layer)
-            self._markButton(layer, True)
-
-        self._currentSelected = layer
-
-    #
-    # ActivationEngine
-    #
-
-    def setActivationEngine(self, activations: ActivationEngine) -> None:
-        """Set the ActivationEngine for this QLayerSelector.
-        """
-        LOG.info("QLayerSelector.setActivationEngine(activations=%s): "
-                 "old activation=%s", activations, self._activation)
-        self._networkInfo.setActivationEngine(activations)
-        # FIXME[hack]: should be done by QObserver
-        self._activation = activations
-
-    def activation_changed(self, activation: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
+    def selectLayers(self, activation, info) -> None:
+        # FIXME[old]:
+        # def activation_changed(self, activation: ActivationEngine,
+        #                        info: ActivationEngine.Change) -> None:
         # pylint: disable=invalid-name
         """The QLayerSelector is interested in network related changes, i.e.
         changes of the network itself or the current layer.

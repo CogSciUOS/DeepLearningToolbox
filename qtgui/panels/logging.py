@@ -247,7 +247,6 @@ class LoggingPanel(Panel):
         if self._loggingRecorder is not None:
             self._loggingRecorder.replay(self._log_handler)
 
-
     def _decorateLoggerItem(self, item: QListWidgetItem,
                             logger: logging.Logger) -> None:
         """Decorate an entry in the logger list reflecting the properties
@@ -262,6 +261,8 @@ class LoggingPanel(Panel):
     def _updateLoggerList(self):
         self._loggerList.clear()
         self._updateLogger(None)
+        # FIXME[bug]: this may raise a RuntimeError:
+        #    dictionary changed size during iteration
         for name, logger in logging.Logger.manager.loggerDict.items():
             if not isinstance(logger, logging.Logger):
                 continue

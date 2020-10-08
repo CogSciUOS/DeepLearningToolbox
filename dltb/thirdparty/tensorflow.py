@@ -26,6 +26,19 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 # TF_CPP_MIN_LOG_LEVEL of 0 to see any VLOG message.
 #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
 
+
+# GPU/CUDA info
+# -------------
+#
+# import tensorflow as tf
+# if tf.test.gpu_device_name():
+#    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
+# else:
+#    print("Please install GPU version of TF")
+# print(tf.list_devices())
+# print(tf.test.is_built_with_cuda())
+
+
 import tensorflow
 
 if hasattr(tensorflow, 'compat'):

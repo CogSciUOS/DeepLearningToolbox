@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import QWidget, QToolTip
 # toolbox imports
 import util.image
 from network import Layer
-from tools.activation import Engine as ActivationEngine
+from dltb.tool.activation import ActivationWorker
 from ..utils import QObserver, protect
 
 # logging
@@ -46,8 +46,9 @@ LOG = logging.getLogger(__name__)
 # one should think what would be the best way to provide such
 # functionality.
 
+
 class QActivationView(QWidget, QObserver, qobservables={
-        ActivationEngine: {'activation_changed', 'unit_changed'}}):
+        ActivationWorker: {'data_changed', 'work_finished'}}):
     # pylint: disable=too-many-instance-attributes
     """A widget to display the activations of a given
     :py:class:`Layer` in a :py:class:`Network`.
@@ -74,7 +75,7 @@ class QActivationView(QWidget, QObserver, qobservables={
 
     Attributes
     -----------
-    _activationEngine: ActivationEngine = None
+    _activationWorker: ActivationWorker = None
 
     _activations: np.ndarray
         The activation values to be displayed in this
@@ -141,7 +142,7 @@ class QActivationView(QWidget, QObserver, qobservables={
     unitChanged = pyqtSignal(int)
     positionChanged = pyqtSignal(QPoint)
 
-    def __init__(self, engine: ActivationEngine = None, **kwargs) -> None:
+    def __init__(self, worker: ActivationWorker = None, **kwargs) -> None:
         """Initialization of the QActivationView.
 
         Parameters
@@ -152,7 +153,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         super().__init__(**kwargs)
 
         self._activations = None
-        self._activationEngine = None
+        self._activationWorker = None
         self._layer = None
         self._units = 0
         self._rows = None
@@ -171,7 +172,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
         self.setToolTip(False)
-        self.setActivationEngine(engine)
+        self.setActivationWorker(worker)
 
     def layer(self) -> Layer:
         """The layer for which activations are currently displayed in this
@@ -188,13 +189,14 @@ class QActivationView(QWidget, QObserver, qobservables={
         ----------
         layer: Layer
             The network :py:class:`Layer`. It is assumed that this
-            layer belongs th the current `py:meth:`ActivationEngine.network`
-            of the :py:class:`ActivationEngine`.
+            layer belongs th the current
+            `py:meth:`ActivationWorker.tool.network`
+            of the :py:class:`ActivationTool`.
         """
         LOG.info("QActivationView.setLayer(%s)", layer)
         if self._layer is not None:
-            if self._activationEngine is not None:
-                self._activationEngine.remove_layer(self._layer)
+            if self._activationWorker is not None:
+                self._activationWorker.remove_layer(self._layer)
         self._layer = layer
         if layer is None:
             self._units = 0
@@ -203,8 +205,8 @@ class QActivationView(QWidget, QObserver, qobservables={
             self._unitDisplaySize = None
             self._activations = None
         else:
-            if self._activationEngine is not None:
-                self._activationEngine.add_layer(self._layer)
+            if self._activationWorker is not None:
+                self._activationWorker.add_layer(self._layer)
         self.setUnit(None)
         self.update()
 
@@ -333,30 +335,34 @@ class QActivationView(QWidget, QObserver, qobservables={
         self._colorScale = flag
         self.update()
 
-    def activation_changed(self, engine: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
+    def worker_changed(self, worker: ActivationWorker,
+                       info: ActivationWorker.Change) -> None:
         # pylint: disable=invalid-name
-        """Get the current activations from the ActivationEngine and
+        """Get the current activations from the ActivationWorker and
         set the activations to be displayed in this
         :py:class:`QActivationView`.
         Currently there are two possible types of activations that are
         supported by this widget: 1D, and 2D convolutional.
 
         """
-        LOG.debug("QActivationView.activation_changed(%s)", info)
+        LOG.debug("QActivationView.worker_changed(%s)", info)
 
         if self._layer is None:
             return  # we are not interestend in any activation
 
         # get activation and update overlay only when
         # significant properties change
-        if info & {'activation_changed', 'layer_changed'}:
-            # activation is also changed when a new network is selected ...
+        if info.work_finished:
             try:
-                activations = engine.get_activation(self._layer)
-            except ValueError:
+                # FIXME[bug]: in loop mode it may happen that the
+                # worked data has already been replaced by new data
+                # when this code is executed. In this case a
+                # TypeError ('NoneType' object is not subscriptable)
+                # is raised. We may adapt the worker to avoid this.
+                activations = worker.activations(self._layer)
+            except (ValueError, TypeError):
                 activations = None
-            LOG.debug("QActivationView.activation_changed: type=%s",
+            LOG.debug("QActivationView.worker_changed: type=%s",
                       type(activations))
 
             if activations is not None:
@@ -382,17 +388,10 @@ class QActivationView(QWidget, QObserver, qobservables={
             self._activations = activations
             self._updateGeometry()
 
-        LOG.debug("QActivationView.activation_changed: units=%s/%s, "
+        LOG.debug("QActivationView.worker_changed: units=%s/%s, "
                   "isConvolution=%s, currentPosition=%s, size/display=%s/%s",
                   self._unit, self._units, self._isConvolution,
                   self._position, self._unitSize, self._unitDisplaySize)
-
-        if False and info.unit_changed:  # FIXME[todo]: units
-            # unit_changed includes also a change of position
-            self._unit = engine.unit
-            self._position = (None if engine.position is None else
-                              QPoint(engine.position[1], engine.position[0]))
-            self.update()
 
     def setToolTip(self, active: bool = True) -> None:
         """Turn on/off the tooltips for this Widget.
@@ -658,7 +657,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         """
         painter.drawText(self.rect(), Qt.AlignCenter, "No data,\n"
                          f"layer='{self._layer.id if self._layer else None}',"
-                         f"\nengine={self._activationEngine is not None}!")
+                         f"\nworker={self._activationWorker is not None}!")
 
     def paintEvent(self, _: QPaintEvent) -> None:
         """Process the paint event by repainting this Widget.
@@ -846,3 +845,10 @@ class QActivationView(QWidget, QObserver, qobservables={
             self.setUnit(unit)
         else:
             event.ignore()
+
+    def debug(self):
+        LOG.debug("QActivationView: debug.")
+        if hasattr(super(), 'debug'):
+            super().debug()
+        print(f"debug: QActivationView[{type(self).__name__}]:")
+        print(f"debug:   - worker: {self._activationWorker}")

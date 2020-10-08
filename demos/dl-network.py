@@ -17,7 +17,7 @@ import logging
 import argparse
 
 # toolbox imports
-from network import argparse as NetworkArgparse
+from dltb.network import argparse as NetworkArgparse
 from util.error import print_exception
 
 # logging

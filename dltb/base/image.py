@@ -20,16 +20,21 @@ Relation to other `image` modules in the Deep Learning ToolBox:
 """
 
 # standard imports
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict, Any
+from abc import abstractmethod, ABC
 from threading import Thread
+import logging
 
 # third party imports
 import numpy as np
 
 # toolbox imports
-from base.observer import Observable
+from .observer import Observable
 from .data import Data
 from .. import thirdparty
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 # FIXME[todo]: create an interface to work with different image/data formats
@@ -89,7 +94,7 @@ class Image(Data):
         raise NotImplementedError(f"Conversion of {type(image).__module__}."
                                   f"{type(image).__name__} to numpy.ndarray "
                                   "is not implemented")
-    
+
     @staticmethod
     def as_data(image: Imagelike, copy: bool = False) -> 'Data':
         """Get image-like objec as :py:class:`Data` object.
@@ -109,6 +114,79 @@ class Image(Data):
         if image is not None:
             array = self.as_array(image)
         super().__init__(array=array, **kwargs)
+
+
+class ImageAdapter(ABC):
+    """If an object is an ImageAdapter, it can adapt images to
+    some internal representation. It has to implement the
+    :py:class:`image_to_internal` and :py:class:`internal_to_image`
+    methods. Such an object can then be extended to do specific
+    image processing.
+
+    The :py:class:`ImageAdapter` keeps a map of known
+    :py:class:`ImageExtension`. If a subclass of
+    :py:class:`ImageAdapter` also subclasses a base class of these
+    extensions it will be adapted to also subclass the corresponding
+    extension, e.g., a :py:class:`ImageAdapter` that is a `Tool` will
+    become an `ImageTool`, provided the mapping of `Tool` to
+    `ImageTool` has been registered with the `ImageAdapter` class.
+    Creating `ImageTool` as an :py:class:`ImageExtension` of
+    `base=Tool` will automatically do the registration.
+    """
+
+    _image_extensions: Dict[type, type] = {}
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+
+        for base, replacement in ImageAdapter._image_extensions.items():
+            if base in cls.__mro__ and replacement not in cls.__mro__:
+                new_bases = []
+                found = False
+                for base_class in cls.__bases__:
+                    if base_class is base:
+                        found = True
+                        new_bases.append(replacement)
+                        continue
+                    if not found and issubclass(base_class, base):
+                        new_bases.append(replacement)
+                        found = True
+                    new_bases.append(base_class)
+                LOG.debug("ImageAdapter.__init_subclass__(%s): %s -> %s",
+                          cls, cls.__bases__, new_bases)
+                cls.__bases__ = tuple(new_bases)
+
+    @abstractmethod
+    def image_to_internal(self, image: Imagelike) -> Any:
+        "to be implemented by subclasses"
+
+    @abstractmethod
+    def internal_to_image(self, data: Any) -> Imagelike:
+        "to be implemented by subclasses"
+
+
+class ImageExtension(ImageAdapter):
+    """An :py:class:`ImageExtension` extends some base class to be able to
+    process images. In that it makes use of the :py:class:`ImageAdapter`
+    interface.
+
+    In addition to deriving from :py:class:`ImageAdapter`, the
+    :py:class:`ImageExtension` introduces some "behind the scene
+    magic": a class `ImageTool` that is declared as an `ImageExtension`
+    with base `Tool` is registered with the :py:class:`ImageAdapter`
+    class, so that any common subclass of :py:class:`ImageAdapter`
+    and `Tool` will automagically become an `ImageTool`.
+    """
+
+    def __init_subclass__(cls, base: type = None, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if base is not None:
+            new_bases = [ImageAdapter, base]
+            for base_class in cls.__bases__:
+                if base_class is not ImageExtension:
+                    new_bases.append(base_class)
+            cls.__bases__ = tuple(new_bases)
+            ImageAdapter._image_extensions[base] = cls
 
 
 class ImageIO:

@@ -15,15 +15,11 @@ import logging
 import numpy as np
 
 # toolbox imports
-from base import RegisterClass, Preparable
-from ..base.data import Data, Datalike
-from ..base.image import Imagelike, Image
-from ..util.image import imread, imresize
-from .tool import Tool
-from .image import ImageTool
+from base import Preparable
+from ..base.register import RegisterClass
+from ..base.data import Datalike
+from ..base.image import Imagelike, ImageExtension
 
-# FIXME[hack]: instead of prepare_input_image use the network.resize
-# API once it is finished!
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -164,9 +160,9 @@ class ClassScheme(metaclass=RegisterClass):
                     {val: idx for idx, val in enumerate(values)}
 
 
-ClassScheme.register_key('ImageNet', 'datasource.imagenet',
+ClassScheme.register_instance('ImageNet', 'datasource.imagenet',
                          'ImagenetScheme')
-ClassScheme.register_key('WiderFace', 'datasource.widerface',
+ClassScheme.register_instance('WiderFace', 'datasource.widerface',
                          'WiderfaceScheme')
 
 
@@ -259,7 +255,7 @@ class Classifier(ABC, Preparable):
         LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
         super().__init__(**kwargs)
         if isinstance(scheme, str):
-            scheme = ClassScheme.register_initialize_key(scheme)
+            scheme = ClassScheme[scheme]
         elif isinstance(scheme, int):
             scheme = ClassScheme(10)
         self._scheme = scheme
@@ -306,6 +302,16 @@ class Classifier(ABC, Preparable):
             A list of class-identifiers or a
             list of tuples of class identifiers.
         """
+
+
+class ImageClassifier(ImageExtension, base=Classifier):
+    """
+    """
+
+    def classify_image(self, image: Imagelike) -> ClassIdentifier:
+        """Classify the given image.
+        """
+        return self.classify(self.image_to_internal(image))
 
 
 class SoftClassifier(Classifier):

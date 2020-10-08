@@ -123,7 +123,8 @@ class TestCaffeNetwork(TestCase):
 
     def test_get_activations(self):
         input_image = self.data[0:1, :, :, np.newaxis]
-        activations = self.loaded_network.get_activations('dense_2', input_image)
+        activations = \
+            self.loaded_network.get_activations(input_image, 'dense_2')
         prediction = np.array([  3.51925933e-09,   2.81613372e-10,   2.09109629e-07,
                                  1.37495732e-07,   3.44873262e-11,   7.33259398e-10,
                                  2.16445026e-13,   9.99998212e-01,   1.22597754e-09,

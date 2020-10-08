@@ -25,8 +25,8 @@ def get_occlussion_map(self, input_sample: np.ndarray, kernel_size: int) -> np.n
         i % input_shape[2] + kernel_size - (kernel_size):i % input_shape[2] + kernel_size + (kernel_size + 1), 0] = 1
     occluded_list = np.multiply(padded_input, maskmulti) + maskadd
 
-    heatmap = self.get_activations([list(self.layer_dict.keys())[-3]],
-                                   occluded_list[:, kernel_size:-kernel_size, kernel_size:-kernel_size])
+    heatmap = self.get_activations(occluded_list[:, kernel_size:-kernel_size, kernel_size:-kernel_size],
+                                   [list(self.layer_dict.keys())[-3]])
     # print(np.asarray(heatmap).shape)
     # print(self.get_layer_weights(self.layer_dict.keys()[-1])[0].shape)
 

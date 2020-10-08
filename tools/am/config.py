@@ -1,7 +1,7 @@
 """Configuration data for the "activation maximization" (am) module.
 """
 from base import Config as BaseConfig
-from base.observer import change
+from dltb.base.observer import change
 
 
 class Config(BaseConfig,

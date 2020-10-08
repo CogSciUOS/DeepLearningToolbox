@@ -4,9 +4,10 @@ import os
 import logging
 
 # Qt imports
-from PyQt5.QtCore import (Qt, QObject, QThreadPool, QRunnable,
+from PyQt5.QtCore import (Qt, QObject, QEvent, QThreadPool, QRunnable,
                           pyqtSignal, pyqtSlot, QMetaObject, Q_ARG)
-from PyQt5.QtGui import QKeyEvent, QMovie, QHideEvent, QShowEvent
+from PyQt5.QtGui import QKeyEvent, QMouseEvent, QHideEvent, QShowEvent
+from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 # toolbox imports
@@ -103,6 +104,7 @@ class QDebug:
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        self.installEventFilter(self)
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -123,6 +125,36 @@ class QDebug:
             super().keyPressEvent(event)
         else:
             event.ignore()
+
+    @protect
+    def mousePressEventFIXME(self, event: QMouseEvent) -> None:
+        """
+        """
+        button = event.button()
+        modifiers = event.modifiers()
+        print(f"debug: QDebug[{type(self).__name__}].mousePressEvent: "
+              f"button={button}, modifiers={modifiers}")
+        event.ignore()
+
+    @protect
+    def eventFilter(self, object: object, event: QEvent) -> bool:
+        """
+        """
+        # print(f"debug: QDebug[{type(self).__name__}].eventFilter: "
+        #       f"event={type(event)}, object={type(object)}, "
+        #       f"type={event.type()}")
+        if event.type() == QEvent.MouseButtonPress:
+            # event is of type QMouseEvent
+            modifiers = event.modifiers()
+            if modifiers & Qt.ControlModifier:
+                button = event.button()
+                print(f"debug: QDebug[{type(self).__name__}].eventFilter: "
+                      f"object={type(object).__name__}, button={button}, "
+                      f"shift={bool(modifiers & Qt.ShiftModifier)}, "
+                      f"control={bool(modifiers & Qt.ControlModifier)}"
+                      f"alt={bool(modifiers & Qt.AltModifier)}")
+                self.debug()
+        return False
 
     def debug(self) -> None:
         """Output debug information for this :py:class:`QDebug`.
@@ -215,18 +247,15 @@ class QAttribute:
             setattr(cls, orig_setter_name, getattr(cls, setter_name))
             LOG.debug("QAttribute: moving old setter to %s.%s",
                       cls, orig_setter_name)
-        setter = lambda self, *args, **kwargs: \
-            self._qAttributeSetAttribute(name, *args, **kwargs)
-        setattr(cls, setter_name, setter)
+        setattr(cls, setter_name, lambda self, *args, **kwargs:
+                self._qAttributeSetAttribute(name, *args, **kwargs))
 
     @staticmethod
     def _qAttributeName(cls: type, *args) -> str:
         """Provide name(s) for an attribute of a given type.
-        This will be the name provided by the class method
-        :py:meth:`observable_name`, which defaults to the class name.
+        This will be the name of the class.
         """
-        name = (cls.observable_name() if hasattr(cls, 'observable_name')
-                else cls.__name__)
+        name = cls.__name__
         LOG.debug("QAttribute: Using attribute name '%s' for class '%s'",
                   name, cls.__name__)
         return QAttribute._qAttributeNameFor(name, *args)
@@ -650,7 +679,8 @@ class QObserver(QAttribute):
             # -> this will call self.observe(new_view, interests)
 
     def debug(self) -> None:
-        super().debug()
+        if hasattr(super(), 'debug'):
+            super().debug()
         print(f"debug: QObserver[{type(self).__name__}]: "
               f"{len(self._qObserverHelpers)} observations:")
         for i, (key, helper) in enumerate(self._qObserverHelpers.items()):
@@ -911,7 +941,7 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         del self._movie
 
 
-class QPrepareButton(QPushButton, QObserver, qobservables={
+class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
         Preparable: {'busy_changed', 'state_changed'}}):
     """A Button to control a :py:class:`Preparable`, allowing to prepare
     and unprepare it.
@@ -974,5 +1004,21 @@ class QPrepareButton(QPushButton, QObserver, qobservables={
         """
         enabled = (isinstance(self._preparable, Preparable) and
                    not self._preparable.busy)
+        if isinstance(self._preparable, Preparable) and self._preparable.busy:
+            if self._preparable.prepared:
+                self.setText("Upreparing")
+            else:
+                self.setText("Preparing")
+        else:
+            self.setText("Prepare")
         self.setEnabled(enabled)
         self.setChecked(enabled and self._preparable.prepared)
+
+    def debug(self) -> None:
+        if isinstance(self, QDebug):
+            super().debug()
+        print(f"debug: QPrepareButton[{type(self).__name__}]: "
+              f"enabled={self.isEnabled()}, checked={self.isChecked()}")
+        print(f"debug:  - preparable: {type(self._preparable)}" +
+              ("" if self._preparable is None else
+               f"self._preparable.prepared"))

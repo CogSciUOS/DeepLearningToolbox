@@ -56,7 +56,8 @@ del logging
 # - we just want the code to be executed ...
 del predefined
 
-LOG.info("Predefined data sources: %r", list(Datasource.register_keys()))
+LOG.info("Predefined data sources: %r",
+         list(Datasource.instance_register.keys()))
 
 # FIXME[old]: may be used at some other place ...
 # for keras_id in KerasDatasource.KERAS_IDS:

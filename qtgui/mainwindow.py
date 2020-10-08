@@ -32,7 +32,7 @@ from util import resources
 from datasource import Datasource
 
 # Toolbox GUI imports
-from .utils import QtAsyncRunner, QObserver, protect, QBusyWidget
+from .utils import QtAsyncRunner, QObserver, QBusyWidget, QDebug, protect
 from .panels import Panel
 
 # logging
@@ -89,7 +89,7 @@ LOG = logging.getLogger(__name__)
 BUG = False
 
 
-class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
+class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         Toolbox: {'datasources_changed', 'datasource_changed',
                   'server_changed', 'shell_changed'}}):
     """The main window of the Deep Visualization Toolbox. The window
@@ -874,11 +874,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
                                 trainingController=training)
 
     def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
-        activation_tool = self._toolbox.add_tool('activation')
+        # FIXME[old]
+        # activation_tool = self._toolbox.add_tool('activation')
         # network = self._toolbox.autoencoder_controller
         network = None
         return ActivationsPanel(toolbox=self._toolbox, network=network,
-                                activation=activation_tool,
                                 datasource=self._toolbox.datasource)
 
     def _newSegmentationPanel(self, SegmentationPanel: type) -> Panel:
@@ -981,29 +981,11 @@ class DeepVisMainWindow(QMainWindow, QObserver, qobservables={
 
     @protect
     def onAlexnetTriggered(self, checked: bool) -> None:
-        Network.register_initialize_key('alexnet-tf')  # FIXME[todo]: prepare
+        Network.instance_register['alexnet-tf'].initialize
 
     ##########################################################################
     #                           FIXME[old]                                   #
     ##########################################################################
-
-    def setActivationEngine(self) -> None:
-        print("\nFIXME[old]: MainWindow.setActivationEngine() was called!\n")
-        # FIXME[hack]
-        from tools.activation import Engine as ActivationEngine
-        activationsPanel = self.panel('activations', create=True)
-        if activationsPanel is not None:
-            activationsPanel.setController(self._toolbox.
-                                           get_tool('activation'),
-                                           ActivationEngine.Observer)
-            activationsPanel.setController(self._toolbox.datasource,
-                                           Datasource.Observer)
-
-        maximizationPanel = self.panel('maximization', create=True)
-        if maximizationPanel is not None:
-            maximizationPanel.setController(self._toolbox.
-                                            activation_controller,
-                                            ActivationEngine.Observer)
 
     def setLucidEngine(self, engine: 'LucidEngine' = None) -> None:
         print("FIXME[old]: MainWindow.setLucidEngine() was called!")

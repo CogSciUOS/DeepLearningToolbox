@@ -14,8 +14,8 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout
 from toolbox import Toolbox
 from network import Network
 from datasource import Datasource, Datafetcher
-from base import RegisterClass
-from base.register import InstanceRegisterEntry, ClassRegisterEntry
+from dltb.base.register import RegisterClass
+from dltb.base.register import InstanceRegisterEntry, ClassRegisterEntry
 from dltb.tool import Tool
 
 # GUI imports
@@ -182,16 +182,6 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
         self._resourceController.setEntry(entry)
         self.setInstanceRegisterEntry(None)
 
-    def state_changed(self, entry: InstanceRegisterEntry,
-                      info: InstanceRegisterEntry.Change) -> None:
-        """The currently observed :py:class:`InstanceRegisterEntry`
-        has changed.
-        """
-        LOG.info("QResourceInspector.state_changed: key='%s' [info=%s]",
-                 entry.key, info)
-        if info.state_changed:
-            self.setResource(entry.obj)
-
     def setResource(self, resource: object) -> None:
         """Set the current resource for this :py:class:`QResourceInspector`.
         """
@@ -205,6 +195,19 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
         """React to a change of resource.
         """
         self._resourceList.setInstance(self._resource)
+
+    #
+    # Observations
+    #
+
+    def entry_changed(self, entry: InstanceRegisterEntry,
+                      info: InstanceRegisterEntry.Change) -> None:
+        """The currently observed :py:class:`InstanceRegisterEntry`
+        has changed.
+        """
+        LOG.info("QResourceInspector.state_changed: key='%s' [info=%s]",
+                 entry.key, info)
+        self.setResource(entry.obj)
 
 
 class QNetworkInspector(QResourceInspector):
@@ -326,7 +329,7 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         return datasourceView
 
     def _updateResource(self) -> None:
-        """React to a change of resource (network) for this
+        """React to a change of resource (datasouce) for this
         :py:class:`QNetworkInspector`.
         """
         super()._updateResource()

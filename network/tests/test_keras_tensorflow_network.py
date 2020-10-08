@@ -43,7 +43,8 @@ class TestKerasTensorFlowNetwork(TestCase):
 
     def test_get_activations(self):
         input_image = self.data[0:1, :, :, np.newaxis]
-        activations = self.loaded_network.get_activations('dense_2', input_image)
+        activations = \
+            self.loaded_network.get_activations(input_image, 'dense_2')
         prediction = self.loaded_network._model.predict(input_image)
         # Increase absolute tolerance a little to make in work.
         self.assertTrue(

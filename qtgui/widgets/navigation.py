@@ -174,6 +174,10 @@ class QIndexControls(QWidget):
     def setIndex(self, index: int, emit: bool = False) -> None:
         """Set the index for this :py:class:`QIndexControls`
         """
+        if self._elements is None:
+            return
+        if index is None:
+            return
         if index >= self._elements:
             index = self._elements - 1
         if index < 0:

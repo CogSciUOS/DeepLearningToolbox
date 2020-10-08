@@ -58,7 +58,7 @@ def main():
     args = parser.parse_args()
 
     if args.detect:
-        detector = Tool.register_initialize_key('haar')
+        detector = Tool['haar']
         print(f"Detector: {detector} [prepared={detector.prepared}]")
         detector.prepare()
         print(f"Detector: {detector} [prepared={detector.prepared}]")

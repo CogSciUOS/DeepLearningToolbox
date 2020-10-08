@@ -96,7 +96,9 @@ import numpy as np
 
 # toolbox imports
 from dltb.base.data import Data
-from base import Preparable, FailableObservable, RegisterClass
+from dltb.base.image import Image
+from dltb.base.register import RegisterClass
+from base import Preparable, FailableObservable
 from util.image import imread
 
 # logging
@@ -136,6 +138,10 @@ class Datasource(Preparable, FailableObservable, # ABC,
     _description : str
         Short description of the dataset
 
+    The data class can be overwritten by subclasses:
+
+    _data_class: type
+
     Data loaders can be set globally, but they may be overwritten
     by subclasses or instances if desired.
 
@@ -172,6 +178,8 @@ class Datasource(Preparable, FailableObservable, # ABC,
     _id: str = None
     _metadata = None
 
+    _data_class: type = Data
+
     _loaders: Dict[str, Callable[[str], Any]] = {}
     _loader: Callable[[str], Any] = None
     _loader_kind: str = None
@@ -204,7 +212,7 @@ class Datasource(Preparable, FailableObservable, # ABC,
     def get_data(self, batch: int = None, **kwargs) -> Data:
         """Get data from this :py:class:`Datasource`.
         """
-        data = Data(datasource=self, batch=batch)
+        data = self._data_class(datasource=self, batch=batch)
         LOG.debug("Datasource[%s].get_data(%s)", self, kwargs)
         data.add_attribute('datasource', self)
         data.add_attribute('datasource_argument')
@@ -350,7 +358,7 @@ class Datasource(Preparable, FailableObservable, # ABC,
             return imread(filename)
         except ValueError:
             # FIXME[bug]: error reporting (on console) does not work
-            print(f"Error reading image file '{filename}'")
+            print(f"{type(self)}: Error reading image file '{filename}'")
             LOG.error("Error reading image file '%s'", filename)
             raise
 
@@ -360,6 +368,8 @@ class Imagesource(Datasource):
     """A datasource providing images.
     """
 
+    _data_class: type = Image
+    
     def __init__(self, shape: Tuple = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.shape = shape
@@ -657,6 +667,10 @@ class Indexed(Random):
             description += f", index={index}"
         return description
 
+    #
+    # data access
+    #
+
     def _get_meta(self, data: Data, index: int = None, **kwargs) -> None:
         # pylint: disable=arguments-differ
         if index is not None and not data.datasource_argument:
@@ -693,6 +707,7 @@ class Indexed(Random):
         It should perform whatever is necessary to get a element with
         the given index from the dataset.
         """
+        data.index = index
 
     def _get_random(self, data: Data, **kwargs) -> None:
         """Get a random element. In a :py:class:`Indexed` datasource

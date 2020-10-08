@@ -1,5 +1,5 @@
 from typing import Tuple
-from . import layers
+from dltb.network import layer as layers
 
 import tensorflow as tf
 

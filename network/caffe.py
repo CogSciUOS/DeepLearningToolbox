@@ -53,7 +53,7 @@ class Network(BaseNetwork):
                 Path the .caffemodel weights file.
         """
         # Caffe uses channels first as data format.
-        kwargs['data_format'] = 'channels_first'
+        kwargs['channel_axis'] = 'channels_first'
         self.protonet = self._remove_inplace(kwargs['model_def'])
         # Write the new protobuf model definition to a file, so it can be read to create a caffe net.
         # This would probably not be necessary with boost > 1.58, see https://stackoverflow.com/a/34172374/4873972
@@ -136,7 +136,7 @@ class Network(BaseNetwork):
 
         return FrozenOrderedDict(layer_dict)
 
-    def _compute_activations(self, layer_ids: list, input_samples: np.ndarray):
+    def _get_activations(self, input_samples: np.ndarray, layer_ids: list):
         """Gives activations values of the loaded_network/model
         for a given layername and an input (inputsample).
         Parameters

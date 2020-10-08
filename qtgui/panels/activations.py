@@ -13,10 +13,10 @@ from PyQt5.QtCore import Qt, QPoint, QRect, QSize
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
 
 # toolbox imports
+from dltb.tool.activation import ActivationTool, ActivationWorker
 from toolbox import Toolbox
 from network import Network
 from datasource import Datasource
-from tools.activation import Engine as ActivationEngine
 import util.image
 
 # GUI imports
@@ -47,12 +47,15 @@ LOG = logging.getLogger(__name__)
 
 class ActivationsPanel(Panel, QObserver, qobservables={
         Toolbox: {'datasource_changed', 'input_changed'},
-        ActivationEngine: {'network_changed'}}):
+        ActivationWorker: {'data_changed', 'work_finished'}}, qattributes={
+            Datasource: False, Network: False}):
     # pylint: disable=too-many-instance-attributes
-    """The :py:class:`ActivationsPanel` is basically a graphical frontend
-    for an :py:class:`ActivationEngine`. It allows to set the network
-    for that engine, it feeds input to the engine and displays
-    activation maps computed by the the engine.
+    """The :py:class:`ActivationsPanel` is a graphical frontend for an
+    :py:class:`ActivationTool` and the an associated
+    :py:class:`ActivationWorker`. It allows to set the network for
+    that tool, it feeds input to the associated
+    :py:class:`ActivationWorker` and displays activation maps computed
+    by the tool.
 
     The :py:class:`ActivationsPanel` complex panel consisting
     of three parts:
@@ -71,17 +74,21 @@ class ActivationsPanel(Panel, QObserver, qobservables={
     ----------
 
     The :py:class:`ActivationsPanel` holds a reference
-    to the underlying :py:class:`tools.activation.Engine`:
+    to the underlying :py:class:`dltb.tool.activation.ActivationTool`:
 
-    _activation: ActivationEngine
-        The :py:class:`ActivationsPanel` will observe this engine
-        to reflect the network currently used by the engine and
-        it also acts as a controller allowing to change that network.
-        This engine is also propagated to the _activationView.
+    _activationTool: ActivationTool
+        The :py:class:`ActivationsPanel` holds a reference to the
+        tool allowing to access the network currently used.
+        It also acts as a controller allowing to change that network.
+
+    _activationWorker: ActivationWorker
+        The :py:class:`ActivationsPanel` will observe this worker
+        to reflect its state. The worker is also propagated to
+        the _activationView.
 
     In addition, the :py:class:`ActivationsPanel` also holds the
     following protected attributes based on the current state of the
-    underlying activation engine:
+    underlying activation worker:
 
     _layerID: str
         The currently selected unit in the activation map.
@@ -138,7 +145,6 @@ class ActivationsPanel(Panel, QObserver, qobservables={
     def __init__(self, toolbox: Toolbox = None,
                  network: Network = None,
                  datasource: Datasource = None,
-                 activation: ActivationEngine = None,
                  **kwargs) -> None:
         """Initialization of the ActivationsPael.
 
@@ -149,20 +155,27 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         parent: QWidget
             The parent argument is sent to the QWidget constructor.
         """
-        self._activation = None
         self._layerID = None
         self._unit = None
         self._receptiveField = None
-        LOG.info("ActivationsPanel(toolbox=%s, network=%s, "
-                 "datasource=%s, activation=%s)",
-                 toolbox, network, datasource, activation)
+        LOG.info("ActivationsPanel(toolbox=%s, network=%s, datasource=%s)",
+                 toolbox, network, datasource)
         super().__init__(**kwargs)
         self._initUI()
         self._layoutUI()
+
+        self._activationTool = ActivationTool()
+        worker = ActivationWorker(tool=self._activationTool)
+        self.setActivationWorker(worker)
+
         self.setToolbox(toolbox)
         self.setNetwork(network)
-        self.setActivationEngine(activation)
         self.setDatasource(datasource)
+
+        if network is None and self._networkSelector.count() > 0:
+            self._networkSelector.setCurrentIndex(0)
+
+
 
     def _initUI(self):
         """Initialize all UI elements. These are
@@ -178,9 +191,10 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         #
 
         # QActivationView: a canvas to display a layer activation
-        self._activationView = QActivationView(engine=self._activation)
+        self._activationView = QActivationView(worker=self._activationWorker)
         self._activationView.unitChanged.connect(self.onUnitChanged)
         self._activationView.positionChanged.connect(self.onPositionChanged)
+        self.addAttributePropagation(ActivationWorker, self._activationView)
 
         # QClassesView: display classification results
         self._classesView = QClassesView()
@@ -212,6 +226,8 @@ class ActivationsPanel(Panel, QObserver, qobservables={
 
         # QDatasourceNavigator: navigate through the datasource
         self._datasourceNavigator = self._dataSelector.datasourceNavigator()
+        self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+
         # self.addAttributePropagation(Toolbox, self._datasourceNavigator)
 
         #
@@ -221,15 +237,16 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # QNetworkComboBox: a widget to select a network
         self._networkSelector = QNetworkComboBox()
         self.addAttributePropagation(Toolbox, self._networkSelector)
+        self.addAttributePropagation(Network, self._networkSelector)
         # FIXME[note]: the 'activated' signal is emitted on every
         # activation, not just on changes - we use this during development
         # as it may help to trigger the event on purpose.  However, in future
         # 'activated' may be replaced by 'currentIndexChanged' which
         # will only be emitted if the selected network actually changed.
-        # self._networkSelector.activated[str].\
+        self._networkSelector.networkSelected.\
+            connect(self.onNetworkSelected)
+        # self._networkSelector.currentIndexChanged[str].\
         #    connect(self.onNetworkSelectorChanged)
-        self._networkSelector.currentIndexChanged[str].\
-            connect(self.onNetworkSelectorChanged)
 
         # QPrepareButton: a button to (un)prepare the network
         self._networkPrepareButton = QPrepareButton()
@@ -237,6 +254,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # QLayerSelector: a widget to select a network layer
         self._layerSelector = QLayerSelector()
         self._layerSelector.layerClicked.connect(self.onLayerSelected)
+        self.addAttributePropagation(Network, self._layerSelector)
 
     def _layoutUI(self):
         """Layout the graphical user interface.
@@ -317,35 +335,28 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         layout.addLayout(rightLayout)
         self.setLayout(layout)
 
-    def setActivationEngine(self, activation: ActivationEngine) -> None:
-        """Set the underlying :py:class:`ActivationEngine`.
+    def setActivationWorker(self, worker: ActivationWorker) -> None:
+        """Set the underlying :py:class:`ActivationWorker`.
         """
-        LOG.debug("ActivationsPanel.setActivationEngine(%s)", activation)
-        interests = ActivationEngine.Change('network_changed')
-        self._exchangeView('_activation', activation, interests=interests)
-        self._layerSelector.setActivationEngine(activation)
-        self._imageView.setActivationEngine(activation)
-        # self._inputInfoBox.setActivationEngine(activation)
-        self._activationView.setActivationEngine(activation)
-        self._classesView.setActivationEngine(activation)
-        if activation is not None:
-            self._networkSelector.setNetwork(activation.network)
+        LOG.debug("ActivationsPanel.setActivationWorker(%s)", worker)
 
     def network(self) -> Network:
         """The network used by this :py:class:`ActivationsPanel`, i.e. by the
-        network of the underlying :py:class:`ActivtionEngine`.
+        network of the underlying :py:class:`ActivtionTool`.
         """
-        return None if self._activation is None else self._activation.network
+        return (None if self._activationTool is None
+                else self._activationTool.network)
 
     def setNetwork(self, network: Network) -> None:
         """Set the network to be used by this
         :py:class:`ActivationsPanel`, i.e. by the underlying
-        :py:class:`ActivtionEngine`. If no activation engine is
+        :py:class:`ActivtionTool`. If no activation tool is
         set, setting the network will have no effect (and it will
-        not be remembered in case an engine will be set in the future).
+        not be remembered in case an tool will be set in the future).
         """
-        if self._activation is not None:
-            self._activation.network = network
+        self._networkPrepareButton.setPreparable(network)
+        if self._activationTool is not None:
+            self._activationTool.network = network
 
     def setDatasource(self, datasource: Datasource) -> None:
         """Set the datsource to be used for selecting input data.
@@ -353,12 +364,16 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         """
         self._datasourceNavigator.setDatasource(datasource)
 
+    #
+    # Toolbox interface
+    #
+
     def toolbox_changed(self, toolbox: Toolbox, change: Toolbox.Change):
         # pylint: disable=invalid-name
         """React to changes of the toolbox. The :py:class:`ActivationsPanel`
         will reflect two types of changes:
         (1) `input_change`: new input data for the toolbox will be used
-            as input for the underlying :py:class:`ActivationEngine`, and
+            as input for the underlying :py:class:`ActivationWorker`, and
         (2) `datasource_changed`: the toolbox datasource will be used
             for selecting inputs by the datasource navigator of them
             :py:class:`ActivationsPanel`.
@@ -368,20 +383,26 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             data = toolbox.input_data if toolbox is not None else None
             self._imageView.setData(data)
             self._dataView.setData(data)
+            if self._activationWorker is not None:
+                self._activationWorker.work(data)
         elif change.datasource_changed:
             self.setDatasource(toolbox.datasource)
 
-    def activation_changed(self, activation: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
+    #
+    # ActivationWorker
+    #
+
+    def worker_changed(self, worker: ActivationWorker,
+                       info: ActivationWorker.Change) -> None:
         # pylint: disable=invalid-name
-        """React to changes of the underlying :py:class:`ActivationEngine`.
+        """React to changes of the underlying :py:class:`ActivationWorker`.
 
         The QClassesView is only interested if the classification result
         changes.
         """
-        LOG.debug("QActivationsPanel.activation_changed: %s", info)
-        if info.network_changed:
-            network = activation.network
+        LOG.debug("QActivationsPanel.worker_changed: %s", info)
+        if info.tool_changed:
+            network = worker.tool.network
 
             self._networkSelector.setNetwork(network)
             self._networkPrepareButton.setPreparable(network)
@@ -391,41 +412,14 @@ class ActivationsPanel(Panel, QObserver, qobservables={
                        network.is_classifier())
             self._classesViewBox.setEnabled(enabled)
 
-    @protect
-    def onNetworkSelectorChanged(self, key: str) -> None:
-        """The signal `currentIndexChanged` is sent whenever the currentIndex
-        in the combobox changes either through user interaction or
-        programmatically.
-        """
-        #network = self._networkSelector.currentNetwork()
-        network = None if not key else Network[key]
-        LOG.info("QActivationsPanel.onNetworkSelectorChanged('%s', %s)",
-                 key, network)
-        self.setNetwork(network)
-
-    @protect
-    def onUnitChanged(self, unit: int) -> None:
-        """React to the (de)selection of a unit in the activation map.
-        """
-        self._unit = None if unit == -1 else unit
-        self.updateImageMask()
-
-    @protect
-    def onPositionChanged(self, position: QPoint) -> None:
-        """React to the (de)selection of a position in the activation map.
-        """
-        layer = self._activationView.layer()
-        if layer is None or position == QPoint(-1, -1):
-            self._receptiveField = None
-        else:
-            point = (position.x(), position.y())
-            self._receptiveField = layer.receptive_field(point)
-        self.updateReceptiveField()
+    #
+    # update
+    #
 
     def updateImageMask(self) -> None:
         """Display the current activations as mask in the image view.
         """
-        if self._activationEngine is None or self._unit is None:
+        if self._activationWorker is None or self._unit is None:
             self._imageView.setMask(None)
             return
 
@@ -433,14 +427,14 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             self._imageView.setMask(None)
             return
 
-        activation = self._activationEngine.get_activation(self._layerID,
-                                                           unit=self._unit)
+        activations = self._activationWorker.activations(self._layerID,
+                                                         unit=self._unit)
 
         # For convolutional layers add a activation mask on top of the
         # image, if a unit is selected
-        if activation is not None and activation.ndim > 1:
+        if activations is not None and activations.ndim > 1:
             # exclude dense layers
-            activationMask = util.image.grayscaleNormalized(activation)
+            activationMask = util.image.grayscaleNormalized(activations)
             self._imageView.setMask(activationMask)
             #field = engine.receptive_field
             #if field is not None:
@@ -464,6 +458,38 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             reference = QSize(*network.get_input_shape(False, False))
             self._imageView.setReceptiveField(rect, reference)
 
+    #
+    # Slots
+    #
+
+    @protect
+    def onNetworkSelected(self, network: Network) -> None:
+        """The signal `networkSelected` is sent whenever the currentIndex
+        in the combobox changes either through user interaction or
+        programmatically.
+        """
+        LOG.info("QActivationsPanel.onNetworkSelected(%s)", network)
+        self.setNetwork(network)
+
+    @protect
+    def onUnitChanged(self, unit: int) -> None:
+        """React to the (de)selection of a unit in the activation map.
+        """
+        self._unit = None if unit == -1 else unit
+        self.updateImageMask()
+
+    @protect
+    def onPositionChanged(self, position: QPoint) -> None:
+        """React to the (de)selection of a position in the activation map.
+        """
+        layer = self._activationView.layer()
+        if layer is None or position == QPoint(-1, -1):
+            self._receptiveField = None
+        else:
+            point = (position.x(), position.y())
+            self._receptiveField = layer.receptive_field(point)
+        self.updateReceptiveField()
+
     @protect
     def onLayerSelected(self, layer_id: str, selected: bool) -> None:
         """A slot for reacting to layer selection signals.
@@ -473,17 +499,17 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         layer_id: str
             The id of the network :py:class:`Layer`. It is assumed
             that this id refers to a layer in the current
-            `py:meth:`ActivationEngine.network`
-            of the :py:class:`ActivationEngine`.
+            `py:meth:`ActivationTool.network`
+            of the :py:class:`ActivationTool`.
         selected: bool
             A flag indicating if the layer was selected (`True`)
             or deselected (`False`).
         """
         LOG.info("QActivationsPanel.onLayerSelected('%s', %s)",
                  layer_id, selected)
-        if self._activationEngine is None:
-            return  # we will not do anything without an ActivationEngine
+        if self._activationTool is None:
+            return  # we will not do anything without an ActivationTool
 
         self._layerID = layer_id if selected else None
-        layer = self._activationEngine.network[layer_id] if selected else None
+        layer = self.network()[layer_id] if selected else None
         self._activationView.setLayer(layer)

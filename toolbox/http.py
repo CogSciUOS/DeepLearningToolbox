@@ -52,7 +52,7 @@ class ToolboxHandler(http.server.BaseHTTPRequestHandler):
         message += "    <h1>Datasources</h1>"
         message += "    <ul>"
         from datasource import Datasource
-        for key in Datasource.register_keys():
+        for key in Datasource.instance_register.keys():
             message += f'      <li><a href="datasource/{key}">{key}</a></li>'
         message += "    </ul>"
         message += "    <pre>"

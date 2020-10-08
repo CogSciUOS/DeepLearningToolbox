@@ -138,7 +138,7 @@ class Network(BaseNetwork):
         model_file
             Path to the .h5 model file.
         """
-        print("**keras.Network:", kwargs)
+        print("**network.keras.Network:", kwargs)
         kwargs['data_format'] = keras.backend.image_data_format()
 
         super().__init__(*args, **kwargs)
@@ -354,8 +354,8 @@ class Network(BaseNetwork):
     def plot(self):  # FIXME[hack]: plot_model allows for more parameters ...
         plot_model(self._model)
 
-    def _compute_activations(self, layer_ids: list,
-                             input_samples: np.ndarray) -> List[np.ndarray]:
+    def _get_activations(self, input_samples: np.ndarray,
+                         layer_ids: list,) -> List[np.ndarray]:
         """To be implemented by subclasses.
         Computes a list of activations from a list of layer ids.
         """
@@ -688,7 +688,8 @@ class ApplicationsNetwork(Network, Classifier):
 class KerasClassifier(Network, Classifier):
 
     def __init__(self, **kwargs):
-        print("**keras_tensorflow.Classifier:", kwargs, self.__class__.__mro__)
+        print("**network.keras_tensorflow.Classifier:",
+              kwargs, self.__class__.__mro__)
         super().__init__(**kwargs)
         self._input_placeholder = None
         self._label_placeholder = None

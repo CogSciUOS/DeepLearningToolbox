@@ -7,21 +7,23 @@ unregistered.
 from abc import ABCMeta, abstractmethod
 from typing import Iterator, Tuple, Union
 import importlib
-import inspect
 import logging
 
 # Toolbox imports
-from dltb.base.state import Stateful
-from util.debug import debug_object as object
+from base.busy import BusyObservable, busy
+from base.prepare import Preparable
+from base.fail import Failable
+from util.debug import debug_object
 from .observer import Observable
-from .prepare import Preparable
-from .fail import Failable
+from ..thirdparty import check_module_requirements
+
 
 # Logging
 LOG = logging.getLogger(__name__)
 
 
-class Registrable(object, metaclass=ABCMeta):
+class Registrable(metaclass=ABCMeta):
+    # pylint: disable=too-few-public-methods
     """A :py:class:`Registrable` is an object that may be put into a
     :py:class:`Register`. This basically mean that it has a unique key
     (accessible via the :py:attr:`key` property).
@@ -42,11 +44,11 @@ class Registrable(object, metaclass=ABCMeta):
         # to be implemented by subclasses
 
 
-class RegisterEntry(Registrable):
+class RegisterEntry(Registrable, debug_object):
+    # pylint: disable=too-few-public-methods
     """A :py:class:`RegisterEntry` is a base class for
-    :py:class:`Registrable` objects. It realizes the
-    :py:attr:`key` property by storing the key value as
-    private property.
+    :py:class:`Registrable` objects. It realizes the :py:attr:`key`
+    property by storing the key value as private property.
 
     Attributes
     ----------
@@ -57,6 +59,7 @@ class RegisterEntry(Registrable):
     ----------------
     _key_counter: int
         A counter for generating unique keys.
+
     """
 
     _key_counter = 0
@@ -91,6 +94,7 @@ class Register(Observable, method='register_changed',
     """
 
     **Changes**
+
     'entry_added':
         A new entry was added to this :py:class:`Register`.
     'entry_changed'
@@ -117,6 +121,10 @@ class Register(Observable, method='register_changed',
         del self._entries[key]
         self.register_change(key, 'entry_removed')
 
+    #
+    # The Container[Registrable] protocol
+    #
+
     def __contains__(self, entry: Union[str, Registrable]) -> bool:
         """Check if the given entry is registered.
 
@@ -125,32 +133,61 @@ class Register(Observable, method='register_changed',
         entry: Union[str, Registrable]
             Either the entry or the key.
         """
-        if isinstance(entry, Registrable):
-            entry = entry.key
-        return entry in self._entries
+        return ((entry.key if isinstance(entry, Registrable) else entry)
+                in self._entries)
 
-    def __getitem__(self, key: str) -> Registrable:
-        """Lookup the entry for the given key in this :py:class:`Register`.
-        """
-        return self._entries[key]
+    #
+    # The Sized protocol
+    #
 
     def __len__(self) -> int:
         """The number of entries in this register.
         """
         return len(self._entries)
 
-    def __iter__(self) -> Iterator[Registrable]:
-        """Enumerate the entries registered in this :py:class:`Register`.
-        """
-        for entry in self._entries.values():
-            yield entry
+    #
+    # The Iterable interface
+    #
 
-    def keys(self) -> Iterator[str]:
-        """Enumerate the keys of the entries registered
+    def __iter__(self) -> Iterator[Registrable]:
+        """Iterate the entries registered in this :py:class:`Register`.
+        """
+        return map(lambda item: item[1], self._entries.items())
+
+    #
+    # item access
+    #
+
+    def __getitem__(self, key: str) -> Registrable:
+        """Lookup the entry for the given key in this :py:class:`Register`.
+        """
+        return self._entries[key]
+
+    def keys(self, **kwargs) -> Iterator[str]:
+        """Ieterate the keys of the entries registered
         in this :py:class:`Register`.
         """
-        for entry in self._entries.values():
-            yield entry.key
+        return map(lambda entry: entry.key, self.entries(**kwargs))
+
+    def entries(self) -> Iterator[str]:
+        """Iterate the entries of this :py:class:`Register`.
+        """
+        return iter(self)
+
+    def __iadd__(self, entry: Registrable) -> None:
+        """Add an new entry or change an existing entry
+        in this :py:class:`Register`
+        """
+        key = entry.key
+        self._entries[key] = entry
+        self.register_change(key, 'entry_added')
+
+    def __delitem__(self, entry: Union[str, Registrable]) -> None:
+        """Remove an entry from this :py:class:`Register`
+        """
+        key = entry if isinstance(entry, str) else entry.key
+        del self._entries[key]
+        self.register_change(key, 'entry_removed')
 
     def register_change(self, key: str, *args, **kwargs) -> None:
         """Notify observers on a register change.
@@ -165,8 +202,63 @@ class Register(Observable, method='register_changed',
         self.notify_observers(changes, key=key)
 
 
+#
+# The ClassRegister
+#
 
-class ClassRegisterEntry(Failable, Stateful):  # FIXME[todo]: Busy
+class StatefulRegisterEntry(BusyObservable, Registrable, Failable,
+                            method='entry_changed'):
+    """Base class for observable register items
+    """
+
+    @property
+    @abstractmethod
+    def initialized(self) -> bool:
+        """A flag indicatining if the entry is initalized.
+        """
+
+
+class StatefulRegister(Register, StatefulRegisterEntry.Observer):
+    """Base class for registers with stateful items.
+    """
+
+    def add(self, entry: StatefulRegisterEntry) -> None:
+        # pylint: ignore
+        """Add a new entry to this :py:class:`StatefulRegister`
+        """
+        super().add(entry)
+        # 'busy_changed', state_changed
+        interests = StatefulRegisterEntry.Change('state_changed')
+        self.observe(entry, interests=interests)
+
+    def remove(self, entry: StatefulRegisterEntry) -> None:
+        """Remove an entry from this :py:class:`StatefulRegister`
+        """
+        self.unobserve(entry)
+        super().remove(entry)
+
+    def entry_changed(self, entry: StatefulRegisterEntry,
+                      _change: StatefulRegisterEntry.Change) -> None:
+        """React to a change of the observed
+        :py:class:`StatefulRegisterEntry`. Such a change will be
+        propagated to observers of the register.
+        """
+        self.register_change(entry.key, 'entry_changed')
+
+    def entries(self, initialized: bool = None) -> Iterator[Registrable]:
+        # pylint: disable=arguments-differ
+        """Iterate the entries of this register.
+        """
+        return (super().entries() if initialized is None else
+                filter(lambda entry: initialized is entry.initialized,
+                       super().entries()))
+
+#
+# The ClassRegister
+#
+
+
+class ClassRegisterEntry(StatefulRegisterEntry):
     """A :py:class:`ClassRegisterEntry` represents information that
     can be used to import a class. This includes module and class.
     """
@@ -188,19 +280,25 @@ class ClassRegisterEntry(Failable, Stateful):  # FIXME[todo]: Busy
              and `class_name` will be determined automatically and
              do not have to be provided.
         """
+        super().__init__(**kwargs)
         if not (module_name and class_name) and cls is None:
             raise ValueError("Provide either module and class name or class "
                              "for ClassRegisterEntry")
 
         if cls is not None:
             module_name, class_name = cls.__module__, cls.__name__
-        elif class_name is not None and '.' in class_name:
+        elif module_name is None and '.' in class_name:
             module_name, class_name = class_name.rsplit('.', maxsplit=1)
 
         self.cls = cls
         self.module_name = module_name
         self.class_name = class_name
-        super().__init__(**kwargs)
+
+    def __str__(self) -> str:
+        """String representation of this :py:class:`ClassRegisterEntry`
+        """
+        return (f"{self.module_name}.{self.class_name}: "
+                f"initialized={self.initialized}")
 
     @property
     def key(self):
@@ -215,8 +313,7 @@ class ClassRegisterEntry(Failable, Stateful):  # FIXME[todo]: Busy
         Some classes may not be initializable due to unfulfilled requirements
         (like Python modules that have not been installed).
         """
-        return (self.initialized or
-                RegisterClass.check_module_requirement(self.module_name))
+        return self.initialized or check_module_requirements(self.module_name)
 
     @property
     def initialized(self) -> bool:
@@ -225,6 +322,7 @@ class ClassRegisterEntry(Failable, Stateful):  # FIXME[todo]: Busy
         """
         return self.cls is not None
 
+    @busy("Initializing class")
     def initialize(self) -> None:
         """Initialize this class. This essentially means to load
         the module holding the class definition.
@@ -239,7 +337,7 @@ class ClassRegisterEntry(Failable, Stateful):  # FIXME[todo]: Busy
             self.cls = getattr(module, self.class_name)
 
 
-class ClassRegister(Register):
+class ClassRegister(StatefulRegister):
     """A register for :py:class:`ClassRegisterEntry`s.
     """
 
@@ -256,6 +354,13 @@ class ClassRegister(Register):
         All classes registered have to be subclasses of this base class.
         """
         return self._base_class
+
+    def __getitem__(self, key: Union[str, type]) -> Registrable:
+        """Lookup the entry for the given key in this :py:class:`Register`.
+        """
+        if isinstance(key, type):
+            key = f"{key.__module__}.{key.__name__}"
+        return super().__getitem__(key)
 
     def initialized(self, full_name: str) -> bool:
         """Check if a given class is initialized.
@@ -274,7 +379,8 @@ class ClassRegister(Register):
         else:
             self.add(ClassRegisterEntry(cls=cls))
 
-class InstanceRegister(Register):
+
+class InstanceRegister(StatefulRegister):
     """A register for :py:class:`InstanceRegisterEntry`s.
     """
 
@@ -293,40 +399,67 @@ class InstanceRegister(Register):
         return self._base_class
 
 
-class InstanceRegisterEntry(ClassRegisterEntry, Stateful.Observer):
+class InstanceRegisterEntry(StatefulRegisterEntry, RegisterEntry):
     """A :py:class:`InstanceRegisterEntry` represents information that
     can be used to create an object. This includes module and
     class name as well as initialization parameters.
     """
 
-    def __init__(self, key: str = None, obj: object = None, cls: type = None,
+    def __init__(self, key: str = None, obj: object = None,
+                 cls: type = None, class_entry: ClassRegisterEntry = None,
                  args=(), kwargs=None, **_kwargs) -> None:
         # pylint: disable=too-many-arguments
         # too-many-arguments:
         #    It is fine to give all these arguments here, as they
         #    are used to initialize one record of (initialization)
         #    information.
+        if key is None and obj is not None and isinstance(obj, Registrable):
+            key = obj.key
+
+        super().__init__(key=key, **_kwargs)
+
+        if key is None:
+            raise ValueError("No key provided for new InstanceRegisterEntry.")
 
         if obj is not None:
-            cls = type(obj)
+            if cls is None:
+                cls = type(obj)
+            elif cls is not type(obj):
+                raise TypeError(f"Type mismatch between class {cls} "
+                                f"and object of type {type(obj)}.")
 
-        super().__init__(cls=cls, **_kwargs)
-        if key is None:
-            if obj is not None and isinstance(obj, Registrable):
-                key = obj.key
-            else:
-                raise ValueError("No key provided for new "
-                                 "InstanceRegisterEntry.")
-        self._key = key
+        if cls is not None:
+            if class_entry is None:
+                class_entry = cls.class_register[cls]
+            elif class_entry is not cls.class_register[cls]:
+                raise TypeError("Type mismatch between class entry of "
+                                f"type {class_entry.cls} and class {cls}.")
+
+        if class_entry is None:
+            raise ValueError("No class entry provided for "
+                             "InstancRegisterEntry.")
+        self._class_entry = class_entry
         self.obj = obj
         self.args, self.kwargs = args, (kwargs or {})
 
+    def __str__(self) -> str:
+        """String representation of this :py:class:`InstancRegisterEntry`.
+        """
+        return f"{self.key}: {self._class_entry}"
+
     @property
-    def key(self):
+    def key(self) -> str:
         """The unique key identifying a class is the canonical (full)
         class name (including the module name).
         """
         return self._key
+
+    @property
+    def cls(self) -> type:
+        """The unique key identifying a class is the canonical (full)
+        class name (including the module name).
+        """
+        return self._class_entry.cls
 
     @property
     def initializable(self) -> bool:
@@ -334,18 +467,18 @@ class InstanceRegisterEntry(ClassRegisterEntry, Stateful.Observer):
         Some keys may not be initializable due to unfulfilled requirements
         (like Python modules that have not been installed).
         """
-        return (self.initialized or
-                RegisterClass.check_module_requirement(self.module_name))
+        return self.initialized or self._class_entry.initializable
 
     @property
     def initialized(self) -> bool:
-        """A flog indicating if this :py:class:`InstanceRegisterEntry`
+        """A flag indicating if this :py:class:`InstanceRegisterEntry`
         is initialized (`True`) or not (`False`).
         """
         return self.obj is not None and self.obj is not True
 
-    # FIXME[todo]: make busy -> no two concurrent initializations ...
+    @busy("Initializing instance")
     def initialize(self, prepare: bool = False) -> None:
+        # pylint: disable=arguments-differ
         """Initialize this :py:class:`InstanceRegisterEntry`.
         When finished, the register observers will be informed on
         `entry_changed`, and the :py:attr:`initialized` property
@@ -355,21 +488,20 @@ class InstanceRegisterEntry(ClassRegisterEntry, Stateful.Observer):
             return  # Nothing to do
 
         # Initialize the class object
-        super().initialize()
+        self._class_entry.initialize(busy_async=False)
 
         message = (f"Initialization of InstanceRegisterEntry '{self.key}' "
-                   f"from class {self.module_name}.{self.class_name}")
+                   f"from class {self._class_entry}")
         with self.failure_manager(logger=LOG, message=message):
-            self.obj = True  # mark this InstanceRegisterEntry as busy
-            self.obj = self.cls(*self.args, key=self.key, **self.kwargs)
+            self.obj = self._class_entry.cls(*self.args, key=self.key,
+                                             **self.kwargs)
 
-        register = type(self.obj).instance_register
         self.change('state_changed')
-        register.register_change(self.obj.key, 'entry_changed')
 
         if prepare and isinstance(self.obj, Preparable):
             self.obj.prepare()
 
+    @busy("Uninitializing instance")
     def uninitialize(self) -> None:
         """Unitialize this :py:class:`InstanceRegisterEntry`.
         When finished, the register observers will be informed on
@@ -379,9 +511,9 @@ class InstanceRegisterEntry(ClassRegisterEntry, Stateful.Observer):
         obj = self.obj
         if obj is None:
             return  # nothing to do
-        self._set_object(None)
+        self.obj = None
         self.clean_failure()
-        self.register.register_change(obj.key, 'entry_changed')
+        self.change('state_changed')
         del obj
 
     @property
@@ -390,29 +522,8 @@ class InstanceRegisterEntry(ClassRegisterEntry, Stateful.Observer):
         which the object this :py:class:`InstanceRegisterEntry` belongs
         to.
         """
-        return None if self.cls is None else self.cls.instance_register
-
-    @property
-    def busy(self) -> bool:
-        """Check if this :py:class:`InstanceRegisterEntry` is busy.
-        """
-        return self.obj is True
-
-    def state_changed(self, obj: Stateful, change: Stateful.Change) -> None:
-        """
-        """
-        self.register.register_change(obj.key, 'entry_changed')
-
-
-
-
-class RegisterClassEntry(RegisterEntry):
-    """A registrable object that generates keys from a register.
-    """
-
-    def _generate_key(self) -> str:
-        return (self.__class__.__name__ + "-" +
-                str(len(self.instance_register)))
+        return (None if self._entry_class.cls is None else
+                self._entry_class.cls.instance_register)
 
 
 class RegisterClass(ABCMeta):
@@ -422,18 +533,8 @@ class RegisterClass(ABCMeta):
     #     not recognizing `cls` as a valid first parameter instead
     #     of `self` in metaclasses, and hence taking cls.method as
     #     an unbound call, messing up the whole argument structure.
-    """A Metaclass for classes that allows to register instances.
-    Instances are registered by a unique key (of type `str`).
-
-    The :py:class:`RegisterClass` also supports delayed
-    initialization.  Upon registration, just class name and
-    initialization parameters are provided and initialization takes
-    place only when the instanced is accessed for the first time
-    (via the cls[] operator).
-
-    The :py:class:`RegisterClass` also registers subclasses of
-    the base class, allowing for iterating over subclasses and
-    delayed initialization (import) of individual subclasses.
+    """A metaclass for classes that allow to register subclasses and
+    instances.
 
     Class attributs
     ---------------
@@ -456,20 +557,50 @@ class RegisterClass(ABCMeta):
         for import and initialization. If a class has been created,
         `entry.cls` will be that class.
 
-    Changes
-    -------
+    Subclasses are automatically added to the `class_register` upon
+    initialization, that is usually when the module defining the class
+    is imported. Instances are also automatically added upon
+    initialization. Instances are registered by a unique key (of type
+    `str`).
 
-    'key_added':
-        A new key was added to the list of keys.
-    'class_added':
-        A class was added to the list of classes.
-    'key_changed':
-        The status of an individual key has changed (unititialized,
-        initializing, initialized, failure).
-    'class_changed':
-        The status of an individual class has changed (unititialized,
-        initializing, initialized, failure).
+    ** Preregistering classes and instances **
+
+    It is also possible to preregister subclasses and instances.
+
+    Subclasses can be preregistered by calling
+    :py:meth:`register_class`. The idea of preregistering classes is
+    to specify requirements that have to be fulfilled in order
+    initialize (import) the class. This allows to filter out those
+    subclasses with unmet requirements.  The actual instantiation
+    (import) of a class can be performed in a background thread by
+    calling `py:meth:`ClassRegisterEntry.initialize`.
+
+    Preregistering instances is done by the
+    :py:meth:`register_instance` method, providing the class name and
+    initialization parameters. Preregistering instances has mutliple
+    purposes. It allows to provide initialization arguments and
+    thereby store commonly used instances for fast access. As
+    registration is fast (no additional imports or data loading takes
+    place during registration), it can be done in the initialization
+    phase of the toolbox without significant performance effects (only
+    the abstract register base classes have to be imported). The
+    actual instantiation can be done in a background thread by calling
+    `py:meth:`InstancRegisterEntry.initialize`.
+
+    A registered instance can be accessed by its key using the expression
+    `Class[key]`. If not instantiated yet, the instance will be
+    created (synchronously).
     """
+
+    class RegisterClassEntry(RegisterEntry):
+        # pylint: disable=too-few-public-methods
+        """A registrable object that generates keys from a register.
+        """
+
+        def _generate_key(self) -> str:
+            # pylint: disable=no-member
+            return (self.__class__.__name__ + "-" +
+                    str(len(self.instance_register)))
 
     def __new__(mcs, clsname: str, superclasses: Tuple[type],
                 attributedict: dict, **class_parameters) -> None:
@@ -492,10 +623,10 @@ class RegisterClass(ABCMeta):
             Addition class parameters specificied in the class
             definition.
         """
-        is_base_class = not any(issubclass(supercls, RegisterClassEntry)
+        is_base_class = not any(issubclass(supercls, mcs.RegisterClassEntry)
                                 for supercls in superclasses)
         if is_base_class:
-            superclasses += (RegisterClassEntry, )
+            superclasses += (mcs.RegisterClassEntry, )
 
         # class_parameters are to be processed by __init_subclass__()
         # of some superclass of the newly created class ...
@@ -533,51 +664,21 @@ class RegisterClass(ABCMeta):
         new_entry = super().__call__(*args, **kwargs)
 
         if 'key' in kwargs and new_entry.key != kwargs['key']:
-            print("Key mismatch for new register entry: "
-                  f"should be '{kwargs['key']}' but is '{new_entry.key}'")
+            LOG.warning("Key mismatch for new register entry: "
+                        "should be '%s' but is '%s'",
+                        kwargs['key'], new_entry.key)
 
         # If the initialization has been invoked directly (not via
-        # Register.register_initialize_key), we will register the new
-        # instance now.
+        # Register.instance_register.initialize), we will register the
+        # new instance now.
         if new_entry not in cls.instance_register:
-            class_name = '.'.join((cls.__module__, cls.__name__))
-            entry = InstanceRegisterEntry(key=new_entry.key,
-                                          class_name=class_name, obj=new_entry,
+            entry = InstanceRegisterEntry(obj=new_entry,
                                           args=args, kwargs=kwargs)
             cls.instance_register.add(entry)
 
         LOG.info("RegisterClass: new instance of class %s with key '%s'",
                  type(new_entry).__name__, new_entry.key)
         return new_entry
-
-    #
-    # module related methods (FIXME[todo]: move to own module)
-    #
-
-    # A dictionary mapping modulenames MOD to a list of modulenames,
-    # that are requirements for importing MOD (e.g. 'mtcnn' is a
-    # requirement for importing 'tools.face.mtcnn').
-    _module_requirements = {}
-
-    @staticmethod
-    def add_module_requirement(module: str, requirement: str) -> None:
-        """Add a requirement for the given module.
-        """
-        if module not in RegisterClass._module_requirements:
-            RegisterClass._module_requirements[module] = []
-        RegisterClass._module_requirements[module].append(requirement)
-
-    @staticmethod
-    def check_module_requirement(module: str) -> bool:
-        """Check if the given module requires other modules, and
-        if these modules can be found.
-        """
-        if module not in RegisterClass._module_requirements:
-            return True  # no requirements for that module
-        for requirement in RegisterClass._module_requirements[module]:
-            if not importlib.util.find_spec(requirement):
-                return False
-        return True
 
     #
     # class related methods
@@ -608,40 +709,17 @@ class RegisterClass(ABCMeta):
         """
         full_name = name if module is None else ".".join((module, name))
         if full_name not in cls.class_register:
+            if module is None:
+                module, name = name.rsplit('.', maxsplit=1)
             entry = ClassRegisterEntry(module_name=module, class_name=name)
             cls.class_register.add(entry)
 
-    # FIXME[old]: only used in toolbox/shell.py
-    def classes(cls, initialized: bool = None,
-                abstract: bool = None) -> Iterator[str]:
-        """Return an iterate over the classes registered with this
-        :py:class:`RegisterClass`.
-
-        Arguments
-        ---------
-        initialized: bool
-            If set, only iterate over initialized classes (True) or
-            initialized not yet imported (False). A class gets initialized
-            once the module defining it is imported. If this argument
-            is not given, all classes will be considered.
-        abstract: bool
-            If set, only iterate over abstract classes (True) or
-            non abstract classes (False).
-        """
-        for entry in cls.class_register:
-            if initialized is not None and initialized != entry.initialized:
-                continue
-            if not abstract and (entry.initialized and
-                                 inspect.isabstract(entry.cls)):
-                continue
-            yield entry.key
-
     #
-    # key related methods
+    # instance related methods
     #
 
-    def register_key(cls, key: str, module_name: str, class_name: str,
-                     *args, **kwargs) -> None:
+    def register_instance(cls, key: str, module_name: str, class_name: str,
+                          *args, **kwargs) -> None:
         """Register a key with this class. Registering a key will
         allow to initialize an instance of a class (or subclass)
         of this register.
@@ -662,15 +740,15 @@ class RegisterClass(ABCMeta):
             raise ValueError(f"Duplcate registration of {cls.__name__}"
                              f"with key '{key}'.")
 
-        entry = InstanceRegisterEntry(key=key, module_name=module_name,
-                                      class_name=class_name,
+        full_name = module_name + '.' + class_name
+        if full_name not in cls.class_register:
+            cls.register_class(full_name)
+        class_entry = cls.class_register[full_name]
+
+        entry = InstanceRegisterEntry(key=key, class_entry=class_entry,
                                       args=args, kwargs=kwargs)
 
         cls.instance_register.add(entry)
-
-    #
-    # Access to instances
-    #
 
     def __len__(cls):
         return len(cls.instance_register)
@@ -680,116 +758,35 @@ class RegisterClass(ABCMeta):
         """
         return key in cls.instance_register
 
-    def __getitem__(cls, key: str):
+    def __getitem__(cls, key: str) -> object:
         """Access the instantiated entry for the given key.
         If the entry was not instantiated yet, it will be
         instantiated now.
         """
-        entry = cls._assert_key(key)
-        if entry.initialized:
-            return entry.obj
-
-        raise KeyError(f"Key '{key}' is not yet initialized.")
-
-    def _assert_key(cls, key: str) -> None:
-        """Asserts that the given key was registered with this class.
-
-        Raises
-        ------
-        KeyError:
-            If a key was provided, that was not registered with
-            this class.
-        """
         if key not in cls:
             raise KeyError(f"No key '{key}' registered for class "
                            f"{cls.instance_register.base_class}"
-                           f"[{cls.__name__}]. "
-                           f"Valid keys are: {list(cls.register_keys())}")
-        return cls.instance_register[key]
-
-    #
-    # FIXME[old]
-    #
-
-    # FIXME[todo]: replace by Class[key].initialized
-    def key_is_initialized(cls, key: str) -> bool:
-        """Check if a given key is initialized.
-        """
-        return cls._assert_key(key).initialized
-
-
-    # FIXME[todo]: this is not really busy: we may initialize different(!)
-    # keys at thesame time ...
-    # @busy("initializing key")
-    # FIXME[todo]: replace by Class[key, True]
-    def register_initialize_key(cls, key: str) -> object:
-        """Initialize an instance of the :py:class:`RegisterClass`'s base
-        class (or one of its subclassse) using a registered key. This
-        is basically equivalent to importing and initializing the
-        class using the arguments specified when registering the key.
-
-        Attributes
-        ----------
-        key: str
-            A unique key identifying an instance of this class.  The
-            key has to be registered using :py:meth:`register_key`
-            prior to calling this method.
-
-        Returns
-        ------
-        new_instance:
-            The newly initialized instance of the class.
-        """
-
-        # check if that key is already initialized
-        entry = cls._assert_key(key)
+                           f"[{cls.__name__}]. Valid keys are: "
+                           f"{list(cls.instance_register.keys())}")
+        entry = cls.instance_register[key]
         if not entry.initialized:
-            entry.initialize()
-            # FIXME[todo]: error handling
+            entry.initialize(busy_async=False)
 
         return entry.obj
 
-    # FIXME[todo]: remove
-    @staticmethod
-    def _name_for_entry(entry) -> str:
-        """Get the name for the given entry.
-        """
-        return f"({entry.key})" if entry.initialized else f"[{entry.key}]"
-
-    # FIXME[todo]: rename to 'instances'
-    def register_keys(cls, initialized: bool = None) -> Iterator[str]:
-        """Iterate all keys registered with this
-        :py:class:`RegisterClass`.
-        """
-        for entry in cls.instance_register:
-            if initialized is None or initialized == entry.initialized:
-                yield entry.key
-
-    # FIXME[todo]: rename to 'instances'
-    def register_instances(cls, initialized: bool = None) -> Iterator[object]:
-        """Iterate all initialized objects from this
-        :py:class:`RegisterClass`.
-        """
-        for entry in cls.instance_register:
-            if entry.initialized and (initialized is None or initialized):
-                yield entry.obj
-            elif (not entry.initialized and
-                  (initialized is None or not initialized)):
-                yield entry
-
-    # FIXME[todo]: rename to 'instances'
-    def entries(cls, initialized: bool = None) -> Iterator[Tuple[str, str]]:
-        """Iterate pairs of (key, name) for all keys registered with
-        this :py:class:`RegisterClass`.
-        """
-        for entry in cls.instance_register:
-            if initialized is None or initialized == entry.initialized:
-                yield (entry.key, cls._name_for_entry(entry))
+    #
+    # Debugging
+    #
 
     def debug_register(cls):
         """Output debug information for this :py:class:`RegisterClass`.
         """
         print(f"debug: register {cls.__name__} ")
-        print(f"debug: {len(cls.instance_register)} keys:")
+        print(f"debug: {len(cls.class_register)} registered subclasses:")
+        for i, entry in enumerate(cls.class_register):
+            print(f"debug: ({i+1}) {entry.key}: "
+                  f"initialized={entry.initialized}")
+        print(f"debug: {len(cls.instance_register)} registered instances:")
         for i, entry in enumerate(cls.instance_register):
-            print(f"debug: ({i}) {entry.key}: initialized={entry.initialized}")
+            print(f"debug: ({i+1}) {entry.key}: "
+                  f"initialized={entry.initialized}")

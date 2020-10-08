@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QCheckBox,
                              QGridLayout, QVBoxLayout)
 
 # toolbox imports
-from tools.activation import Engine as ActivationEngine
+from dltb.tool.activation import ActivationWorker
 from network import Classifier
 
 # GUI imports
@@ -15,8 +15,7 @@ from ..utils import QObserver
 
 
 class QClassesView(QWidget, QObserver, qobservables={
-        ActivationEngine: {'network_changed', 'input_changed',
-                           'activation_changed'}}):
+        ActivationWorker: {'data_changed', 'work_finished'}}):
     """Visualization of classification results.
 
     Attributes
@@ -39,8 +38,6 @@ class QClassesView(QWidget, QObserver, qobservables={
 
     _targetLabel: QLabel
     """
-
-    _activation: ActivationEngine = None
 
     def __init__(self, parent: QWidget = None, top_n=5):
         """Initialization of the QActivationView.
@@ -90,40 +87,38 @@ class QClassesView(QWidget, QObserver, qobservables={
     def changeEvent(self, event):
         super().changeEvent(event)
 
-    def activation_changed(self, activation: ActivationEngine,
-                           info: ActivationEngine.Change) -> None:
+    def worker_changed(self, worker: ActivationWorker,
+                       info: ActivationWorker.Change) -> None:
         """The QClassesView is only interested if the classification result
         changes.
         """
-        if activation is None:
-            return
 
         if info.network_changed:
-            if isinstance(activation.network, Classifier):
-                scheme = activation.network.class_scheme
+            if isinstance(worker.tool.network, Classifier):
+                scheme = worker.tool.network.class_scheme
                 self._output_format = ('text' if scheme.has_label('text') else
                                        'default')
-                if activation.network.prepared:
-                    activation.add_layer(activation.network.score_layer)
+                if worker.tool.network.prepared:
+                    worker.add_layer(worker.network.score_layer)
 
         if info.input_changed:
             if self._datasource is None:
-                # self._target = activation.input_label # FIXME[old]
+                # self._target = worker.input_label # FIXME[old]
                 self._target = '?'
                 label_text = f'"{self._target}"'
-            elif self._datasource == activation.input_datasource:
+            elif self._datasource == worker.input_datasource:
                 try:
                     self._target = self._datasource.\
-                        format_labels(activation.input_label,
+                        format_labels(worker.input_label,
                                       target=self._label_format)
                 except ValueError:  # Format is not supported by datasource
-                    self._target = '?' + str(activation.input_label)
+                    self._target = '?' + str(worker.input_label)
                 try:
                     label_text = str(self._datasource.
-                                     format_labels(activation.input_label,
+                                     format_labels(worker.input_label,
                                                    target=self._output_format))
                 except ValueError:  # Format is not supported by datasource
-                    label_text = '?' + str(activation.input_label)
+                    label_text = '?' + str(worker.input_label)
             else:
                 self._target = None
                 label_text = "?"
@@ -131,14 +126,14 @@ class QClassesView(QWidget, QObserver, qobservables={
             self._targetLabel.setToolTip(None if self._target is None else
                                          f"network unit: {self._target}")
 
-        if info.activation_changed or info.input_changed:
+        if info.worker_changed or info.input_changed:
             self._update_scores()
 
     def _update_scores(self):
-        if self._activation is None:
+        if self._activationWorker is None:
             return
 
-        classes, scores = self._activation.top_classes(self._top_n)
+        classes, scores = self._activationWorker.top_classes(self._top_n)
         labels = classes
         target = self._target
 

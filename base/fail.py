@@ -14,7 +14,7 @@ import logging
 # toolbox imports
 from util.error import handle_exception
 from util.debug import debug_object as object
-from .observer import Observable
+from dltb.base.observer import Observable
 
 
 class Failable(object):

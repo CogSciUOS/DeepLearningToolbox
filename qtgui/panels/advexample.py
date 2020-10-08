@@ -148,7 +148,7 @@ import numpy as np
 print(f"numpy: {np.__version__}")
 print(f"tensorflow: {tf.__version__}")
 
-from base.observer import Observable
+from dltb.base.observer import Observable
 import util
 
 import cleverhans

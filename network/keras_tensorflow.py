@@ -10,7 +10,7 @@ from dltb.thirdparty.keras import keras
 from dltb.thirdparty.tensorflow import v1 as tf
 
 # toolbox imports
-from .network import Network as BaseNetwork
+from . import Network as BaseNetwork
 from .keras import Network as KerasNetwork
 from .tensorflow import Network as TensorflowNetwork
 
@@ -53,7 +53,7 @@ class Network(KerasNetwork, TensorflowNetwork):
         modelfile_path
             Path to the .h5 model file.
         """
-        print("**keras_tensorflow.Network:", kwargs)
+        print("**network.keras_tensorflow.Network:", kwargs)
         super().__init__(**kwargs)
         self._snapshot = None  # FIXME[old]: what is this? -> documentation or remove
 
@@ -83,8 +83,7 @@ class Network(KerasNetwork, TensorflowNetwork):
         # FIXME[hack]: create a cleaner concept of keras/tensorflow preparation
         # super()._prepare_session()
 
-
-    def _compute_activations(self, layer_ids: list, input_samples: np.ndarray):
+    def _get_activations(self, input_samples: np.ndarray, layer_ids: list):
         """Gives activations values of the loaded_network/model
         for a given layername and an input (inputsample).
         

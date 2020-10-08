@@ -1,2 +1,2 @@
-from . import layers
+from dltb.network import layer as layers
 

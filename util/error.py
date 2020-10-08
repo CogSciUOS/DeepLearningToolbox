@@ -33,6 +33,8 @@ import sys
 import traceback
 
 def print_exception(exception: BaseException) -> None:
+    """Print the given exception including traceback to stdout.
+    """
     print("-" * 79)
     print(f"\nUnhandled exception ({type(exception).__name__}): {exception}")
     # FIXME[bug]: sys.stderr may by set to os.devnull ...
@@ -70,7 +72,7 @@ def protect(function):
     (1) Only use @protect to protect for event handlers, signal slots,
         and similar functions in user interfaces!
     (2) Never call a `@protect`ed function.
-    
+
     The @protect decorator will handle the exception by calling the
     generic exception handler (`util.error.handle_exception()`) and
     not re-raise it again. This may be fine for functions called
@@ -89,6 +91,7 @@ def protect(function):
 
     """
     def closure(self, *args, **kwargs):
+        # pylint: disable=broad-except
         try:
             return function(self, *args, **kwargs)
         except BaseException as exception:

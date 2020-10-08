@@ -15,12 +15,13 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QLabel, QRadioButton,
                              QScrollArea, QSizePolicy)
 
 # toolbox imports
-from base.register import Register, RegisterClass, RegisterEntry, Registrable
-from base.register import ClassRegisterEntry, InstanceRegisterEntry
+from dltb.base.register import Register, RegisterEntry, Registrable
+from dltb.base.register import RegisterClass
+from dltb.base.register import ClassRegisterEntry, InstanceRegisterEntry
 from toolbox import Toolbox
 
 # GUI imports
-from ..utils import QObserver, QPrepareButton, protect
+from ..utils import QObserver, QDebug, QPrepareButton, protect
 from ..adapter import ItemAdapter, QAdaptedListWidget, QAdaptedComboBox
 
 # logging
@@ -182,7 +183,8 @@ class RegisterAdapter(QObserver, ItemAdapter, qobservables={
         if self._register is not None:
             print(f"debug:   * register entries:")
             for entry in self._register:
-                print(f"debug:     - {entry.key} [{repr(entry)}]")
+                print(f"debug:     {'+' if not entry.initialized else '-'} "
+                      f"{entry.key} [{repr(entry)}]")
 
 
 class ToolboxAdapter(RegisterAdapter, qobservables={Toolbox: set()}):
@@ -212,6 +214,21 @@ class ToolboxAdapter(RegisterAdapter, qobservables={Toolbox: set()}):
         """
         raise NotImplementedError("A ToolboxAdapter should implement "
                                   "'updateFromToolbox'")
+
+    def debug(self) -> None:
+        """Output debug information for this :py:class:`ToolboxAdapter`.
+        """
+        super_debug = getattr(super(), 'debug')
+        if super_debug is not None:
+            super_debug()
+        print(f"debug: ToolboxAdapter[{type(self).__name__}]: "
+              f"Toolbox={self.toolbox()}")
+        toolbox = self.toolbox()
+        if toolbox is not None:
+            for index, datasource in enumerate(toolbox.datasources):
+                print("debug:   "
+                      f"{'**' if datasource is toolbox.datasource else '  '}"
+                      f" ({index}) {datasource} [{type(datasource)}]")
 
 
 class QRegisterListWidget(RegisterAdapter, QAdaptedListWidget):
@@ -592,7 +609,8 @@ class QClassRegisterEntryController(QRegisterClassEntryController):
         super().update()
 
 
-class QInitializeButton(QPrepareButton):
+class QInitializeButton(QPrepareButton, qobservables={
+        InstanceRegisterEntry: {'busy_changed', 'state_changed'}}):
     """An initialize button allows to initialize the class or
     instance represented by a :py:class:`ClassRegisterEntry`
     or :py:class:`InstanceRegisterEntry`, respectively.
@@ -620,13 +638,33 @@ class QInitializeButton(QPrepareButton):
         state of the :py:class:`Preparable`.
         """
         if self._preparable is None and self._initialize:
-            self.setText(self._initializeText)
-            self.setChecked(False)
-            self.setEnabled(True)
+            entry = self._instanceRegisterEntry
+            if entry is not None:
+                self.setEnabled(not entry.busy)
+                self.setChecked(True)
+                if entry.busy:
+                    if entry.initialized:
+                        self.setText("Uninitializing")
+                    else:
+                        self.setText("Initializing")
+                else:
+                    self.setText("Initialize")
+                    self.setChecked(entry.initialized)
         else:
             self._initialize = False
             self.setText(self._prepareText)
             super().updateState()
+
+    def entry_changed(self, entry: InstanceRegisterEntry,
+                      change: InstanceRegisterEntry.Change) -> None:
+        """React to a change of the observed
+        :py:class:`InstanceRegisterEntry`. Such a change means that
+        the entry was initialized, that is that an object was created.
+        """
+        if not entry.busy:
+            self.setPreparable(entry.obj)
+        else:
+            self.updateState()
 
 
 class QInstanceRegisterEntryController(QRegisterClassEntryController,
@@ -647,6 +685,7 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController,
         :py:class:`QInstanceRegisterEntryController`.
         """
         self._button = QInitializeButton()
+        self.addAttributePropagation(InstanceRegisterEntry, self._button)
         super()._initUI()
 
     def update(self) -> None:
@@ -672,8 +711,7 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController,
             else:
                 self._stateLabel.setText("uninitialized")
                 self._button.setInitialize()
-                self._descriptionLabel.setText(entry.module_name + "." +
-                                               entry.class_name)
+                self._descriptionLabel.setText(str(entry))
         super().update()
 
     @protect
@@ -707,7 +745,10 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController,
         # FIXME[hack]: set the observable InstanceRegisterEntry ...
         self.setInstanceRegisterEntry(self._registerEntry)
 
-    # FIXME[todo]: should be entry_changed?
-    def state_changed(self, entry: InstanceRegisterEntry,
+    #
+    # Observers
+    #
+
+    def entry_changed(self, entry: InstanceRegisterEntry,
                       change: InstanceRegisterEntry.Change) -> None:
         self.update()

@@ -187,16 +187,16 @@ class ToolboxShell(Cmd):
         """List resources available to the program.
         """
         print("Datasources:")
-        for key in Datasource.register_keys():
+        for key in Datasource.instance_register.keys():
             print(f" - {key}")
         print("Known subclasses of Datasource:")
-        for key in Datasource.classes():
+        for key in Datasource.class_register.keys():
             print(f" - {key}")
         print("Tools:")
-        for key in Tool.register_keys():
+        for key in Tool.instance_register.keys():
             print(f" - {key}")
         print("Known subclasses of Tool:")
-        for key in Tool.classes():
+        for key in Tool.class_register.keys():
             print(f" - {key}")
         print("Tools in the Toolbox:")
         if self._toolbox is None:
@@ -225,7 +225,7 @@ class ToolboxShell(Cmd):
         GREEN = '\033[92m'
         YELLOW = '\033[93m'
         BLUE = '\033[94m'
-        if not register.key_is_initialized(key):
+        if not register.instance_register[key].initialized:
             return YELLOW + 'uninitialized' + NORMAL
         obj = register[key]
         if obj.failed:
@@ -251,7 +251,7 @@ class ToolboxShell(Cmd):
         """
         if args.list:
             print("Known datasources are:")
-            for key in Datasource.register_keys():
+            for key in Datasource.instance_register.keys():
                 print(f" - {key}  [{self._state_for_key(Datasource, key)}]")
 
             if not self._toolbox:
@@ -267,7 +267,7 @@ class ToolboxShell(Cmd):
         for datasource_key in args.datasources:
             try:
                 print(f"Initializing Datasource '{datasource_key}'")
-                datasource = Datasource.register_initialize_key(datasource_key)
+                datasource = Datasource[datasource_key]
                 if datasource.failed:
                     handle_exception(datasource.failure_exception)
                 if args.prepare:
@@ -285,7 +285,8 @@ class ToolboxShell(Cmd):
     def complete_datasource(self, text, line, begidx, endix):
         """Command line completion for the `datasource` command.
         """
-        return [t for t in Datasource.register_keys() if t.startswith(text)]
+        return [t for t in Datasource.instance_register.keys()
+                if t.startswith(text)]
 
     _network_parser = ShellArgumentParser(description="Manage Networks")
     _network_parser.add_argument('--list', help='List known networks',
@@ -314,14 +315,14 @@ class ToolboxShell(Cmd):
         """
         if args.list:
             print("Known networks are:")
-            for key in Network.register_keys():
+            for key in Network.instance_register.keys():
                 print(f" - {key}  [{self._state_for_key(Network, key)}]")
             return
 
         for network_key in args.networks:
             try:
                 print(f"Initializing Network '{network_key}'")
-                network = Network.register_initialize_key(network_key)
+                network = Network[network_key]
                 if self._isinstance(network, 'network.Classifier'):
                     print("- Classifier")
                 if self._isinstance(network, 'network.Autoencoder'):
@@ -339,12 +340,13 @@ class ToolboxShell(Cmd):
             except Exception as exception:
                 print(f"Error: {exception}")
                 handle_exception(exception)
-            
+
     @_network_parser.complete_with_args
     def complete_network(self, text, line, begidx, endix):
         """Command line completion for the `network` command.
         """
-        return [t for t in Network.register_keys() if t.startswith(text)]
+        return [t for t in Network.instance_register.keys()
+                if t.startswith(text)]
 
     _tool_parser = ShellArgumentParser(description="Manage tools")
     _tool_parser.add_argument('--list', help='List known tools',
@@ -366,14 +368,14 @@ class ToolboxShell(Cmd):
         """
         if args.list:
             print("Known tools are:")
-            for key in Tool.register_keys():
+            for key in Tool.instance_register.keys():
                 print(f" - {key}  [{self._state_for_key(Tool, key)}]")
             return
 
         for tool_key in args.tools:
             try:
                 print(f"Initializing Tool '{tool_key}'")
-                tool = Tool.register_initialize_key(tool_key)
+                tool = Tool[tool_key]
                 if args.prepare:
                     print(f"Preparing Tool")
                     tool.prepare()
@@ -387,7 +389,8 @@ class ToolboxShell(Cmd):
     def complete_tool(self, text, line, begidx, endix):
         """Command line completion for the `tool` command.
         """
-        return [t for t in Tool.register_keys() if t.startswith(text)]
+        return [t for t in Tool.instance_register.keys()
+                if t.startswith(text)]
 
     def do_show(self, inp):
         """Show the current input data.
@@ -399,14 +402,14 @@ class ToolboxShell(Cmd):
         if self._toolbox.input_data is None:
             print("No input data available.")
             return
-        
+
         import matplotlib.pyplot as plt
         plt.gray()
         plt.imshow(self._toolbox.input_data)
 
         print("Close window to continue ...")
         plt.show()
-        
+
     def do_modules(self, inp):
         """List the modules that have been loaded.
         """

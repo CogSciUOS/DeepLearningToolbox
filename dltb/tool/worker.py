@@ -54,7 +54,7 @@ class Worker(BusyObservable, method='worker_changed',
         self._data = None
         self._next_data = None
         self._tool = tool
-        LOG.info("New Worker created: %r", self)
+        LOG.info("New Worker created: %r (tool=%s)", self, tool)
 
     @property
     def data(self):
@@ -78,13 +78,22 @@ class Worker(BusyObservable, method='worker_changed',
         LOG.info("Tool changed from %s to %s for worker %r",
                  self._tool, tool, self)
         if tool is not self._tool:
+            if self._tool is not None:
+                self.unobserve(tool)
             self._tool = tool
+            if tool is not None:
+                self.observe(tool, 'tool_changed')
             self.change('tool_changed')
+            if self._data is not None:
+                self.work(self._data)  # rework the current data with new tool
 
     @property
     def ready(self) -> bool:
         """Check if this worker is ready for use.
         """
+        return self._ready()
+
+    def _ready(self) -> bool:
         # FIXME[todo/states]: self.tool.ready
         return (self.working or
                 (self._tool is not None and
@@ -114,11 +123,15 @@ class Worker(BusyObservable, method='worker_changed',
         a data loop (like a webcam or a video) in real-time, always
         working on the most recent data available.
         """
-        LOG.info("Worker for Tool '%s' works on data %r",
-                 self.tool and self.tool.key, data)
-        self._next_data = data
-        if not self.busy:
+        LOG.info("Worker for Tool '%s' (ready=%s, prepared=%s) "
+                 "works on data: %r",
+                 self.tool and self.tool.key, self.ready,
+                 self.tool is not None and self.tool.prepared, data)
+        if self.ready and not self.busy:
+            self._next_data = data
             self._work(**kwargs)
+        else:
+            self._data = data
 
     @busy("working")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
     def _work(self, stepwise: bool = False, **kwargs):
@@ -142,7 +155,9 @@ class Worker(BusyObservable, method='worker_changed',
             self._data = data
             self.change(data_changed=True)
             with self.failure_manager(catch=True):
-                result = self.tool.result + ('duration', )
+                result = self.tool.external_result + ('duration', )
+                LOG.debug("Worker %r applying tool %r on data %r "
+                          "with result %s.", self, self.tool, data, result)
                 if stepwise:
                     for values in self.tool.steps(data, result=result,
                                                   **kwargs):
@@ -164,3 +179,23 @@ class Worker(BusyObservable, method='worker_changed',
     # small image (244x244x3) is causing an error in the 'haar' detector.
     # The source of this messages is not clear to me yet (I have also
     # seen it at other locations ...)
+
+    def _apply_tool(self, data, **kwargs) -> None:
+        self.tool.apply(self, data, **kwargs)
+
+    #
+    # Tool observer
+    #
+
+    def tool_changed(self, _tool: Tool, _info: Tool.Change) -> None:
+        """React to a change of the :py:class:`Tool` by reworking
+        the current :py:class:`Data`.
+        """
+        if self._data is None:
+            return  # nothing to do ...
+
+        # FIXME[todo]: what tool changes would require a recomputation
+        #   - info.busy_change should not do this ...
+        # if info.state_changed
+        # if self._data is not None:
+        #    self.work(self._data)

@@ -49,13 +49,13 @@ def main():
     args = parser.parse_args()
 
     if args.detect:
-        detector = Tool.register_initialize_key('haar')
+        detector = Tool['haar']
         print(f"Detector: {detector} [prepared={detector.prepared}]")
         detector.prepare()
         print(f"Detector: {detector} [prepared={detector.prepared}]")
 
         if args.webcam:
-            Datasource.register_initialize_key('Webcam')
+            Datasource['Webcam']
             webcam = Datasource['Webcam']
             webcam.prepare()
             display = ImageDisplay(module='qt')

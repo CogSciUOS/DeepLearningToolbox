@@ -95,7 +95,7 @@ class WiderFace(DataDirectory, Imagesource, Sectioned,
         """
         self._widerface_data = os.getenv('WIDERFACE_DATA', '.')
         self._section = section
-        scheme = ClassScheme.register_initialize_key('widerface')
+        scheme = ClassScheme['widerface']
         directory = os.path.join(self._widerface_data,
                                  'WIDER_' + self._section, 'images')
         super().__init__(key=key or f"wider-faces-{section}",

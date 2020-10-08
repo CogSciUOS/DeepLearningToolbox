@@ -27,7 +27,7 @@ import cv2
 import numpy as np
 
 # toolbox imports
-from base.observer import Observable, change
+from dltb.base.observer import Observable, change
 from network import Network
 # FIXME[hack]: make this network/dataset agnostic!
 from tools.caffe_classes import class_names

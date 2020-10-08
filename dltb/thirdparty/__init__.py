@@ -96,6 +96,22 @@ def modules() -> Iterator[str]:
     return _MODULES.keys()
 
 
+def check_module_requirements(module: str) -> bool:
+    """Check if the given module requires other modules, and
+    if these modules can be found.
+    """
+    if module.startswith(__package__):
+        if module == __package__:
+            return True
+        module = module[len(__package__) + 1:]
+        if (module not in _MODULES or 'modules' not in _MODULES[module]):
+            return True  # no requirements for that module
+        for requirement in _MODULES[module]['modules']:
+            if not importlib.util.find_spec(requirement):
+                return False
+    return bool(importlib.util.find_spec(module))
+
+
 def classes() -> Iterator[str]:
     """Iterate class names for which implementations are provided by
     a third-party module.

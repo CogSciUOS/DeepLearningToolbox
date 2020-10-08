@@ -93,8 +93,9 @@ class BaseChange(set):
             For unknown attributes.
         """
         if attr not in self.CHANGES:
-            raise AttributeError(f'{type(self).__name__} has no '
-                                 f'attribute \'{attr}\'.')
+            raise AttributeError(f"{type(self).__name__} has no "
+                                 f"attribute '{attr}'."
+                                 f"Valid values are: {self.CHANGES}")
         return attr in self
 
     def __setattr__(self, attr: str, value: bool):
@@ -112,8 +113,9 @@ class BaseChange(set):
             The given attribute name is not known.
         """
         if attr not in self.CHANGES:
-            raise AttributeError(f'{type(self).__name__} has no '
-                                 'attribute \'{attr}\'.')
+            raise AttributeError(f"{type(self).__name__} has no "
+                                 f"attribute '{attr}'. "
+                                 f"Valid values are: {self.CHANGES}")
         if value:
             self.add(attr)
         else:
@@ -121,8 +123,9 @@ class BaseChange(set):
 
     def __iadd__(self, attr: str):
         if attr not in self.CHANGES:
-            raise AttributeError(f'{type(self).__name__} has no '
-                                 'attribute \'{attr}\'.')
+            raise AttributeError(f"{type(self).__name__} has no "
+                                 f"attribute \'{attr}\'."
+                                 f"Valid values are: {self.CHANGES}")
         self.add(attr)
 
     @classmethod
@@ -405,12 +408,6 @@ class Observable(object):
             else:
                 LOG.debug("end_change(%s): not in main thread", change)
                 return self, data_change
-
-    @classmethod
-    def observable_name(cls) -> str:
-        """The name of this observable.
-        """
-        return cls.__name__
 
     def change(self, *args, debug: bool = False, **kwargs):
         """Register a change to be sent to the observers.

@@ -26,15 +26,17 @@ class MockLayer:
 class MockNetwork(BaseNetwork):
     """Mock to allow instantiation."""
     def __init__(self, **kwargs):
-        self._data_format = kwargs['data_format']
+        self._channel_axis = kwargs['channel_axis']
         layer = MockLayer(input_shape=kwargs['input_shape'])
         self.layer_dict = OrderedDict(input_layer=layer)
 
 
 class TestBaseNetwork(TestCase):
     def setUp(self):
-        self.network_last = MockNetwork(data_format='channels_last', input_shape=(1, 28, 30, 1))
-        self.network_first = MockNetwork(data_format='channels_first', input_shape=(1, 1, 28, 30))
+        self.network_last = MockNetwork(channel_axis='channels_last',
+                                        input_shape=(1, 28, 30, 1))
+        self.network_first = MockNetwork(channel_axis='channels_first',
+                                         input_shape=(1, 1, 28, 30))
 
 
     def test_transform_input(self):
@@ -42,14 +44,17 @@ class TestBaseNetwork(TestCase):
         mock_input_sample = np.zeros((1, 28, 30, 1))
 
         # Check that the data format is changed correctly.
-        input_sample = self.network_last._transform_input(mock_input_sample, data_format='channels_last')
+        input_sample, is_batch, is_internal = \
+            self.network_last._transform_input(mock_input_sample,
+                                               channel_axis='channels_last')
         self.assertTrue(np.all(mock_input_sample == input_sample))
 
-        input_sample = self.network_first._transform_input(mock_input_sample, data_format='channels_last')
+        input_sample, is_batch, is_internal = \
+            self.network_first._transform_input(mock_input_sample,
+                                                channel_axis='channels_last')
         self.assertTrue(input_sample.shape == (1, 1, 28, 30))
 
     def test_fill_up_ranks(self):
-
 
         rank_2_input = np.zeros((28, 30))
         input_samples = self.network_last._fill_up_ranks(rank_2_input)

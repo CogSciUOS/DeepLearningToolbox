@@ -1,25 +1,9 @@
-"""An engine accessing network activations.
-"""
 
-# standard imports
-from typing import Union, List
-import logging
-
-# third party imports
-import numpy as np
-
-# toolbox imports
-from dltb.base.data import Data
-from dltb.tool import Tool
-from toolbox import Toolbox
-from network import Network, Classifier, ShapeAdaptor, ResizePolicy
-from network.layers import Layer
-
-# logging
-LOG = logging.getLogger(__name__)
+# =============================================================================
 
 
-class Engine(Tool, Toolbox.Observer, method='activation_changed',
+# FIXME[old]
+class OldEngine(Worker, Toolbox.Observer, method='activation_changed',
              changes={'network_changed', 'input_changed',
                       'activation_changed'}):
     # pylint: disable=too-many-ancestors, too-many-instance-attributes
@@ -74,7 +58,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
     _activations: Dict[layer_ids, np.ndarray]
         Mapping layer_ids to the current activation values.
     """
-
+    
     def __init__(self, network: Network = None, toolbox: Toolbox = None):
         """Create a new ``Engine`` instance.
 
@@ -141,7 +125,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
         """
         LOG.debug("tools.activation.Engine.toolbox_changed(%s)", info)
         if info.input_changed:
-            self.process(toolbox.input_data)
+            self.work(toolbox.input_data)
 
     ##########################################################################
     #                          SETTING DATA                                  #
@@ -162,7 +146,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
         :py:class:`Data` object.
         """
         LOG.debug("tools.activation.Engine.data = %s", data)
-        self.process(data)
+        self.work(data)
 
     ##########################################################################
     #                     SETTING THE NETWORK                                #
@@ -265,6 +249,8 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
             self._classification = classification
             self._update_activation()
 
+    # --------------------------------------------------------------------------
+
     #
     # Activation and processor
     #
@@ -315,7 +301,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
 
     def _update_activations(self):
         if self._data is not None:
-            self.process(self._data)
+            self.work(self._data)
 
     def _process_data(self, data: Data) -> None:
         if self._layers is None:
@@ -348,7 +334,7 @@ class Engine(Tool, Toolbox.Observer, method='activation_changed',
 
         LOG.info("computing activations for data <%s>, layers=%s",
                  data, layer_ids)
-        activations = self._network.get_activations(layer_ids, preprocessed)
+        activations = self._network.get_activations(preprocessed, layer_ids)
         # activations will be a List[np.ndarray]
 
         # FIXME[hack]: should be done in network!

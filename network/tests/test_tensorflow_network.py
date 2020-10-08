@@ -49,7 +49,8 @@ class TestTensorFlowNetwork(TestCase):
 
     def test_get_activations(self):
         input_image = self.data[0:1, :, :, np.newaxis]
-        activations = self.loaded_network.get_activations('conv2d_1', input_image)
+        activations = \
+            self.loaded_network.get_activations(input_image, 'conv2d_1')
         self.assertEqual(activations.shape, (1, 26, 26, 32))
         predicted_activation = np.array([[ 0.12313882,  0.07273569,  0.05022647,  0.        ,  0.        ],
                                        [ 0.1309115 ,  0.14641027,  0.18909475,  0.19199452,  0.16788514],

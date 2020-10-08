@@ -8,10 +8,10 @@ import logging
 from threading import Event
 
 # third party imports
-import numpy as np
 
 # toolbox imports
-from base import RegisterClass
+from ..base.data import Datalike
+from ..base.register import RegisterClass
 from ..base.resource import Resource
 from ..base.data import Data, BatchWrapper, BatchDataItem
 
@@ -19,9 +19,12 @@ from ..base.data import Data, BatchWrapper, BatchDataItem
 LOG = logging.getLogger(__name__)
 
 
-Datalike = Union[Data, np.ndarray]
-
-
+# FIXME[todo]: specify the observable interface: there should be
+# at least one change 'tool_changed' indicating that the tool
+# has changed in a way that it will now yield different results
+# to prior application. This may be caused by a change of configuration
+# parameters, exchange of the underlying engine, or the tool
+# becoming perpared ...
 class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
     # pylint: disable=too-many-ancestors
     """:py:class:`Tool` is an abstract base class for tools.
@@ -46,6 +49,23 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         attributes in the given :py:class:`Data` object. Either
         `_process_data` or `_process_batch` have to be overwritten
         (but it is also allowed to owverwrite both).
+
+
+    Class Attributes
+    ----------------
+    external_result: Tuple[str]
+        A tuple naming the values to be returned by an application
+        of the :py:class:`Tool`. These values will be constructed
+        by calling :py:meth:`_postprocess` on the intermediate values.
+    internal_arguments: Tuple[str] = ()
+        A tuple naming the positional arguments for calling the internal
+        processing function :py:meth:`_process`. Values for these
+        names will be taken from the intermediate data structure,
+        which should be filled by :py:class:`_preprocess`
+    internal_result: Tuple[str] = ()
+        A name tuple naming the results of the internal processing.
+        Values will be stored under this name in the intermediate
+        data structure.
 
     Attributes
     ----------
@@ -72,9 +92,9 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
     # Application API
     #
 
-    _result: Tuple[str] = ()
-    _internal_arguments: Tuple[str] = ()
-    _internal_result: Tuple[str] = ()
+    external_result: Tuple[str] = ()
+    internal_arguments: Tuple[str] = ()
+    internal_result: Tuple[str] = ()
 
     def __call__(self, *args, batch: bool = False, internal: bool = False,
                  result: Union[str, Tuple[str]] = None,
@@ -163,7 +183,7 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
                        result: Union[str, Tuple[str]] = None,
                        **kwargs) -> Data:
         if result is None and not internal:
-            result = self._result
+            result = self.external_result
         elif isinstance(result, str):
             result = (result, )
 
@@ -236,10 +256,13 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         """
         # FIXME[todo]: batch data ...
         if result is None:
-            result = self._result
+            result = self.external_result
+        LOG.debug("Applying tool %r to data %r, result=%s", self, data, result)
         values = self(data, *args, result=result, **kwargs)
         if isinstance(result, str):
             self.add_data_attribute(data, result, values)
+        elif len(result) == 1:
+            self.add_data_attribute(data, result[0], values)
         elif result is not None:
             for name, value in zip(result, values):
                 self.add_data_attribute(data, name, value)
@@ -272,7 +295,7 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
         for name, value in zip(names, values):
             self.add_data_attribute(data, name, value)
 
-    def duration(self, data) -> float:
+    def duration(self, data: Data) -> float:
         """Provide the duration (in seconds) the tool needed for processing
         the given data. This property is only available after processing,
         and only if the timer was activated.
@@ -281,6 +304,9 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
 
 
 class BatchTool(Tool):
+    # FIXME[question/todo]: what is a batch tool supposed to be?
+    """BatchTool
+    """
 
     def _do_preprocess(self, *args, internal: bool = False,
                        batch: bool = False,
@@ -294,6 +320,7 @@ class BatchTool(Tool):
 
 
 class IterativeTool(Tool):
+    # pylint: disable=abstract-method
     """An iterative tool performs its operation as an iterative process.
     """
 
@@ -382,7 +409,7 @@ class IterativeTool(Tool):
 
         """
         if result is None:
-            result = self._result
+            result = self.external_result
         if result is None:
             result = ()
         elif isinstance(result, str):

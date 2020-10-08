@@ -251,7 +251,7 @@ class QDemo(QWidget):
         """Demonstration of the :py:class:`QLayerSelector`.
         """
         widget = QLayerSelector()
-        network = Network.register_initialize_key('alexnet-tf')
+        network = Network['alexnet-tf']
         widget.setNetwork(network)
         self.setWidget(widget)
 

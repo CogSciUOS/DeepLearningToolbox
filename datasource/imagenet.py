@@ -153,7 +153,7 @@ class ImagenetClassifier(Classifier):
     """
 
     def __init__(self, **kwargs) -> None:
-        scheme = ClassScheme.register_initialize_key('ImageNet')
+        scheme = ClassScheme['ImageNet']
         super().__init__(scheme=scheme, **kwargs)
 
 
@@ -222,7 +222,7 @@ class ImageNet(DataDirectory, Imagesource, Sectioned,
         description = f"ImageNet {section}"
         self._imagenet_data = imagenet_data or os.getenv('IMAGENET_DATA', '.')
         directory = os.path.join(self._imagenet_data, section)
-        scheme = ClassScheme.register_initialize_key('ImageNet')
+        scheme = ClassScheme['ImageNet']
         super().__init__(key=key or f"imagenet-{section}", section=section,
                          directory=directory,
                          description=description,

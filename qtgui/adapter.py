@@ -218,6 +218,11 @@ class ItemAdapter(QDebug):
         except StopIteration:
             raise LookupError()
 
+    def _setCurrentText(self, text: str) -> None:
+        """
+        """
+        self._setCurrentItem(self._findItem(text))
+
     def _texts(self) -> Iterator[str]:
         """An iterator for the texts presented by this
         :py:class:`ItemAdapter`.
@@ -346,7 +351,8 @@ class ItemAdapter(QDebug):
         print(f"debug: ItemAdapter[{type(self).__name__}]: "
               f"with {self._countItems()} entries:")
         for index, item in enumerate(self._items()):
-            print(f"debug:   ({index+1}) {self._textForItem(item)} "
+            print(f"debug:{'**' if item is self._currentItem() else '  '}"
+                  f"({index+1}) {self._textForItem(item)} "
                   f"[{repr(item)}]")
 
 

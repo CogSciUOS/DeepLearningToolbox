@@ -6,7 +6,7 @@ from .matplotlib import QMatplotlib
 
 from qtgui.utils import QObserver
 from tools.train import Training, TrainingController
-from network import Network, View as NetworkView
+from dltb.network import Network
 
 class QTrainingBox(QWidget, QObserver, qobservables={
         # FIXME[hack]: check what we are really interested in ...
@@ -26,10 +26,10 @@ class QTrainingBox(QWidget, QObserver, qobservables={
     """
 
     _training: TrainingController = None
-    _network: NetworkView = None
+    _network: Network = None
 
     def __init__(self, training: TrainingController=None,
-                 network: NetworkView=None, parent=None):
+                 network: Network=None, parent=None):
         """Initialization of the QTrainingBox.
         """
         super().__init__(parent)
@@ -111,9 +111,6 @@ class QTrainingBox(QWidget, QObserver, qobservables={
         self._exchangeView('_training', training)
         # FIXME[test]: should be notified by the observable
         self._enableComponents()
-
-    def setNetwork(self, network: NetworkView):
-        self._exchangeView('_network', network)
 
     def network_changed(self, network, change):
         self._network(network)

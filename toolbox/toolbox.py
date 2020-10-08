@@ -36,9 +36,7 @@ Concepts:
 #
 # We also call the following, which should be avoided:
 #   - self._gui.getRunner()
-#
 #   - self._gui.setLucidEngine()
-#   - self._gui.setActivationEngine()
 #
 # Changing global logging Handler
 #
@@ -69,7 +67,8 @@ from dltb.base.data import Data
 # that actually needed
 
 # FIXME[todo]: this will load tensorflow!
-from network import Network, AutoencoderController, argparse as NetworkArgparse
+from dltb.network import Network, argparse as NetworkArgparse
+from network import AutoencoderController
 # from network.examples import keras, torch
 from datasource import Datasource, Datafetcher, DataDirectory
 from tools.train import TrainingController
@@ -358,7 +357,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         """
         if isinstance(network, str):
             try:
-                network = Network.register_initialize_key(network)
+                network = Network[network]
             except KeyError:
                 raise ValueError(f"Unknown network: '{network}'")
 
@@ -425,7 +424,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             the active datasource.
         """
         if isinstance(datasource, str):
-            datasource = Datasource.register_initialize_key(datasource)
+            datasource = Datasource[datasource]
 
         if datasource not in self._datasources:
             self._datasources.append(datasource)
@@ -568,13 +567,9 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                 # activations of multiple networks ...
 
             if key == 'activation':
-                # FIXME[hack] ...
-                from tools.activation import Engine as ActivationEngine
-                tool = ActivationEngine(toolbox=self)
-                # FIXME[old]
-                # network_controller = \
-                #    self._toolbox_controller.autoencoder_controller  # FIXME[hack]
-                # tool.set_network_controller(network_controller)
+                # FIXME[old/todo]: should the Toolbox have an
+                # activation tool?
+                pass 
 
             elif key == 'lucid':
                 if addons.use('lucid') and False:  # FIXME[todo]
@@ -702,7 +697,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         # Datasources
         #
         logging.debug("importing datasources")
-        datasources = list(Datasource.register_keys())
+        datasources = list(Datasource.instance_register.keys())
         logging.debug(f"got datasources: {datasources}")
 
         if (len(datasources) > 0):
@@ -828,8 +823,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                     # detector = FaceDetector[key] # .create(name, prepare=False)
                 for key in face_detectors: 
                     LOG.info("Toolbox: Initializing detector '%s'", key)
-                    detector = Tool.register_initialize_key(
-                        key)  # FIXME[todo], busy_async=False)
+                    detector = Tool[key]
                     detector.runner = self.runner  # FIXME[hack]
                     # LOG.info("Toolbox: Preparing detector '%s'", key)
                     # detector.prepare(busy_async=False)
@@ -839,7 +833,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         # Datasources
         #
         for id in 'Webcam', 'Noise', 'Helen', 'Movie':
-            self.add_datasource(Datasource.register_initialize_key(id))
+            self.add_datasource(Datasource[id])
 
         if args is not None:
             if args.data:
@@ -1090,10 +1084,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             self._gui.panel(panel, create=True)
         if panel is not None:  # show the last panel
             self._gui.panel(panel, show=True)
-
-        # FIXME[old]
-        if self.contains_tool('activation'):
-            self._gui.setActivationEngine()
 
         # Show the logging panel.
         #
@@ -1445,7 +1435,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                 result += f"\n  {mark} {datasource}"
 
         result += "\nPredefined data sources: "
-        result += f"{list(Datasource.register_keys())}"
+        result += f"{list(Datasource.instance_register.keys())}"
 
         return result + "\n"
 
@@ -1501,13 +1491,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             controller = TrainingController(runner=self._runner)
             self._training_controller = controller
         return controller
-
-    @property
-    def activation_controller(self) -> BaseController:
-        # -> tools.activation.Controller
-        """Get the Controller for the activation engine.
-        """
-        return self.get_tool('activation')
 
     @property
     def maximization_engine(self) -> BaseController:  # -> tools.am.Controller

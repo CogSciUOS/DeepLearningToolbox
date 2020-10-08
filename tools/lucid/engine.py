@@ -2,7 +2,7 @@ import logging
 logger = logging.getLogger(__name__)
 print(f"!!!!!!!!!! getEffectiveLevel: {logger.getEffectiveLevel()} !!!!!!!!!!!!!")
 
-from base.observer import Observable, change
+from dltb.base.observer import Observable, change
 from network import Network, loader
 from network.lucid import Network as LucidNetwork
 

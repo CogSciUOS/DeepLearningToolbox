@@ -13,12 +13,12 @@ import importlib
 import numpy as np
 
 # toolbox imports
-from dltb.base.data import Data, Datalike
-from dltb.base.image import Image, Imagelike
-from dltb.tool import Tool
-from dltb.tool.classifier import SoftClassifier
-from base import Identifiable, Extendable, Preparable, RegisterClass, busy
-from .util import convert_data_format
+from ..base.register import RegisterClass
+from ..base.data import Data, Datalike
+from ..base.image import Imagelike, ImageExtension
+from ..tool import Tool
+from ..tool.classifier import SoftClassifier
+from base import Identifiable, Extendable, Preparable
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -45,6 +45,24 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
               metaclass=RegisterClass):
     """Abstract Network interface for all frameworks.
 
+
+
+    ** Data format **
+
+    There seem to be (at least) two formats in use in different
+    frameworks: `channels_first` means that the channel axis is
+    before additional (spatial) axes, that is for 2-dimensional layers
+    the axis would be ``(batch, channel, height, width)``, short `NCHW`.
+    `channels_last` means that the channel axis is the last data axes,
+    that is the axes for a 2-dimensional layer wourd be
+    ``(batch, channel, height, width)``, short `NHWC`.
+
+    We have decided to use `channel_last` as a standard ordering, as this
+    seems to be the natural ordering for RGB images. However, there
+    may also be arguments against this ordering. Rüdiger has mentioned
+    that cuDNN `requires channel first data
+    <https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order>`
+
     The Network API will allow to order the dimensions in data arrays
     in a way independent of the underlying Network
     implementation. There seem to be different orderings applied in
@@ -64,18 +82,26 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
       * theano: ?
 
-    We have decided to use a batch first, channel last ordering, that
-    is ``NHWC``, i.e, ``(batch, height, width, channel)`` as this
-    seems to be the natural ordering for RGB images. However, there
-    may also be arguments against this ordering. Rüdiger has mentioned
-    that cuDNN `requires channel first data
-    <https://caffe2.ai/docs/tutorial-image-pre-processing.html#null__caffe-prefers-chw-order>`
+    To stay flexible, we introdude two properties to adapt this
+    behaviour:
+
+    _channel_axis:
+        The format for data passed to the network via the public
+        interface. Also data returned by public methods, like
+        :py:meth:`get_activations` will be in that format.
+
+    _channel_internal:
+        The internal data format used by the underlying implementation.
+        This is the format expected and returned by all internal
+        methods like :py:meth:`_get_activations`.
+
+    Public methods may in addition accept an optional `channel_axis`
+    argument, allowing to overwrite the :py:class:`Network`s default.
 
     .. note::
         It may be more useful to be able to specify the desired order,
         either globally for a Network, in each method that gets or
         returns array data.
-
 
     Attributes
     ----------
@@ -89,6 +115,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         the network state changed
     'weights_changed':
         network weights were changed
+
     """
 
     # FIXME[problem]:
@@ -117,7 +144,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     def import_framework(cls):
         """Import the framework (python modules) required by this network.
         """
-        pass  # to be implemented by subclasses   
+        pass  # to be implemented by subclasses
 
     # FIXME[todo]: add additional parameters, e.g. cpu / gpu
     # FIXME[concept]: there are at least two different concepts of loading:
@@ -138,14 +165,32 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
     # ------------ Public interface ----------------
 
-    def __init__(self, id=None, data_format: str = 'channels_last',
+    CHANNEL_AXIS_FIRST = 'channels_first'
+    CHANNEL_AXIS_LAST = 'channels_last'
+
+    _channel_axis: str = 'channels_last'  # or 'channels_first'
+    # network/tests/test_network.py
+    # ./network/tensorflow.py
+    # ./network/torch.py
+    # ./network/caffe.py
+    # ./network/layers/caffe_layers.py
+    # ./dltb/network/network.py
+    # --
+    # ./network/keras.py
+    # --
+    # keras.backend.image_data_format()  # 'channels_last'
+    #
+    # FIXME[todo]: channel ordering is relevant when processing
+    # actiations
+
+    def __init__(self, id=None, channel_axis: str = None,
                  **kwargs) -> None:
         """
 
         Parameters
         ----------
         **kwargs
-            data_format: {'channels_last', 'channels_first'}
+            channel_axis: {'channels_last', 'channels_first'}
                 The place of the color channels in the tensors.
         """
         LOG.debug("Network.__init__: %s [%s]", kwargs, self.__class__.__mro__)
@@ -157,8 +202,17 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
         # Every loaded_network should know which data format it is using.
         # Default is channels_last.
-        self._data_format = data_format
+        if channel_axis is not None:
+            self._channel_axis = channel_axis
         self.layer_dict = None
+
+    @property
+    def channel_axis(self) -> str:
+        return self._channel_axis
+
+    @channel_axis.setter
+    def channel_axis(self, axis: str) -> None:
+        self._channel_axis = axis
 
     #
     # Sized interface
@@ -193,11 +247,11 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         elif isinstance(key, Identifiable):
             return self.layer_dict[key.get_id()]
         raise KeyError(f"No layer for key '{key}' in network.")
-    
+
     #
     # Preparation
     #
-        
+
     def _prepare(self):
         super()._prepare()
         #
@@ -240,27 +294,30 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         raise TypeError("Network index argument layer has invalid type "
                         f"{type(layer)}, should by str or int")
 
-    @busy("getting activations")
-    def get_activations(self, layer_ids: Any,
-                        input_samples: np.ndarray,
-                        data_format: str = 'channels_last'
+    # @busy("getting activations")
+    def get_activations(self, inputs: np.ndarray,
+                        layer_ids: Any = None,
+                        channel_axis: str = 'channels_last',
+                        image: bool = False
                         ) -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
 
         Parameters
         ----------
-        layer_ids
-            The layers the activations should be fetched for. Single
-            layer_id or list of layer_ids.
-        input_samples
+        inputs:
             For multi-channel, two-dimensional data, we expect the
             input data to be given in with channel last, that is
             (N,H,W,C). For plain data of dimensionality D we expect
             batch first (N,D).
-        data_format: {'channels_last', 'channels_first'}
+        layer_ids:
+            The layers the activations should be fetched for. Single
+            layer_id or list of layer_ids.
+        channel_axis: {'channels_last', 'channels_first'}
             The format in which the data is provided.
             Either "channels_first" or "channels_last".
+        image: bool
+            The data provided are an image.
 
         Returns
         -------
@@ -268,15 +325,20 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         (input_samples, image_height, image_width, feature_maps).
 
         """
+        internal, is_batch, is_internal = \
+            self._transform_input(inputs, channel_axis)
+
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
+
         # Transform the input_sample appropriate for the loaded_network.
         LOG.debug("Transforming input data from %s to %s.",
-                  input_samples.shape, data_format)
-        input_samples = self._transform_input(input_samples, data_format)
-        activations = self._compute_activations(layer_ids, input_samples)
+                  inputs.shape, channel_axis)
+        activations = self._get_activations(internal, layer_ids)
+
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, data_format)
+        activations = [self._transform_outputs(activation, channel_axis,
+                                               is_batch, is_internal)
                        for activation in activations]
         # If it was just asked for the activations of a single layer,
         # return just an array.
@@ -286,7 +348,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
     def get_net_input(self, layer_ids: Any,
                       input_samples: np.ndarray,
-                      data_format: str = 'channels_last'
+                      channel_axis: str = 'channels_last'
                       ) -> Union[np.ndarray, List[np.ndarray]]:
         """Gives the net input (inner product + bias) values of the network
         for given layers and an input sample.
@@ -311,10 +373,12 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
         # Transform the input_sample appropriate for the loaded_network.
-        input_samples = self._transform_input(input_samples, data_format)
+        internal, is_batch, is_internal = \
+            self._transform_input(input_samples, channel_axis)
         activations = self._compute_net_input(layer_ids, input_samples)
         # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, data_format)
+        activations = [self._transform_outputs(activation, channel_axis,
+                                               is_batch, is_internal)
                        for activation in activations]
         # If it was just asked for the activations of a single layer,
         # return just an array.
@@ -339,8 +403,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
     # ------------------- Things to be implmeneted by subclasses --------------
 
-    def _compute_activations(self, layer_ids: list,
-                             input_samples: np.ndarray) -> List[np.ndarray]:
+    def _get_activations(self, input_samples: Any,
+                         layer_ids: list) -> List[Any]:
         """To be implemented by subclasses.
         Computes a list of activations from a list of layer ids.
         """
@@ -367,7 +431,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # ---------------------- Private helper functions -------------------------
 
     def _transform_input(self, inputs: np.ndarray,
-                         data_format: str) -> np.ndarray:
+                         channel_axis: str) -> np.ndarray:
         """Fills up the ranks of the input, e.g. if no batch size was
         specified and converts the input to the data format of the model.
 
@@ -375,26 +439,62 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         ----------
         inputs
             The inputs fed to the network.
-        data_format: {'channels_last', 'channels_first'}
+        channel_axis: {'channels_last', 'channels_first'}
             The data format of inputs.
 
         Returns
         -------
-        The transformed input.
+        internal:
+            The transformed input.
+        is_batch: bool
+            The data was already as a batch.
+        is_internal: bool
+            The data was already given in the internal format.
         """
+        is_internal = True
 
-        inputs = self._fill_up_ranks(inputs)
-        inputs = convert_data_format(inputs, input_format=data_format,
-                                     output_format=self._data_format)
+        shape = self.get_input_shape()
+        if len(inputs.shape) == len(shape):
+            is_batch = True
+        elif len(inputs.shape) == len(shape) - 1:
+            inputs = inputs[np.newaxis]
+            is_batch = False
+        else:
+            raise ValueError(f"Invalid input of shape {inputs.shape} "
+                             f"for network with imput shape {shape}")
 
-        return inputs
+        channel_index = -1 if self._channel_axis == 'channels_last' else 1
+        channels = shape[channel_index]
+
+        if channels == inputs.shape[channel_index]:
+            # channel_swap = False
+            pass
+        elif (self._channel_axis == 'channels_last' and
+              inputs.shape[1] == channels):
+            # channel_swap = True
+            inputs = inputs.transpose((0, 2, 3, 1))
+        elif (self._channel_axis == 'channels_first' and
+              inputs.shape[-1] == channels):
+            # channel_swap = True
+            inputs = inputs.transpose((0, 3, 1, 2))
+        else:
+            raise ValueError(f"Cannot find channels ({channels}) "
+                             f"in input of show {inputs.shape}")
+
+        return inputs, is_batch, is_internal
 
     def _transform_outputs(self, outputs: np.ndarray,
-                           data_format: str) -> np.ndarray:
+                           channel_axis: str,
+                           batch: bool, internal: bool) -> np.ndarray:
         """Convert output values into a desired data format.
         """
-        return convert_data_format(outputs, input_format=self._data_format,
-                                   output_format=data_format)
+        if not internal:
+            outputs = transpose_channel_axis(outputs,
+                                             input_format=self._channel_axis,
+                                             output_format=channel_axis)
+        if not batch:
+            outputs = outputs[0]
+        return outputs
 
     def _fill_up_ranks(self, inputs: np.ndarray) -> np.ndarray:
         """Fill up the ranks of the input tensor in case no batch or
@@ -404,7 +504,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         ----------
         inputs
             The inputs fed to the network.
-        data_format: {'channels_last', 'channels_first'}
+        channel_axis: {'channels_last', 'channels_first'}
             The data format to transform to.
 
 
@@ -460,8 +560,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         """
         return input_sample_shape[1:3] == network_input_shape[1:3]
 
-    @staticmethod
-    def _force_list(maybe_list: Union[List, Any]) -> Tuple[list, bool]:
+    def _force_list(self, maybe_list: Union[List[str], Any]) -> \
+            Tuple[List['str'], bool]:
         """Turn something into a list, if it is none.
 
         Returns
@@ -472,15 +572,17 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             A flag indicating whether the input was a list or not
 
         """
-        is_list = True
-        if not isinstance(maybe_list, list):
-            is_list = False
-            maybe_list = [maybe_list]
-        return maybe_list, is_list
+        if maybe_list is None:
+            return list(self.layer_dict.keys()), True
 
-    ###------------------------- methods from Ulf ----------------------
+        if isinstance(maybe_list, list):
+            return maybe_list, True
 
-    def _canonical_input_shape(self, input_shape : tuple) -> tuple:
+        return [maybe_list], False
+
+    # -------------------------- methods from Ulf ----------------------
+
+    def _canonical_input_shape(self, input_shape: tuple) -> tuple:
         """Transform an input shape into the canonical form. For
         convolutional layers, this is channel last ordering (N,H,W,C).
         For flat input of dimension D it is (D,N).
@@ -578,11 +680,11 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             return shape
         if include_channel:  # and not include_batch
             return shape[1:]
-        if not include_batch:
-            return (shape[1:-1] if self._data_format == 'channels_last'
+        if not include_batch:  # and not include_channel
+            return (shape[1:-1] if self._channel_axis == 'channels_last'
                     else shape[2:])
         # include_batch and not include_channel
-        if self._data_format == 'channels_last':
+        if self._channel_axis == 'channels_last':
             return shape[:-1]
         return (shape[0],) + shape[2:]
 
@@ -851,7 +953,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         self._check_layer_is_convolutional(layer_id)
         raise NotImplementedError
 
-    def get_layer_output_padding(self, layer_id) -> (int,int):
+    def get_layer_output_padding(self, layer_id) -> (int, int):
         """The output padding for the cross-correlation/convolution operation.
 
         Parameters
@@ -912,6 +1014,26 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     def postprocess(self, outputs: Any) -> Any:
         return outputs
 
+    def internal_to_numpy(self, array: np.ndarray,
+                          unbatch: bool = False) -> np.ndarray:
+        """Convert data from internal format into a numpy array.
+        Should be overwritten by subclases that do not use
+        numpy arrays for internal representation.
+
+        Arguments
+        ---------
+        array:
+            The array in internal representation.
+        unbatch: bool
+            A flag indicating if the data should be unbatched.
+        """
+        if unbatch:
+            if array.shape[0] != 1:
+                raise ValueError("Cannot unbatch array "
+                                 f"with batch size {array.shape[0]}")
+            array = array[0]
+        return array
+
     #
     # Information
     #
@@ -922,55 +1044,55 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             print(f"({index:3}) {layer.get_id():20}: "
                   f"{layer.input_shape} -> {layer.output_shape}")
 
-    # FIXME[concept]: we need some training concept ...
 
-    def get_trainer(self, training):
-        return Trainer(training, self)
-
-
-class Trainer:
+class ImageNetwork(ImageExtension, base=Network):
+    """A network for image processiong. Such a network provides
+    additional methods to support passing images as arguments.
     """
-
-    Attributes
-    ----------
-
-    training: Training
-        The training that is currently performed. None if no training
-        is ongoing.
-    busy: bool
-        A flag indicating if the Trainer is currently busy, i.e.
-        executing some training.
-    """
-
-    def __init__(self, training, network):
-        self._training = training
-        self._network = network
-
     @property
-    def training(self):
-        return self._training
+    def input_size(self) -> Tuple[int, int]:
+        return self.get_input_shape()
 
-    @property
-    def busy(self):
-        return self._training is not None
+    # FIXME[hack]: this changes the semantics of the function:
+    # the base class expects inputs: np.ndarray, while we expect an Imagelike.
+    # We should improve the interface (either a new method or a somethign
+    # more flexible)
+    def get_activations(self, inputs: Imagelike,
+                        layer_ids: Any = None,
+                        channel_axis: str = 'channels_last'
+                        ) -> Union[np.ndarray, List[np.ndarray]]:
 
-    def start(self, training: 'Training'):
-        if self.busy:
-            raise RuntimeError("Trainer is busy")
-        self._training = training
-        self._train()
-        self._training = None
+        LOG.debug("ImageNetwork.getActivations(%s, %s)",
+                  inputs.shape, layer_ids)
+        internal = self.image_to_internal(inputs)
+        is_list = isinstance(layer_ids, list)
 
-    def stop(self):
-        if self.busy:
-            self._training = None
+        # Check whether the layer_ids are actually a list.
+        layer_ids, is_list = self._force_list(layer_ids)
 
-    def pause(self):
-        if self.busy:
-            self._training = None
+        # Transform the input_sample appropriate for the loaded_network.
+        LOG.debug("ImageNetwork: internal=%s", internal.shape)
+        activations = self._get_activations(internal, layer_ids)
 
-    def _train(self):
-        raise NotImplementedError("A Trainer has to implement a _train method")
+        # Transform the output to stick to the canocial interface.
+        activations = [self._transform_outputs(activation, channel_axis,
+                                               False, False)
+                       for activation in activations]
+        LOG.debug("ImageNetwork: activations=%s", activations[0].shape)
+        # If it was just asked for the activations of a single layer,
+        # return just an array.
+        if not is_list:
+            activations = activations[0]
+        return activations
+
+    #
+    # Implementation of the Tool interface (not used yet)
+    #
+
+    def _preprocess(self, image: Imagelike, *args, **kwargs) -> Data:
+        data = super(self, image=None, *args, **kwargs)
+        data.add_attribute('image', self.image_to_internal(image))
+        return data
 
 
 class Classifier(SoftClassifier, Network):
@@ -1015,27 +1137,16 @@ class Classifier(SoftClassifier, Network):
                              f"units vs. {len(self._scheme)} classes")
 
     #
-    # Implementation of teh SoftClassifier API
+    # Implementation of the SoftClassifier API
     #
 
     def class_scores(self, data: Datalike) -> np.ndarray:
         """Implementation of the :py:class:`SoftClassifier` interface.
         """
-        data_internal = self._image_as_batch(data)
+        data_internal = self.image_to_internal(data)
         scores_internal = self._class_scores(data_internal)
-        scores = self._postprocess_scores(scores_internal, unbatch=True)
+        scores = self.internal_to_numpy(scores_internal, unbatch=True)
         return scores
-
-    def _image_as_batch(self, image: Imagelike) -> np.ndarray:
-        # size = self.get_input_shape(include_batch=False,
-        #                             include_channel=False)
-        # FIXME[todo]: general resizing/preprocessing strategy for networks
-        image = Image.as_array(image)  # , size=size
-        image = self.preprocess_image(image)
-
-        # add batch dimension
-        image = np.expand_dims(image, axis=0)
-        return image
 
     def _class_scores(self, inputs: np.ndarray) -> np.ndarray:
         # FIXME[todo]: at least in tensorflow it seems possible to feed
@@ -1045,24 +1156,9 @@ class Classifier(SoftClassifier, Network):
         # However, we do not allow this yet!
         # print(f"network.Classifier.class_scores: inputs={type(inputs)}")
         inputs = np.asarray(inputs)
-        scores = self.get_activations(self.score_layer, inputs)
+        scores = self.get_activations(inputs, self.score_layer)
         return scores
 
-    def _postprocess_scores(self, scores: np.ndarray,
-                            unbatch: bool = False) -> np.ndarray:
-        """
-        Arguments
-        ---------
-
-        unbatch: bool
-            A flag indicating if the data should be unbatched.
-        """
-        if unbatch:
-            if scores.shape[0] != 1:
-                raise ValueError("Cannot unbatch scores "
-                                 f"with batch size {scores.shape[0]}")
-            scores = scores[0]
-        return scores
 
 class Autoencoder(Network, method='network_changed'):
 
@@ -1095,99 +1191,6 @@ class VariationalAutoencoder(Autoencoder):
         pass
 
 
-from base import View, Controller, run
-
-
-class NetworkView(View, view_type=Network):
-
-    def __init__(self, network: Network = None, **kwargs):
-        super().__init__(observable=network, **kwargs)
-
-
-class NetworkController(NetworkView, Controller):
-    """
-
-    Attributes
-    ----------
-    network: Network
-        The :py:class:`Network` controlled by this controller.
-
-    trainer: Trainer
-        A :py:class:`Trainer` for the network controlled by this
-        :py:class:`NetworkController`. Can be None.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        self.data = None
-        self.batch_size_range = 1, 256
-        self._batch_size = 128
-
-        self.epochs_range = 1, 50
-        self._epochs = 5
-
-        self._training = None
-
-    @property
-    def network(self) -> Network:
-        return self._network
-
-    @network.setter
-    def network(self, network: Network):
-        if network != self._network:
-            self._network = network
-            if self._training is not None:
-                self._training.network = network
-
-    @run
-    def load_model(self, filename):
-        self._network.load(filename)
-
-    @run
-    def save_model(self, checked: bool = False):
-        self._network.save(self._weights_file)
-
-    def plot_model(self):
-        pass
-
-    # """A Trainer is a Controller for some training."""
-
-    @property
-    def trainer(self):
-        return self._trainer
-
-    @trainer.setter
-    def trainer(self, trainer: Trainer):
-        self._trainer = trainer
-        self._trainer.network = self._network
-
-
-class AutoencoderController(NetworkController):
-
-    batch_size = 128  # FIXME[hack]: need some concept here!
-
-    def __init__(self, autoencoder: Autoencoder = None, **kwargs):
-        super().__init__(network=autoencoder, **kwargs)
-
-    @run
-    def encode(self, inputs):
-        return self._network.encode(inputs, batch_size=self.batch_size)
-
-    @run
-    def decode(self, codes):
-        return self._network.decode(codes, batch_size=self.batch_size)
-
-    @run
-    def reconstruct(self, inputs):
-        return self._network.reconstruct(inputs, batch_size=self.batch_size)
-
-    @run
-    def sample(self, inputs=None, codes=None):
-        if codes is None and inputs is not None:
-            codes = self._network.encode(inputs, batch_size=self._batch_size)
-
-
 class NetworkTool(Tool):
 
     _result: Tuple[str] = ('outputs')
@@ -1212,10 +1215,100 @@ class NetworkTool(Tool):
         """Default operation: propagate data through the network.
         """
         output_layer = self._network.output_layer_id()
-        return self._network.get_activations(output_layer, inputs)
+        return self._network.get_activations(inputs, output_layer)
 
     def _postprocess(self, data: Data, what: str) -> None:
         if what == 'outputs':
             data.add_attribute(what, self._network.postprocess(data.outputs_))
         elif not hasattr(data, what):
             raise ValueError(f"Unknown property '{what}' for tool {self}")
+
+#
+# FIXME[old]: util functions
+#
+
+
+def remove_batch_dimension(shape: tuple) -> tuple:
+    """Set the batch dimension to None as it does not matter for the
+    Network interface."""
+    shape = list(shape)
+    shape[0] = None
+    shape = tuple(shape)
+    return shape
+
+
+def transpose_channel_axis(array_or_shape: Union[np.ndarray, tuple],
+                           input_format: str = None, output_format: str = None
+                           ) -> Union[np.ndarray, tuple]:
+    """Convert channel first to channel last format or vice versa.
+
+    Parameters
+    ----------
+    array_or_shape
+        The array or shape tuple to be converted. Needs to be at least rank 3.
+
+    input_format
+        Either 'channels_first' or 'channels_last'. If not given, opposite
+        of `output_format` is used.
+
+    output_format
+        Either 'channels_first' or 'channels_last'. If not given, opposite
+        of `input_format` is used.
+
+    Returns
+    -------
+    The converted numpy array.
+
+    """
+    is_tuple = False
+    # Check inputs.
+    if isinstance(array_or_shape, np.ndarray):
+        if array_or_shape.ndim < 3:
+            # raise ValueError('Tensor needs to be at least of rank 3
+            # but is of rank {}.'.format(array_or_shape.ndim))
+            # Non-image arrays don't have to be converted.
+            return array_or_shape
+    elif isinstance(array_or_shape, tuple):
+        # Convert to list for assignment later, but set a flag to
+        # remember it was a tuple.
+        array_or_shape = list(array_or_shape)
+        is_tuple = True
+        if len(array_or_shape) < 3:
+            # raise ValueError('Shape needs to be at least of rank 3
+            # but is of rank {}.'.format(len(array_or_shape)))
+            return array_or_shape
+    else:
+        raise TypeError("Input must be either tuple or ndarray "
+                        f"but is {type(array_or_shape)}")
+    # Do the conversion based on the arguments.
+    if input_format == output_format:
+        # No conversion needed to same input and output format.
+        return array_or_shape
+    elif ((input_format == 'channels_first' and
+           output_format == 'channels_last') or
+          (input_format == 'channels_first' and output_format is None) or
+          (input_format is None and output_format == 'channels_last')):
+        if isinstance(array_or_shape, np.ndarray):
+            return np.moveaxis(array_or_shape, 1, -1)
+        elif is_tuple:
+            num_channels = array_or_shape[1]
+            del array_or_shape[1]
+            array_or_shape.append(num_channels)
+            array_or_shape[-1] = num_channels
+            return tuple(array_or_shape)
+    elif ((input_format == 'channels_last'
+           and output_format == 'channels_first') or
+          (input_format == 'channels_last' and output_format is None) or
+          (input_format is None and output_format == 'channels_first')):
+        if isinstance(array_or_shape, np.ndarray):
+            return np.moveaxis(array_or_shape, -1, 1)
+        elif is_tuple:
+            num_channels = array_or_shape[-1]
+            del array_or_shape[-1]
+            array_or_shape[1].insert(1, num_channels)
+            return tuple(array_or_shape)
+    else:
+        raise ValueError("Data format must be either 'channels_last' "
+                         "or 'channels_first,' but is "
+                         f"input_format='{input_format}' and "
+                         f"output_format='{output_format}'")

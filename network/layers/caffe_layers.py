@@ -1,10 +1,10 @@
 """
 See https://github.com/netaz/caffe2any/blob/master/topology.py for some inspiration.
 """
-from . import layers
+from dltb.network import layer as layers
 from caffe.proto import caffe_pb2
 import google.protobuf.text_format
-from network.util import remove_batch_dimension, convert_data_format
+from dltb.network.network import remove_batch_dimension, transpose_channel_axis
 from functools import wraps
 
 def channels_last(shape_fn):
@@ -23,7 +23,8 @@ def channels_last(shape_fn):
     def wrapper(*args, **kwargs):
         shape = shape_fn(*args, **kwargs)
         if len(shape) > 2:
-            shape = convert_data_format(shape, output_format='channels_last')
+            shape = transpose_channel_axis(shape,
+                                           output_format='channels_last')
         return shape
     return wrapper
 
@@ -40,7 +41,6 @@ class CaffeLayer(layers.Layer):
         self._caffe_layer_obj = caffe_layer_obj
         self._caffe_layer_proto = caffe_layer_proto
         self.layer_name = caffe_layer_proto.name
-
 
     @property
     @channels_last

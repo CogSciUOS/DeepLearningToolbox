@@ -3,26 +3,26 @@
 
 from .datasource import Datasource
 
-Datasource.add_module_requirement('datasource.webcam', 'cv2')
+Datasource.register_instance('mnist-train', 'datasource.keras',
+                             'KerasDatasource', name='mnist',
+                             section='train')
+Datasource.register_instance('mnist-test', 'datasource.keras',
+                             'KerasDatasource', name='mnist',
+                             section='test')
+Datasource.register_instance('cifar10-train', 'datasource.keras',
+                             'KerasDatasource', name='cifar10',
+                             section='train')
 
-
-Datasource.register_key('mnist-train', 'datasource.keras',
-                        'KerasDatasource', name='mnist', section='train')
-Datasource.register_key('mnist-test', 'datasource.keras',
-                        'KerasDatasource', name='mnist', section='test')
-Datasource.register_key('cifar10-train', 'datasource.keras',
-                        'KerasDatasource', name='cifar10', section='train')
-
-Datasource.register_key('imagenet-val', 'datasource.imagenet',
-                        'ImageNet', section='val')  # section='train'
-Datasource.register_key('dogsandcats', 'datasource.dogsandcats',
-                        'DogsAndCats')
-Datasource.register_key('widerface', 'datasource.widerface', 'WiderFace')
-Datasource.register_key('fgnet', 'datasource.fgnet', 'FGNet')
-Datasource.register_key('Helen', 'datasource.helen', 'Helen')
-Datasource.register_key('ms-celeb-1m', 'datasource.face', 'MSCeleb1M')
-Datasource.register_key('Noise', 'datasource.noise', 'Noise',
-                        shape=(100, 100, 3))
+Datasource.register_instance('imagenet-val', 'datasource.imagenet',
+                             'ImageNet', section='val')  # section='train'
+Datasource.register_instance('dogsandcats', 'datasource.dogsandcats',
+                             'DogsAndCats')
+Datasource.register_instance('widerface', 'datasource.widerface', 'WiderFace')
+Datasource.register_instance('fgnet', 'datasource.fgnet', 'FGNet')
+Datasource.register_instance('Helen', 'datasource.helen', 'Helen')
+Datasource.register_instance('ms-celeb-1m', 'datasource.face', 'MSCeleb1M')
+Datasource.register_instance('Noise', 'datasource.noise', 'Noise',
+                             shape=(100, 100, 3))
 
 # FIXME[problem]: it seems to be problematic to use two webcams
 # at the same time. It may help to reduce the resolution or
@@ -44,15 +44,16 @@ Datasource.register_key('Noise', 'datasource.noise', 'Noise',
 # reader1 = image.get_reader('<video1>', size=(160, 120))
 # frame0 = reader0.get_next_data()
 # frame1 = reader1.get_next_data()
-Datasource.register_key('Webcam', 'datasource.webcam', 'DataWebcam')
-Datasource.register_key('Webcam2', 'datasource.webcam', 'DataWebcam',
-                        device=1)
+Datasource.register_instance('Webcam', 'datasource.webcam', 'DataWebcam')
+Datasource.register_instance('Webcam2', 'datasource.webcam', 'DataWebcam',
+                             device=1)
 
-Datasource.register_key('Movie', 'datasource.video', 'Video',
-                        filename='/pub/ulf/media/music/Laibach/'
-                        'Laibach - God is God.mp4')
-Datasource.register_key('dummy', 'datasource.dummy', 'Dummy')
-Datasource.register_key('5celeb', 'datasource.fivecelebface', 'FiveCelebFace')
+Datasource.register_instance('Movie', 'datasource.video', 'Video',
+                             filename='/pub/ulf/media/music/Laibach/'
+                             'Laibach - God is God.mp4')
+Datasource.register_instance('dummy', 'datasource.dummy', 'Dummy')
+Datasource.register_instance('5celeb', 'datasource.fivecelebface',
+                             'FiveCelebFace')
 
 
 Datasource.register_class('WiderFace', 'datasource.widerface')

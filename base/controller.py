@@ -214,8 +214,7 @@ class View:
             else:
                 notify(None, change)
         
-    def remove_observer(self, observer, observable_class: type=None,
-                        observable_name: str=None):
+    def remove_observer(self, observer, observable_class: type=None):
         """Remove an :py:class:`Observer` from (one of) the
         :py:class:`Observervable`s controlled by this
         :py:class:`Controller`.
