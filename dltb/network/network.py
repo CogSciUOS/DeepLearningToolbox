@@ -496,6 +496,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             requested by other flags) are applied.
         """
         if not internal:
+            data_format = data_format or self.data_format
             outputs = adapt_data_format(outputs,
                                         input_format=self._data_format,
                                         output_format=data_format)
@@ -1061,11 +1062,11 @@ class ImageNetwork(ImageExtension, base=Network):
     # more flexible)
     def get_activations(self, inputs: Imagelike,
                         layer_ids: Any = None,
-                        data_format: str = DATA_FORMAT_CHANNELS_LAST
+                        data_format: str = None
                         ) -> Union[np.ndarray, List[np.ndarray]]:
 
-        LOG.debug("ImageNetwork.getActivations(%s, %s)",
-                  inputs.shape, layer_ids)
+        LOG.debug("ImageNetwork.getActivations: inputs=%s [%s], layers=%s",
+                  inputs.shape, DATA_FORMAT_CHANNELS_LAST, layer_ids)
         internal = self.image_to_internal(inputs)
         is_list = isinstance(layer_ids, list)
 
@@ -1073,14 +1074,18 @@ class ImageNetwork(ImageExtension, base=Network):
         layer_ids, is_list = self._force_list(layer_ids)
 
         # Transform the input_sample appropriate for the loaded_network.
-        LOG.debug("ImageNetwork: internal=%s", internal.shape)
+        LOG.debug("ImageNetwork.getActivations: internal=%s (%s)",
+                  internal.shape, self._internal_format)
         activations = self._get_activations(internal, layer_ids)
+        LOG.debug("ImageNetwork.getActivations: internal activations=%s (%s)",
+                  activations[0].shape, self._internal_format)
 
         # Transform the output to stick to the canocial interface.
         activations = [self._transform_outputs(activation, data_format,
                                                unbatch=True, internal=False)
                        for activation in activations]
-        LOG.debug("ImageNetwork: activations=%s", activations[0].shape)
+        LOG.debug("ImageNetwork.getActivations: output activations=%s (%s/%s)",
+                  activations[0].shape, data_format, self.data_format)
         # If it was just asked for the activations of a single layer,
         # return just an array.
         if not is_list:

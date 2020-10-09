@@ -155,8 +155,9 @@ class ActivationTool(Tool, Network.Observer):
                  layers: List[Layer]) -> List[np.ndarray]:
         # pylint: disable=arguments-differ
 
-        LOG.info("computing activations for data <%s>, layers=%s",
-                 inputs.shape, layers)
+        LOG.info("ActivationTool: computing activations for data <%s>, "
+                 "layers=%s, activation format=%s",
+                 inputs.shape, layers, self.data_format)
 
         if self._network is None:
             return None
@@ -164,7 +165,8 @@ class ActivationTool(Tool, Network.Observer):
         if not layers:
             return layers
 
-        return self._network.get_activations(inputs, layers)
+        return self._network.get_activations(inputs, layers,
+                                             data_format=self.data_format)
 
     def _postprocess(self, data: Data, what: str) -> None:
         if what == 'activations':
