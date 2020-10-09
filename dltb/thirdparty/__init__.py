@@ -168,9 +168,10 @@ def available(module: str) -> bool:
     """
     # Check if we know that module
     if module not in _MODULES:
-        raise ValueError(f"Unsupported third party module '{module}'. "
-                         f"Valid values are: " +
-                         ', '.join(f"'{name}'" for name in _MODULES))
+        return False
+        # raise ValueError(f"Unsupported third party module '{module}'. "
+        #                  f"Valid values are: " +
+        #                  ', '.join(f"'{name}'" for name in _MODULES))
     found = True
 
     # Check if the module was already imported
@@ -187,7 +188,7 @@ def available(module: str) -> bool:
     return found
 
 
-def import_class(name: str, module: Union[str, List[str]] = None):
+def import_class(name: str, module: Union[str, List[str]] = None) -> type:
     """Import a class.
 
     Arguments
@@ -304,6 +305,12 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
 
     patch_keras: bool = True
 
+    _post_imports = {
+        'PIL': ('.pil', __name__),
+        'torchvision': ('.pil', __name__),
+        'torch': ('.torch', __name__),
+    }
+
     def find_spec(self, fullname, path, target=None):
         """Implementation of the PathFinder API.
         """
@@ -334,31 +341,54 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
             else:
                 LOG.info("Not mapping 'keras' -> 'tensorflow.keras'")
 
-        # Proceed with the standard procedure ...
+        if fullname in self._post_imports:
+            args = self._post_imports.pop(fullname)
+            LOG.info("Preparing post import for module '%s': %s",
+                     fullname, args)
+            module_spec = importlib.util.find_spec(fullname)
+            module_spec.loader = \
+                ImportInterceptor.LoaderWrapper(module_spec.loader, args)
+            return module_spec
 
+        # Proceed with the standard procedure ...
+        return None
+
+    class LoaderWrapper(importlib.abc.Loader):
+        def __init__(self, loader, args):
+            self._loader = loader
+            self._args = args
+
+        def create_module(self, spec):
+            self._loader.create_module(spec)
+
+        def exec_module(self, module):
+            self._loader.exec_module(module)
+            LOG.info("Performing post import for module '%s': %s",
+                     module.__name__, self._args)
+            importlib.import_module(*self._args)
 
 #
 # Post import hooks
 #
 
 # FIXME[hack]: check if there is a better way of doing this ...
-import builtins
-_builtin_import = builtins.__import__
+# import builtins
+# _builtin_import = builtins.__import__
 
-def _import_adapter(name, globals=None, locals=None, fromlist=(), level=0):
-    already_imported = name in sys.modules
-
-    module = _builtin_import(name, globals=globals, locals=locals,
-                             fromlist=fromlist, level=level)
-
-    if not already_imported:
-        if name == 'PIL.Image' or name == 'torchvision':
-            importlib.import_module('.pil', __name__)
-        elif name == 'torch':
-            importlib.import_module('.torch', __name__)
-    return module
-
-builtins.__import__ = _import_adapter
+# def _import_adapter(name, globals=None, locals=None, fromlist=(), level=0):
+#    already_imported = name in sys.modules
+#
+#    module = _builtin_import(name, globals=globals, locals=locals,
+#                             fromlist=fromlist, level=level)
+#
+#    if not already_imported:
+#        # if name == 'PIL.Image' or name == 'torchvision':
+#        #     importlib.import_module('.pil', __name__)
+#        if name == 'torch':
+#            importlib.import_module('.torch', __name__)
+#    return module
+#
+# builtins.__import__ = _import_adapter
 
 
 # Is the application started from source or is it frozen (bundled)?

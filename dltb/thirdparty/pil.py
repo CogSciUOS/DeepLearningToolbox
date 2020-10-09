@@ -21,6 +21,9 @@ This module adds some hooks to work with pillow images:
 # * add hook for dltb.base.image.Image.as_array()
 # * add hook for dltb.base.image.Image.as_data()
 
+# standard imports
+import logging
+
 # third party imports
 import numpy as np
 import PIL.Image
@@ -30,9 +33,13 @@ from datasource import Imagesource
 from ..base.data import Data
 from ..base.image import Image, Imagelike
 
+# logging
+LOG = logging.getLogger(__name__)
+
 
 def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image.Image:
-    """Get a :py:class:`PIL.Image.Image` from a given  
+    # pylint: disable=unused-argument
+    """Get a :py:class:`PIL.Image.Image` from a given
     """
     if isinstance(image, PIL.Image.Image):
         return image
@@ -47,15 +54,15 @@ def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image.Image:
 
     if not isinstance(image, np.ndarray):
         image = Image.as_array(image)
-        
+
     if issubclass(image.dtype.type, np.float):
         image = (image*255).astype('uint8')
     elif image.dtype != np.uint8:
-        image = numpy_image.astype('uint8')
+        image = image.astype('uint8')
     return PIL.Image.fromarray(image, 'RGB')
 
 
-print("adapting dltb.base.image.Image: adding static method 'as_pil'")
+LOG.info("Adapting dltb.base.image.Image: adding static method 'as_pil'")
 Image.as_pil = staticmethod(as_pil)
 
 Imagesource.add_loader('pil', PIL.Image.open)

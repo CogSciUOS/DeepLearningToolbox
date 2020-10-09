@@ -12,6 +12,9 @@ This module adds some hooks to work with pillow images:
 
 """
 
+# standard imports
+import logging
+
 # third party imports
 import numpy as np
 import torch
@@ -19,6 +22,9 @@ import torch
 # toolbox imports
 from datasource import Datasource
 from ...base.data import Data, Datalike
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 def as_torch(data: Datalike, copy: bool = False) -> torch.Tensor:
@@ -45,7 +51,7 @@ def as_torch(data: Datalike, copy: bool = False) -> torch.Tensor:
     return torch.tensor(data) if copy else torch.from_numpy(data)
 
 
-print("adapting dltb.base.data.Data: adding static method 'as_torch'")
+LOG.info("Adapting dltb.base.data.Data: adding static method 'as_torch'")
 Data.as_torch = staticmethod(as_torch)
 
 # add a loader for torch data: typical suffix is '.pt' (pytorch)

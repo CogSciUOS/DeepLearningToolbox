@@ -1,8 +1,10 @@
 """Image utility functions.
 """
 
-# third party imports
+# standard imports
 from typing import Union, Tuple
+
+# third party imports
 import numpy as np
 
 # toolbox imports

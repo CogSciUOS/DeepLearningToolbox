@@ -227,8 +227,10 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         """Set the display mode for this :py:class:`QDataInfoBox`.
         """
         if processed != self._processed:
+            print(f"set processed: {self._processed} -> {processed}")
             self._processed = processed
             self._updateInfo()
+            print(f"processed={self._processed}")
 
     def _showInfo(self, data: Data = None, label=None,
                   description: str = ''):
@@ -318,7 +320,10 @@ class QDataView(QWidget, QObserver, qobservables={
         self._dataInfo = QDataInfoBox()
         self.addAttributePropagation(Toolbox, self._dataInfo)
         self.addAttributePropagation(Datafetcher, self._dataInfo)
-        self._imageView.modeChanged.connect(self._dataInfo.onModeChanged)
+
+        # FIXME[old]: this does not no longe work but it should be easy
+        # to repair with the new data concept
+        # self._imageView.modeChanged.connect(self._dataInfo.onModeChanged)
 
         self._batchNavigator = QBatchNavigator()
         self._batchNavigator.indexChanged.connect(self.onIndexChanged)

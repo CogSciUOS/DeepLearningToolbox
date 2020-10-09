@@ -16,5 +16,6 @@ class TestOpencv(TestCase):
         self.assertTrue(have_imageio)
 
     def test_import_imageio(self):
-        cls = import_class('ImageIO', 'opencv')
+        # cls = import_class('ImageIO', 'opencv')
+        cls = import_class('ImageReader', 'opencv')
         self.assertIsInstance(cls, type)

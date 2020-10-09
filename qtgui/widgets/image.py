@@ -9,9 +9,10 @@ import logging
 import numpy as np
 
 # Qt imports
-from PyQt5.QtCore import Qt, QPoint, QSize, QRect, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import (QImage, QPainter, QPen, QTransform,
-                         QKeyEvent, QMouseEvent)
+from PyQt5.QtCore import Qt, QPoint, QPointF, QSize, QRect
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
+from PyQt5.QtGui import QKeyEvent, QMouseEvent
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
 from PyQt5.QtWidgets import QToolTip
 
@@ -131,15 +132,18 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._keepAspect = True
         self._showMetadata = True
 
-        self._processed = False  
+        self._offset = QPointF(0, 0)
+        self._zoom = 1.0
+
+        self._mouseStartPosition = None
+
+        self._processed = False
         self._toolTipActive = False
         self.setToolTip(False)
 
-        self.modeChanged.connect(self.onModeChanged)
-
         self._toolbox: Toolbox = None
         self.setToolbox(toolbox)
-        
+
         #
         # Prepare the context Menu
         #
@@ -230,7 +234,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         if not self._toolTipActive:
             QToolTip.hideText()
 
-    def setData(self, data: Data, attribute='array', index: int=0) -> None:
+    def setData(self, data: Data, attribute='array', index: int = 0) -> None:
         """Set the data to be displayed by this :py:class:`QImageView`.
         """
         LOG.debug("QImageView.setData(%s, attribute='%s', index=%d): "
@@ -243,7 +247,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     def setImagelike(self, image: Imagelike) -> None:
         array = Image.as_array(image)
         self.setImage(array)
-        
+
     def getImage(self) -> np.ndarray:
         return self._raw
 
@@ -302,6 +306,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         mask: numpy.ndarray
             If the mask has a different size than the actual image,
             it will be resized to fit the image.
+            The mask is assumed to be in the (height,width) format.
         """
         if mask is None:
             self._overlay = None
@@ -317,22 +322,14 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             #     should be a contiguous uint8 numpy array of appropriate
             #     size.
             #
-            # FIXME[problem/todo]: some of the resizing function seem
-            # to change the datatype (from uint to float) and alse the
-            # range (from [0,256] to [0.0,1.0]). This must not happen!
-            # We need some stable and well-documented resizing API
-            # from util.image (originally we used scipy.misc.imresize
-            # here, which was well-behaved for our purposes, but which
-            # has been deprecated and is no longer present in modern
-            # versions of scipy)
-            
+
             print(f"A: mask: {mask.flags['C_CONTIGUOUS']}, dtype={mask.dtype}, shape={mask.shape}, min={mask.min()}, max={mask.max()}")
             if not mask.flags['C_CONTIGUOUS'] or mask.dtype != np.uint8:
                 mask = np.ascontiguousarray(mask, np.uint8)
 
             print(f"B: mask: {mask.flags['C_CONTIGUOUS']}, dtype={mask.dtype}, shape={mask.shape}, min={mask.min()}, max={mask.max()}")
             # print(f"B: mask: resize({mask.shape} -> {(self._image.height(), self._image.width())})")
-            mask = imresize(mask, (self._image.height(), self._image.width()))
+            mask = imresize(mask, (self._image.width()-5, self._image.height()-5))
             print(f"C: mask: {mask.flags['C_CONTIGUOUS']}, dtype={mask.dtype}, shape={mask.shape}, min={mask.min()}, max={mask.max()}")
             mask = mask.astype(np.uint8)
             print(f"D: mask: {mask.flags['C_CONTIGUOUS']}, dtype={mask.dtype}, shape={mask.shape}, min={mask.min()}, max={mask.max()}")
@@ -407,14 +404,20 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         if self._keepAspect:
             w_ratio = min(w_ratio, h_ratio)
             h_ratio = w_ratio
+        w_ratio *= self._zoom
+        h_ratio *= self._zoom
         # the rect is created such that it is centered on the
         # current widget pane both horizontally and vertically
         x = (self.width() - w * w_ratio) // 2
         y = (self.height() - h * h_ratio) // 2
         transform = QTransform()
-        transform.translate(x, y)
+        transform.translate(x + self._offset.x(), y + self._offset.y())
         transform.scale(w_ratio, h_ratio)
         return transform
+
+    def setZoom(self, zoom: float) -> None:
+        self._zoom = zoom
+        self.update()
 
     @protect
     def paintEvent(self, event):
@@ -531,12 +534,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     #
 
     @protect
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        """A mouse press toggles between raw and processed mode.
-        """
-        self.setMode(not self.mode())
-
-    @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Process key events. The :py:class:`QImageView` supports
         the following keys:
@@ -558,6 +555,55 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         else:
             super().keyPressEvent(event)
 
+    @protect
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """A mouse press toggles between raw and processed mode.
+        """
+        self.setMode(not self.mode())
+        self._mouseStartPosition = event.pos()
+        print(self.mode())
+
+    @protect
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """A mouse press toggles between raw and processed mode.
+        """
+        if self._mouseStartPosition is None:
+            return  # something strange happened - we will ignore this
+        self._offset += event.pos() - self._mouseStartPosition
+        print("Moved: ", self._offset)
+        self._mouseStartPosition = None
+        self.update()
+
+    @protect
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        print("double click")
+        self._zoom = 1.0
+        self._offset = QPointF(0, 0)
+        self._mouseStartPosition = None
+        self.update()
+
+    def wheelEvent(self, event):
+        """Process the wheel event. The mouse wheel can be used for
+        zooming.
+
+        Parameters
+        ----------
+        event : QWheelEvent
+            The event providing the angle delta.
+        """
+        delta = event.angleDelta().y() / 120  # will be +/- 1
+        # position = (self._offset + event.pos()) / self._zoom
+
+        zoom = (1 + delta * 0.01) * self._zoom
+        self.setZoom(zoom)
+
+        # offset = (position * self._zoom) - event.pos()
+        # self.setOffset(offset)
+
+        # We will accept the event, to prevent interference
+        # with the QScrollArea.
+        event.accept()
+
     # Attention: The mouseMoveEvent() is only called for regular mouse
     # movements, if mouse tracking is explicitly enabled for this
     # widget by calling self.setMouseTracking(True).  Otherwise it may
@@ -573,6 +619,14 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             The mouse event, providing local and global coordinates.
         """
         if not self._toolTipActive:
+            print("QImageView: mouseMoveEvent:", event.pos(),
+                  bool(event.buttons() & Qt.LeftButton),
+                  bool(event.buttons() & Qt.RightButton))
+            if self._mouseStartPosition is not None:
+                self._offset += event.pos() - self._mouseStartPosition
+                self._mouseStartPosition = event.pos()
+                print("Moved: ", self._offset)
+                self.update()
             return
 
         position = event.pos()
@@ -687,8 +741,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         # FIXME[old]
         # self.setMetadata(self._toolbox and self._toolbox.input_metadata)
 
-    @pyqtSlot(bool)
-    def onModeChanged(self, processed: bool) -> None:
+    def mode(self) -> bool:
+        return self._processed
+
+    def setMode(self, processed: bool) -> None:
         """The display mode was changed. There are two possible modes:
         (1) processed=False (raw): the input is shown as provided by the source
         (2) processed=True: the input is shown as presented to the network
@@ -698,12 +754,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         precessed: bool
             The new display mode (False=raw, True=processed).
         """
-        self.setMode(processed)
-
-    def mode(self) -> bool:
-        return self._processed
-
-    def setMode(self, processed: bool) -> None:
         if not self._toolbox:
             processed = False
         if processed != self._processed:
