@@ -17,6 +17,7 @@ from ..base.register import RegisterClass
 from ..base.data import Data, Datalike
 from ..base.image import Imagelike, ImageExtension
 from ..tool import Tool
+from ..tool.image import ImageTool
 from ..tool.classifier import SoftClassifier
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
 from base import Identifiable, Extendable, Preparable
@@ -1048,7 +1049,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
                   f"{layer.input_shape} -> {layer.output_shape}")
 
 
-class ImageNetwork(ImageExtension, base=Network):
+class ImageNetwork(ImageExtension, ImageTool, base=Network):
     """A network for image processiong. Such a network provides
     additional methods to support passing images as arguments.
     """

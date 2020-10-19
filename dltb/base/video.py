@@ -95,6 +95,30 @@ class Reader:
             time = float(time)
         return time
 
+    # FIXME[todo]: documentation!
+
+    @property
+    @abstractmethod
+    def frames_per_second(self) -> float:
+        """
+        """
+
+    @property
+    @abstractmethod
+    def frame(self) -> int:
+        """
+        """
+
+    @abstractmethod
+    def get_frame_at(self, time: Union[int, float, str]):
+        """
+        """
+
+    @abstractmethod
+    def frame_at(self, time: Union[int, float, str]) -> int:
+        """
+        """
+
 
 class VideoReader(Reader):
     """A :py:class:`VideoReader` is a :py:class:`Reader` that reads

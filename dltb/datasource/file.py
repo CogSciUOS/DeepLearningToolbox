@@ -1,6 +1,13 @@
+"""Definition of datasources that provide data from a single file.
+"""
+
+# standard imports
 import os
+
+# third party imports
 import numpy as np
 
+# toolbox imports
 from .array import DataArray
 
 

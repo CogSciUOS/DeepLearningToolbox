@@ -79,12 +79,14 @@ class DataArray(Indexed):
     #
 
     def _get_meta(self, data: Data, **kwargs) -> None:
+        # pylint: disable=arguments-differ
         """Get data from this :py:class:`Datasource`\\ .
         """
         data.add_attribute('shape', value=self._array.shape[1:])
         super()._get_meta(data, **kwargs)
 
     def _get_batch(self, data: Data, index: int = None, **kwargs) -> None:
+        # pylint: disable=arguments-differ
         if index is not None:
             data.array = self._array[index:index+len(data)]
         super()._get_batch(data, **kwargs)
@@ -149,6 +151,7 @@ class LabeledArray(DataArray, Labeled):
 
     def _get_description(self, index: int = None, short: bool = False,
                          with_label: bool = False, **kwargs) -> str:
+        # pylint: disable=arguments-differ
         """Provide a description of the Datasource or one of its
         elements.
 
@@ -160,10 +163,11 @@ class LabeledArray(DataArray, Labeled):
         """
         if index and with_label:
             description = super()._get_description(index=index, **kwargs)
-            if self.labels_prepared:
-                description += " with label {self._labels[index]}"
-            else:
-                description += ", no label available"
+            if not short:
+                if self.labels_prepared:
+                    description += " with label {self._labels[index]}"
+                else:
+                    description += ", no label available"
         else:
             description = super()._get_description(with_label=with_label,
                                                    **kwargs)

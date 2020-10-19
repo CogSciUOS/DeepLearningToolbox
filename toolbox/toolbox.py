@@ -63,6 +63,9 @@ from dltb.base import run
 from dltb.tool import Tool
 from dltb.base.data import Data
 
+# FIXME[hack]: provide predefined Datasources
+import datasource.predefined
+
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
 
@@ -71,7 +74,7 @@ from dltb.network import Network, argparse as NetworkArgparse
 # FIXME[old]: make AutoencoderController a tool
 #from network import AutoencoderController
 # from network.examples import keras, torch
-from datasource import Datasource, Datafetcher, DataDirectory
+from dltb.datasource import Datasource, Datafetcher, DataDirectory
 from tools.train import TrainingController
 from .process import Process
 

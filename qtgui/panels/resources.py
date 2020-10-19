@@ -95,23 +95,6 @@ class ResourcesPanel(Panel, QAttribute, qattributes={
             layout.addWidget(tabs, 0, 0)
         self.setLayout(layout)
 
-    def resizeEvent(self, event: QResizeEvent) -> None:
-        """Adapt to new widget size.
-        """
-        halfWidth = event.size().width() * 5 // 11
-        self._networkInspector.setMinimumWidth(halfWidth)
-        self._datasourceInspector.setMinimumWidth(halfWidth)
-        # avoid image growing to large
-        # FIXME[todo]: we can actually use the screen size to
-        # compute the size:
-        # app = QtGui.QApplication([])
-        # screen_resolution = app.desktop().screenGeometry()
-        # width, height = screen_resolution.width(), screen_resolution.height()
-        # FIXME[hack]
-        maxsize = max(100, halfWidth-220)
-        self._datasourceInspector._dataView.setMaximumSize(maxsize, maxsize+50)
-        super().resizeEvent(event)
-
     #
     # Datasource
     #

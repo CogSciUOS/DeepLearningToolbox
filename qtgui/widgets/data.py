@@ -21,11 +21,11 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
 # toolbox imports
-from dltb.base.data import Data
-from dltb.tool.classifier import ClassIdentifier
 from toolbox import Toolbox
-from datasource import Metadata
-from datasource import Datasource, Datafetcher
+from dltb.base.data import Data
+from dltb.base.meta import Metadata
+from dltb.datasource import Datasource, Datafetcher
+from dltb.tool.classifier import ClassIdentifier
 from util.image import Region, PointsBasedLocation
 
 # GUI imports
@@ -227,10 +227,11 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         """Set the display mode for this :py:class:`QDataInfoBox`.
         """
         if processed != self._processed:
-            print(f"set processed: {self._processed} -> {processed}")
+            print("QDataInfoBox.setMode(): "
+                  f"processed {self._processed} -> {processed}")
             self._processed = processed
             self._updateInfo()
-            print(f"processed={self._processed}")
+            print(f"QDataInfoBox.setMode(): processed={self._processed}")
 
     def _showInfo(self, data: Data = None, label=None,
                   description: str = ''):
@@ -321,7 +322,7 @@ class QDataView(QWidget, QObserver, qobservables={
         self.addAttributePropagation(Toolbox, self._dataInfo)
         self.addAttributePropagation(Datafetcher, self._dataInfo)
 
-        # FIXME[old]: this does not no longe work but it should be easy
+        # FIXME[old]: this does not no longer work but it should be easy
         # to repair with the new data concept
         # self._imageView.modeChanged.connect(self._dataInfo.onModeChanged)
 
@@ -329,17 +330,6 @@ class QDataView(QWidget, QObserver, qobservables={
         self._batchNavigator.indexChanged.connect(self.onIndexChanged)
 
     def _layoutUI(self, style: str) -> None:  # style='high'/'wide'
-        # FIXME[layout]
-        # layout.setSpacing(0)
-        # layout.setContentsMargins(0, 0, 0, 0)
-        # self._dataInfo.setMinimumWidth(200)
-        # keep image view square (FIXME[question]: does this make
-        # sense for every input?)
-        #self._imageView.heightForWidth = lambda w: w
-        #self._imageView.hasHeightForWidth = lambda: True
-
-        # FIXME[todo]: make this span the whole width
-        self.setMinimumWidth(1200)
 
         dataInfo = QVBoxLayout()
         dataInfo.addWidget(self._dataInfo)
@@ -349,18 +339,13 @@ class QDataView(QWidget, QObserver, qobservables={
         if style == 'high':
             # vertical layout: image above info
             layout = QVBoxLayout()
-            row = QHBoxLayout()
-            row.addStretch()
-            row.addWidget(self._imageView)
-            row.addStretch()
-            layout.addLayout(row)
+            layout.addWidget(self._imageView, stretch=20)
             layout.addLayout(dataInfo)
-        else:
-            # style == 'wide': horizontal layout: image left of info
+        else:  # style == 'wide
+            # horizontal layout: image left of info
             layout = QHBoxLayout()
-            layout.addLayout(dataInfo)
-            # self._imageView.setMinimumSize(400, 400)
             layout.addWidget(self._imageView)
+            layout.addLayout(dataInfo)
 
         self.setLayout(layout)
 

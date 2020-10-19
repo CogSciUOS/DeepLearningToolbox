@@ -7,9 +7,9 @@ import logging
 # toolbox imports
 from dltb.base.video import Reader
 from dltb.base.data import Data
-from .datasource import Indexed, Imagesource, Loop
+from .datasource import Indexed, Imagesource, Livesource
 
-
+# logging
 LOG = logging.getLogger(__name__)
 
 
@@ -17,7 +17,7 @@ LOG = logging.getLogger(__name__)
 # loop continues but raises errors:
 
 
-class Video(Imagesource, Indexed, Loop):
+class Video(Indexed, Imagesource, Livesource):
     # pylint: disable=too-many-ancestors
     """A data source fetching frames from a video.
 
@@ -114,6 +114,21 @@ class Video(Imagesource, Indexed, Loop):
     def _get_default(self, data: Data, **kwargs) -> None:
         """The default is to obtain the next frame from the video.
         """
+        self._get_index(data, index=None, **kwargs)  # get next frame
+
+    def _get_snapshot(self, data, snapshot: bool = True, **kwargs) -> None:
+        """Reading a sanpshot from the video means reading the next frame.
+
+        Arguments
+        ---------
+        snapshot: bool
+            If True, try to make sure that we get a current snapshot.
+            On some systems, the video driver buffers some frame, so that
+            reading just reading the frame may result in outdated data and
+            one should first empty the buffer before reading the data.
+
+        """
+        LOG.debug("Video._get_data(snapshot=%r)", snapshot)
         self._get_index(data, index=None, **kwargs)  # get next frame
 
     def _get_index(self, data: Data, index: int, **kwargs) -> None:

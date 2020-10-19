@@ -6,8 +6,7 @@ import os
 
 # toolbox imports
 from dltb.tool.classifier import ClassScheme
-from .datasource import Imagesource
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, DataDirectory
 
 
 class DogsAndCats(DataDirectory, Imagesource):

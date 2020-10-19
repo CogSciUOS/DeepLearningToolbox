@@ -111,7 +111,12 @@ class TensorFlowStridingLayer(TensorFlowLayer, layers.StridingLayer):
     @property
     def padding(self):
         striding_op = self._first_op_with_attr('padding')
-        return striding_op.node_def.attr['padding'].s.decode('utf8')
+        padding = striding_op.node_def.attr['padding'].s.decode('utf8')
+        if padding == 'VALID':
+            return (0, 0)
+        if padding == 'SAME':
+            return tuple(size // 2 for size in self.kernel_size)
+        raise ValueError(f"Unexpected padding {padding} for layer {self}")
 
     @property
     def activation_tensor(self):

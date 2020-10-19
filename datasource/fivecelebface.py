@@ -5,8 +5,7 @@
 import os
 
 # toolbox imports
-from .datasource import Imagesource, Sectioned
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, Sectioned, DataDirectory
 
 
 class FiveCelebFace(DataDirectory, Imagesource, Sectioned,

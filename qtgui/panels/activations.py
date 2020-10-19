@@ -10,25 +10,25 @@ import logging
 
 # Qt imports
 from PyQt5.QtCore import Qt, QPoint, QRect, QSize
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QSplitter
+from PyQt5.QtWidgets import QWidget, QGroupBox, QSplitter
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout
 
 # toolbox imports
 from dltb.tool.activation import ActivationTool, ActivationWorker
-from toolbox import Toolbox
-from network import Network
-from datasource import Datasource
-import util.image
+from dltb.tool.image import ImageTool
+from dltb.network import Network
+from dltb.datasource import Datasource
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
+from toolbox import Toolbox
+import util.image
 
 # GUI imports
 from .panel import Panel
 from ..utils import QObserver, QPrepareButton, protect
 from ..widgets.activationview import QActivationView
-from ..widgets.data import QDataSelector, QDataView
-from ..widgets.image import QImageView
+from ..widgets.data import QDataSelector
 from ..widgets.network import QLayerSelector, QNetworkComboBox
 from ..widgets.classesview import QClassesView
-from ..widgets.datasource import QDatasourceNavigator
 
 
 # logging
@@ -177,8 +177,6 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         if network is None and self._networkSelector.count() > 0:
             self._networkSelector.setCurrentIndex(0)
 
-
-
     def _initUI(self):
         """Initialize all UI elements. These are
         * The ``QActivationView`` showing the unit activations on the left
@@ -285,25 +283,6 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # Input data (center column)
         #
         inputLayout = QVBoxLayout()
-
-        # FIXME[layout]
-        # keep image view square (TODO: does this make sense for every input?)
-        # self._imageView.heightForWidth = lambda w: w
-        # self._imageView.hasHeightForWidth = lambda: True
-        # FIXME[hack]
-        # self._imageView.setMaximumSize(500, 500)
-
-        # FIXME[layout]
-        # inputLayout.setSpacing(0)
-        # inputLayout.setContentsMargins(0, 0, 0, 0)
-        # row = QHBoxLayout()
-        # row.addStretch()
-        # row.addWidget(self._imageView)
-        # row.addStretch()
-        # inputLayout.addLayout(row)
-        #inputLayout.addWidget(self._dataView)
-        # inputLayout.addWidget(self._datasourceNavigator)
-        # inputLayout.addStretch()
         inputLayout.addWidget(self._dataSelector)
 
         inputBox = QGroupBox('Input')
@@ -332,9 +311,14 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(activationBox)
         splitter.addWidget(inputBox)
+
+        rightWidget = QWidget()
+        rightWidget.setLayout(rightLayout)
+        rightLayout.setContentsMargins(0, 0, 0, 0)
+        splitter.addWidget(rightWidget)
+
         layout = QHBoxLayout()
         layout.addWidget(splitter)
-        layout.addLayout(rightLayout)
         self.setLayout(layout)
 
     def setActivationWorker(self, worker: ActivationWorker) -> None:
@@ -359,6 +343,10 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._networkPrepareButton.setPreparable(network)
         if self._activationTool is not None:
             self._activationTool.network = network
+        print(f"ActivationsPanel.setNetwork({network}): "
+              f"{isinstance(network, ImageTool)}")
+        self._imageView.setImageTool(network if isinstance(network, ImageTool)
+                                     else None)
 
     def setDatasource(self, datasource: Datasource) -> None:
         """Set the datsource to be used for selecting input data.
@@ -413,6 +401,8 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             enabled = (network is not None and network.prepared and
                        network.is_classifier())
             self._classesViewBox.setEnabled(enabled)
+        if info.work_finished:
+            self.updateImageMask()
 
     #
     # update

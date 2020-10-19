@@ -13,8 +13,7 @@ import numpy as np
 # toolbox imports
 from util.image import Landmarks, Region
 from dltb.base.data import Data
-from .datasource import Imagesource
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, DataDirectory
 
 
 class MSCeleb1M(DataDirectory, Imagesource):

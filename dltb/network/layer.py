@@ -62,6 +62,42 @@ class Layer(Identifiable):
         """The suceeding Layer in a network."""
         return self._sucessor
 
+    @staticmethod
+    def compute_receptive_field(point1: Tuple[int, ...],
+                                point2: Tuple[int, ...],
+                                size: Tuple[int, ...],
+                                padding: Tuple[int, ...],
+                                strides: Tuple[int, ...]) \
+            -> (Tuple[int, ...], Tuple[int, ...]):
+        """The receptive field of a layer.
+
+        Parameters
+        ----------
+        point1: the upper left corner of the region of interest.
+        point2: the lower right corner of the region of interest.
+
+        Returns
+        ------
+        q1: The upper left corner of the receptive field for the region
+            of interest.
+        q2: The lower right corner of the receptive field for the region
+            of interest.
+        """
+        print(f"compute_receptive_field({point1},{point2},{size},"
+              f"{padding},{strides})")
+        if point2 is None:
+            point2 = point1
+        q1, q2 = (), ()
+        for i, s in enumerate(strides):
+            q1 = q1 + (point1[i] * s,)
+            q2 = q2 + (point2[i] * s,)
+
+        point1, point2 = (), ()
+        for i, (s, p) in enumerate(zip(size, padding)):
+            point1 = point1 + (q1[i] - p,)
+            point2 = point2 + (q2[i] + s - p,)
+        return point1, point2
+
     def receptive_field(self, point1: Tuple[int, ...],
                         point2: Tuple[int, ...] = None
                         ) -> (Tuple[int, ...], Tuple[int, ...]):
@@ -77,9 +113,10 @@ class Layer(Identifiable):
             one point.
 
         Returns
-        ------
-        The upper left corner and the lower right corner of the
-        receptive field for the region of interest.
+        -------
+        point1, point2:
+            The upper left corner and the lower right corner of the
+            receptive field for the region of interest.
         """
         return ((point1, point2) if self.predecessor is None else
                 self.predecessor.receptive_field(point1, point2))
@@ -191,22 +228,9 @@ class StridingLayer(Layer):
         q2: The lower right corner of the receptive field for the region
             of interest.
         """
-        if point2 is None:
-            point2 = point1
-        q1, q2 = (), ()
-        for i, s in enumerate(self.strides):
-            q1 = q1 + (point1[i] * s,)
-            q2 = q2 + (point2[i] * s,)
-
-        point1, point2 = (), ()
-        for i, size in enumerate(self.filter_size):
-            if self.padding == 'SAME':
-                point1 = point1 + (q1[i] - size//2,)
-                point2 = point2 + (q2[i] + size//2,)
-            else:
-                point1 = point1 + (q1[i],)
-                point2 = point2 + (q2[i] + size-1,)
-
+        point1, point2 = \
+            self.compute_receptive_field(point1, point2, self.filter_size,
+                                         self.padding, self.strides)
         return super().receptive_field(point1, point2)
 
     @property

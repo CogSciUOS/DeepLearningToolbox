@@ -161,6 +161,29 @@ class Sequential(Layer):
                 return module
         raise ValueError("Layer contains no operation with"
                          f"attribute '{attr}'")
+
+    def receptive_field(self, point1: Tuple[int, ...],
+                        point2: Tuple[int, ...] = None
+                        ) -> (Tuple[int, ...], Tuple[int, ...]):
+        """The receptive field of a layer.
+
+        Parameters
+        ----------
+        point1:
+            The upper left corner of the region of interest.
+        point2:
+            The lower right corner of the region of interest.
+            If none is given, the region is assumed to consist of just
+            one point.
+
+        Returns
+        -------
+        point1, point2:
+            The upper left corner and the lower right corner of the
+            receptive field for the region of interest.
+        """
+        
+
 # -----------------------------------------------------------------------------
 
 
@@ -194,15 +217,15 @@ class NeuralLayer(Layer, Base.NeuralLayer):
 class StridingLayer(Layer, Base.StridingLayer):
 
     @property
-    def strides(self):
-        striding_op = self._first_module_with_attr('strides')
-        strides = striding_op.node_def.attr['strides']
-        return (strides.list.i[1], strides.list.i[2])
+    def strides(self) -> Tuple[int]:
+        return self._module.stride
 
     @property
-    def padding(self):
-        striding_op = self._first_module_with_attr('padding')
-        return striding_op.node_def.attr['padding'].s.decode('utf8')
+    def padding(self) -> Tuple[int]:
+        """The amount of padding to be added on both sides
+        along each axis.
+        """
+        return self._module.padding
 
     @property
     def activation_tensor(self):
@@ -221,17 +244,6 @@ class Conv2D(NeuralLayer, StridingLayer, Base.Conv2D):
     @property
     def kernel_size(self):
         return self._module.kernel_size
-
-    @property
-    def strides(self):
-        return self._module.stride
-
-    @property
-    def padding(self):
-        # FIXME[todo]: here torch stores the actual number of pixels
-        # that are padded in both directions. This allows for a more
-        # fine grained controll than just 'SAME'
-        return 'SAME'
 
     @property
     def dilation(self):
@@ -254,8 +266,11 @@ class MaxPooling2D(StridingLayer, Base.MaxPooling2D):
 
     @property
     def pool_size(self):
-        kernel = self._ops[0].node_def.attr['ksize']
-        return (kernel.list.i[1], kernel.list.i[2])
+        return self._module.kernel_size
+
+    @property
+    def dilation(self):
+        return self._module.dilation
 
 
 class Dropout(Layer, Base.Dropout):
@@ -267,7 +282,7 @@ class Flatten(Layer, Base.Flatten):
 
 
 # -----------------------------------------------------------------------------
-    
+
 
 class Network(BaseNetwork):
     """A class implmenting the network interface (BaseNetwork) to access

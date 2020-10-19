@@ -13,7 +13,7 @@ import mtcnn
 # toolbox imports
 from base import Preparable
 from util.image import BoundingBox
-from datasource import Metadata
+from ..base.meta import Metadata
 from ..tool.face.detector import Detector as FaceDetector
 from ..tool.face.landmarks import (Detector as LandmarkDetector,
                                    FacialLandmarks)

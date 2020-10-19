@@ -12,11 +12,11 @@ import numpy as np
 # toolbox imports
 from util.image import Region, Landmarks
 from dltb.base.data import Data
-from .datasource import Imagesource
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, DataDirectory
 
 # logging
 LOG = logging.getLogger(__name__)
+
 
 class FGNet(DataDirectory, Imagesource):
     """

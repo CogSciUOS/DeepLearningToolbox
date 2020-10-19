@@ -14,8 +14,7 @@ import numpy as np
 # toolbox imports
 from dltb.base.data import Data
 from dltb.tool.classifier import ClassScheme, Classifier
-from .datasource import Imagesource, Sectioned
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, Sectioned, DataDirectory
 
 # logging
 LOG = logging.getLogger(__name__)

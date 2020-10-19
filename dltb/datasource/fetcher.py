@@ -14,7 +14,7 @@ import logging
 # toolbox imports
 from base import busy, BusyObservable
 from dltb.base.data import Data
-from .datasource import Datasource, Loop, Snapshot, Random, Indexed
+from .datasource import Datasource, Livesource, Random, Indexed
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
     """
 
     def __init__(self, datasource: Datasource = None,
-                 frames_per_seccond: float = None, **kwargs) -> None:
+                 frames_per_second: float = 2.5, **kwargs) -> None:
         self._data = None
         self._datasource = None
         super().__init__(**kwargs)
@@ -72,7 +72,12 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         #
         # Loop specific variables
         #
-        self._frames_per_seccond = frames_per_seccond
+        self._looping = False
+        self._frames_per_second = frames_per_second
+
+    def __del__(self) -> None:
+        self.looping = False
+        super().__del__()
 
     @property
     def datasource(self) -> Datasource:
@@ -185,7 +190,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """A flag indicating if the datafetcher can take
         a snapshot.
         """
-        return isinstance(self._datasource, Snapshot)
+        return isinstance(self._datasource, Livesource)
 
     @property
     def randomable(self) -> bool:
@@ -200,17 +205,15 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
     @property
     def loopable(self) -> bool:
-        """Check if the datafetcher can run a loop. This is true,
-        if it currently is running a loop or it is ready and the
-        underlying datasource allows for loops.
+        """Check if the datafetcher can run a loop.
         """
-        return self.looping or isinstance(self._datasource, Loop)
+        return True
 
     @property
     def looping(self) -> bool:
         """Check if this datafetcher is currently looping.
         """
-        return isinstance(self._datasource, Loop) and self._datasource.looping
+        return self._looping
 
     @looping.setter
     def looping(self, looping: bool) -> None:
@@ -229,40 +232,72 @@ class Datafetcher(BusyObservable, Datasource.Observer,
 
         if self.looping:
             LOG.info("Stopping datasource loop")
-            self._datasource.stop_loop()
+            self._looping = False
         else:
             LOG.info("Starting datasource loop")
-            if frames_per_second is None:
-                frames_per_second = self._frames_per_seccond
-            if frames_per_second is None:
-                frames_per_second = self._datasource.frames_per_second
-            self._datasource.start_loop()
-            self.run_loop(frames_per_second)
+            if frames_per_second is not None:
+                self.frames_per_second = frames_per_second
+            self.run_loop()
 
     @busy("looping")
-    def run_loop(self, frames_per_second: float) -> None:
+    def run_loop(self) -> None:
         """
         This method is intended to be invoked in its own Thread.
         """
-        interval = 1. / frames_per_second
-        start_time = time.time()
-        LOG.info("Loop: start loop")
-        self.change('state_changed')
-        while self._datasource.looping:
-            # Fetch a data item
-            last_time = time.time()
-            LOG.debug("Loop: %s at %.4f",
-                      self._datasource.looping, last_time - start_time)
-            self.fetch()
+        try:
+            LOG.info("Loop: start loop")
+            if isinstance(self._datasource, Livesource):
+                self._datasource.start_loop()
+            self._looping = True
+            self.change('state_changed')
 
-            # Now wait before fetching the next input
-            sleep_time = last_time + interval - time.time()
-            if sleep_time > 0:
-                self._datasource.loop_stop_event.wait(timeout=sleep_time)
-            else:
-                LOG.debug("Loop: late for %.4fs", -sleep_time)
-        self.change('state_changed')
-        LOG.info("Loop: end loop")
+            # Run the loop
+            start_time = time.time()
+            while self._looping:
+
+                # adapt the speed
+                interval = 1. / self._frames_per_second
+
+                # fetch a data item
+                last_time = time.time()
+                LOG.debug("Loop: %s at %.4f",
+                          self._datasource, last_time - start_time)
+                self.fetch()
+
+                # now wait before fetching the next input
+                sleep_time = last_time + interval - time.time()
+                if sleep_time < 0:
+                    LOG.debug("Loop: late for %.4fs", -sleep_time)
+                elif isinstance(self._datasource, Livesource):
+                    self._datasource.loop_stop_event.wait(timeout=sleep_time)
+                else:
+                    time.sleep(sleep_time)
+
+                if (isinstance(self._datasource, Livesource) and
+                        not self._datasource.looping):
+                    self._looping = False
+        finally:
+            self._looping = False
+            self.change('state_changed')
+            LOG.info("Loop: end loop")
+            if isinstance(self._datasource, Livesource):
+                self._datasource.stop_loop()
+
+    @property
+    def frames_per_second(self) -> float:
+        """The number of frames to be fetched per second in loop mode.
+        """
+        return self._frames_per_second
+
+    @frames_per_second.setter
+    def frames_per_second(self, frames_per_second: float) -> None:
+        """Set the number of frames to be fetched per second in loop mode.
+        This may be different from the frames per second provided by
+        the underlying :py:class:`Datasource`. If higher, the same frame
+        may be fetched multiple times, if lower, some frames from the
+        datasource may be skipped.
+        """
+        self._frames_per_second = frames_per_second
 
     #
     # Public interface (convenience functions)

@@ -18,10 +18,11 @@ from PyQt5.QtWidgets import QToolTip
 
 # toolbox imports
 from dltb.base.data import Data
-from dltb.base.image import Image, Imagelike, ImageTool
+from dltb.base.meta import Metadata
+from dltb.base.image import Image, Imagelike, ImageGenerator
+from dltb.tool.image import ImageTool
 from dltb.util.image import imresize, imwrite
 from toolbox import Toolbox
-from datasource import Metadata
 from util.image import BoundingBox, PointsBasedLocation, Region
 
 
@@ -38,7 +39,7 @@ LOG = logging.getLogger(__name__)
 
 class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         Toolbox: {'input_changed'},
-        ImageTool: {'image_changed'}}):
+        ImageGenerator: {'image_changed'}}):
     """An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.
@@ -58,21 +59,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         A flag indicating if metadata should be shown if available.
     _toolTipActive : bool
         A flag indicating whether tooltips shoould be shown.
-    """
-    """A :py:class:`QImageView` to display the input image of the
-    Toolbox.
-
-
-    **Toolbox.Observer:**
-    The :py:class:`QImageView` can observe a
-    :py:class:`Toolbox` to always display the
-    current input image. If a 'input_changed' is reported, the
-    QImageView is updated to display the new input image.
-
-
-    **ActivationEngine.Observer:**
-    FIXME[todo]: Currently not implemented!
-
 
     Attributes
     ----------
@@ -102,8 +88,37 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
     Signals
     -------
+    modeChanged = pyqtSignal(bool)
+
+
+    Toolbox interface
+    -----------------
+
+    A :py:class:`QImageView` to display the input image of the
+    Toolbox.
+
+    **Toolbox.Observer:**
+    The :py:class:`QImageView` can observe a
+    :py:class:`Toolbox` to always display the
+    current input image. If a 'input_changed' is reported, the
+    QImageView is updated to display the new input image.
+
+
+    ActivationTool interface
+    ------------------------
+
+    **ActivationEngine.Observer:**
+    FIXME[todo]: Currently not implemented!
+
+
+    ImageGenerator Observer
+    -----------------------
+    The QImageView may be assigned to an :py:class:`ImageGenerator`.
+    If this is the case, the :py:class:`ImageGenerator` can provide
+    information on how the image is used by that tool and that
+    information can be visualized by the :py:class:`QImageView`.
+
     """
-    keyPressed = pyqtSignal(int)
     modeChanged = pyqtSignal(bool)
 
     def __init__(self, toolbox: Toolbox = None, **kwargs) -> None:
@@ -144,6 +159,11 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._toolbox: Toolbox = None
         self.setToolbox(toolbox)
 
+        self._imageTool = None
+        self._imageToolRect = None
+        self._imageToolSize = None
+        self._imageToolTransform = None
+
         #
         # Prepare the context Menu
         #
@@ -156,7 +176,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         aspectAction.setStatusTip('Keep original aspect ratio of the image')
         aspectAction.toggled.connect(self.onAspectClicked)
         self._contextMenu.addAction(aspectAction)
-        
+
         self._contextMenu.addSeparator()
         saveAction = QAction('Save image', self)
         saveAction.setStatusTip('save the current image')
@@ -169,8 +189,13 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self.customContextMenuRequested.connect(self.onContextMenu)
 
         # set the size policy
-        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        #sizePolicy.setHeightForWidth(self.assetsListWidget.sizePolicy().hasHeightForWidth())
+        #
+        # QSizePolicy.MinimumExpanding: The sizeHint() is minimal, and
+        # sufficient. The widget can make use of extra space, so it
+        # should get as much space as possible.
+        sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding,
+                                 QSizePolicy.MinimumExpanding)
+        # sizePolicy.setHeightForWidth(True)
         self.setSizePolicy(sizePolicy)
 
         # By default, a QWidget does not accept the keyboard focus, so
@@ -178,14 +203,30 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         # get focus by 'Tab' key as well as by mouse click.
         self.setFocusPolicy(Qt.StrongFocus)
 
-    #@pyqtSlot(QPoint)
+    @staticmethod
+    def minimumSizeHint():
+        return QSize(100, 100)  # default is QSize(-1, -1)
+
+    @staticmethod
+    def sizeHint():
+        return QSize(200, 200)
+
+    @staticmethod
+    def heightForWidth(width: int) -> int:
+        return width
+
+    @staticmethod
+    def hasHeightForWidth() -> bool:
+        return True
+
+    # @pyqtSlot(QPoint)
     @protect
     def onContextMenu(self, point):
         # show context menu
         print(f"QImageView.onContextMenu({point}) [{type(point)}]")
         self._contextMenu.exec_(self.mapToGlobal(point))
 
-    #@pyqtSlot(bool)
+    # @pyqtSlot(bool)
     @protect
     def onAspectClicked(self, checked):
         self.keepAspectRatio = checked
@@ -193,8 +234,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     @protect
     def onSaveClicked(self, checked):
         if (self._raw is not None and
-            self._metadata is not None and
-            self._metadata.has_attribute('basename')):
+                self._metadata is not None and
+                self._metadata.has_attribute('basename')):
             # write the file
             imwrite(self._metadata.get_attribute('basename'), self._raw)
 
@@ -233,6 +274,39 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
         if not self._toolTipActive:
             QToolTip.hideText()
+
+    def imageTool(self) -> ImageTool:
+        return self._imageTool
+
+    def setImageTool(self, imageTool: ImageTool) -> None:
+        self._imageTool = imageTool
+        self._updateImageTool()
+
+    def _updateImageTool(self) -> None:
+        imageTool, image = self._imageTool, self._raw
+
+        if imageTool is None or image is None:
+            self._imageToolRect = None
+            self._imageToolSize = None
+            self._imageToolTransform = None
+        else:
+            rectangle = imageTool.region_of_image(image)
+            self._imageToolRect = \
+                QRect(rectangle[0], rectangle[1],
+                      rectangle[2]-rectangle[0], rectangle[3]-rectangle[1])
+            size = QSize(*imageTool.size_of_image(image))
+            imageSize = QSize(image.shape[1], image.shape[0])
+            self._imageToolSize = size
+            # imageToolTransform: map tool coordinates to image coordinates
+            self._imageToolTransform = QTransform()
+            print(size, imageSize, self._imageToolRect.size())
+            self._imageToolTransform.translate(self._imageToolRect.x(),
+                                               self._imageToolRect.y())
+            self._imageToolTransform.scale(self._imageToolRect.width() /
+                                           size.width(),
+                                           self._imageToolRect.height() /
+                                           size.height())
+        self.update()
 
     def setData(self, data: Data, attribute='array', index: int = 0) -> None:
         """Set the data to be displayed by this :py:class:`QImageView`.
@@ -287,16 +361,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self._image = None
 
         # self.updateGeometry()
-        self.update()
-
-    def minimumSizeHint(self):
-        # FIXME[hack]: this will change the size of the widget depending
-        # on the size of the image, probably not what we want ...
-        # return QSize(-1,-1) if self._image is None else self._image.size()
-        return QSize(100, 100)
-
-    def sizeHint(self):
-        return QSize(1000, 1000)
+        self._updateImageTool()
 
     def setMask(self, mask):
         """Set a mask to be displayed on top of the actual image.
@@ -437,6 +502,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             painter.setTransform(self.transform())
 
         self._drawImage(painter)
+        self._drawImageTool(painter)
         self._drawReceptiveField(painter)
         self._drawMask(painter)
         self._drawMarks(painter)
@@ -465,6 +531,21 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         """
         if self._image is not None:
             painter.drawImage(QPoint(0, 0), self._image)
+
+    def _drawImageTool(self, painter: QPainter):
+        """Draw current image into this ``QImageView``.
+
+        Parameters
+        ----------
+        painter :   QPainter
+        """
+        if self._imageToolRect is not None:
+            pen_width = 4
+            pen_color = Qt.blue
+            pen = QPen(pen_color)
+            pen.setWidth(pen_width)
+            painter.setPen(pen)
+            painter.drawRect(self._imageToolRect)
 
     def _drawMask(self, painter: QPainter):
         """Display the given image.
@@ -541,7 +622,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         r: toggle the keepAspectRatio flag
         """
         key = event.key()
-        self.keyPressed.emit(key)
 
         # Space will toggle display of tooltips
         if key == Qt.Key_Space:
@@ -640,6 +720,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             image_size = self._image.size()
 
         transform = self.transform()
+        imagePosition = None
         if transform is None:
             text += "\nNo transformation"
         elif not transform.isInvertible():
@@ -652,10 +733,33 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             text += (f"\nScreen image size: {projected_image_size.width()}x"
                      f"{projected_image_size.height()}")
 
-            image_position = inverted.map(position)
+            imagePosition = inverted.map(position)
             text += (f"\nScreen image position: "
-                     f"({image_position.x()}, {image_position.y()})"
+                     f"({imagePosition.x()}, {imagePosition.y()})"
                      f" in {image_size.width()}x{image_size.height()}")
+
+        if self._imageTool is None:
+            text += "\nNo ImageTool"
+        else:
+            # toolTransform = self._imageToolTransformation
+            text += "\nImageTool: "
+            rect = self._imageToolRect
+            if rect is None:
+                text += "None"
+            else:
+                text += f"{rect}"
+            size = self._imageToolSize
+            if size is None:
+                text += "None"
+            else:
+                text += f"{size}"
+
+            tTransform = self._imageToolTransform
+            if tTransform is not None and imagePosition is not None:
+                iTransform, ok = self._imageToolTransform.inverted()
+                if ok: 
+                    toolPosition = iTransform.map(imagePosition)
+                    text += f" at {toolPosition}"
 
         if self._overlay is None:
             text += "\nNo activation"
@@ -669,8 +773,11 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     #
 
     @protect
-    def image_changed(self, tool, change) -> None:
-        self.setImage(tool.image)
+    def image_changed(self, tool: ImageGenerator,
+                      change: ImageGenerator.Change) -> None:
+        # FIXME[old]: what is this supposed to do?
+        # self.setImage(tool.image)
+        pass
 
     #
     # Toolbox.Observer

@@ -24,13 +24,13 @@ import logging
 # toolbox imports
 from dltb.base.video import Webcam
 from dltb.base.data import Data
-from .datasource import Imagesource, Loop, Snapshot
+from .datasource import Imagesource, Livesource
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class DataWebcam(Imagesource, Loop, Snapshot):
+class DataWebcam(Livesource, Imagesource):
     # pylint: disable=too-many-ancestors
     """A data source fetching images from the webcam.
 

@@ -37,7 +37,7 @@ class QIndexControls(QWidget):
         A flag indicating if the display is 1-based (instead of the
         internal 0-based indexing). This only affects the display,
         not the way the index is reported (which is always 0-based)
-    
+
     Signals
     -------
     indexChanged:
@@ -87,7 +87,7 @@ class QIndexControls(QWidget):
         # programmatically, e.g., by setText().  The text argument is
         # the new text.
         self._indexField.textEdited.connect(self.onIndexEdited)
-        
+
         # editingFinished: This signal is emitted when the Return or
         # Enter key is pressed or the line edit loses focus.
         self._indexField.editingFinished.connect(self.onIndexEditingFinished)

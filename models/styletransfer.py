@@ -21,7 +21,7 @@ import tensorflow as tf
 from PIL import Image
 
 # toolbox imports
-from dltb.base.image import ImageTool
+from dltb.tool.image import IterativeImageTool
 from dltb.util.image import imimport
 
 # logging
@@ -417,7 +417,7 @@ class TensorflowStyletransferEngine:
               f"(style={style_loss}/content={content_loss})")
 
 
-class StyletransferTool(ImageTool):
+class StyletransferTool(IterativeImageTool):
     """A style transfer tool.
 
     The style transfer tool generates a new image from two input

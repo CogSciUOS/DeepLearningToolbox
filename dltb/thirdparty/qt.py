@@ -63,7 +63,7 @@ class QImageDisplay(QImageView):
         We add handling of 'Esc' and 'Q' to close the window.
         """
         key = event.key()
-        if key in (Qt.Key_R, Qt.Key_Escape) and self._application is not None:
+        if key in (Qt.Key_Q, Qt.Key_Escape) and self._application is not None:
             self._application.quit()
         else:
             super().keyPressEvent(event)
@@ -212,7 +212,7 @@ class ImageDisplay(BaseImageDisplay):
     class WorkerThread(QThread):
         """An auxiliary class to realize the wait for key behaviour.
         This has to be a `QThread` (not a python thread), in order
-        to connect the `QImageView.keyPressed` signal
+        to connect to the Qt event system.
         """
 
         def __init__(self, worker: Callable, args: Tuple = (),
@@ -224,7 +224,7 @@ class ImageDisplay(BaseImageDisplay):
         def run(self):
             """The code to be run in the thread. This will wait
             for the `stopped` :py:class:`Event`, either caused
-            by the `keyPressed` signal or abortion of the main
+            by the `keyPressedEvent` or abortion of the main
             event loop.
             """
             LOG.debug("Background QTthread starts running")

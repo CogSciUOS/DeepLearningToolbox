@@ -16,9 +16,9 @@ import importlib.util
 import pickle
 
 # toolbox imports
+from dltb.datasource import Imagesource
+from dltb.datasource.array import LabeledArray
 from dltb.tool.classifier import ClassScheme
-from .datasource import Imagesource
-from .array import LabeledArray
 
 
 class KerasScheme(ClassScheme):

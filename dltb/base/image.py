@@ -189,6 +189,17 @@ class ImageExtension(ImageAdapter):
             ImageAdapter._image_extensions[base] = cls
 
 
+class ImageGenerator(Observable, method='image_changed',
+                     changes={'image_changed'}):
+    """A base for classes that can create an change images.
+    """
+
+    @property
+    def image(self) -> np.ndarray:
+        """Provide the current image.
+        """
+
+
 class ImageIO:
     """An abstract interface to read, write and display images.
     """
@@ -482,182 +493,7 @@ class ImageOperator:
         image.add_attribute(target, value=self(image.get_attribute(source)))
 
 
-class ImageTool(Observable, method='image_changed', changes={'image_changed'}):
-    """Base class for tools that can iteratively create images:
-
-    Design pattern 1 (observer)
-    ---------------------------
-
-    * loop
-      - hold the current version of the image as a object state
-      - loop over the following steps:
-        1, perform one step of image creation
-        2. notify observers
-
-    Design pattern 2 (functional):
-    ------------------------------
-
-    * iterator for generating N (or unlimited) images
-
-    for image in tool:
-        do something with image
-
-    for image in tool(30):
-
-
-    Stateless inremental image create API:
-
-    * next_image = tool.next(image)
-
-    * bool tool.finished(image)
-
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._step = 0
-        self._image = None
-        self._thread = None
-        self._stop = True
-
-    def __call__(self) -> np.ndarray:
-        """The actual image generation. To be impolemented by subclasses.
-
-        Result
-        ------
-        image: np.ndarray
-            The next image generated in standard representation
-            (RGB, uint8, 0-255).
-        """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
-                                  "be an ImageTool, but does not implement "
-                                  "the __next__ method.")
-
-    #
-    # loop API (stateful)
-    #
-
-    @property
-    def image(self) -> np.ndarray:
-        """The current image provided by this :py:class:`ImageTool`
-        in standard format (RGB, uint8, 0-255).
-        """
-        return self._image
-
-    @property
-    def step(self) -> int:
-        """The current step performed by this :py:class:`ImageTool`
-        """
-        return self._step
-
-    def next(self) -> None:
-        """Do one step adapting the current image. This changes the
-        property `image` and notifies observers that a new image is
-        available.
-        """
-        self._image = self()
-        self._step += 1
-        self.change('image_changed')
-
-    def __next__(self) -> np.ndarray:
-        """Create a new image by doing the next step.
-
-        Result
-        ------
-        image: np.ndarray
-            The image in standard format (RGB, uint8, 0-255).
-        """
-        self.next()
-        return self._image
-
-    def loop(self, threaded: bool = False, **kwargs) -> None:
-        if self.looping:
-            raise RuntimeError("Object is already looping.")
-        if threaded:
-            self._thread = Thread(target=self._loop, kwargs=kwargs)
-            self._thread.start()
-        else:
-            self._loop(**kwargs)
-
-    def _loop(self, stop: int = None, steps: int = None) -> None:
-        """Run an  loop
-
-        Arguments
-        ---------
-        steps: int
-            The number of steps to perform.
-
-        stop: int
-            The loop will stop once the internal step counter
-            reaches this number. If no stop value is given
-        """
-        self._stop = False
-        while not self._stop:
-            try:
-                self.next()
-                if steps is not None:
-                    steps -= 1
-                    if steps <= 0:
-                        self.stop()
-                if stop is not None and self._step >= stop:
-                    self.stop()
-
-            except KeyboardInterrupt:
-                self.stop()
-
-    @property
-    def looping(self) -> bool:
-        return not self._stop
-
-    def stop(self) -> None:
-        self._stop = True
-        if self._thread is not None:
-            self._thread.join()
-            self._thread = None
-
-    def pause(self) -> None:
-        self._stop = True
-
-
-class ImageOptimizer(ImageTool):
-    """An image optimizer can incrementally optimize an image, e.g., using
-    some gradient-based optimization strategy.  The
-    :py:class:`ImageOptimizer` provides an API for accessing image
-    optimizers.
-
-    Stateless vs. stateful optimizer
-    --------------------------------
-    An :py:class:`ImageOptimizer` has an internal state, the current
-    version of the image.
-
-    An :py:class:`ImageOptimizer` may also provide different loss
-    values and evaluation metrics that may be .
-
-    Internal optimizer
-    ------------------
-
-    An Image optimizer may employ some external engine to do the
-    optimization.  In such a situation, the image may need to be
-    converted into an internal representation prior to optimization,
-    and the result has to be converted back into a standard image.
-
-    """
-
-    # FIXME[todo]: optimization values
-    def __call__(self, image: np.ndarray) -> np.ndarray:
-        internal_image = self._internalize(image)
-        internal_result = self._internal_optimizer(internal_image)
-        return self._externalize(internal_result)
-
-    def __next__(self) -> np.ndarray:
-        self._internal_image = self._internal_optimizer(self._internal_image)
-        # FIXME[concept/design]: should we store and return the image?
-        # - There may be observers!
-        self._image = self._externalize(self._internal_image)
-        return self._image
-
-
-class ImageDisplay(ImageIO, ImageTool.Observer):
+class ImageDisplay(ImageIO, ImageGenerator.Observer):
     """An `ImageDisplay` can display images.
     """
 
@@ -675,7 +511,7 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         return self
 
     def __exit__(self, _exception_type, _exception_value, _traceback) -> None:
-        pass # FIXME[todo]
+        pass  # FIXME[todo]
 
     #
     # public interface
@@ -713,7 +549,7 @@ class ImageDisplay(ImageIO, ImageTool.Observer):
         the processor and update the display whenever new data
         are available.
         """
-        self.observe(tool, interests=ImageTool.Change('image_changed'))
+        self.observe(tool, interests=ImageGenerator.Change('image_changed'))
         try:
             print("Starting thread")
             thread = Thread(target=tool.loop)

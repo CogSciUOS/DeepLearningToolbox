@@ -9,8 +9,8 @@ import numpy as np
 import imutils
 
 # toolbox imports
-from datasource import Metadata
 from ..base.data import Data
+from ..base.meta import Metadata
 from ..base.image import Image, Imagelike
 from .tool import Tool
 from .image import ImageTool

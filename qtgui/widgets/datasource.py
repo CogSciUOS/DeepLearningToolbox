@@ -15,14 +15,15 @@ import logging
 
 # Qt imports
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QHideEvent
+from PyQt5.QtGui import QHideEvent, QFontMetrics, QDoubleValidator
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
-from PyQt5.QtWidgets import QWidget, QPushButton
+from PyQt5.QtWidgets import QWidget, QPushButton, QDoubleSpinBox
+
 
 # toolbox imports
 from toolbox import Toolbox
-from datasource import Datasource, Datafetcher
-from datasource import Indexed, Random, Snapshot, Loop
+from dltb.datasource import Datasource, Datafetcher
+from dltb.datasource import Indexed, Random, Livesource
 from dltb.base.register import RegisterEntry, InstanceRegisterEntry
 
 # GUI imports
@@ -219,9 +220,50 @@ class QLoopButton(QPushButton, QDatafetcherObserver):
         super().hideEvent(event)
 
 
+class QFramesPerSecondEdit(QDoubleSpinBox, QDatafetcherObserver):
+    # FIXME[todo]: should become a Datafetcher.Observer
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.setRange(0.5, 10.0)
+        self.setSingleStep(0.5)
+        self.setMinimumWidth(QFontMetrics(self.font()).width('8') * 4)
+
+        # editingFinished: This signal is emitted when the Return or
+        # Enter key is pressed or the line edit loses focus.
+        self.valueChanged.connect(self.onValueChanged)
+
+    def setDatafetcher(self, datafetcher: Datafetcher) -> None:
+        """Set the datafetcher whose frames per second value is to
+        be edited by this :py:class:`QFramesPerSecondEdit`.
+        """
+        self._datafetcher = datafetcher
+        self.setValue(10.0 if datafetcher is None else
+                      datafetcher.frames_per_second)
+
+    @protect
+    def onValueChanged(self, value: float) -> None:
+        """React to the `EditingFinished` signal of the line editor.  This
+        signal is emitted when the Return or Enter key is pressed or
+        the line edit loses focus.
+
+        """
+        if self._datafetcher is not None:
+            frames_per_second = max(0.5, min(value, 10.0))
+            self._datafetcher.frames_per_second = frames_per_second
+
+    def update(self) -> None:
+        """Update this QLoopButton based on the state of the
+        :py:class:`Datafetcher`.
+        """
+        enabled = (self._datafetcher is not None and
+                   self._datafetcher.ready)
+        self.setEnabled(enabled)
+
+
 class QSnapshotButton(QPushButton, QDatafetcherObserver):
     """A Button to control a :py:class:`Datasource` of type
-    :py:class:`Loop`. Pressing this button will will obtain a
+    :py:class:`Livesource`. Pressing this button will will obtain a
     snapshot from the datasource.
 
     The :py:class:`QSnapshotButton` can observe a :py:class:`Datasource`
@@ -466,6 +508,9 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         self._loopButton = QLoopButton()
         self.addAttributePropagation(Datafetcher, self._loopButton)
 
+        self._framesPerSecondEdit = QFramesPerSecondEdit()
+        self.addAttributePropagation(Datafetcher, self._framesPerSecondEdit)
+
         self._batchButton = QBatchButton()
         self.addAttributePropagation(Datafetcher, self._batchButton)
 
@@ -495,6 +540,7 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         row.addWidget(self._randomButton)
         row.addWidget(self._snapshotButton)
         row.addWidget(self._loopButton)
+        row.addWidget(self._framesPerSecondEdit)
         row.addWidget(self._batchButton)
 
         if style == 'narrow':
@@ -563,8 +609,9 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
         """
         self._indexControls.setVisible(isinstance(datasource, Indexed))
         self._randomButton.setVisible(isinstance(datasource, Random))
-        self._snapshotButton.setVisible(isinstance(datasource, Snapshot))
-        self._loopButton.setVisible(isinstance(datasource, Loop))
+        self._snapshotButton.setVisible(isinstance(datasource, Livesource))
+        self._loopButton.setVisible(isinstance(datasource, Livesource) or
+                                    isinstance(datasource, Indexed))
         self._batchButton.setVisible(isinstance(datasource, Datasource))
         if self._prepareButton is not None:
             self._prepareButton.setPreparable(datasource)

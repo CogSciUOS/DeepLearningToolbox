@@ -12,8 +12,7 @@ import numpy as np
 from util.image import BoundingBox, Region, Landmarks
 from dltb.base.data import Data
 from dltb.tool.classifier import ClassScheme
-from .datasource import Imagesource, Sectioned
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, Sectioned, DataDirectory
 
 # logging
 LOG = logging.getLogger(__name__)

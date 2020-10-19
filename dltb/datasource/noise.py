@@ -9,10 +9,10 @@ import numpy as np
 
 # toolbox imports
 from dltb.base.data import Data
-from .datasource import Imagesource, Loop, Snapshot, Random
+from .datasource import Imagesource, Livesource, Random
 
 
-class Noise(Imagesource, Random, Loop, Snapshot):
+class Noise(Random, Livesource, Imagesource):
     # pylint: disable=too-many-ancestors
     """A :py:class:`Noise` is a :py:class:`Datasource` that
     provides different kinds of noise.

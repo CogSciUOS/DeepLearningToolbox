@@ -14,8 +14,7 @@ import numpy as np
 from util.image import Landmarks, Region
 from dltb.base.data import Data
 from dltb.util import read_cache, write_cache
-from .datasource import Imagesource
-from .directory import DataDirectory
+from dltb.datasource import Imagesource, DataDirectory
 
 
 class Helen(DataDirectory, Imagesource):

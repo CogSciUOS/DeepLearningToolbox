@@ -1,7 +1,14 @@
-from util.image import Region
+"""Abstract base class :py:class:`Metadata` for different kind of metadata.
+"""
 
+# standard imports
 import os
+
+# Generic imports
 import numpy as np
+
+# toolbox imports
+from util.image import Region
 
 
 class Metadata:
@@ -18,21 +25,36 @@ class Metadata:
         self.__dict__.update(attributes)
 
     def add_region(self, position, **attributes):
+        """Add a spatial region with attributes to this
+        :py:class:`Metadata` object.
+        """
         if self._regions is None:
             self._regions = []
         self._regions.append(Region(position, **attributes))
 
     def has_regions(self):
+        """Check if there are regions registered with this
+        :py:class:`Metadata` object.
+        """
         return self._regions is not None
 
     def __bool__(self) -> bool:
+        """`True` if there is at least one region registered with this
+        :py:class:`Metadata` object.
+        """
         return self._regions is not None and len(self._regions) > 0
 
     def __len__(self) -> int:
+        """The number of regions registered with this
+        :py:class:`Metadata` object.
+        """
         return 0 if self._regions is None else len(self._regions)
 
     @property
     def regions(self):
+        """The list of regions registered with this :py:class:`Metadata`
+        object.
+        """
         return self._regions
 
     def scale(self, factor) -> None:
@@ -53,27 +75,39 @@ class Metadata:
 
     @property
     def description(self):
+        """A description for this :py:class:`Metadata`
+        object.
+        """
         return self._description
 
     @property
     def label(self):
+        """A label for this :py:class:`Metadata` object.
+        """
         return self._label
 
     def has_attribute(self, name) -> bool:
+        """Check if this :py:class:`Metadata` object as the given attribute.
+
+        """
         return name in self.__dict__
 
     def set_attribute(self, name, value) -> None:
+        """Set an attribute for this :py:class:`Metadata` object.
+        """
         self.__dict__[name] = value
 
     def get_attribute(self, name):
+        """Get an attribute value for this :py:class:`Metadata` object.
+        """
         return self.__dict__[name]
 
     def __str__(self):
-        s = "Metadata:"
+        description = "Metadata:"
         for name, value in self.__dict__.items():
-            s += os.linesep + "  " + name + ": "
+            description += os.linesep + "  " + name + ": "
             if isinstance(value, np.ndarray):
-                s += f"Array({value.shape}, dtype={value.dtype})"
+                description += f"Array({value.shape}, dtype={value.dtype})"
             else:
-                s += str(value)
-        return s
+                description += str(value)
+        return description

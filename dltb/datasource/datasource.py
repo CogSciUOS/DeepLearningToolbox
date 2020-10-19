@@ -369,7 +369,7 @@ class Imagesource(Datasource):
     """
 
     _data_class: type = Image
-    
+
     def __init__(self, shape: Tuple = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.shape = shape
@@ -407,6 +407,7 @@ class Sectioned(Datasource):
 
     def __init_subclass__(cls, sections: AbstractSet[str] = None,
                           **kwargs) -> None:
+        # pylint: disable=arguments-differ
         super().__init_subclass__(**kwargs)
         if sections is not None:
             cls.sections = sections
@@ -431,22 +432,16 @@ class Sectioned(Datasource):
         self._section = section
 
 
-class Loop(Datasource):
-    # pylint: disable=abstract-method
-    # FIXME[todo]: make this a more general interface
-    # can be derived from `Stateful`, adding a state `looping`
-    """The :py:class:`Loop` class provides a loop logic.
+class Livesource(Datasource):
+    """A :py:class:`Livesource` can provide live data. Live data can
+    be different on every retrieval. Typical live sources are
+    video streams like webcams.
 
-    FIXME[design]: make clear what this is really supposed to do ...
-
-    A :py:class:`Loop` :py:class:`Datasource` can be set in a loop
-    state, where it continously reads data objects and places
-    them in a in a local register (this sounds more like a fetcher ...)
-
-    Examples:
-    - Webcam
-    - Video
-    - other datasource (-> datafetcher)
+    A :py:class:`Livesource` can be put in online mode, meaning that
+    it spawns a background thread that continously provides new data
+    (corresponds to pressing play on a media player). In that mode, a
+    call to :py:meth:`get_data `will simply return a :py:class:`Data`
+    object for the current data.
 
     Attributes
     ----------
@@ -456,6 +451,7 @@ class Loop(Datasource):
         if set, this means that the loop is currently not running (or at
         least supposed to stop running soon).
     """
+
 
     def __init__(self, loop_interval: float = 0.2, **kwargs) -> None:
         """
@@ -504,26 +500,9 @@ class Loop(Datasource):
         if not self.loop_stop_event.is_set():
             self.loop_stop_event.set()
 
-
-class Snapshot(Datasource):
-    """Instances of this class are able to provide a snapshot.  Typical
-    examples of :py:class:`Snapshot` datasources are sensors and
-    cameras that obtain changing data from the environment.  Calling
-    the :py:meth:`snapshot` method will provide data reflecting the
-    current state of affairs.
-
-    Notes
-    -----
-
-    Subclasses of :py:class:`Snapshot` may overwrite the
-    py:class:`_get_snapshot` method to provide a snapshot.
-
-    """
-
-    def __init__(self, **kwargs) -> None:
-        """Instantiate a new :py:class:`Snapshot` object.
-        """
-        super().__init__(**kwargs)
+    #
+    # FIXME[old]: snapshot
+    #
 
     def snapshot(self, **kwargs) -> Data:
         """Create a snapshot (synchronously).
@@ -577,6 +556,42 @@ class Snapshot(Datasource):
         object is to take a snapshot.
         """
         self._get_snapshot(data, **kwargs)
+
+
+class Loop(Datasource):
+    # pylint: disable=abstract-method
+    # FIXME[todo]: make this a more general interface
+    # can be derived from `Stateful`, adding a state `looping`
+    """The :py:class:`Loop` class provides a loop logic.
+
+    FIXME[design]: make clear what this is really supposed to do ...
+
+    A :py:class:`Loop` :py:class:`Datasource` can be set in a loop
+    state, where it continously reads data objects and places
+    them in a in a local register (this sounds more like a fetcher ...)
+
+    Examples:
+    - Webcam
+    - Video
+    - other datasource (-> datafetcher)
+
+    """
+
+
+class Snapshot(Datasource):
+    """Instances of this class are able to provide a snapshot.  Typical
+    examples of :py:class:`Snapshot` datasources are sensors and
+    cameras that obtain changing data from the environment.  Calling
+    the :py:meth:`snapshot` method will provide data reflecting the
+    current state of affairs.
+
+    Notes
+    -----
+
+    Subclasses of :py:class:`Snapshot` may overwrite the
+    py:class:`_get_snapshot` method to provide a snapshot.
+
+    """
 
 
 class Random(Loop):
@@ -662,6 +677,7 @@ class Indexed(Random):
         """
 
     def _get_description(self, index=None, **kwargs) -> str:
+        # pylint: disable=arguments-differ
         description = super()._get_description(**kwargs)
         if index is not None:
             description += f", index={index}"

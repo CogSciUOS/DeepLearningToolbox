@@ -8,12 +8,12 @@ import logging
 
 # Qt imports
 from PyQt5.QtWidgets import QWidget, QGroupBox, QStackedWidget
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QSizePolicy
 
 # toolbox imports
 from toolbox import Toolbox
-from network import Network
-from datasource import Datasource, Datafetcher
+from dltb.network import Network
+from dltb.datasource import Datasource, Datafetcher
 from dltb.base.register import RegisterClass
 from dltb.base.register import InstanceRegisterEntry, ClassRegisterEntry
 from dltb.tool import Tool
@@ -321,12 +321,15 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         self._dataView.setDatafetcher(self._datasourceNavigator.datafetcher())
         self.addAttributePropagation(Datafetcher, self._dataView)
 
-        datasourceView = QWidget()
+        self._datasourceView = QWidget()
         layout = QVBoxLayout()
+        self._datasourceNavigator.setSizePolicy(
+            QSizePolicy.Preferred, QSizePolicy.Fixed)
+
         layout.addWidget(self._datasourceNavigator)
         layout.addWidget(self._dataView)
-        datasourceView.setLayout(layout)
-        return datasourceView
+        self._datasourceView.setLayout(layout)
+        return self._datasourceView
 
     def _updateResource(self) -> None:
         """React to a change of resource (datasouce) for this
@@ -335,6 +338,44 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         super()._updateResource()
         datasource = self._resource
         self.setDatasource(datasource)
+
+    # FIXME[debug]
+    def NOresizeEvent(self, event):
+        print("RESIZE:")
+
+        def _(size):
+            return f"{size.width()}x{size.height()},"
+
+        def p(policy):
+            if policy == QSizePolicy.Fixed:
+                return 'Fixed'
+            if policy == QSizePolicy.Minimum:
+                return 'Minimum'
+            if policy == QSizePolicy.Maximum:
+                return 'Maximum'
+            if policy == QSizePolicy.Preferred:
+                return 'Preferred'
+            if policy == QSizePolicy.Expanding:
+                return 'Expanding'
+            if policy == QSizePolicy.MinimumExpanding:
+                return 'MinimumExpanding'
+            return f'?{policy}'
+
+        for widget in (self._datasourceView,
+                       self._datasourceNavigator,
+                       self._dataView,
+                       self._dataView._imageView,
+                       self._dataView._dataInfo):
+            print(f" - {type(widget).__name__:30}: "
+                  f"size={_(widget.size()):12} "
+                  f"min={_(widget.minimumSize()):12} "
+                  f"max={_(widget.maximumSize()):24} "
+                  f"size hint={_(widget.sizeHint()):12} "
+                  f"minimum size hint={_(widget.minimumSizeHint()):12}"
+                  f"policy: {p(widget.sizePolicy().horizontalPolicy())}/"
+                  f"{p(widget.sizePolicy().verticalPolicy())}"
+                  f", stretch={widget.sizePolicy().horizontalStretch()}/"
+                  f"{widget.sizePolicy().verticalStretch()}")
 
 
 class QToolInspector(QResourceInspector):
