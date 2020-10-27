@@ -14,13 +14,14 @@ import numpy as np
 
 # toolbox imports
 from ..base.register import RegisterClass
+from ..base.prepare import Preparable
 from ..base.data import Data, Datalike
 from ..base.image import Imagelike, ImageExtension
 from ..tool import Tool
 from ..tool.image import ImageTool
 from ..tool.classifier import SoftClassifier
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
-from base import Identifiable, Extendable, Preparable
+from base import Identifiable, Extendable
 
 # logging
 LOG = logging.getLogger(__name__)

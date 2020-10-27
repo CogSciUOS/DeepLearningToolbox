@@ -12,7 +12,10 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 
 # toolbox imports
 from toolbox import Toolbox
-from base import Observable, BusyObservable, AsyncRunner, Preparable
+from dltb.base.observer import Observable
+from dltb.base.busy import BusyObservable
+from dltb.base.prepare import Preparable
+from base import AsyncRunner
 import util
 from util.error import protect, handle_exception
 

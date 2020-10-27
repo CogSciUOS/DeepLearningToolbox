@@ -1,4 +1,7 @@
-from base import Observable, Controller as BaseController
+import re
+
+from dltb.base import Observable
+from base import Controller as BaseController
 
 from PyQt5.QtWidgets import QWidget, QTabWidget, QStackedWidget
 
@@ -7,7 +10,7 @@ class Panel(QWidget):
     '''Base class for different visualisation panels.
     '''
 
-    def __init__(self, parent: QWidget=None):
+    def __init__(self, parent: QWidget = None):
         '''Initialization of the ActivationsView.
 
         Parameters
@@ -18,7 +21,7 @@ class Panel(QWidget):
         super().__init__(parent)
 
     def setController(self, controller: BaseController,
-                      observerType: type=Observable.Observer):
+                      observerType: type = Observable.Observer):
         for child in self.findChildren(observerType):
             child.setController(controller)
 
@@ -38,9 +41,8 @@ class Panel(QWidget):
         if parent is not None and isinstance(parent, QTabWidget):
             me = parent.indexOf(self)
             text = parent.tabText(me)
-            import re # FIXME[hack]
             text = re.sub(r'^X ', '', text)
             if alert:
                 text = 'X ' + text
             text = parent.setTabText(me, text)
-            #parent.item().setTextColor(QColor(color));
+            # parent.item().setTextColor(QColor(color));

@@ -95,10 +95,11 @@ import threading
 import numpy as np
 
 # toolbox imports
-from dltb.base.data import Data
-from dltb.base.image import Image
-from dltb.base.register import RegisterClass
-from base import Preparable, FailableObservable
+from ..base.data import Data
+from ..base.image import Image
+from ..base.register import RegisterClass
+from ..base.fail import FailableObservable
+from ..base import Preparable
 from util.image import imread
 
 # logging

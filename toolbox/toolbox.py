@@ -57,7 +57,8 @@ import numpy as np
 # toolbox imports
 import util
 from util import addons
-from base import BusyObservable, Runner, Controller as BaseController
+from base import Runner, Controller as BaseController
+from dltb.base.busy import BusyObservable
 from dltb.util.image import imread
 from dltb.base import run
 from dltb.tool import Tool

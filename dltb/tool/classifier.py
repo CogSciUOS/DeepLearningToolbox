@@ -15,7 +15,7 @@ import logging
 import numpy as np
 
 # toolbox imports
-from base import Preparable
+from ..base.prepare import Preparable
 from ..base.register import RegisterClass
 from ..base.data import Datalike
 from ..base.image import Imagelike, ImageExtension

@@ -11,8 +11,8 @@ import tensorflow as tf
 import mtcnn
 
 # toolbox imports
-from base import Preparable
 from util.image import BoundingBox
+from dltb.base import Preparable
 from ..base.meta import Metadata
 from ..tool.face.detector import Detector as FaceDetector
 from ..tool.face.landmarks import (Detector as LandmarkDetector,

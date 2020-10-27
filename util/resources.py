@@ -220,16 +220,16 @@ class Metaclass(type):
             if isinstance(instance, cls):
                 yield instance
 
-
     def __len__(cls) -> int:
         len = 0
         for instance in cls._base_class._instances.values():
             if isinstance(instance, cls):
                 len += 1
         return len
-            
 
-from base import BusyObservable, busy, change
+
+from dltb.base.busy import BusyObservable, busy
+from base import change
 
 
 class Resource(BusyObservable, method='resource_changed',
@@ -243,8 +243,8 @@ class Resource(BusyObservable, method='resource_changed',
     """
     _label: str = None
     _description: str = None
-   
-    def __init__(self, label: str=None, description: str=None,
+
+    def __init__(self, label: str = None, description: str = None,
                  **kwargs) -> None:
         """Create a new resource.
 

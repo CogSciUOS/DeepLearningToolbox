@@ -1,10 +1,10 @@
 import numpy as np
 
-from ..base.meta import Metadata
-from util.image import Landmarks, BoundingBox
-from base import run, busy
-from ..detector import ImageDetector as BaseDetector
+from util.image import Landmarks
 from .detector import Detector as FaceDetector
+from ..base.busy import busy
+from ..base.meta import Metadata
+from ..detector import ImageDetector as BaseDetector
 
 
 class FacialLandmarks(Landmarks):

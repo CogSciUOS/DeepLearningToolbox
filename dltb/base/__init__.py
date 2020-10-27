@@ -2,6 +2,10 @@
 from concurrent.futures import ThreadPoolExecutor, Future
 import threading
 
+from .observer import Observable
+from .prepare import Preparable
+
+
 _executor: ThreadPoolExecutor = \
     ThreadPoolExecutor(max_workers=4, thread_name_prefix='runner')
 

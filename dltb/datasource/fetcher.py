@@ -12,8 +12,8 @@ import time
 import logging
 
 # toolbox imports
-from base import busy, BusyObservable
 from dltb.base.data import Data
+from dltb.base.busy import busy, BusyObservable
 from .datasource import Datasource, Livesource, Random, Indexed
 
 # logging

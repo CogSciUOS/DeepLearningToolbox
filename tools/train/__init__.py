@@ -15,7 +15,8 @@
 #  - the Training will hold all this together
 
 
-from base import BusyObservable, Controller as BaseController, View as BaseView
+from dltb.base.busy import BusyObservable
+from base import Controller as BaseController, View as BaseView
 
 
 class Training(BusyObservable, method='training_changed',
