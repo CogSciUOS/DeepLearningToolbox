@@ -25,6 +25,7 @@ Datasource.register_instance('dogsandcats', 'datasource.dogsandcats',
 Datasource.register_instance('widerface', 'datasource.widerface', 'WiderFace')
 Datasource.register_instance('fgnet', 'datasource.fgnet', 'FGNet')
 Datasource.register_instance('Helen', 'datasource.helen', 'Helen')
+Datasource.register_instance('lfw', 'datasource.lfw', 'LabeledFacesInTheWild')
 Datasource.register_instance('ms-celeb-1m', 'datasource.face', 'MSCeleb1M')
 Datasource.register_instance('Noise', 'dltb.datasource.noise', 'Noise',
                              shape=(100, 100, 3))
@@ -57,7 +58,7 @@ Datasource.register_instance('Movie', 'dltb.datasource.video', 'Video',
                              filename='/pub/ulf/media/music/Laibach/'
                              'Laibach - God is God.mp4')
 Datasource.register_instance('dummy', 'dltb.datasource.dummy', 'Dummy')
-Datasource.register_instance('5celeb', 'dltb.datasource.fivecelebface',
+Datasource.register_instance('5celeb', 'datasource.fivecelebface',
                              'FiveCelebFace')
 
 

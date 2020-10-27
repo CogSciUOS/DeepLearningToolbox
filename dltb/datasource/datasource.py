@@ -212,6 +212,12 @@ class Datasource(Preparable, FailableObservable, # ABC,
 
     def get_data(self, batch: int = None, **kwargs) -> Data:
         """Get data from this :py:class:`Datasource`.
+
+        Arguments
+        ---------
+        batch:
+            Either `None` for getting a single (non-batch) data object,
+            or a positive integer specifying the batch size.
         """
         data = self._data_class(datasource=self, batch=batch)
         LOG.debug("Datasource[%s].get_data(%s)", self, kwargs)

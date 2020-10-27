@@ -1,5 +1,29 @@
 # Tools
 
+
+FIXME[bug]: due to refactoring, the implementation is currently in an
+insane (not operational) state: there seems to be some redundancy between
+`Tool.apply` and `Detector._process_data`. Currently `apply` is
+called from:
+* `dltb/tool/worker.py`
+* `dltb/tool/detector.py`
+* `dltb/tool/activation.py`
+* `dltb/tool/tool.py`: (`IterativeTool`)
+* `demos/dl-activation.py`
+
+The `process_data` family is used similar places. `_preprocess_data`:
+* `dltb/tool/detector.py` (seems not to be called)
+* `tools/activation/engine.py` (seems outdated ...)
+the central `_process_data` (and `_process_batch`):
+* `dltb/tool/tool.py`:
+* `dltb/tool/detector.py`:
+and finally `_postprocess_data`:
+* `dltb/tool/detector.py`
+
+This second set of functions (`_...process_data`) seems to be outdated
+and should be removed!
+
+
 ## The three APIs
 
 The Deep Learning Toolbox aims to provide access to a large set of
@@ -11,6 +35,16 @@ use cases.  Hence the `Tool` class provides three different interfaces.
 ```python
 tool(datalike, arguments, result=(...))
 ```
+
+Preprocess `datalike` to obtain suitable internal data and attributes
+(by calling `_do_preprocess`).
+
+Then process the data in its internal representation (by calling `_process`).
+
+Finally postprocess data to get the desired result (by calling
+`_do_postprocess`).
+
+
 
 ### The internal API
 
@@ -30,6 +64,12 @@ tool.apply(data, arguments, result=(...))
 
 The `Data` API is for example used by the `Worker`. An example
 can be found at the "Face Panel".
+
+The function `apply` basically does the following steps:
+* obtain some values by calling `self.__call__(data, result, ...)`
+* store these values as data attributes (according to `result`)
+
+
 
 
 ## The result argument
@@ -92,17 +132,21 @@ sequentially.
 Data preprocessing my include different kinds of operations:
 * data normalization
 * resizing (e.g., in case of images)
-* internal representation (e.g. a framework specific data type, like
-  a torch.Tensor or a tensorflow.Tensor.
+* internalization: convert data into an internal representation
+  (e.g. a framework specific data type, like a torch.Tensor or
+  a tensorflow.Tensor). This may include moving the data to the
+  desired computation device.
 
 
 Remarks:
 * it is not clear to me yet, whether there is a preferred order in which
 these preprocessing operations should be applied:
   - certain operations (e.g. normalization) are faster on smaller than
-    on larger input (but do they loose accuracy?)
-  - certain operations may be performed faster in a specific framework,
-    while others may not be available
+    on larger input, so shrinking but not growing an image should be
+    done before (but do we loose accuracy?)
+  - certain operations may be performed faster in a specific computational
+    framework (like a GPU), while other operation may not be available
+    for that device.
 * there should also be a corresponding postprocessing operation
    - the postprocessing operation may be an inverse operation,
      in case the tool operates on the data, but it may also be
@@ -130,7 +174,7 @@ methods:
 
 class MyTool(Tool):
 
-    result: Tuple[str] = ('my_result', 'duration')
+    external_result: Tuple[str] = ('my_result', 'duration')
     internal_arguments: Tuple[str] = ('_preprocessed', )
     internal_result: Tuple[str] = ('_result, )
 

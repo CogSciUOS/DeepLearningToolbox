@@ -97,6 +97,14 @@ class DataDirectory(DataFiles):
         if self._filenames is None:
             self._prepare_filenames()
             write_cache(filenames_cache, self._filenames)
+        if self._scheme is None:
+            directories = set()
+            for name in self._filenames:
+                directories.add(os.path.dirname(name))
+            self._scheme = ClassScheme(len(directories))
+            self._scheme.add_labels(directories,
+                                    self._label_from_directory or 'default',
+                                    lookup=True)
 
     def _unprepare(self) -> None:
         self._filenames = None

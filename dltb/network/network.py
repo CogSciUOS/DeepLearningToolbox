@@ -1202,9 +1202,9 @@ class VariationalAutoencoder(Autoencoder):
 
 class NetworkTool(Tool):
 
-    _result: Tuple[str] = ('outputs')
-    _internal_arguments: Tuple[str] = ('inputs_')
-    _internal_result: Tuple[str] = ('outputs_')
+    external_result: Tuple[str] = ('outputs', )
+    internal_arguments: Tuple[str] = ('inputs_', )
+    internal_result: Tuple[str] = ('outputs_', )
 
     @property
     def network(self) -> Network:

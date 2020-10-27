@@ -911,6 +911,10 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
     def _newFacePanel(self, FacePanel: type) -> Panel:
         return FacePanel(toolbox=self._toolbox)
 
+    def _newAdversarialExamplePanel(self,
+                                    AdversarialExamplePanel: type) -> Panel:
+        return AdversarialExamplePanel(toolbox=self._toolbox)
+
     ##########################################################################
     #                             Actions                                    #
     ##########################################################################

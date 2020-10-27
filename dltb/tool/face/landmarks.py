@@ -2,9 +2,9 @@ import numpy as np
 
 from util.image import Landmarks
 from .detector import Detector as FaceDetector
-from ..base.busy import busy
-from ..base.meta import Metadata
 from ..detector import ImageDetector as BaseDetector
+from ...base.busy import busy
+from ...base.meta import Metadata
 
 
 class FacialLandmarks(Landmarks):

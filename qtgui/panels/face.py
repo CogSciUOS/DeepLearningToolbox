@@ -146,8 +146,8 @@ class QDetectorWidget(QGroupBox, QObserver,
         # pylint: disable=invalid-name
         """React to changes in the observed :py:class:`FaceDetector`.
         """
-        LOG.debug("QDetectorWidget.worker_changed(%s, %s)",
-                  worker.tool, change)
+        LOG.debug("QDetectorWidget[%s].worker_changed(chanage=%s): busy=%s",
+                  worker.tool, change, worker.busy)
         if change.tool_changed or change.busy_changed:
             detector = worker.tool
             self.setTitle("None" if detector is None else
@@ -166,6 +166,9 @@ class QDetectorWidget(QGroupBox, QObserver,
     def setImage(self, image: np.ndarray, data: Data = None):
         """Set the image to be worked on by the underlying detector.
         """
+        LOG.debug("QDetectorWidget[%s].set_image(data=%s, data=%s)",
+                  self._worker.tool,
+                  None if image is None else image.shape, data)
         self._trueMetadata = data
         if self._worker.ready:
             self._worker.work(data, extract=True)
@@ -183,8 +186,8 @@ class QDetectorWidget(QGroupBox, QObserver,
         detector = self._worker.tool
         data = self._worker.data
         detections = detector.detections(data)
-        LOG.debug("QDetectorWidget.update(): data = %s", data)
-        LOG.debug("QDetectorWidget.update(): detections = %s", detections)
+        LOG.debug("QDetectorWidget[%s].update(): data = %s, detections = %s",
+                  detector, data, detections)
 
         self._view.setData(data)
         if detections is None:
@@ -269,7 +272,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
 
     """
 
-    def __init__(self, toolbox: Toolbox = None, parent=None):
+    def __init__(self, toolbox: Toolbox = None, **kwargs):
         """Initialization of the FacePanel.
 
         Parameters
@@ -279,7 +282,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         parent: QWidget
             The parent argument is sent to the QWidget constructor.
         """
-        super().__init__(parent)
+        super().__init__(**kwargs)
 
         # name = 'shape_predictor_5_face_landmarks.dat'
         name = 'shape_predictor_68_face_landmarks.dat'  # FIXME[hack]
@@ -291,7 +294,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         self._counter = 0  # FIXME[hack]
 
     def _initUI(self):
-        """Initialize the user interface
+        """Initialize the user interface.
 
         The user interface contains the following elements:
         * the data selector: depicting the current input image
@@ -329,18 +332,18 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         # The big picture:
         #
         #  +--------------------+----------------------------------------+
-        #  |+------------------+|                                        |
-        #  ||dataSelector      ||                                        |
-        #  ||[view]            ||                                        |
-        #  ||                  ||                                        |
-        #  ||                  ||                                        |
-        #  ||                  ||                                        |
-        #  ||                  ||                                        |
-        #  ||                  ||                                        |
-        #  ||[navigator]       ||                                        |
-        #  ||                  ||                                        |
-        #  ||                  ||                                        |
-        #  |+------------------+|                                        |
+        #  |+------------------+|+---------------+ +---------------+ ... |
+        #  ||dataSelector      |||QDetectorWidget| |QDetectorWidget|     |
+        #  ||[view]            ||| Result        | | Result        |     |
+        #  ||                  |||               | |               |     |
+        #  ||                  |||               | |               |     |
+        #  ||                  |||               | |               |     |
+        #  ||                  ||| Controls      | | Controls      |     |
+        #  ||                  |||               | |               |     |
+        #  ||[navigator]       |||               | |               |     |
+        #  ||                  |||               | |               |     |
+        #  ||                  ||| Selector      | | Selector      |     |
+        #  |+------------------+|+---------------+ +---------------+ ... |
         #  +--------------------+----------------------------------------+
         layout = QHBoxLayout()
 

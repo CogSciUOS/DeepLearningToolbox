@@ -14,7 +14,7 @@ from .tool import Tool
 LOG = logging.getLogger(__name__)
 
 
-class Worker(BusyObservable, method='worker_changed',
+class Worker(BusyObservable, Tool.Observer, method='worker_changed',
              changes={'tool_changed', 'data_changed',
                       'work_step', 'work_finished'}):
     """A worker can be used to work on data using a :py:class:`Tool`.
@@ -81,7 +81,7 @@ class Worker(BusyObservable, method='worker_changed',
                 self.unobserve(tool)
             self._tool = tool
             if tool is not None:
-                self.observe(tool, 'tool_changed')
+                self.observe(tool, Tool.Change('tool_changed'))
             self.change('tool_changed')
             if self._data is not None:
                 self.work(self._data)  # rework the current data with new tool

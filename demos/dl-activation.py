@@ -20,6 +20,27 @@ from dltb.tool.activation import ActivationTool, ActivationWorker
 LOG = logging.getLogger(__name__)
 
 
+def extract_activations(network: Network,
+                        datasource: Datasource, layers,
+                        batch_size: int = 128) -> None:
+    """Extract activation values for a dataset from a Network.
+    """
+    tool = ActivationTool(network)
+    try:
+        samples = len(datasource)
+        results = {
+            np.ndarray((samples,) + network[layer].ouput_shape)
+            for layer in layers
+        }
+
+        fetcher = Datafetcher(datasource)
+        index = 0
+        for batch in fetcher.batches(batch_size=batch_size):
+            activations = network.get_activations(data, layers)
+            for layer, values in activations:
+                results[layer][index:index+len(batch)] = values
+
+
 def main():
     """The main program.
     """

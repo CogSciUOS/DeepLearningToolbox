@@ -33,7 +33,7 @@ class Detector(Tool):
     will differ for specific subclasses (for example an ImageDetector
     typically returns a list of bounding boxes).
     """
-    
+
     #
     # Detector
     #
@@ -163,7 +163,7 @@ class ImageDetector(Detector, ImageTool):
     # Implementation of the private API
     #
 
-    result: Tuple[str] = ('detections', )
+    external_result: Tuple[str] = ('detections', )
     internal_arguments: Tuple[str] = ('_data', )
     internal_result: Tuple[str] = ('_detections', )
     

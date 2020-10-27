@@ -8,6 +8,7 @@ observers will receive a `data_changed` notification.
 
 """
 # standard imports
+from typing import Iterator
 import time
 import logging
 
@@ -63,17 +64,20 @@ class Datafetcher(BusyObservable, Datasource.Observer,
     """
 
     def __init__(self, datasource: Datasource = None,
+                 batch_size: int = None,
                  frames_per_second: float = 2.5, **kwargs) -> None:
         self._data = None
         self._datasource = None
         super().__init__(**kwargs)
-        self.datasource = datasource
 
-        #
+        # default batch size when fetching batches
+        self._batch_size = batch_size
+        
         # Loop specific variables
-        #
         self._looping = False
         self._frames_per_second = frames_per_second
+
+        self.datasource = datasource
 
     def __del__(self) -> None:
         self.looping = False
@@ -106,6 +110,12 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         if self.ready:
             self.fetch()
 
+    def reset(self) -> None:
+        """Reset this :py:class:`Datafetcher`.
+        """
+        self._data = None
+        self.change('data_changed')
+            
     @property
     def fetched(self) -> bool:
         """Check if data have been fetched and are now available.
@@ -368,3 +378,26 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         self._assert_indexable()
         self.fetch(index=len(self)-1, **kwargs)
+
+    #
+    # Iterable interface
+    #
+
+    def __iter__(self) -> Iterator[Data]:
+        return self
+
+    def __next__(self) -> Data:
+        if self._data is None:
+            index = 0
+        elif self._data.is_batch:
+            index = self._data.index + len(self._data)
+        else:
+            index = self._data.index + 1
+
+        if index < len(self._datasource):
+            self._data = \
+                self._datasource.get_data(index=index, batch=self._batch_size)
+        else:
+            self._data = None
+            raise StopIteration()
+        return self._data
