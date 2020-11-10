@@ -390,13 +390,15 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         if self._data is None:
             index = 0
         elif self._data.is_batch:
-            index = self._data.index + len(self._data)
+            index = self._data[0].index + len(self._data)
         else:
             index = self._data.index + 1
 
         if index < len(self._datasource):
+            batch = (self._batch_size and
+                     min(len(self._datasource) - index, self._batch_size))
             self._data = \
-                self._datasource.get_data(index=index, batch=self._batch_size)
+                self._datasource.get_data(index=index, batch=batch)
         else:
             self._data = None
             raise StopIteration()

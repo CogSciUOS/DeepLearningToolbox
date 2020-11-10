@@ -291,6 +291,9 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         if not self.prepared:
             return RuntimeError("Trying to access unprepared Network "
                                 f"'{self.key}'")
+        from .layer import Layer  # FIXME[hack]: we need another way to make Layer available ...
+        if isinstance(layer, Layer):
+            return layer
         if isinstance(layer, str):
             return self.layer_dict[layer]
         if isinstance(layer, int):
@@ -399,6 +402,9 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
 
     def layers(self) -> Iterator['Layer']:
         return self.layer_dict.values()
+
+    def layer_names(self) -> Iterator[str]:
+        return self.layer_dict.keys()
 
     def get_layer_info(self, layername):
         """FIXME[todo]: we still have to decide on some info API

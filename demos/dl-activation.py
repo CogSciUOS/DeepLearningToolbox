@@ -10,10 +10,15 @@
 import logging
 import argparse
 
+# third party imports
+import numpy as np
+
 # toolbox imports
 from dltb.base.data import Data
 from dltb.util.image import imread
-from dltb.network import argparse as NetworkArgparse
+from dltb.network import Network, argparse as NetworkArgparse
+from dltb.datasource import Datasource, Datafetcher
+from dltb.datasource import argparse as DatasourceArgparse
 from dltb.tool.activation import ActivationTool, ActivationWorker
 
 # logging
@@ -28,17 +33,27 @@ def extract_activations(network: Network,
     tool = ActivationTool(network)
     try:
         samples = len(datasource)
+        # Here we could:
+        #  np.memmap(filename, dtype='float32', mode='w+',
+        #            shape=(samples,) + network[layer].output_shape[1:])
         results = {
-            np.ndarray((samples,) + network[layer].ouput_shape)
+            layer: np.ndarray((samples,) + network[layer].output_shape[1:])
             for layer in layers
         }
 
-        fetcher = Datafetcher(datasource)
+        fetcher = Datafetcher(datasource, batch_size=batch_size)
         index = 0
-        for batch in fetcher.batches(batch_size=batch_size):
-            activations = network.get_activations(data, layers)
-            for layer, values in activations:
-                results[layer][index:index+len(batch)] = values
+        for batch in fetcher:
+            print("dl-activation: batch:", type(batch.array), len(batch.array))
+            print("dl-activation: indices:", batch[0].index)  # , batch[-1].index
+            activations = network.get_activations(batch, layers)
+            #print(type(activations), len(activations))
+            print("dl-activation: activations:", type(activations[0]))
+            for index, values in enumerate(activations):
+                results[layers[index]][index:index+len(batch)] = values
+            print("dl-activation: batch finished.")
+    except InterruptedError:
+        print("Interrupted.")
 
 
 def main():
@@ -49,6 +64,7 @@ def main():
         argparse.ArgumentParser(description="Activation extraction from "
                                 "layers of a neural network")
     NetworkArgparse.prepare(parser)
+    DatasourceArgparse.prepare(parser)
     args = parser.parse_args()
 
     network = NetworkArgparse.network(args)
@@ -58,8 +74,13 @@ def main():
 
     network.summary()
 
+    datasource = DatasourceArgparse.datasource(args)
+    if datasource is None:
+        logging.error("No datasource was specified.")
+        return
+
+    #image = 'images/elephant.jpg'
     image = imread('images/elephant.jpg')
-    image = network.image_to_internal(image)
     activations1 = network.get_activations(image)
     print('1: network.get_activations(image):')
     for index, activation in enumerate(activations1):
@@ -91,6 +112,13 @@ def main():
     print('5: ActivationWorker(tool).work(data):')
     for layer_id, activation in activations5.items():
         print(f" ({layer_id}) {activation.shape}")
+
+    #
+    # Now loop over the dataset
+    #
+    layers = list(network.layer_names())
+    print("Layers:", layers)
+    extract_activations(network, datasource, layers[-1:])
 
 
 if __name__ == "__main__":

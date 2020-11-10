@@ -820,10 +820,26 @@ class Alexnet(Classifier, ImageNetwork, Network):
         """
         # FIXME[todo]: check out the correct preprocessing for AlexNet
         # with the current approach the accuracy is only around 30%
-        image = Image.as_array(image)
+
+        # FIXME[hack]: batch handling
+        from dltb.base.data import Data
+        if isinstance(image, Data) and image.is_batch:
+            result = np.ndarray((len(image), 227, 227, 3))
+            for index, img in enumerate(image.array):
+                img = Image.as_array(img) # return a numpy.ndarray
+                img = img[:, :, :3].astype(np.float32)  # /256.
+                img = imresize(img, (227, 227))
+                img = img - img.mean()
+                img[:, :, 0], img[:, :, 2] = img[:, :, 2], img[:, :, 0]
+                result[index] = img
+            print("New batch:", result.shape)
+            return result
+
+        image = Image.as_array(image) # return a numpy.ndarray
         image = image[:, :, :3].astype(np.float32)  # /256.
         image = imresize(image, (227, 227))
         image = image - image.mean()
+        # color: BGR -> RGB
         image[:, :, 0], image[:, :, 2] = image[:, :, 2], image[:, :, 0]
         return image[np.newaxis]
 
