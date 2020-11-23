@@ -23,6 +23,8 @@ from dltb.tool.classifier import ClassScheme
 
 class KerasScheme(ClassScheme):
     """:py:class:`ClassScheme` for Keras datasources.
+    This class adds functionality to load class schemes for
+    keras datasources 'cifa10', and 'cifar100'.
     """
 
     def __init__(self, *args, name: str = None, variant: str = None,
@@ -79,11 +81,14 @@ class KerasScheme(ClassScheme):
 
 class KerasDatasource(LabeledArray, Imagesource):
     # pylint: disable=too-many-ancestors
-    """Data source for Keras builtin datasets.
+    """Data source for Keras builtin datasets [1].
 
     Keras provides some methods to access standard datasets via its
     keras.datasets API. This API will automatically download and
-    unpack required data into ~/.keras/datasets/.
+    unpack required data into `${KERAS_HOME}/datasets/` (if not set,
+    ${KERAS_HOME} defaults to `~/.keras/`; currently there seems to be
+    no option to specify the download directory for individual
+    datasets).
 
 
     Attributes
@@ -113,6 +118,11 @@ class KerasDatasource(LabeledArray, Imagesource):
         KERAS_IDS).
     _section_index: int
         Index for the section of the dataset: 0 for train and 1 for test.
+
+
+    Links
+    -----
+    [1] https://keras.io/api/datasets/
     """
     KERAS_IDS = ['mnist', 'cifar10', 'cifar100', 'fashion_mnist']
 

@@ -4,6 +4,10 @@
 # FIXME[todo]: add the option to work with numpy memmap
 #  np.memmap(filename, dtype='float32', mode='w+',
 #            shape=(samples,) + network[layer].output_shape[1:])
+#
+# Notice: the filen referred to by filename has to by an
+# (uncompressed) `.npy` file. There is not way to use compressed `.npz`
+# files.
 
 
 # third party imports
