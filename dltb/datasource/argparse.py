@@ -79,7 +79,7 @@ def datasources(args: Namespace) -> Iterator[Datasource]:
               join(Datasource.instance_register.keys()))
 
     if args.datasource:
-        yield Datasource[args.datasoruce]
+        yield Datasource[args.datasource]
     if args.imagenet_val:
         yield Datasource['imagenet-val']
 

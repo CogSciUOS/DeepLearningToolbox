@@ -24,13 +24,58 @@ Datalike = Union[np.ndarray, str]
 class Data(Observable, method='data_changed', changes={'data_changed'}):
     # pylint: disable=no-member
     # _attributes, data
-    """A piece of data, either single datum or a batch of data.
+    """A :py:class:`Data` object describes piece of data, either single
+    datum or a batch of data.  The central part of a :py:class:`Data`
+    object are the actual values, usually in form of a numpy
+    array. The values may be present in different versions, e.g.,
+    different sizes of an image, normalized versions of the data.
+    Such additional representation may be added on demand. The main
+    idea is to (1) initially store not more data than necessary, and
+    (2) avoid doing same processing steps multiple times, that is
+    store transformed version of the data, once they have been
+    computed. Each version of the data will be available in
 
+    In addition to the actual data, optional secondary values like
+    manually annotations (e.g., class labels for classification tasks,
+    bounding boxes for detection task, etc.) and derived values like
+    statistics or model predictions can be present or added in form of
+    data attributes.  Data attributes are immutable once they have
+    been added to the :py:class:`Data` object. That means, that the
+    object can grow, but established attributes are not supposed to
+    change.
+
+    A :py:class:`Data` is :py:class:`Observable`, allowing a data view
+    to be informed once new attributes have been added.
+
+    Batches
+    -------
+
+    A :py:class:`Data` object can be created as a batch, meaning that
+    it does not represent a single datum, but rather a batch of
+    data. The ratio behind this is that many frameworks actually
+    expect and operate on batched data.
+
+    The :py:class:`Data` interface provides means to switch between single
+    value and batched values: given a :py:class:`Data` representing a
+    single datum, one can create a batch of size 1 using the `[]` operator.
+    Given a batch :py:class:`Data` one can obtain a view on a single
+    value from that batch by providing a numeric index.
+
+    A data attribute can be qualified as batch attribute (meaning that
+    there are different attribute values for each element of the
+    batch, e.g., the size for a batch of images with different
+    individual sizes) or as global attribute (being just one value for
+    the complete batch, e.g., if all images in a batch of images have
+    the same size). Whether a data attribute is batch or global has to
+    be specified when the attribute is added to the data object.
+
+    FIXME[old]:
     Labels
     ------
     * scheme: e.g., ClassLabel (like, MNISTClasses or ImagnetClasses)
       of RegionLabel (like BoundingBox, FacialLandmark168)
     * single or multi:
+
     """
     TYPE_IMAGE = 1
     TYPE_FACE = 2 | TYPE_IMAGE
@@ -106,8 +151,9 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
         if attr not in self._attributes:
             raise AttributeError(f"Data has no attribute '{attr}'.")
         if self._attributes[attr]:  # batch attribute
-            if not hasattr(val, '__len__'):
-                raise ValueError("Cannot assign single value "
+            if not isinstance(val, Sized):
+                raise ValueError("Cannot assign non-Sized value "
+                                 f"of type {type(val)} "
                                  f"to batch attribute '{attr}'")
             if len(val) != len(self):
                 raise ValueError("Cannot assign value of length {len(val)}"
@@ -208,16 +254,18 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
         for name, is_batch in self._attributes.items():
             value = getattr(self, name, None)
             if value is None:
-                info = 'None'
+                info = 'None' if hasattr(self, name) else '*missing*'
             elif isinstance(value, np.ndarray):
                 info = f"ndarray{value.shape} [{value.dtype}]"
             elif isinstance(value, int):
                 info = f"{value} (int)"
             elif isinstance(value, str):
                 info = f"'{value}' (str)"
+            elif isinstance(value, tuple):
+                info = f"{value} (tuple)"
             else:
                 info = f"{type(value)}"
-            print(f" - {name}[{is_batch}]: {info}")
+            print(f" - {name}[{'batch' if is_batch else 'global'}]: {info}")
 
 
 class BatchDataItem:

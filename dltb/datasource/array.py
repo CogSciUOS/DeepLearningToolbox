@@ -1,6 +1,11 @@
 """A :py:class:`Datasource` providing data from an array.
 """
 
+# FIXME[todo]: add the option to work with numpy memmap
+#  np.memmap(filename, dtype='float32', mode='w+',
+#            shape=(samples,) + network[layer].output_shape[1:])
+
+
 # third party imports
 import numpy as np
 
@@ -89,7 +94,7 @@ class DataArray(Indexed):
         # pylint: disable=arguments-differ
         if index is not None:
             data.array = self._array[index:index+len(data)]
-        super()._get_batch(data, **kwargs)
+        super()._get_batch(data, index=index, **kwargs)
 
     def _get_index(self, data: Data, index: int, **kwargs) -> None:
         data.array = self._array[index]
@@ -136,6 +141,12 @@ class LabeledArray(DataArray, Labeled):
         """
         data.add_attribute('label', batch=True)
         super()._get_meta(data, **kwargs)
+
+    def _get_batch(self, data: Data, **kwargs) -> None:
+        """Get data from this :py:class:`Datasource`\\ .
+        """
+        super()._get_batch(data, **kwargs)
+        data.label = self._labels[data.index] if self.labels_prepared else None
 
     def _get_index(self, data, index: int, **kwargs) -> None:
         """

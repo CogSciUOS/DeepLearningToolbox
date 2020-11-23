@@ -84,12 +84,13 @@ Worker classes
 """
 
 # standard imports
-from typing import Tuple, Any, Dict, Callable, AbstractSet
+from typing import Tuple, Iterator, Any, Dict, Callable, AbstractSet
 from abc import abstractmethod, ABC
 import time
 import random
 import logging
 import threading
+import collections.abc
 
 # third party imports
 import numpy as np
@@ -236,14 +237,15 @@ class Datasource(Preparable, FailableObservable, # ABC,
     def _get_meta(self, data: Data, **_kwargs) -> None:
         """Enrich the :py:class:`Data` object with meta information.
         This method is called before :py:meth:`_get_data` or
-        :py:meth:`_get_batch` is called.  It is intended add
-        general data attributes and either for directly providing a value,
-        or for preparing them for the `_get` methods.
+        :py:meth:`_get_batch` is called.  It is intended to add
+        data attributes to the data object, either directly providing
+        a value, or preparing them so that values can be added by
+        the `_get_data` or `_get_batch` methods.
 
-        Sublasses that can provide meta information should
-        overwrite this method and call `super()._get_meta()`
-        in order to accumulate all meta information in the
-        :py:class:`Data` object.
+        Sublasses that can provide meta information should overwrite
+        this method and call `super()._get_meta()` in order to
+        accumulate all meta information in the :py:class:`Data`
+        object.
         """
 
     def _get_data(self, data: Data, **kwargs) -> None:
@@ -267,11 +269,21 @@ class Datasource(Preparable, FailableObservable, # ABC,
                 self._get_data(item, **kwargs)
 
     @abstractmethod
-    def _get_default(self, data, **kwargs) -> None:
+    def _get_default(self, data: Data, **kwargs) -> None:
         """The default method for getting data from this
         :py:class:`Datasource`. This method should be implemented by
         all subclases of :py:class:`Datasource`.
         """
+
+    #
+    # Batches
+    #
+
+    def batches(self, size: int, **kwargs) -> Iterator[Data]:
+        """Batchwise iterate the data of this :py:class:`Datasoruce`.
+        """
+        while True:
+            self.get_data(batch=size, **kwargs)
 
     #
     # Description
@@ -373,17 +385,27 @@ class Datasource(Preparable, FailableObservable, # ABC,
 class Imagesource(Datasource):
     # pylint: disable=abstract-method
     """A datasource providing images.
+
+    FIXME[todo]:
+    The image source can be set to a specific size. Images will then
+    be provided in that size.  Parameters to control the resizing
+    process correspond to those that can be passed to the image
+    loading functions.
     """
 
     _data_class: type = Image
 
-    def __init__(self, shape: Tuple = None, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.shape = shape
-
+    #
     _loaders: Dict[str, Callable[[str], Any]] = {'array': imread}
     _loader: Callable[[str], Any] = imread
     _loader_kind: str = 'array'
+
+    # FIXME[todo]:
+    _size: Tuple[int, int] = None
+
+    def __init__(self, shape: Tuple = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.shape = shape
 
     def _get_meta(self, data: Data, **kwargs) -> None:
         """Set the image metdata for the :py:class:`data`.
@@ -671,7 +693,7 @@ class Random(Loop):
         self._get_random(data, **kwargs)
 
 
-class Indexed(Random):
+class Indexed(Random, collections.abc.Sequence):
     """Instances of this class can be indexed.
     """
 
@@ -695,6 +717,11 @@ class Indexed(Random):
     #
 
     def _get_meta(self, data: Data, index: int = None, **kwargs) -> None:
+        """An :py:class:`Indexed` datasource will add an `index`
+        attribute to the :py:class:`Data` object. This will be
+        a batch attribute, holding the respective index for each
+        element of the batch.
+        """
         # pylint: disable=arguments-differ
         if index is not None and not data.datasource_argument:
             data.datasource_argument = 'index'
@@ -718,6 +745,15 @@ class Indexed(Random):
                       type(self), index, kwargs, data)
             self._get_index(data, index, **kwargs)
         super()._get_data(data, **kwargs)
+
+    def _get_batch(self, data: Data, index: int = None, **kwargs) -> None:
+        # pylint: disable=arguments-differ
+        if index is not None:
+            if isinstance(index, (int, np.integer)):
+                data.index = np.arange(index, index+len(data), dtype=np.int)
+            else:
+                data.index = index
+        super()._get_batch(data, **kwargs)
 
     #
     # Data
