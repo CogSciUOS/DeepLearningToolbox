@@ -37,43 +37,6 @@ from joblib import Memory
 from .tool import IterativeTool
 
 
-# The idea of this class seems to be to simply provide some arguments
-# specifiying an experiment.
-#
-# Example:
-#   folder:      Contains latent representations for a model+dataset
-#                e.g., latent_datasets/ResNet18_XXS_Cifar10_32/
-#   save_path:   Instrospection data, like training performance
-#                probe_performances, etc.
-#                e.g., logs/ResNet18_XXS/Cifar10_32/myreceptive
-@attrs(auto_attribs=True, slots=True)
-class PseudoArgs:  # why Pseudo
-    """The pseudo args configuring the training of a probe.
-    Args:
-        model_name: str
-            The name of the model                    
-        folder: str
-            The folder containing the latent representation
-        mp: int
-            Number of processes to use of multiprocessing
-        overwrite: bool
-            Overwrite existing results
-    """
-    model_name: str
-    folder: str
-    mp: int
-    save_path: str = attrib(init=False)
-    overwrite: bool = False
-
-    def __attrs_post_init__(self):
-        # attr initialization magic:
-
-        # the `model_pointer.txt` file contains the path to a directory
-        # to which model specific results should be stored
-        filename = os.path.join(self.folder, "model_pointer.txt")
-        self.save_path = open(filename, "r").read()
-
-
 class ProbeClassifier(IterativeTool):
     """A :py:class:`ProbeClassifier` is a simple probe classifier that is
     used to estimate how hard a classification task is.  This is
@@ -365,7 +328,9 @@ class ProbeClassifier(IterativeTool):
         return np.vstack([batch for batch in self._unpickle_file(filename)])
 
     def load_data_and_labels_from_pickle_files(self, data_path: str,
-            label_path: str) -> Tuple[np.ndarray, np.ndarray]:
+                                               label_path: str
+                                               ) -> Tuple[np.ndarray,
+                                                          np.ndarray]:
         """Load the dataset and labels ready for training.
 
         Arguments
@@ -383,14 +348,51 @@ class ProbeClassifier(IterativeTool):
                 np.squeeze(self._load_pickle_file(label_path)))
 
 
-
-
-
+# This is the actual regression function.
+# -> we should provide a general regression interface and
+#    tensorflow/torch implementations
 def fit_with_cache(data: np.ndarray, labels: np.ndarray):
     model = LogisticRegressionModel(multi_class='multinomial', n_jobs=12,
                                     solver='saga', verbose=True)
     model = model.fit(data, labels)
     return model
+
+
+# The idea of this class seems to be to simply provide some arguments
+# specifiying an experiment.
+#
+# Example:
+#   folder:      Contains latent representations for a model+dataset
+#                e.g., latent_datasets/ResNet18_XXS_Cifar10_32/
+#   save_path:   Instrospection data, like training performance
+#                probe_performances, etc.
+#                e.g., logs/ResNet18_XXS/Cifar10_32/myreceptive
+@attrs(auto_attribs=True, slots=True)
+class PseudoArgs:  # why Pseudo
+    """The pseudo args configuring the training of a probe.
+    Args:
+        model_name: str
+            The name of the model.
+        folder: str
+            The folder containing the latent representation
+        mp: int
+            Number of processes to use of multiprocessing
+        overwrite: bool
+            Overwrite existing results
+    """
+    model_name: str
+    folder: str
+    mp: int
+    save_path: str = attrib(init=False)
+    overwrite: bool = False
+
+    def __attrs_post_init__(self):
+        # attr initialization magic:
+
+        # the `model_pointer.txt` file contains the path to a directory
+        # to which model specific results should be stored
+        filename = os.path.join(self.folder, "model_pointer.txt")
+        self.save_path = open(filename, "r").read()
 
 
 class PhdLabWrapper:
