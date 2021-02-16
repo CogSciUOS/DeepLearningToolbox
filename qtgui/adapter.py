@@ -7,7 +7,7 @@ for a smoother combination of Qt and the Deep Learning ToolBox.
 from typing import Iterator, Iterable, Any, Callable
 import logging
 
-# standard imports
+# Qt imports
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import QComboBox, QListWidget, QListWidgetItem

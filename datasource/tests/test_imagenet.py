@@ -16,7 +16,7 @@ class TestData(TestCase):
 
         # 'imagenet', 'caffe', 'torch', 'synset'
         self.assertEqual(scheme.get_label(5), 5)
-        self.assertEqual(scheme.get_label(5, name='default'), 5)
+        self.assertEqual(scheme.get_label(5), 5)
         self.assertEqual(scheme.get_label(5, name='imagenet'), 6)
         self.assertEqual(scheme.get_label(5, name='caffe'), 147)
         self.assertEqual(scheme.get_label(5, name='torch'), 147)

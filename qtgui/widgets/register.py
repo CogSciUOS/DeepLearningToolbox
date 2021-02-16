@@ -143,7 +143,11 @@ class RegisterAdapter(QObserver, ItemAdapter, qobservables={
         key = event.key()
         LOG.debug("RegisterAdapter.keyPressEvent: key=%d", key)
         if key == Qt.Key_U:  # update
+            LOG.info("Updateting from register: %s",
+                     self._register and type(self._register).__name__)
             self._updateFromRegister()
+            LOG.debug("Updated RegisterAdapter: %s",
+                      self._register and list(self._register.keys()))
         elif key == Qt.Key_I:  # toggle onlyInitialized
             self.setOnlyInitialized(not self.onlyInitialized())
         else:

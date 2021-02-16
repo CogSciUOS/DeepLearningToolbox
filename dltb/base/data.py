@@ -69,6 +69,11 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     the same size). Whether a data attribute is batch or global has to
     be specified when the attribute is added to the data object.
 
+
+    Attributes
+    ----------
+    _batch: int
+    
     FIXME[old]:
     Labels
     ------
@@ -82,9 +87,19 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
 
     def __init__(self, array: np.ndarray = None,
                  datasource=None, batch: int = None, **kwargs) -> None:
+        """
+        Arguments
+        ---------
+        
+        """
         super().__init__(**kwargs)
         super().__setattr__('_attributes', {})
-        if batch is not None:
+        if batch is True:
+            if array is None:
+                raise ValueError("If no data is given, argument `batch` "
+                                 "should specify the batch size.")
+            batch = len(array)
+        if batch is not None and batch is not False:
             super().__setattr__('_batch', batch)
         if datasource is not None:
             self.add_attribute('datasource', datasource)

@@ -3,7 +3,7 @@ classes mapping the toolbox API onto the opencv library.
 """
 
 # standard imports
-from typing import Union, Iterator, Tuple, List
+from typing import Union, Tuple, List
 import logging
 import threading
 
@@ -55,11 +55,7 @@ class OpenCV:
         pass
 
 
-class ImageIO(image.ImageReader, image.ImageWriter, image.ImageDisplay):
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._window = None
+class ImageIO(image.ImageReader, image.ImageWriter):
 
     def __del__(self) -> None:
         cv2.destroyAllWindows()
@@ -85,11 +81,69 @@ class ImageIO(image.ImageReader, image.ImageWriter, image.ImageDisplay):
         #    this flag.
         return cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2RGB)
 
-    def write(self, image: np.ndarray, filename: str, **kwargs) -> None:
-        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    def write(self, image: image.Imagelike, filename: str, **kwargs) -> None:
+        cv2.imwrite(filename,
+                    cv2.cvtColor(image.Image.as_array(image),
+                                 cv2.COLOR_RGB2BGR))
 
-    def show(self, image: np.ndarray, **kwargs) -> None:
-        cv2.imshow('Image', image)
+
+class ImageDisplay(image.ImageDisplay):
+    """An image :py:class:`Display` based on the OpenCV `highgui`
+    graphical user interface.  This interface provides a simple API to
+    open windows and display images.  I even allows for adding some
+    graphical controls and to process keyboard and mouse events.
+
+    Note: there are versions of OpenCV that are build without the
+    `highgui` (for example the current Anaconda package comes without
+    GUI support).
+
+    """
+    # FIXME[todo]: check if the installed OpenCV is compiled with
+    # `highgui` support!
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._window_name = 'Test'
+        self._window = None
+
+    def _show(self, image: np.ndarray, title: str = None) -> None:
+        cv2.imshow(self._window_name, cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
+        title = "OpenCV" if title is None else f"OpenCV: {title}"
+        cv2.setWindowTitle(self._window_name, title)
+
+    def _open(self) -> None:
+        cv2.namedWindow(self._window_name)
+
+    def _close(self) -> None:
+        cv2.destroyWindow(self._window_name)
+
+    def _process_events(self) -> None:
+        # it is not clear what the function cv2.startWindowThread() is
+        # supposed to do ...
+        # cv2.startWindowThread()
+
+        # FIXME[bug]: with the OpenCV Qt GUI, we get the following
+        # error message:
+        #  QObject::startTimer: Timers cannot be started from another thread
+        cv2.waitKey(10)
+
+    def _run_blocking_event_loop(self, timeout: float = None) -> None:
+        # The event loop can be started with `cv2.waitKey()`. This
+        # function will run the event loop, until a key is pressed and
+        # will then return the key code.  Some care has to be taken,
+        # as closing the window will not stop `waitKey()` which
+        # continues to wait for a key stroke, which will never occur,
+        # as keys strokes are only detected in the (no longer
+        # existing) window.
+        LOG.debug("starting blocking opencv event loop")
+        while cv2.getWindowProperty(self._window_name,
+                                    cv2.WND_PROP_VISIBLE) > 0:
+            keystroke = cv2.waitKey(50)  # wait 50 ms for a key stroke
+            if keystroke >= 0:
+                LOG.debug("opencv detected keystroke = %d", keystroke)
+        LOG.debug("blocking opencv event loop ended")
+
 
 
 class ImageUtils(image.ImageResizer):
@@ -165,7 +219,6 @@ class VideoReader(video.Reader):
     #
     # FIXME[question]: when is this needed?
     #
-    
 
     def prepared(self) -> bool:
         return self._capture is not None
@@ -304,19 +357,6 @@ class VideoFileWriter(video.Writer):
     def unprepare(self):
         self._output.release()
 
-    @staticmethod
-    def copy(video: video.Reader, transform=None, progress=None):
-        # Set parameters of results
-        with VideoFileWriter(fps=30.0, size=(512, 288)) as writer:
-
-            # Go through frames and add them to video
-            if progress is not None:
-                video = progress(video)
-            for frame in video:
-                if transform is not None:
-                    frame = transform(frame)
-                writer(frame)
-
 
 class Webcam(video.Webcam, VideoReader):
     """A :py:class:`WebcamBackend` realized by an OpenCV
@@ -330,7 +370,7 @@ class Webcam(video.Webcam, VideoReader):
     """
 
     _devices: Tuple = None
-    
+
     @classmethod
     def devices(cls, update: bool = False) -> List[int]:
         """Obtain a list of available devices.

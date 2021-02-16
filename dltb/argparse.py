@@ -19,15 +19,19 @@ def prepare(parser: ArgumentParser) -> None:
                         help="Issue warnings on missing software packages",
                         action='store_true', default=False)
 
-def evalute(args: Namespace) -> None:
+def evalute(parser: ArgumentParser, args: Namespace = None) -> None:
     """Evaluate command line arguments for configuring the toolbox.
 
     Parameters
     ----------
+    parser: ArgumentParser
+        The argument parser (used for error proecessing).
     args: Namespace
         An `Namespace` from parsing the command line
         arguments with `parser.parse_args()`.
     """
+    if args is None:
+        args = parser.parse_args()
 
     if args.warn_missing_dependencies:
         config.warn_missing_dependencies = True

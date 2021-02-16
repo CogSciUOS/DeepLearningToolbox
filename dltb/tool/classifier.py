@@ -7,7 +7,7 @@
 #   class labels, even if not applied to ImageNet data
 
 # standard imports
-from typing import Union, Tuple, Iterable, Any
+from typing import Union, Tuple, Iterable, Iterator, Any
 from abc import abstractmethod, ABC
 import logging
 
@@ -87,33 +87,44 @@ class ClassScheme(metaclass=RegisterClass):
         """
         return ClassIdentifier(self.get_label(index, lookup=lookup), self)
 
-    def get_label(self, index: Any, name: str = 'default',
+    def get_label(self, index: Any, name: str = None,
                   lookup: str = None) -> Any:
-        """Look up a label from this :py:class:`ClassScheme`.
+        """Look up a label for a given index for this
+        :py:class:`ClassScheme`.
+
+        Attributes
+        ----------
+        index:
+            A single class index or a collection of indices (list or tuple).
+            The
+        name:
+            The name of the label format. If `None`, the default
+            format (the integer value) is returned.
+        
         """
-        # FIXME[hack]:
+        # FIXME[todo]:
         # 1) allow for more iterables than just lists
         #    (e.g., tuples, ndarrays)
         # 2) do it more efficently
         if isinstance(index, list):
             if lookup is not None:
                 index = [self._lookup[lookup][i] for i in index]
-            if name == 'default':
+            if name is None:
                 return index
             return [self._labels[name][i] for i in index]
 
         if isinstance(index, tuple):
             if lookup is not None:
                 index = tuple(self._lookup[lookup][i] for i in index)
-            if name == 'default':
+            if name is None:
                 return index
             return tuple(self._labels[name][i] for i in index)
 
         if lookup is not None:
             index = self._lookup[lookup][index]
-        return index if name == 'default' else self._labels[name][index]
+        return index if name is None else self._labels[name][index]
 
-    def has_label(self, name: str = 'default') -> bool:
+    def has_label(self, name: str) -> bool:
         """Check if this :py:class:`ClassScheme` supports the given
         labeling format.
 
@@ -122,9 +133,9 @@ class ClassScheme(metaclass=RegisterClass):
         name: str
             The name of the labeling format.
         """
-        return name == 'default' or name in self._labels
+        return (name is None) or (name in self._labels)
 
-    def add_labels(self, values: Iterable, name: str = 'default',
+    def add_labels(self, values: Iterable, name: str,
                    lookup: bool = False) -> None:
         """Add a label set to this :py:class:`ClassScheme`.
 
@@ -159,11 +170,17 @@ class ClassScheme(metaclass=RegisterClass):
                 self._lookup[name] = \
                     {val: idx for idx, val in enumerate(values)}
 
+    def labels(self) -> Iterator[str]:
+        """Enumerate the label names that are currently registered with
+        this :py:class:`ClassScheme`.
+        """
+        return self._labels.keys()
+
 
 ClassScheme.register_instance('ImageNet', 'datasource.imagenet',
-                         'ImagenetScheme')
+                              'ImagenetScheme')
 ClassScheme.register_instance('WiderFace', 'datasource.widerface',
-                         'WiderfaceScheme')
+                              'WiderfaceScheme')
 
 
 class ClassIdentifier(int):
@@ -204,7 +221,7 @@ class ClassIdentifier(int):
             self._scheme = scheme
         return self
 
-    def label(self, name: str = None) -> Any:
+    def __getitem__(self, name: str = None) -> Any:
         """Get the label for this class number.
 
         Arguments
@@ -215,9 +232,34 @@ class ClassIdentifier(int):
         Raises
         ------
         KeyError:
-            The given name is not a valid labeling for the ClassScheme.
+            The given name is not a valid labeling for the
+            :py:class:`ClassScheme`.
         """
         return self._scheme.get_label(self, name)
+
+    def label(self, name: str = None) -> Any:
+        # FIXME[old]: should be replaced by the shorter __getitem__()
+        """Get the label for this class number.
+
+        Arguments
+        ---------
+        name: str
+            The name of the labeling format.
+
+        Raises
+        ------
+        KeyError:
+            The given name is not a valid labeling for the
+            :py:class:`ClassScheme`.
+        """
+        return self[name]
+
+    @property
+    def scheme(self) -> ClassScheme:
+        """The :py:class:`ClassScheme` in which this
+        :py:class:`ClassIdentifier` identifies a class.
+        """
+        return self._scheme
 
     def has_label(self, name: str = None) -> bool:
         """Check if the :py:class:`ClassIdentifier` has a
@@ -456,7 +498,7 @@ class SoftClassifier(Classifier):
             indicates less confidence.
         """
         # FIXME[todo]: batch = np.arange(len(scores))
-        score = scores[label.label(self._lookup)]
+        score = scores[label[self._lookup]]
         rank = (scores > score).sum()
 
         return rank, score

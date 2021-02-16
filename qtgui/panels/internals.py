@@ -6,8 +6,7 @@ Github: https://github.com/krumnack
 """
 
 import sys
-from util.resources import (Resource, ModuleResource,
-                            Controller as ResourceController)
+from util.resources import (Resource, ModuleResource)
 from ..utils import QObserver, QAttribute
 
 from PyQt5 import QtCore
@@ -39,9 +38,9 @@ class ModuleInfo(QGroupBox, QObserver, qobservables={
     state of this resource changes (e.g. if the module is imported),
     the information will be updated.
     """
-    _resource: ResourceController = None
+    _resource: Resource = None
 
-    def __init__(self, resource: ResourceController = None, **kwargs) -> None:
+    def __init__(self, resource: Resource = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._initGui()
         self.setResource(resource)
@@ -50,7 +49,7 @@ class ModuleInfo(QGroupBox, QObserver, qobservables={
         self.setResource(None)
         super().__del__()
 
-    def setResource(self, resource: ResourceController) -> None:
+    def setResource(self, resource: Resource) -> None:
         interests = Resource.Change('status_changed')
         self._exchangeView('_resource', resource, interests=interests)
 
@@ -191,16 +190,17 @@ class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
 
         self.setLayout(self._layout)
 
-    @QtCore.pyqtSlot()
+    #@QtCore.pyqtSlot()
     @protect
-    def _onInfo(self):
+    def _onInfo(self, checked: bool = False):
         sender = self.sender()
-        resource = ResourceController(Resource[sender.ID])
+        print(sender, type(sender), sender.text())
+        resource = Resource[sender.ID]
         self.showInfo(ModuleInfo(resource=resource))
 
-    @QtCore.pyqtSlot()
+    #@QtCore.pyqtSlot()
     @protect
-    def _onUpdateModules(self):
+    def _onUpdateModules(self, checked: bool = False) -> None:
         self._updateModules()
 
     def showInfo(self, info: QWidget):

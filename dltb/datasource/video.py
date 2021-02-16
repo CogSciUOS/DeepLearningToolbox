@@ -4,10 +4,13 @@
 # standard imports
 import logging
 
+# thirdparty imports
+import numpy as np
+
 # toolbox imports
 from dltb.base.video import Reader
 from dltb.base.data import Data
-from .datasource import Indexed, Imagesource, Livesource
+from .datasource import Imagesource, Imagesourcelike, Indexed, Livesource
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -180,3 +183,34 @@ class Video(Indexed, Imagesource, Livesource):
         if not self.prepared:
             raise RuntimeError("Applying len() to unprepare Video object.")
         return len(self._backend)
+
+
+class Thumbcinema(Reader):
+    """A video :py:class:`Reader` that uses an `Imagesource` to produce
+    a sequence of frames.
+
+    >>> reader = Thumbcinema(Datasource['imagenet'])
+    # FIXME[todo]
+    >>> reader = Thumbcinema('imagenet')
+    """
+
+    def __init__(self, source: Imagesourcelike) -> None:
+        self._source = Imagesource.as_imagesource(source)
+
+    def __enter__(self) -> Reader:
+        self._source.prepare()
+        self._iterator = iter(self._source)
+        self._count = 0
+        return super().__enter__()
+
+    def __next__(self) -> np.ndarray:
+        """Implementation of the :py:class:`Iterator` interface.
+        """
+        if self._count > 600 and self._count < 800:
+            print(self._count)
+        self._count += 1
+        image = next(self._iterator)
+        import sys
+        if image.index > 600 and image.index < 800:
+            print(image.index, image.array.shape, image.filename, file=sys.stderr)
+        return image.array

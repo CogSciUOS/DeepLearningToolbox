@@ -647,7 +647,7 @@ class Observable(object):
 
 
 class Changeable(Observable):
-    # observers can register to a specific set of chhanges (strings)
+    # observers can register to a specific set of changes (strings)
     #
     pass  # FIXME[todo]: spell out the Changeable concept
     # there may be closed (fixed set, e.g. specific actions) and open

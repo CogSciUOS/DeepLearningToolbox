@@ -40,7 +40,7 @@ def main():
     NetworkArgparse.prepare(parser)
     args = parser.parse_args()
 
-    network = NetworkArgparse.network(args)
+    network = NetworkArgparse.network(parser, args)
     if network is None:
         print("No network was specified.")
         return

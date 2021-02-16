@@ -47,7 +47,7 @@ def main():
     DatasourceArgparse.prepare(parser)
     args = parser.parse_args()
 
-    datasource = DatasourceArgparse.datasource(args)
+    datasource = DatasourceArgparse.datasource(parser, args)
     if datasource is None:
         logging.error("No datasource was specified.")
         return

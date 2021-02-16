@@ -6,14 +6,23 @@ on the command line.
 """
 
 # standard imports
-from typing import Iterator
+from typing import Iterator, Union
 from argparse import ArgumentParser, Namespace
 
 # toolbox imports
 from . import Network
 
+def int_or_str(argument: str) -> Union[int, str]:
+    """Return the argument either as integer (if it can be converted
+    to int) or as string.
+    """
+    try:
+        return int(argument)
+    except ValueError:
+        return argument
 
-def prepare(parser: ArgumentParser) -> None:
+
+def prepare(parser: ArgumentParser, layers: bool = False) -> None:
     """Add arguments to an :py:class:`ArgumentParser`, that
     allow to specify a network on the command line.
 
@@ -22,20 +31,28 @@ def prepare(parser: ArgumentParser) -> None:
     parser: ArgumentParser
         The argument parser to which arguments are to be added.
     """
-    parser.add_argument('--alexnet', help="Use AlexNet (Tensorflow)",
-                        action='store_true', default=False)
-    parser.add_argument('--resnet', help="Use ResNet (Torch)",
-                        action='store_true', default=False)
-    parser.add_argument('--network', help='Name of a network to use')
-    parser.add_argument('--model', help='Filename of model to use',
-                        default='models/example_keras_mnist_model.h5')
-    parser.add_argument('--framework', help="The framework to use "
-                        "(torch/keras/tensorflow)")
-    parser.add_argument('--list-networks', help='List known networks',
-                        action='store_true', default=False)
+    group = parser.add_argument_group('Network')
+
+    network_group = group.add_mutually_exclusive_group()
+    network_group.add_argument('--alexnet', help="Use AlexNet (Tensorflow)",
+                               action='store_true', default=False)
+    network_group.add_argument('--resnet', help="Use ResNet (Torch)",
+                               action='store_true', default=False)
+    network_group.add_argument('--network', help='Name of a network to use')
+    network_group.add_argument('--model', help='Filename of model to use',
+                               default='models/example_keras_mnist_model.h5')
+    network_group.add_argument('--framework', help="The framework to use "
+                               "(torch/keras/tensorflow)")
+    network_group.add_argument('--list-networks', help='List known networks',
+                               action='store_true', default=False)
+
+    if layers:
+        group.add_argument('--layer', metavar='LAYER', type=int_or_str,
+                           nargs='+', help='Specify specific layer(s)')
 
 
-def network(args: Namespace) -> Network:
+def network(parser: ArgumentParser, args: Namespace = None,
+            layers: bool = False) -> Network:
     """Evaluate command line arguments to create a
     :py:class:`Network`. If multiple networks are specified only one
     will be returned. If multiple networks are expected, use
@@ -43,25 +60,47 @@ def network(args: Namespace) -> Network:
 
     Parameters
     ----------
+    parser: ArgumentParser
+        The argument parser (used for error proecessing).
     args: Namespace
         An `Namespace` from parsing the command line
         arguments with `parser.parse_args()`.
+    layers:
+        If not False, the function will return as a second value a
+        list of layers. The argument value will be used as a default
+        value, if no layers are specified on the command line. The
+        value `True` means all layers of the network, the value
+        [] means no layers.
 
     Result
     ------
     network: Network
         The network obtained from the command line arguments. If no
         network was specified, `None` is returned.
+    layers: List[Layer]
+        A list of layers. This value is only present if the `layers`
+        argument is not `False`.
     """
+    if args is None:
+        args = parser.parse_args()
 
     try:
         # get the first network specified on the command line
         network = next(networks(args))
         network.prepare()
     except StopIteration:
-        network = None
+        parser.error("No network was specified.")
 
-    return network
+    if layers is False:
+        return network
+
+    try:
+        layers = list(network.layers(args.layer or
+                                     (None if layers is True else layers)))
+    except KeyError as error:
+        parser.error(f"Invalid layer: {error.args[0]}")
+
+    return network, layers
 
 
 def networks(args: Namespace) -> Iterator[Network]:

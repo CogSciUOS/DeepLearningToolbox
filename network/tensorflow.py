@@ -23,7 +23,7 @@ from .layers.tensorflow_layers import TensorFlowConv2D as Conv2D
 from .layers.tensorflow_layers import TensorFlowMaxPooling2D as MaxPooling2D
 from .layers.tensorflow_layers import TensorFlowDropout as Dropout
 from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
-from dltb.base.image import Image, Imagelike
+from dltb.base.image import Image, Imagelike, Colorspace
 from dltb.util.image import imresize
 from dltb.util.array import DATA_FORMAT_CHANNELS_LAST
 
@@ -815,6 +815,33 @@ class Alexnet(Classifier, ImageNetwork, Network):
         LOG.debug("alexnet: prepare")
         self._online()
 
+    def _prepare_image(self, imagelike: Imagelike) -> np.ndarray:
+        # get a numpy.ndarray
+        image = Image.as_array(imagelike, dtype=np.float32,
+                               colorspace=Colorspace.RGB)
+
+        # FIXME: probably we should do center crop here ...
+        image = imresize(image, (227, 227))
+        # print("Alexnet._prepare_image:", image.dtype, image.shape)
+
+        # dividing by 256 brings accuracy down to almost 0%.
+        # image = image/256.
+
+        # centering slightly improves accuracy
+        # FIXME[todo]: we need real means ...
+        image = image - image.mean()
+
+        # standardization reduces accuracy to below 3%.
+        # image = image / image.std()
+
+        # Caffe Uses BGR Order
+        # RGB to BGR: this really boosts performance; from 33% to 55%
+        image = image[:, :, ::-1]
+        #tmp = image[:, :, 2].copy()
+        #image[:, :, 2] = image[:, :, 0]
+        #image[:, :, 0] = tmp
+        return image
+
     def image_to_internal(self, image: Imagelike) -> np.ndarray:
         """
         """
@@ -826,21 +853,11 @@ class Alexnet(Classifier, ImageNetwork, Network):
         if isinstance(image, Data) and image.is_batch:
             result = np.ndarray((len(image), 227, 227, 3))
             for index, img in enumerate(image.array):
-                img = Image.as_array(img) # return a numpy.ndarray
-                img = img[:, :, :3].astype(np.float32)  # /256.
-                img = imresize(img, (227, 227))
-                img = img - img.mean()
-                img[:, :, 0], img[:, :, 2] = img[:, :, 2], img[:, :, 0]
-                result[index] = img
-            print("New batch:", result.shape)
+                result[index] = self._prepare_image(img)
+            print("Alexnet.image_to_internal: new batch:", result.shape)
             return result
 
-        image = Image.as_array(image) # return a numpy.ndarray
-        image = image[:, :, :3].astype(np.float32)  # /256.
-        image = imresize(image, (227, 227))
-        image = image - image.mean()
-        # color: BGR -> RGB
-        image[:, :, 0], image[:, :, 2] = image[:, :, 2], image[:, :, 0]
+        image = self._prepare_image(image)
         return image[np.newaxis]
 
     def internal_to_image(self, internal: tf.Tensor) -> np.ndarray:

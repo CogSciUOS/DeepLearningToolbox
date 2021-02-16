@@ -96,8 +96,8 @@ class QClassesView(QWidget, QObserver, qobservables={
         if info.network_changed:
             if isinstance(worker.tool.network, Classifier):
                 scheme = worker.tool.network.class_scheme
-                self._output_format = ('text' if scheme.has_label('text') else
-                                       'default')
+                self._output_format = \
+                    ('text' if scheme.has_label('text') else None)
                 if worker.tool.network.prepared:
                     worker.add_layer(worker.network.score_layer)
 

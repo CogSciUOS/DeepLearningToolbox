@@ -4,6 +4,7 @@
 
 # standard imports
 from typing import Tuple
+from threading import Thread
 import logging
 
 # third party imports
@@ -70,7 +71,7 @@ class ImageTool(Tool):
         self._resize_policy = resize_policy
 
     @property
-    def input_size(self) -> Tuple[int,int]:
+    def input_size(self) -> Tuple[int, int]:
         """Get the input size on which this ImageTool operates.
         """
         return self._min_size

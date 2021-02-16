@@ -21,7 +21,6 @@ from util.error import protect, handle_exception
 
 # logging
 LOG = logging.getLogger(__name__)
-LOG.setLevel(logging.DEBUG)
 
 
 def qtName(name: str, lower: bool = True) -> str:
@@ -911,12 +910,13 @@ class QBusyWidget(QLabel, QObserver, qobservables={
     """
     _label: QLabel = None
     _movie: QMovie = None
-    _busy = None
+    _busy: bool = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Animated gifs can be obtained from
         # http://www.ajaxload.info/#preview
+        self._busy = None
         self._movie = QMovie(os.path.join('assets', 'busy.gif'))
         self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
 
@@ -926,8 +926,19 @@ class QBusyWidget(QLabel, QObserver, qobservables={
         """
         LOG.debug("QBusyWidget[%s].busy_changed(%s): %s",
                   busyBody, change, busyBody.busy)
-        self._movie.setPaused(not busyBody.busy)
-        if busyBody.busy:
+        self.setBusy(busyBody.busy)
+
+    def busy(self) -> bool:
+        return self._busy
+
+    def setBusy(self, busy: bool) -> None:
+        if busy is not self._busy:
+            self._busy = busy
+            self.update()
+
+    def update(self) -> None:
+        self._movie.setPaused(not self._busy)
+        if self._busy:
             # Setting the text clears any previous content (like
             # text, picture, etc.)
             self.setMovie(self._movie)
@@ -935,6 +946,7 @@ class QBusyWidget(QLabel, QObserver, qobservables={
             # Setting the text clears any previous content (like
             # picture, movie, etc.)
             self.setText("Not busy")
+        super().update()
 
     def __del__(self):
         """Free resources used by this :py:class:`QBusyWidget`.

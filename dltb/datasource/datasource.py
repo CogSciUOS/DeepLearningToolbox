@@ -84,7 +84,7 @@ Worker classes
 """
 
 # standard imports
-from typing import Tuple, Iterator, Any, Dict, Callable, AbstractSet
+from typing import Union, Tuple, Iterator, Any, Dict, Callable, AbstractSet
 from abc import abstractmethod, ABC
 import time
 import random
@@ -374,12 +374,22 @@ class Datasource(Preparable, FailableObservable, # ABC,
             raise ValueError("No data loader was specified for Datasource "
                              f"{self} to load file '{filename}'.")
         try:
-            return imread(filename)
+            return self._loader(filename)
         except ValueError:
             # FIXME[bug]: error reporting (on console) does not work
             print(f"{type(self)}: Error reading image file '{filename}'")
             LOG.error("Error reading image file '%s'", filename)
             raise
+
+
+# Imagelike is intended to be everything that can be used as
+# an image.
+#
+# Imagesourcelike:
+#    An already initialized Imagesource object
+# str:
+#    The key of an registered Imagesource.
+Imagesourcelike = Union['Imagesource', str]
 
 
 class Imagesource(Datasource):
@@ -396,12 +406,24 @@ class Imagesource(Datasource):
     _data_class: type = Image
 
     #
-    _loaders: Dict[str, Callable[[str], Any]] = {'array': imread}
-    _loader: Callable[[str], Any] = imread
+    _loaders: Dict[str, Callable[[str], Any]] = {'array': staticmethod(imread)}
+    _loader: Callable[[str], Any] = staticmethod(imread)
     _loader_kind: str = 'array'
 
     # FIXME[todo]:
     _size: Tuple[int, int] = None
+
+    @classmethod
+    def as_imagesource(cls, source: Imagesourcelike) -> 'Imagesource':
+        """Get an :py:class:`Imagesource` from an
+        :py:class:`Imagesourcelike` object.
+        """
+        if isinstance(source, cls):  # cls is supposed to be Imagesource
+            return source
+        if isinstance(source, str):
+            return Datasource[source]
+        raise TypeError("Imagesourcelike object has unexpected type: "
+                        f"{type(source)}")
 
     def __init__(self, shape: Tuple = None, **kwargs) -> None:
         super().__init__(**kwargs)

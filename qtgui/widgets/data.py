@@ -265,7 +265,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         value = getattr(data, attribute)
         if isinstance(value, ClassIdentifier):
             if value.has_label('text'):
-                value = f"{value.label('text')} ({value})"
+                value = f"{value['text']} ({value})"
         elif isinstance(value, Region):
             points = (len(value.location)
                       if isinstance(value.location, PointsBasedLocation)

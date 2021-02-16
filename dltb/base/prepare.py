@@ -72,7 +72,7 @@ class Preparable(BusyObservable, method='preparable_changed',
     :py:meth:`_prepared`.
 
     """
-    
+
     def __del__(self) -> None:
         """Before deleting an object make sure it is unprepared.
         Unpreparing frees all resources that may be aquired by
@@ -202,4 +202,3 @@ class Preparable(BusyObservable, method='preparable_changed',
         this method (combining their state `with super._preparable()`).
         """
         return True
-

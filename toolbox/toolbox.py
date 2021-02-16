@@ -732,6 +732,9 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         parser.add_argument('--activations',
                             help='Open the activations panel',
                             action='store_true', default=False)
+        parser.add_argument('--gan',
+                            help='Open the generative adversarial network '
+                            'panel', action='store_true', default=False)
         parser.add_argument('--adversarial',
                             help='Open the adversarial examples panel',
                             action='store_true', default=False)
@@ -1030,6 +1033,9 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
         if self.option('adversarial') or self.option('advexample'):
             panels.append('advexample')
+
+        if self.option('gan'):
+            panels.append('gan')
 
         if self.option('styletransfer'):
             panels.append('styletransfer')

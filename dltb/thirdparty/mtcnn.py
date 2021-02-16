@@ -2,21 +2,19 @@
 """
 
 # standard imports
-from typing import Callable
 import logging
 
 # third party imports
 import numpy as np
-import tensorflow as tf
 import mtcnn
 
 # toolbox imports
 from util.image import BoundingBox
-from dltb.base import Preparable
 from ..base.meta import Metadata
 from ..tool.face.detector import Detector as FaceDetector
 from ..tool.face.landmarks import (Detector as LandmarkDetector,
                                    FacialLandmarks)
+from .tensorflow.keras import KerasTensorflowModel
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -35,94 +33,6 @@ class FacialLandmarksMTCNN(FacialLandmarks):
             for i, name in enumerate(self.keypoint_names):
                 points[i] = keypoints[name]
         super().__init__(points, **kwargs)
-
-
-class KerasTensorflowModel(Preparable):
-    """A base class for Keras/TensorFlow models. An instance of this class
-    represents a dedicated TensorFlow environment consisting of a
-    TensorFlow Graph and a TensorFlow Session. The method
-    :py:meth:`keras_run` can be used to run a python function in that
-    context.
-
-    There are two motivation for establishing a specific session:
-
-    (1) We have to make sure that a TensorFlow model is always used
-    with the same tensorflow graph and the same tensorflow session
-    in which it was initialized.  Hence we create these beforehand
-    (during :py:meth:`prepare`) and store them for later use
-    (in model initialization and prediction).
-
-    (2) The aggressive default GPU memory allocation policy of
-    TensorFlow: per default, TensorFlow simply grabs (almost) all
-    of the available GPU memory. This can cause problems when
-    other Tools would also require some GPU memory.
-
-    Private Attributes
-    ------------------
-    _tf_graph: tf.Graph
-    _tf_session: tf.Session
-
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self._tf_graph = None
-        self._tf_session = None
-
-    def _prepare(self):
-        """Initialize the Keras sesssion in which the MTCNN detector is
-        executed.
-
-
-        This method should be called before the first Keras Model is
-        created, that is before the MTCNN detector is initialized.
-
-        """
-        super()._prepare()
-
-        # The TensorFlow GPU memory allocation policy can be
-        # controlled by session parameters. There exist different
-        # options, for example:
-        #   gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
-        #   config = tf.ConfigProto(gpu_options=gpu_options)
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-
-        self._tf_graph = tf.Graph()
-        with self._tf_graph.as_default():
-            self._tf_session = tf.Session(config=config)
-
-        # One may try to set this session as Keras' backend session,
-        # but this may be problematic if there is more than one Keras
-        # model, each using its own Session. Hence it seems more
-        # reliable to explicityl set default graph and default session,
-        # as it is done by the method `keras_run()`.
-        # backend.set_session(self._tf_session)
-
-    def _unprepare(self) -> None:
-        if self._tf_graph is not None:
-            with self._tf_graph.as_default():
-                if tf._session is not None:
-                    self._tf_session.close()
-                tf.reset_default_graph()
-        self._tf_graph = None
-        self._tf_session = None
-        super()._unprepare()
-
-    def _prepared(self) -> bool:
-        return ((self._tf_graph and self._tf_session) is not None
-                and super()._prepared())
-
-    def keras_run(self, function: Callable, *args, **kwargs):
-        """Run a python function in the context of the TensorFlow graph and
-        session represented by this :py:class:`KerasTensorflowModel`.
-
-        """
-        with self._tf_graph.as_default():
-            with self._tf_session.as_default():
-                result = function(*args, **kwargs)
-
-        return result
 
 
 class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
@@ -187,13 +97,13 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
         # seems to be below 1G. Communicate this to the _prepare() method of
         # the KerasTensorflowModel.
         super()._prepare(**kwargs)
-        self.keras_run(self._prepare_detector)
+        self.run_tensorflow(self._prepare_detector)
 
     def _prepare_detector(self):
         """Prepare the MTCNN detector.
         This function should be invoked from a suitable Keras context
         (with controlled TensorFlow Graph and Session), that is
-        usually it will be called via :py:meth:`keras_run`.
+        usually it will be called via :py:meth:`run_tensorflow`.
         """
         # Initialize the MTCNN detector
         detector = mtcnn.MTCNN()
@@ -238,7 +148,7 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
         # (1) Run the MTCNN detector
         #
         LOG.info("MTCNN: detecting facess ...")
-        faces = self.keras_run(self._detector.detect_faces, image)
+        faces = self.run_keras(self._detector.detect_faces, image)
         LOG.info("MTCNN: ... found %d faces.", len(faces))
 
         #

@@ -774,6 +774,12 @@ class RegisterClass(ABCMeta):
 
         return entry.obj
 
+    def keys(cls) -> Iterator[str]:
+        """Iterate keys of all registered instances.
+        """
+        for key in cls.instance_register.keys():
+            yield key
+
     #
     # Debugging
     #

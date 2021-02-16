@@ -132,7 +132,9 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         else:
             self._data = data
 
-    @busy("working")  # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
+    @busy("working")
+    # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
+    # (that is we are busy, but nevertheless accepting more work)
     def _work(self, stepwise: bool = False, **kwargs):
         """The implementation of the work loop. This method
         is assumed to run in a background thread. It will

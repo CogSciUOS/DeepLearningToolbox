@@ -15,7 +15,7 @@ from dltb.base.image import ImageDisplay
 
 with ImageDisplay() as display:
     for frame in Reader('test.mp4'):
-        display.show(frame)
+        display.show(frame, blocking=None)
 ```
 The `frame` is 
 
@@ -50,3 +50,22 @@ A: mainly to reduce dependencies. The idea is that `dltb.base.video`
 (with the relevant implementations from `dltb.thirdparty`) should
 be useable independent of the other parts of the Deep Learning Toolbox.
 
+
+
+
+## Demos
+
+
+### Speed measurement
+
+
+
+### Watching imagesources
+
+```python
+from dltb.util.video import show
+from dltb.datasource import Thumbcinema
+import datasource.predefined
+
+show(Thumbcinema('imagenet-val'))
+```

@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import QToolTip
 # toolbox imports
 from dltb.base.data import Data
 from dltb.base.meta import Metadata
-from dltb.base.image import Image, Imagelike, ImageGenerator
+from dltb.base.image import Image, Imagelike, ImageObservable
 from dltb.tool.image import ImageTool
 from dltb.util.image import imresize, imwrite
 from toolbox import Toolbox
@@ -39,7 +39,7 @@ LOG = logging.getLogger(__name__)
 
 class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         Toolbox: {'input_changed'},
-        ImageGenerator: {'image_changed'}}):
+        ImageObservable: {'image_changed'}}):
     """An experimental class to display images using the ``QImage``
     class.  This may be more efficient than using matplotlib for
     displaying images.
@@ -319,7 +319,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self.setImage(None if data is None else getattr(data, attribute))
 
     def setImagelike(self, image: Imagelike) -> None:
-        array = Image.as_array(image)
+        array = Image.as_array(image, dtype=np.uint8)
         self.setImage(array)
 
     def getImage(self) -> np.ndarray:
@@ -619,6 +619,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         """Process key events. The :py:class:`QImageView` supports
         the following keys:
 
+        space: toggle tool tips
         r: toggle the keepAspectRatio flag
         """
         key = event.key()
@@ -773,11 +774,9 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     #
 
     @protect
-    def image_changed(self, tool: ImageGenerator,
-                      change: ImageGenerator.Change) -> None:
-        # FIXME[old]: what is this supposed to do?
-        # self.setImage(tool.image)
-        pass
+    def image_changed(self, observable: ImageObservable,
+                      change: ImageObservable.Change) -> None:
+        self.setImage(observable.image)
 
     #
     # Toolbox.Observer

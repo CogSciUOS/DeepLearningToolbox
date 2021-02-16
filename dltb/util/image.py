@@ -8,6 +8,7 @@ from typing import Union, Tuple
 import numpy as np
 
 # toolbox imports
+from ..base.image import Imagelike
 from ..base.image import ImageReader, ImageWriter, ImageDisplay, ImageResizer
 
 _reader: ImageReader = None
@@ -25,23 +26,50 @@ def imread(filename: str, **kwargs) -> np.ndarray:
     return _reader.read(filename, **kwargs)
 
 
-def imwrite(filename: str, image: np.ndarray, **kwargs) -> None:
+def imwrite(filename: str, image: Imagelike, **kwargs) -> None:
     """Write an image to given file.
     """
     global _writer
     if _writer is None:
         _writer = (_reader if isinstance(_reader, ImageWriter) else
                    ImageWriter())
-    _writer.write(filename, image, **kwargs)
+    _writer.write(image, filename, **kwargs)
 
 
-def imshow(image: np.ndarray, **kwargs) -> None:
+def imshow(image: Imagelike, module: str = None, **kwargs) -> None:
     """Show the given image.
+
+    FIXME[todo]:
+    Showing an image can be done in different ways:
+    - blocking=True: the execution of the main program is blocked.
+      The display will run an event loop to guarantee a responsive
+      GUI behaviour. Blocking may stop on different occassions
+        - when the display window is closed
+          (either by GUI or programmatically)
+        - after some timeout (the display window may then either close
+          or switch into non-blocking mode, or stay open and unresponsive.
+          the last should only be used, if a new image will be shown by
+          the caller immediately after she regained control)
+    - blocking=False: the execution of the main program is continued.
+      The image display may start some background thread to ensure
+      a responsive GUI behaviour
+
+    - unblock: the unblock option specifies what should happen, when
+      a blocking display ends its block:
+      'close': close the display window
+      'show': continue showing the image in non-blocking mode.
+      'freeze': continue showing the image but without event loop,
+          leaving a frozen (unresponsive) image display window.
+          The caller is responsible for dealing with this window
+          (either closing it or showing some new image).
     """
-    global _display
-    if _display is None:
-        _display = ImageDisplay(module='qt')  # FIXME[hack]
-    _display.show(image, **kwargs)
+    display = get_display(module=module)
+
+    if image is not None:
+        display.show(image, **kwargs)
+    else:
+        display.close()
+    return display
 
 
 def imresize(image: np.ndarray, size: Tuple[int, int],
@@ -124,3 +152,24 @@ def imimport(img: Union[np.ndarray, str], dtype=np.uint8,
         if none == 'random':
             img = np.random.randint(0, 256, size, dtype=np.uint8)
     raise TypeError(f"Cannot import image of type {type(img)}")
+
+
+def get_display(module: str = None) -> ImageDisplay:
+    # obtain a display:
+    # - if a module is given, use that module
+    # - otherwise use the default display
+    # FIXME[hack]
+    global _display
+
+    if module is not None:
+        display = ImageDisplay(module=module)
+        if _display is None:
+            _display = display
+    elif _display is not None:
+        display = _display
+    else:
+        module = 'qt'  # FIXME[hack]:
+        display = ImageDisplay(module=module)
+    if _display is None:
+        _display = display
+    return display

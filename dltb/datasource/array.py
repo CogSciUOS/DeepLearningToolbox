@@ -14,7 +14,8 @@
 import numpy as np
 
 # toolbox imports
-from dltb.base.data import Data
+from ..base.data import Data
+from ..tool.classifier import ClassScheme, ClassIdentifier
 from .datasource import Labeled, Indexed
 
 
@@ -139,6 +140,37 @@ class LabeledArray(DataArray, Labeled):
             raise ValueError("Wrong number of target values: "
                              f"expect={len(self)}, got={len(labels)}")
         self._labels = labels
+
+    def _set_labels(self, labels: np.ndarray,
+                    scheme: ClassScheme = None) -> None:
+        """Set the labels for this :py:class:`LabeledArray`. The labels
+        will be stored as numpy array, allowing for some of the
+        convenient numpy indexing techniques.
+
+        Arguments
+        ---------
+        labels:
+            The labels for this :py:class:`LabeledArray`. Depending
+            on the type of datasource, this could be (numeric) class
+            indices, but could also be other kind of labels, like
+            list of bounding boxes. The crucial point is that there
+            should be one label for each data point in the datasource,
+            and the order of labels has to correspond to the order
+            of datapoints.
+        scheme:
+            If not `None`, `labels` are considered as class labels,
+            that is identifiers of classes in that :py:class:`ClassScheme`.
+            Such labels will be stored as an numpy array of
+            :py:class:`ClassIdentifier`.
+        """
+        if scheme is None:
+            self._labels = labels
+        else:
+            self._scheme = scheme
+            self._labels = np.empty(len(self._lfw_people.target), dtype=object)
+            for index, label in enumerate(labels):
+                self._labels[index] = \
+                    ClassIdentifier(label, scheme=scheme)
 
     def _get_meta(self, data: Data, **kwargs) -> None:
         """Get data from this :py:class:`Datasource`\\ .

@@ -1,6 +1,17 @@
 """ImageNet (ILSVRC2012) related data structures.
 
 """
+# FIXME[bug]: when reading the 'imagenet-val' dataset, there seems to be
+# one faulty image:
+#  import imageio
+#  imageio.__version__
+#  im = imageio.imread('/space/data/ImageNet/val/ILSVRC2012_val_00034187.JPEG')
+#   => PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0.
+# However, there is no warning when using PIL directly:
+#   from PIL import Image
+#   im = Image.open('/space/data/ImageNet/val/ILSVRC2012_val_00034187.JPEG')
+#
+
 
 # standard imports
 import os

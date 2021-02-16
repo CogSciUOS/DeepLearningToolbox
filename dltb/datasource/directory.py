@@ -103,7 +103,7 @@ class DataDirectory(DataFiles):
                 directories.add(os.path.dirname(name))
             self._scheme = ClassScheme(len(directories))
             self._scheme.add_labels(directories,
-                                    self._label_from_directory or 'default',
+                                    self._label_from_directory or 'text',
                                     lookup=True)
 
     def _unprepare(self) -> None:

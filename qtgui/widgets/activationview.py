@@ -175,6 +175,28 @@ class QActivationView(QWidget, QObserver, qobservables={
         self.setToolTip(False)
         self.setActivationWorker(worker)
 
+    def setActivations(self, activations: np.ndarray) -> None:
+        """Set the activations to be displayed in this
+        :py:class:`QActivationView`.
+        """
+        if activations is not None:
+            if activations.dtype != np.float32:
+                raise ValueError('Activations must be floats.')
+            if activations.ndim not in {1, 3}:
+                raise ValueError(f'Unexpected shape {activations.shape}')
+
+        if activations is not None:
+            self._isConvolution = (activations.ndim == 3)
+
+            # this is a uint8 array, globally normalized
+            activations = util.image.grayscaleNormalized(activations)
+            # a contiguous array is important for display with Qt
+            activations = np.ascontiguousarray(activations)
+
+        self._activations = activations
+        self._updateGeometry()
+
+
     def layer(self) -> Layer:
         """The layer for which activations are currently displayed in this
         :py:class:`QActivationView`. None if no :py:class:`Layer` is
@@ -236,8 +258,8 @@ class QActivationView(QWidget, QObserver, qobservables={
         if unit == self._unit:
             return  # nothing changed
 
-        if self._layer is None:
-            raise ValueError("Cannot set a unit without a Layer.")
+        # if self._layer is None:
+        #     raise ValueError("Cannot set a unit without a Layer.")
 
         # FIXME[todo]: Layer does not implement __len__
         if unit is not None and not 0 <= unit:  # < len(self._layer):
@@ -282,8 +304,8 @@ class QActivationView(QWidget, QObserver, qobservables={
         if position == self._position:
             return  # nothing changed
 
-        if self._layer is None:
-            raise ValueError("Cannot set a position without a Layer.")
+        # if self._layer is None:
+        #     raise ValueError("Cannot set a position without a Layer.")
 
         # FIXME[todo]: provide information on layer geometry
         #
@@ -372,23 +394,7 @@ class QActivationView(QWidget, QObserver, qobservables={
                 activations = None
             LOG.debug("QActivationView.worker_changed: type=%s",
                       type(activations))
-
-            if activations is not None:
-                if activations.dtype != np.float32:
-                    raise ValueError('Activations must be floats.')
-                if activations.ndim not in {1, 3}:
-                    raise ValueError(f'Unexpected shape {activations.shape}')
-
-            if activations is not None:
-                self._isConvolution = (activations.ndim == 3)
-
-                # this is a uint8 array, globally normalized
-                activations = util.image.grayscaleNormalized(activations)
-                # a contiguous array is important for display with Qt
-                activations = np.ascontiguousarray(activations)
-
-            self._activations = activations
-            self._updateGeometry()
+            self.setActivations(actviations)
 
         LOG.debug("QActivationView.worker_changed: units=%s/%s, "
                   "isConvolution=%s, currentPosition=%s, size/display=%s/%s",

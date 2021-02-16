@@ -29,7 +29,7 @@ def prepare(parser: ArgumentParser) -> None:
                         action='store_true', default=False)
 
 
-def datasource(args: Namespace) -> Datasource:
+def datasource(parser: ArgumentParser, args: Namespace) -> Datasource:
     """Evaluate command line arguments to create a
     :py:class:`Datasource`. If multiple datasources are specified only one
     will be returned. If multiple datasources are expected, use
@@ -37,6 +37,8 @@ def datasource(args: Namespace) -> Datasource:
 
     Parameters
     ----------
+    parser: ArgumentParser
+        The argument parser (used for error handling).
     args: Namespace
         An `Namespace` from parsing the command line
         arguments with `parser.parse_args()`.
@@ -47,6 +49,8 @@ def datasource(args: Namespace) -> Datasource:
         The datasource obtained from the command line arguments. If no
         datasource was specified, `None` is returned.
     """
+    if args is None:
+        args = parser.parse_args()
 
     try:
         # get the first datasource specified on the command line

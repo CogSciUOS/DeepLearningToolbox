@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Tuple, Any, Union, List, Iterator
+from typing import Tuple, Any, Union, List, Iterator, Iterable, Container
 from collections import OrderedDict
 import functools
 import operator
@@ -21,6 +21,7 @@ from ..tool import Tool
 from ..tool.image import ImageTool
 from ..tool.classifier import SoftClassifier
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
+from ..util.terminal import Terminal, DEFAULT_TERMINAL
 from base import Identifiable, Extendable
 
 # logging
@@ -347,6 +348,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
                   getattr(internal, 'shape', '?'), self._internal_format,
                   getattr(internal, 'dtype', '?'))
         activations = self._get_activations(internal, layer_ids)
+        print(f"Network.get_activations: {type(activations)}, "
+              f"[0]: {type(activations[0])} {activations[0].shape}")
 
         # Transform the output to stick to the canocial interface.
         activations = [self._transform_outputs(activation, data_format,
@@ -400,8 +403,14 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             activations = activations[0]
         return activations
 
-    def layers(self) -> Iterator['Layer']:
-        return self.layer_dict.values()
+    def layers(self, layers: Iterable = None) -> Iterator['Layer']:
+        if layers is None:
+            # return self.layer_dict.values()
+            for layer in self.layer_dict.values():
+                yield layer
+        else:
+            for layer in layers:
+                yield self[layer]
 
     def layer_names(self) -> Iterator[str]:
         return self.layer_dict.keys()
@@ -470,9 +479,9 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         """
         internalized = False
 
-        if len(self.input_shape) == data.ndim:
+        if len(self.input_shape) == inputs.ndim:
             batched = False
-        elif len(self.input_shape) == data.ndim + 1:
+        elif len(self.input_shape) == inputs.ndim + 1:
             batched = True
         else:
             ValueError("Number of data dimension ({data.ndim}) does "
@@ -1049,11 +1058,19 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # Information
     #
 
-    def summary(self) -> None:
-        print(f"Network[{type(self)}] with {len(self)} layers:")
+    def summary(self, terminal: Terminal = DEFAULT_TERMINAL,
+                layers: Container = []) -> None:
+        """Output a summary of this :py:class:`Network`.
+        """
+        terminal.output(f"Network[{type(self).__name__}] "
+                        f"with {len(self)} layers:")
+        layers = list(self.layers(layers=layers))
         for index, layer in enumerate(self):
-            print(f"({index:3}) {layer.get_id():20}: "
-                  f"{layer.input_shape} -> {layer.output_shape}")
+            line = (f"{layer.get_id():20}: "
+                    f"{layer.input_shape} -> {layer.output_shape}")
+            if layer in layers:
+                line = terminal.markup(line, 'emphasize')
+            terminal.output(f"({index:3}) {line}")
 
 
 class ImageNetwork(ImageExtension, ImageTool, base=Network):
@@ -1066,7 +1083,7 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
 
     # FIXME[hack]: this changes the semantics of the function:
     # the base class expects inputs: np.ndarray, while we expect an Imagelike.
-    # We should improve the interface (either a new method or a somethign
+    # We should improve the interface (either a new method or a something
     # more flexible)
     def get_activations(self, inputs: Imagelike,
                         layer_ids: Any = None,
@@ -1077,6 +1094,7 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
                   inputs.shape, DATA_FORMAT_CHANNELS_LAST, layer_ids)
         internal = self.image_to_internal(inputs)
         is_list = isinstance(layer_ids, list)
+        batched = isinstance(inputs, Data) and inputs.is_batch
 
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
@@ -1086,18 +1104,22 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
                   internal.shape, self._internal_format)
         activations = self._get_activations(internal, layer_ids)
         LOG.debug("ImageNetwork.getActivations: internal activations=%s (%s)",
-                  activations[0].shape, self._internal_format)
+                  len(activations), self._internal_format)
 
         # Transform the output to stick to the canocial interface.
         activations = [self._transform_outputs(activation, data_format,
-                                               unbatch=True, internal=False)
+                                               unbatch=not batched,
+                                               internal=False)
                        for activation in activations]
         LOG.debug("ImageNetwork.getActivations: output activations=%s (%s/%s)",
-                  activations[0].shape, data_format, self.data_format)
+                  #activations[0].shape, data_format, self.data_format)
+                  len(activations), data_format, self.data_format)
+
         # If it was just asked for the activations of a single layer,
         # return just an array.
         if not is_list:
             activations = activations[0]
+
         return activations
 
     #
@@ -1171,8 +1193,8 @@ class Classifier(SoftClassifier, Network):
         # However, we do not allow this yet!
         # print(f"network.Classifier.class_scores: inputs={type(inputs)}")
         inputs = np.asarray(inputs)
-        scores = self.get_activations(inputs, self.score_layer)
-        return scores
+        scores = self._get_activations(inputs, [self.score_layer])
+        return scores[0]
 
 
 class Autoencoder(Network, method='network_changed'):
@@ -1250,5 +1272,3 @@ def remove_batch_dimension(shape: tuple) -> tuple:
     shape[0] = None
     shape = tuple(shape)
     return shape
-
-

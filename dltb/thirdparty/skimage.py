@@ -14,9 +14,14 @@ from ..base import image
 LOG = logging.getLogger(__name__)
 
 
-class ImageUtils(image.ImageResizer):
+class ImageUtil(image.ImageResizer):
 
     def resize(self, image: np.ndarray, size=(640, 360)) -> np.ndarray:
         """Resize the frame to a smaller resolution to save computation cost.
         """
-        return resize(image, size)
+        # note: skimage.transform.resize takes on output_shape, not a size!
+        # in the output_shape the number of channels is optional.
+        output_shape = size[::-1]
+        result = resize(image, output_shape, preserve_range=True)
+        result = result.astype(image.dtype)
+        return result

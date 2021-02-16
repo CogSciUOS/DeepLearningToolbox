@@ -323,62 +323,18 @@ class Resource(BusyObservable, method='resource_changed',
         """
         pass
 
-from base import View as BaseView, Controller as BaseController, run
-
-class View(BaseView, view_type=Resource):
-    """View on :py:class:`Resource`.
-
-    Attributes
-    ----------
-    _resource: Resource
-        The resource viewed by this View.
-
-    """
-
-    def __init__(self, resource: Resource=None, **kwargs):
-        super().__init__(observable=resource, **kwargs)
 
 
-class Controller(View, BaseController):
-    """Controller for :py:class:`Resource`.
-    This class allows to control a :py:class:`Resource` in a
-    multi-threaded environment.
-
-    """
-    
-    def __init__(self, resource: Resource, **kwargs) -> None:
-        """
-        Parameters
-        ----------
-        resource: Resource
-        """
-        super().__init__(resource=resource, **kwargs)
-        self._next_image = None
-
-    @run
-    def install(self, **kwargs):
-        """Install :py:class:`Resource` controlled by this
-        :py:class:`Controller` resource. After successful
-        installation, the :py:class:`Resource` should be
-        available (but not necessary prepared).
-        """
-        self._resource.install(**kwargs)
-
-    @run
-    def prepare(self, **kwargs):
-        """Prepare :py:class:`Resource` controlled by this
-        :py:class:`Controller` resource. After preparation,
-        the :py:class:`Resource` should be ready for use.
-        """
-        self._resource.prepare(**kwargs)
 
 
 class DummyResource(Resource):
     pass
 
+
 import sys
 import importlib
-    
+
+
 class ModuleResource(Resource):
     """
     """
@@ -387,8 +343,8 @@ class ModuleResource(Resource):
     _pip: str = None
     _prefix: str = None
 
-    def __init__(self, *args, module: str=None, prefix: str=None,
-                 conda: str=None, conda_channel: str='', **kwargs) -> None:
+    def __init__(self, *args, module: str = None, prefix: str = None,
+                 conda: str = None, conda_channel: str='', **kwargs) -> None:
         """Initialize a new :py:class:`ModuleResource`.
 
         Arguments
@@ -553,5 +509,5 @@ ModuleResource(id='dlib',
                'for creating complex software to solve real world problems.')
 ModuleResource(id='ikkuna',
                description='A tool for monitoring neural network training.')
-
-
+ModuleResource(id='sklearn',
+               description='Machine Learning in Python.')

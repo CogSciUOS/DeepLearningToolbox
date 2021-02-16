@@ -30,8 +30,8 @@ class ImageIO(image.ImageReader, image.ImageWriter):
     def read(self, filename: str, **kwargs) -> np.ndarray:
         return imageio.imread(filename)
 
-    def write(self, image: np.ndarray, filename: str, **kwargs) -> None:
-        imageio.imwrite(filename)
+    def write(self, image: image.Imagelike, filename: str, **kwargs) -> None:
+        imageio.imwrite(filename, image.Image.as_array(image))
 
 
 class VideoReader(video.FileReader):
@@ -177,11 +177,13 @@ class Webcam(video.Webcam):
         A video reader object
     """
 
-    def __init__(self, device: int = 0):
+    def __init__(self, device: int = None):
         """Constructor for this :py:class:`WebcamBackend`.
         The underlying :py:class:`imageio.Reader` object will be
         created.
         """
+        if device is None:
+            device = 0
         super().__init__(device)
         self._reader = imageio.get_reader(f'<video{device}>')
         if not self._reader:
@@ -206,11 +208,15 @@ class Webcam(video.Webcam):
     def _get_frame(self) -> np.ndarray:
         """Get the next frame from the ImageIO Video Reader.
         """
-        frame, meta = self._reader.get_next_data()
+        # frame, meta = self._reader.get_next_data()
+        frame = self._reader.get_next_data()
         if frame is None:
             raise RuntimeError("Reading a frame from "
                                "ImageIO Video Reader failed!")
         return frame
+
+    def __next__(self) -> np.ndarray:
+        return self._get_frame()
 
 
 class VideoWriter(video.FileWriter):

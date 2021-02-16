@@ -11,6 +11,7 @@ import numpy as np
 # toolbox imports
 from network import Network, Classifier, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
+from ..datasource import Datasource, Datafetcher
 from ..base.data import Data
 from ..util.array import DATA_FORMAT_CHANNELS_FIRST
 from . import Tool, Worker
@@ -139,6 +140,9 @@ class ActivationTool(Tool, Network.Observer):
     def _preprocess(self, inputs: np.ndarray, layer_ids: List[Layer] = None,
                     **kwargs) -> Data:
         # pylint: disable=arguments-differ
+        # FIXME[todo]: inputs should probably be Datalike
+        """Preprocess the arguments and construct a Data object.
+        """
         data = super()._preprocess(**kwargs)
         array = inputs.array if isinstance(inputs, Data) else inputs
         data.add_attribute('inputs', array)
@@ -155,9 +159,10 @@ class ActivationTool(Tool, Network.Observer):
                  layers: List[Layer]) -> List[np.ndarray]:
         # pylint: disable=arguments-differ
 
-        LOG.info("ActivationTool: computing activations for data <%s>, "
-                 "layers=%s, activation format=%s",
-                 inputs.shape, layers, self.data_format)
+        print(f"ActivationTool._process({type(inputs)}, {type(layers)})")
+        # LOG.info("ActivationTool: computing activations for data <%s>, "
+        #          "layers=%s, activation format=%s",
+        #          inputs.shape, layers, self.data_format)
 
         if self._network is None:
             return None
@@ -214,6 +219,22 @@ class ActivationTool(Tool, Network.Observer):
 class ActivationWorker(Worker):
     """A :py:class:`Worker` specialized to work with the
     :py:class:`ActivationTool`.
+
+
+    layers:
+        The layers for which activations shall be computed.
+
+    data: (inherited from Worker)
+        The current input data
+    activations: dict
+        The activations for the current data
+
+    top_indices: Mapping[Layer, np.ndarray]
+        A dictionary mapping layers to an array holding the indices
+        of data points for the top activations.
+    top_activations : Mapping[Layer, np.ndarray]
+        A dictionary mapping layers to an array holding the top activation
+        values.
     """
 
     def __init__(self, **kwargs) -> None:
@@ -221,6 +242,32 @@ class ActivationWorker(Worker):
         self._layer_ids = []
         self._fixed_layers = []
         self._classification = False
+
+        self.activations = None
+        self.top_indices = {}
+        self.top_activations = {}
+
+    #
+    # Tool core functions
+    #
+
+    def _apply_tool(self, data: Data, **kwargs) -> None:
+        """Apply the :py:class:`ActivationTool` on the given data.
+        """
+        self.tool.apply(self, data, layers=self._layer_ids, **kwargs)
+
+    def activations(self, layer: Layer = None, unit: int = None,
+                    data_format: str = None) -> np.ndarray:
+        """Get the precomputed activation values for the current
+        :py:class:`Data`.
+        """
+        activations = \
+            self._tool.data_activations(self._data, layer=layer, unit=unit,
+                                        data_format=data_format)
+        LOG.debug("ActivationWorker.activations(%s,unit=%s,data_format=%s):"
+                  " %s", layer, unit, data_format,
+                  len(activations) if layer is None else activations.shape)
+        return activations
 
     def _ready(self) -> bool:
         # FIXME[hack]
@@ -254,11 +301,16 @@ class ActivationWorker(Worker):
         self.set_layers(layers)
         self.change(network_changed=True)
 
+    #
+    # Layer configuration
+    #
+        
     def set_layers(self, layers: List[Layer]) -> None:
         """Set the layers for which activations shall be computed.
 
         """
-        self._fixed_layers = layers if instance(layers, list) else list(layers)
+        self._fixed_layers = \
+            layers if isinstance(layers, list) else list(layers)
         self._update_layers()
 
     def add_layer(self, layer: Union[str, Layer]) -> None:
@@ -301,20 +353,116 @@ class ActivationWorker(Worker):
         if got_new_layers:
             self.work(self._data)
 
-    def _apply_tool(self, data: Data, **kwargs) -> None:
-        """Apply the :py:class:`ActivationTool` on the given data.
-        """
-        self.tool.apply(self, data, layers=self._layer_ids, **kwargs)
+    #
+    # work on Datasource
+    #
 
-    def activations(self, layer: Layer = None, unit: int = None,
-                    data_format: str = None) -> np.ndarray:
-        """Get the precomputed activation values for the current
-        :py:class:`Data`.
+    def extract_activations(self, datasource: Datasource,
+                            batch_size: int = 128) -> None:
+        samples = len(datasource)
+        # Here we could:
+        #  np.memmap(filename, dtype='float32', mode='w+',
+        #            shape=(samples,) + network[layer].output_shape[1:])
+        results = {
+            layer: np.ndarray((samples,) +
+                              self.tool.network[layer].output_shape[1:])
+            for layer in self._layer_ids
+        }
+
+        fetcher = Datafetcher(datasource, batch_size=batch_size)
+
+        try:
+            index = 0
+            for batch in fetcher:
+                print(f"dl-activation: processing batch of length {len(batch)} "
+                      f"with elements given as {type(batch.array)}, "
+                      f"first element having index {batch[0].index} "
+                      f"and shape {batch[0].array.shape} [{batch[0].array.dtype}]")
+                import time
+                batch_start = time.time()
+                # FIXME[bug]:
+                # Worker.work(data)
+                #  -> Worker._work()
+                #  -> Tool.apply(data)
+                #  -> __call__(data)
+                #       -> self._do_preprocess
+                #  -> _process()
+                #  -> Network.get_activations()
+                self.work(batch, busy_async=False)
+                print("Work finished")
+                activations = self.activations()
+                batch_end = time.time()
+                batch_duration = batch_end - batch_start
+                # print(type(activations), len(activations))
+                print("dl-activation: "
+                      f"activations are of type {type(activations)}, "
+                      f"first element is {type(activations[0])} "
+                      f"with shape {activations[0].shape} "
+                      f"[{activations[0].dtype}]")
+                for index, values in enumerate(activations):
+                    print(f"dl-activation:  [{index}]: {values.shape}")
+                    results[layers[index]][index:index+len(batch)] = values
+                print("dl-activation: "
+                      f"batch finished in {batch_duration*1000:.0f} ms.")
+        except KeyboardInterrupt:
+            # print(f"error procesing {data.filename} {data.shape}")
+            print("Keyboard interrupt")
+            # self.output_status(top, end='\n')
+        except InterruptedError:
+            print("Interrupted.")
+        finally:
+            print("dl-activation: finished processing")
+            # signal.signal(signal.SIGINT, original_sigint_handler)
+            # signal.signal(signal.SIGQUIT, original_sigquit_handler)
+        
+    #
+    # top activations
+    #
+
+    def merge_top_activations(self, top: int = None):
+        """Merge the current activations with the top-n highscore of the
+        all-time activations. This highscore consists of two arrays,
+        the first (top_indices) holding the indices of the top scores
+        and the seconde (top_activations) the corresponding activation
+        values.
+
         """
-        activations = \
-            self._tool.data_activations(self._data, layer=layer, unit=unit,
-                                        data_format=data_format)
-        LOG.debug("ActivationWorker.activations(%s,unit=%s,data_format=%s):"
-                  " %s", layer, unit, data_format, 
-                  len(activations) if layer is None else activations.shape)
-        return activations
+        for layer in self.layers:
+            self._merge_layer_top_activations(layer, top)
+
+    def _merge_layer_top_activations(self, layer: Layer, top: int = None):
+        # channel last (batch, height, width, channel)
+        new_activations = \
+            self.activations[layer].reshape(-1, self.actviations.shape[-1])
+
+        batch_len = len(new_activations)
+        data_len = batch_len // self.actviations.shape[0]
+        start_index = self.index_batch_start * data_len
+
+        # activations has shape (batch, classes)
+        batch = np.arange(batch_len)
+        if top is None:
+            top_indices = np.argmax(new_activations, axis=-1)
+        else:
+            # Remark: here we could use np.argsort(-class_scores)[:n]
+            # but that may be slow for a large number classes,
+            # as it does a full sort. The numpy.partition provides a faster,
+            # though somewhat more complicated method.
+            top_indices_unsorted = \
+                np.argpartition(-new_activations, top)[batch, :top]
+            order = \
+                np.argsort((-new_activations)[batch, top_indices_unsorted.T].T)
+            new_top_indices = top_indices_unsorted[batch, order.T].T
+
+        if not start_index:
+            self.top_indices[layer] = new_top_indices
+            self.top_activations[layer] = new_activations[top_indices]
+        else:
+            merged_indices = np.append(self.top_indices[layer],
+                                       new_top_indices + start_index)
+            merged_activations = np.append(self.top_activations[layer],
+                                           new_activations[top_indices])
+
+            sort = np.argsort(merged_activations)
+            self.top_indices[layer] = merged_indices[:sort]
+            self.top_activations[layer] = merged_activations[:sort]

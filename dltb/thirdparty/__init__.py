@@ -3,7 +3,7 @@
 .. module:: dltb.thirdparty
 
 This package provides utility functions for checking dealing with
-third party libraries, ranging from an interface to check availability
+third-party libraries, ranging from an interface to check availability
 and version matching, over package and data installation to abstract
 interfaces that allow to access common functionionality (like images,
 sound, video) using different libraries.
@@ -23,6 +23,19 @@ from ..config import config
 LOG = logging.getLogger(__name__)
 
 
+_DLTB = 'dltb'
+
+_BASE_CLASSES = {
+    'ImageReader': _DLTB + '.base.image.ImageReader',
+    'ImageWriter': _DLTB + '.base.image.ImageWriter',
+    'ImageResizer': _DLTB + '.base.image.ImageResizer',
+    'VideoReader': _DLTB + '.base.video.VideoReader',
+    'VideoWriter': _DLTB + '.base.video.VideoWriter',
+    'Webcam': _DLTB + '.base.video.Webcam',
+    'FaceDetector': _DLTB + '.tool.face.FaceDetector',
+    'ImageGAN': _DLTB + '.tool.gan.ImageGAN',
+}
+
 _MODULES = {
     'imageio': {
         'modules': ['imageio', 'imageio_ffmpeg', 'numpy'],
@@ -39,7 +52,7 @@ _MODULES = {
         'classes': {
             'ImageReader': 'ImageIO',
             'ImageWriter': 'ImageIO',
-            'ImageDisplay': 'ImageIO',
+            'ImageDisplay': 'ImageDisplay',
             'ImageResizer': 'ImageUtils',
             'VideoReader': 'VideoFileReader',
             'Webcam': 'Webcam'
@@ -60,13 +73,18 @@ _MODULES = {
         'classes': {
             'ImageReader': 'ImageIO',
             'ImageWriter': 'ImageIO',
-            'ImageDisplay': 'ImageIO'
+            'ImageDisplay': 'Display'
         }
     },
     'skimage': {
         'modules': ['skimage'],
         'classes': {
             'ImageResizer': 'ImageUtil'
+        }
+    },
+    'sklearn': {
+        'modules': ['sklearn'],
+        'classes': {
         }
     },
     'qt': {
@@ -86,12 +104,24 @@ _MODULES = {
         'classes': {
             'FaceDetector': 'DetectorCNN'
         }
+    },
+    'nvlabs': {
+        'modules': ['tensorflow'],  # 'dnnlib'
+        'classes': {
+            'ImageGAN': ['StyleGAN', 'StyleGAN2']
+        }
+    },
+    'nnabla': {
+        'modules': ['nnabla'],  # 'nnabla_ext.cuda'
+        'classes': {
+            'ImageGAN': 'StyleGAN2'
+        }
     }
 }
 
 
 def modules() -> Iterator[str]:
-    """An iterator for names of known thirdparty modules.
+    """An iterator for names of known third-party modules.
     """
     return _MODULES.keys()
 
@@ -130,11 +160,11 @@ def module_provides_class(module: str, name: str) -> bool:
     Arguments
     ---------
     module: str
-        Name of the third party module (as used in this toolbox, e.g.
+        Name of the third-party module (as used in this toolbox, e.g.
         `opencv` for the OpenCV module).
     name: str
         The name of the abstract Deep Learning Toolbox class that
-        should be implemented by the third party module.
+        should be implemented by the third-party module.
     """
     if module not in _MODULES:
         raise KeyError(f"Unknown module name: {module}")
@@ -144,32 +174,80 @@ def module_provides_class(module: str, name: str) -> bool:
     return name in description['classes']
 
 
-def modules_with_class(name: str) -> Iterator[str]:
-    """Iterate names of all third party modules that provide
+def modules_with_class(cls: Union[type, str]) -> Iterator[str]:
+    """Iterate names of all third-party modules that provide
     an implementation of a given class.
 
     Arguments
     ---------
-    name: str
-        Name of a Deep Learning ToolBox class.
+    cls:
+        Deep Learning ToolBox class or nome of such a class.
     """
+    name = cls if isinstance(cls, str) else cls.__name__
     for module in _MODULES:
         if module_provides_class(module, name):
             yield module
 
 
+def implementations(base: Union[str, type],
+                    check_available: bool = False) -> Iterator[str]:
+    """Iterate all implementations of a given deep learning toolbox
+    base class.
+
+    Arguments
+    ---------
+    base:
+        The abstract base class, either its name or the type object.
+    check_available:
+        If `True`, only provide available implementations according
+        to :py:func:`available`. If `False`, no availability check is
+        perfomed, meaning that implementations may be available or
+        unavailable.
+    """
+    def result(module, implementation):
+        return __name__ + '.' + module + '.' + implementation
+
+    base_name = base if isinstance(base, str) else base.__name__
+
+    for module, description in _MODULES.items():
+        if check_available and not available(module):
+            continue
+        try:
+            classes = description['classes']
+            implementations = classes[base_name]
+            if isinstance(implementations, str):
+                yield result(module, implementations)
+                continue
+            for implementation in implementations:
+                yield result(module, implementation)
+        except KeyError:
+            continue
+
+
 def available(module: str) -> bool:
-    """Check if a third party module is available.
+    """Check if a third-party module is available. Availability in
+    this context means, that all resources required for importing
+    that module (usually some third-party packages) are available.
 
     Arguments
     ---------
     module: str
-        The name of the thirdparty module
+        The name of the thirdparty module, either absolute (with
+        the `'dltb.thirdparty'` prefix) or relative to `dltb.thirdparty`.
+
+    Result
+    ------
+    available:
+        If a third-party module judged to be available, importing that
+         module should not raise an exception.
     """
+    if module.startswith(__name__):
+        module = module[len(__name__) + 1:]
+
     # Check if we know that module
     if module not in _MODULES:
         return False
-        # raise ValueError(f"Unsupported third party module '{module}'. "
+        # raise ValueError(f"Unsupported third-party module '{module}'. "
         #                  f"Valid values are: " +
         #                  ', '.join(f"'{name}'" for name in _MODULES))
     found = True
@@ -178,7 +256,7 @@ def available(module: str) -> bool:
     if __name__ + '.' + module in sys.modules:
         return True  # module already loaded
 
-    # Check if required third party modules are installed
+    # Check if required third-party modules are installed
     description = _MODULES[module]
     if 'modules' in description:
         for name in description['modules']:
@@ -189,21 +267,34 @@ def available(module: str) -> bool:
 
 
 def import_class(name: str, module: Union[str, List[str]] = None) -> type:
-    """Import a class.
+    """Import a class from a third-party module.  The class is specified
+    as one of the abstract base classes of the deep learning toolbox,
+    listed in the array `_BASE_CLASSES`.
 
     Arguments
     ---------
     name: str
-        The name of the class to import.
+        The name of the base class to import, or a fully qualified
+        class name (including fully qualified module name).
 
     module:
         A single module or a list of modules. If no value is provided,
         all modules providing this class will be considered.
     """
 
+    # FIXME[hack]: integrate with the rest of the function
+    if name not in _BASE_CLASSES and '.' in name:
+        module_full_name, class_name = name.rsplit('.', maxsplit=1)
+        module = importlib.import_module(module_full_name)
+        if not hasattr(module, class_name):
+            raise AttributeError(f"Third-party module '{module.__name__}' "
+                                 f"has no attribute '{class_name}'.")
+        return getattr(module, class_name)
+
+    # here starts the original implementation
     if isinstance(module, str):
         if not available(module):
-            raise ImportError(f"Requested third party module '{module}' "
+            raise ImportError(f"Requested third-party module '{module}' "
                               "is not available")
         module_name = module
     else:
@@ -217,7 +308,7 @@ def import_class(name: str, module: Union[str, List[str]] = None) -> type:
             if available(candidate) and module is None:
                 module_name = candidate
         if module_name is None:
-            raise ImportError(f"No third party module providing '{name}' "
+            raise ImportError(f"No third-party module providing '{name}' "
                               f"is available. Checked: {module_list}")
 
     # check if module was already imported:
@@ -226,50 +317,52 @@ def import_class(name: str, module: Union[str, List[str]] = None) -> type:
         module = sys.modules[module_full_name]
     else:
         if not available(module_name):
-            raise ImportError(f"Third party module '{module_name}' "
+            raise ImportError(f"Third-party module '{module_name}' "
                               "is not available.")
         module = importlib.import_module(module_full_name)
 
     # get class from module
     class_name = _MODULES[module_name]['classes'][name]
+    if not isinstance(class_name, str):
+        class_name = class_name[0]
     if not hasattr(module, class_name):
-        raise AttributeError(f"Third party module '{module.__name__}' "
+        raise AttributeError(f"Third-party module '{module.__name__}' "
                              f"has no attribute '{class_name}'.")
     return getattr(module, class_name)
 
 
 def _check_module_config(module: str, attribute: str) -> None:
-    """Check if the configuration for a third party module contains
+    """Check if the configuration for a third-party module contains
     the given attribute.
 
     Raises
     ------
     ValueError:
-        If the name is not a valid third party module, or if that
+        If the name is not a valid third-party module, or if that
         module does not have the given attribute in its configuration.
     """
     if module not in _MODULES:
-        raise ValueError(f"Unsupported third party module '{module}'. "
+        raise ValueError(f"Unsupported third-party module '{module}'. "
                          f"Valid values are: " +
                          ', '.join(f"'{name}'" for name in _MODULES))
     description = _MODULES[module]
     if 'config' not in description:
-        raise ValueError(f"Third party module '{module}' "
+        raise ValueError(f"Third-party module '{module}' "
                          "can not be configured.")
 
     module_config = description['config']
     if attribute not in module_config:
         raise ValueError(f"Unknown configuration attribute '{attribute}' "
-                         f"for third party module '{module}'.")
+                         f"for third-party module '{module}'.")
 
 
 def configure_module(module: str, attribute: str, value: Any) -> None:
-    """Configure a third party module.
+    """Configure a third-party module.
 
     Arguments
     ---------
     module: str
-        Name of a third party module.
+        Name of a third-party module.
     attribute: str
         Name of a configuration attribute.
     value: Any
@@ -280,12 +373,12 @@ def configure_module(module: str, attribute: str, value: Any) -> None:
 
 
 def module_configuration(module: str, attribute: str) -> Any:
-    """Get a configuration value for a third party module.
+    """Get a configuration value for a third-party module.
 
     Arguments
     ---------
     module: str
-        Name of the third party module
+        Name of the third-party module
     attribute: str
         Configuration attribute.
     """
@@ -300,7 +393,7 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
     or tensorflow.compat.v1 as tensorflow).
 
     In order to work, an instance of this class should be put
-    into `sys.sys.meta_path` before those modules are imported.
+    into `sys.meta_path` before those modules are imported.
     """
 
     patch_keras: bool = True
@@ -309,6 +402,7 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
         'PIL': ('.pil', __name__),
         'torchvision': ('.pil', __name__),
         'torch': ('.torch', __name__),
+        'sklearn': ('.sklearn', __name__)
     }
 
     def find_spec(self, fullname, path, target=None):
@@ -345,27 +439,77 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
             args = self._post_imports.pop(fullname)
             LOG.info("Preparing post import for module '%s': %s",
                      fullname, args)
+            # use default path finder to get module loader (note that it
+            # is important that we temporarily remove the fullname from
+            # _post_imports to avoid infinite recursion)
             module_spec = importlib.util.find_spec(fullname)
+            # now add the fullname again, as find_spec may be called
+            # multiple times before the module actually gets loaded.
+            self._post_imports[fullname] = args
+
+            # Adapt the Loader of the module_spec
             module_spec.loader = \
-                ImportInterceptor.LoaderWrapper(module_spec.loader, args)
+                ImportInterceptor.LoaderWrapper(module_spec.loader, self)
             return module_spec
 
         # Proceed with the standard procedure ...
         return None
 
+    def add_post_imports(self, fullname: str, args) -> None:
+        """Add post import modules for a module.
+
+        Arguments
+        ---------
+        fullname:
+            The full name of the module for which a post import shall
+            be performed.
+        args:
+            Arguments describing the additional module to be imported.
+        """
+        self._post_imports[fullname] = args
+
+    def pop_post_imports(self, fullname: str):
+        """Remove a post import.
+
+        Argments
+        --------
+        fullname:
+            Full name of the module for which post imports are registered.
+        """
+        return self._post_imports.pop(fullname)
+
     class LoaderWrapper(importlib.abc.Loader):
-        def __init__(self, loader, args):
+        """A wrapper around a :py:class:`importlib.abc.Loader`,
+        perfoming additional imports after a module has been loaded.
+        """
+        def __init__(self, loader: importlib.abc.Loader, interceptor):
+            LOG.debug("Creating post import LoaderWrapper")
             self._loader = loader
-            self._args = args
+            self._interceptor = interceptor
 
         def create_module(self, spec):
-            self._loader.create_module(spec)
+            """A method that returns the module object to use when importing a
+            module. This method may return None, indicating that
+            default module creation semantics should take place.
+
+            """
+            LOG.debug("Performing create_module for module for spec: %s", spec)
+            return self._loader.create_module(spec)
 
         def exec_module(self, module):
+            """An abstract method that executes the module in its own namespace
+            when a module is imported or reloaded. The module should
+            already be initialized when exec_module() is called.
+
+            """
+            module_name = module.__name__
+            LOG.debug("Performing exec_module for module '%s'", module_name)
             self._loader.exec_module(module)
-            LOG.info("Performing post import for module '%s': %s",
-                     module.__name__, self._args)
-            importlib.import_module(*self._args)
+
+            args = self._interceptor.pop_post_imports(module_name)
+            LOG.debug("Performing post import for module '%s': %s",
+                      module_name, args)
+            importlib.import_module(*args)
 
 #
 # Post import hooks
@@ -410,7 +554,7 @@ else:
 #
 
 def warn_missing_dependencies():
-    """Emit warnings concerning missing dependencies, i.e. third party
+    """Emit warnings concerning missing dependencies, i.e. third-party
     modules not install on this system.
     """
     module_spec = importlib.util.find_spec('appdirs')
@@ -435,7 +579,7 @@ def warn_missing_dependencies():
 
 
 def list_modules():
-    """List the state of registered third party modules.
+    """List the state of registered third-party modules.
     """
     LOG.warning("Status of thirdparty modules:")
     for name in modules():
@@ -445,7 +589,7 @@ def list_modules():
 def list_classes():
     """List classes that are provide by thirdparty modules.
     """
-    LOG.warning("Classes provided by third party modules:")
+    LOG.warning("Classes provided by third-party modules:")
     for name in classes():
         LOG.warning("class '%s': %s", name,
                     ", ".join(modules_with_class(name)))

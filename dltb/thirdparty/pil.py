@@ -66,3 +66,7 @@ LOG.info("Adapting dltb.base.image.Image: adding static method 'as_pil'")
 Image.as_pil = staticmethod(as_pil)
 
 Imagesource.add_loader('pil', PIL.Image.open)
+
+Image.add_converter(PIL.Image.Image,
+                    lambda image, copy: (np.array(image), copy),
+                    target='array')

@@ -9,7 +9,6 @@ import logging
 import os
 
 # third party imports
-import imageio
 import tensorflow as tf
 
 # Qt imports
@@ -17,6 +16,7 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton
 
 # toolbox imports
 import dltb
+from dltb.util.image import imread
 from models.styletransfer import StyletransferTool
 
 # GUI imports
@@ -149,8 +149,8 @@ class StyletransferPanel(Panel):
 
         tool = StyletransferTool(style_layers=style_layers,
                                  content_layers=content_layers)
-        tool.content = imageio.imread(data._content['venice'])
-        tool.style = imageio.imread(data._styles['starry_night'])
+        tool.content = imread(data._content['venice'])
+        tool.style = imread(data._styles['starry_night'])
         tool.reset()
 
         self.setStyletransfer(tool)

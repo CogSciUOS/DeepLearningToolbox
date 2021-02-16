@@ -182,6 +182,8 @@ class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
                        batch: bool = False,
                        result: Union[str, Tuple[str]] = None,
                        **kwargs) -> Data:
+        """
+        """
         if result is None and not internal:
             result = self.external_result
         elif isinstance(result, str):

@@ -44,6 +44,17 @@ Defines metadata classes for images and some auxiliary functions:
 * move auxiliary functions to `dltb.util.image`
 
 
+# Image tools
+
+
+## Displaying images
+
+### ImageObservable
+
+The `image_changed` notification will be send whenever an image has
+changed.
+
+
 
 # Image libraries for Python
 
@@ -72,22 +83,23 @@ image I/O and image manipulation (last updated April 2020):
 
 * mahotas
   - Computer Vision in Python. It includes many algorithms implemented
-  in C++ for speed while operating in numpy arrays and with a very
-  clean Python interface.
+    in C++ for speed while operating in numpy arrays and with a very
+    clean Python interface.
   - https://github.com/luispedro/mahotas
   - https://mahotas.readthedocs.io/en/latest/
   - Version 1.4.8 - October 2019
 
 * imutils: (by Adrian Rosebrock from PyImageSearch)
   - A series of convenience functions to make basic image processing
-  functions such as translation, rotation, resizing,
-  skeletonization, displaying Matplotlib images, sorting contours,
-  detecting edges, and much more easier with OpenCV
+    functions such as translation, rotation, resizing,
+    skeletonization, displaying Matplotlib images, sorting contours,
+    detecting edges, and much more easier with OpenCV
   - https://github.com/jrosebr1/imutils
   - Version 0.5.3 - August 2019
 
 * Pillow/PIL
   - Pillow is the friendly PIL fork by Alex Clark and Contributors.
   - PIL is the Python Imaging Library by Fredrik Lundh and Contributors.
+  - Pillow uses its own Image class: PIL.Image.Image
   - https://pypi.org/project/Pillow/
   - Version 7.1.0 - April 2020
