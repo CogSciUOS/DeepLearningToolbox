@@ -7,7 +7,8 @@ hardware or software, including tools, data, and models (networks).
 import logging
 
 # Qt imports
-from PyQt5.QtWidgets import QWidget, QGroupBox, QStackedWidget
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QWidget, QGroupBox, QStackedWidget, QSplitter
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QSizePolicy
 
 # toolbox imports
@@ -147,12 +148,29 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
 
     def _layoutUI(self) -> QWidget:
         layout = QVBoxLayout()
-        row = QHBoxLayout()
-        row.addWidget(self._resourceList)
-        row.addWidget(self._resourceController)
-        layout.addLayout(row)
-        layout.addWidget(self._resourceView)
-        #layout.addStretch()
+
+        #
+        # The upper 'row' contains the resource list and the
+        # resource controller
+        #
+        upper_row = QSplitter(Qt.Horizontal)
+        upper_row.addWidget(self._resourceList)
+        upper_row.addWidget(self._resourceController)
+
+        #
+        # The lower row just contains the resource view
+        #
+        lower_row = self._resourceView
+
+        #
+        # Splitter
+        #
+        splitter = QSplitter(Qt.Vertical)
+        splitter.addWidget(upper_row)
+        splitter.addWidget(lower_row)
+        layout = QHBoxLayout()
+        layout.addWidget(splitter)
+
         self.setLayout(layout)
 
     def setToolbox(self, toolbox: Toolbox) -> None:  # FIXME[old]
@@ -310,8 +328,14 @@ class QDatasourceInspector(QResourceInspector, qattributes={
 
     def _initResourceView(self) -> QWidget:
         # pylint: disable=attribute-defined-outside-init
-        """Initialize the resource view.
+        """Initialize the resource view. The Datasource view will consist
+        of two components: a :py:class:`QDatasourceNavigator` allowing
+        to navigate through the :py:class:`Datasource`, and a
+        :py:class:`QDataView` for displaying selected :py:class:`Data`.
         """
+        #
+        # Creating the components
+        #
         self._datasourceNavigator = \
             QDatasourceNavigator(datasource_selector=False, style='wide')
         self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
@@ -322,12 +346,17 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         self.addAttributePropagation(Datafetcher, self._dataView)
 
         self._datasourceView = QWidget()
-        layout = QVBoxLayout()
-        self._datasourceNavigator.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Fixed)
 
+        #
+        # Layout
+        #
+        layout = QVBoxLayout()
         layout.addWidget(self._datasourceNavigator)
         layout.addWidget(self._dataView)
+
+        self._datasourceNavigator.setSizePolicy(
+            QSizePolicy.Preferred, QSizePolicy.Fixed)
+        
         self._datasourceView.setLayout(layout)
         return self._datasourceView
 
