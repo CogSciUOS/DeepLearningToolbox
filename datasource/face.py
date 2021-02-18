@@ -1,18 +1,8 @@
 """Collection of face datasets.
 """
 
-# standard imports
-from typing import Tuple
-import os
-import errno
-from glob import glob
-
-# third party imports
-import numpy as np
 
 # toolbox imports
-from util.image import Landmarks, Region
-from dltb.base.data import Data
 from dltb.datasource import Imagesource, DataDirectory
 
 

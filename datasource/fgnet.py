@@ -10,8 +10,8 @@ import logging
 import numpy as np
 
 # toolbox imports
-from util.image import Region, Landmarks
 from dltb.base.data import Data
+from dltb.base.image import Region, Landmarks
 from dltb.datasource import Imagesource, DataDirectory
 
 # logging

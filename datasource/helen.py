@@ -11,8 +11,8 @@ from glob import glob
 import numpy as np
 
 # toolbox imports
-from util.image import Landmarks, Region
 from dltb.base.data import Data
+from dltb.base.image import Landmarks, Region
 from dltb.util import read_cache, write_cache
 from dltb.datasource import Imagesource, DataDirectory
 

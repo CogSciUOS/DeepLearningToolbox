@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 # toolbox imports
-from util.image import Region
+from .image import Region
 
 
 class Metadata:

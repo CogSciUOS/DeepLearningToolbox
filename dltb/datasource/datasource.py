@@ -101,7 +101,7 @@ from ..base.image import Image
 from ..base.register import RegisterClass
 from ..base.fail import FailableObservable
 from ..base import Preparable
-from util.image import imread
+from ..util.image import imread
 
 # logging
 LOG = logging.getLogger(__name__)

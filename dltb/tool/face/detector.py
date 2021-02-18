@@ -2,8 +2,8 @@
 """
 
 # third party imports
-import imutils
-import imutils.face_utils
+# FIXME[todo]: remove third party dependencies (there are also inline import down in the code)!
+ 
 import numpy as np
 
 # toolbox imports
@@ -76,9 +76,9 @@ class Detector(ImageDetector):
                 # compute the bounding box of the face and draw it on the
                 # image
                 if isinstance(rect, dlib.rectangle):
-                    pos_x, pos_y, width, height = \
-                        imutils.face_utils.rect_to_bb(rect)
                     # rect is of type <class 'dlib.rectangle'>
+                    pos_x, pos_y = rect.left(), rect.top()
+                    width, height = rect.right()-pos_x, rect.bottom()-pos_y
                 else:
                     pos_x, pos_y, width, height = rect
                 cv2.rectangle(canvas, (pos_x, pos_y),

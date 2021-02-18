@@ -9,8 +9,8 @@ import numpy as np
 import mtcnn
 
 # toolbox imports
-from util.image import BoundingBox
 from ..base.meta import Metadata
+from ..base.image import BoundingBox
 from ..tool.face.detector import Detector as FaceDetector
 from ..tool.face.landmarks import (Detector as LandmarkDetector,
                                    FacialLandmarks)

@@ -12,7 +12,18 @@ from ..base.image import ImageReader, ImageWriter, ImageDisplay
 class ImageIO(ImageReader, ImageWriter, ImageDisplay):
 
     def read(self, filename: str, **kwargs) -> np.ndarray:
-        return plt.imread(filename)
+        """
+        """
+        # Matplotlib accepts as filename: a filename, a URL, or a
+        # file-like object opened in read-binary mode.
+        #
+        # Note: Matplotlib seems to read images as np.float64 with
+        # a value range from 0.0 to 255.0.
+        #
+        # Note: Matplotlib can only read PNGs natively. Further image
+        # formats are supported via the optional dependency on
+        # Pillow. Note, URL strings are not compatible with Pillow.
+        return plt.imread(filename)#.astype(np.uint8)
 
     def write(self, image: Imagelike, filename: str, **kwargs) -> None:
         # vmin, vmax: scalar

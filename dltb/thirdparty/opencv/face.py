@@ -9,8 +9,8 @@ import cv2
 import numpy as np
 
 # toolbox imports
-from util.image import BoundingBox
 from ...base.meta import Metadata
+from ...base.image import BoundingBox
 from ...tool.face.detector import Detector
 
 

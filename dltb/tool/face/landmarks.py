@@ -1,19 +1,19 @@
 import numpy as np
 
-from util.image import Landmarks
 from .detector import Detector as FaceDetector
 from ..detector import ImageDetector as BaseDetector
 from ...base.busy import busy
 from ...base.meta import Metadata
+from ...base.image import Landmarks
 
 
 class FacialLandmarks(Landmarks):
 
     def eyes(self):
-        not NotImplementedError()
+        raise NotImplementedError()
 
     def mouth(self):
-        not NotImplementedError()
+        raise NotImplementedError()
 
 
 class FacialLandmarks68(FacialLandmarks):

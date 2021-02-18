@@ -6,7 +6,6 @@ import logging
 
 # third party imports
 import numpy as np
-import imutils
 
 # toolbox imports
 from ..base.data import Data
@@ -39,8 +38,10 @@ class Detector(Tool):
     #
 
     def _process(self, data, **kwargs) -> Any:
+        """Processing data with a :py:class:`Detector` means detecting.
+        """
         return self._detect(data, **kwargs)
-    
+
     # FIXME[todo]: working on batches (data.is_batch). Here arises the
     #   question what the result type should be for the functional API
     #   (A): a list/tuple or some iterator, or even another structure
@@ -82,6 +83,7 @@ class Detector(Tool):
 
         # obtain the preprocessed input data
         preprocessed_data = self.preprocess(data)
+        print("detect:", type(data), type(preprocessed_data))
 
         # do the actual processing
         detections = self._detect(preprocessed_data, **kwargs)
@@ -166,7 +168,7 @@ class ImageDetector(Detector, ImageTool):
     external_result: Tuple[str] = ('detections', )
     internal_arguments: Tuple[str] = ('_data', )
     internal_result: Tuple[str] = ('_detections', )
-    
+
     def _preprocess(self, image: Imagelike, **kwargs) -> Data:
         data = super()._preprocess(image, **kwargs)
         data.add_attribute('_data', getattr(data, 'scaled', data.image))
@@ -183,18 +185,18 @@ class ImageDetector(Detector, ImageTool):
                                        self._size[1]/size[1])
                     detections.scale(resize_ratio)
             else:
-                detections = None    
+                detections = None
             data.add_attribute('detections', detections)
 
         elif name == 'mark':
             if not hasattr(data, 'detections'):
-                self._postprocess('detections', values)
+                self._postprocess(data, 'detections')
             data.add_attribute(name, self.mark_image(data.image,
                                                      data.detections))
 
         elif name == 'extract':
             if not hasattr(data, 'detections'):
-                self._postprocess('detections', values)
+                self._postprocess(data, 'detections')
             data.add_attribute(name, self.extract_from_image(data.image,
                                                              data.detections))
 
@@ -213,18 +215,18 @@ class ImageDetector(Detector, ImageTool):
             raise ValueError("The image provided has an illegal format: "
                              f"shape={array.shape}, dtype={array.dtype}")
 
-        if self._size is not None:
+        # if self._size is not None:
             # resize_ratio = array.shape[1]/400.0
-            array = imutils.resize(array, width=400)  # FIXME[hack]
+            # array = imutils.resize(array, width=400)  # FIXME[hack]
 
         return super()._preprocess(array, **kwargs)
 
     def _adapt_detections(self, detections: Detections,
                           data: Data) -> Detections:
-        
+
         if detections is None:
             return None
-        
+
         # if we have scaled the input data, then we have to apply reverse
         # scaling to the detections.
         if self._size is not None:
@@ -233,7 +235,7 @@ class ImageDetector(Detector, ImageTool):
             detections.scale(resize_ratio)
 
         return detections
-    
+
     def _postprocess_data(self, data: Data, mark: bool = False,
                           extract: bool = False, **kwargs) -> None:
         """Apply different forms of postprocessing to the data object,
@@ -280,7 +282,7 @@ class ImageDetector(Detector, ImageTool):
     #
     # Marking detections
     #
-    
+
     def mark_image(self, image: Imagelike, detections: Detections = None,
                    copy: bool = True) -> np.ndarray:
         """Mark the given detections in an image.

@@ -3,18 +3,21 @@
 
 # standard imports
 import os
+import logging
 
 # third party imports
 import numpy as np
-import imutils.face_utils
 import dlib
 
 # toolbox imports
-from util.image import BoundingBox
 from ..base.meta import Metadata
+from ..base.image import BoundingBox
 from ..tool.face.detector import Detector as FaceDetector
 from ..tool.face.landmarks import (Detector as LandmarkDetector,
                                    FacialLandmarks68)
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 class DetectorHOG(FaceDetector):
@@ -57,10 +60,21 @@ class DetectorHOG(FaceDetector):
         Arguments
         ---------
         image:
+            An image in an appropriate format for detection with the
+            DLib HOG detector. This means, an `uint8` grayscale or
+            RGB image.
         """
         if self._detector is None:
             return None
 
+        LOG.debug("Calling dlib detector with %s of shape %s of type %s",
+                  type(image), image.shape, image.dtype)
+        # FIXME[hack]: make sure image is in correct format
+        # (should be done) by preprocessing ...
+        if image.dtype is not np.uint8:
+            image = image.astype(np.uint8)
+
+        # dlib: image must be 8bit gray or RGB image.
         rects = self._detector(image, 2)
 
         detections = Metadata(
@@ -207,7 +221,14 @@ class FacialLandmarkDetector(LandmarkDetector):
 
     @staticmethod
     def _detection_to_landmarks(detection: dlib.full_object_detection):
-        points = imutils.face_utils.shape_to_np(detection)
+        # from imutils.face_utils.shape_to_np:
+        # initialize the list of (x, y)-coordinates
+        points = np.ndarray((detection.num_parts, 2))  # dtype=dtype
+
+        # loop over all facial landmarks and convert them
+        # to a 2-tuple of (x, y)-coordinates
+        for i in range(0, detection.num_parts):
+            points[i] = (detection.part(i).x, detection.part(i).y)
 
         # Construct a Metdata object holding the detected landmarks
         return FacialLandmarks68(points)

@@ -78,7 +78,7 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
                  self._tool, tool, self)
         if tool is not self._tool:
             if self._tool is not None:
-                self.unobserve(tool)
+                self.unobserve(self._tool)
             self._tool = tool
             if tool is not None:
                 self.observe(tool, Tool.Change('tool_changed'))

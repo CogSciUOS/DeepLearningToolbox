@@ -57,10 +57,6 @@ class OpenCV:
 
 class ImageIO(image.ImageReader, image.ImageWriter):
 
-    def __del__(self) -> None:
-        cv2.destroyAllWindows()
-        super().__del__()
-
     def read(self, filename: str, **kwargs) -> np.ndarray:
         # cv2.imread(path, flag=cv2.IMREAD_COLOR)
         #
@@ -105,6 +101,10 @@ class ImageDisplay(image.ImageDisplay):
         super().__init__(**kwargs)
         self._window_name = 'Test'
         self._window = None
+
+    def __del__(self) -> None:
+        cv2.destroyAllWindows()
+        super().__del__()
 
     def _show(self, image: np.ndarray, title: str = None) -> None:
         cv2.imshow(self._window_name, cv2.cvtColor(image, cv2.COLOR_BGR2RGB))

@@ -19,8 +19,9 @@ from dltb.tool.image import ImageTool
 from dltb.network import Network
 from dltb.datasource import Datasource
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
+from dltb.util.image import grayscaleNormalized
+
 from toolbox import Toolbox
-import util.image
 
 # GUI imports
 from .panel import Panel
@@ -426,10 +427,10 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # image, if a unit is selected
         if activations is not None and activations.ndim > 1:
             # exclude dense layers
-            activationMask = util.image.grayscaleNormalized(activations)
+            activationMask = grayscaleNormalized(activations)
             self._imageView.setMask(activationMask)
-            #field = engine.receptive_field
-            #if field is not None:
+            # field = engine.receptive_field
+            # if field is not None:
             #    self.addMark(QRect(field[0][1], field[0][0],
             #                       field[1][1]-field[0][1],
             #                       field[1][0]-field[0][0]))

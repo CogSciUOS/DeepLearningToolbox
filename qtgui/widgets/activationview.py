@@ -16,10 +16,12 @@ from PyQt5.QtGui import (QPainter, QImage, QPen, QColor, QBrush,
 from PyQt5.QtWidgets import QWidget, QToolTip
 
 # toolbox imports
-import util.image
 from network import Layer
 from dltb.tool.activation import ActivationWorker
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
+from dltb.util.image import grayscaleNormalized
+
+# GUI imports
 from ..utils import QObserver, protect
 
 # logging
@@ -189,7 +191,7 @@ class QActivationView(QWidget, QObserver, qobservables={
             self._isConvolution = (activations.ndim == 3)
 
             # this is a uint8 array, globally normalized
-            activations = util.image.grayscaleNormalized(activations)
+            activations = grayscaleNormalized(activations)
             # a contiguous array is important for display with Qt
             activations = np.ascontiguousarray(activations)
 

@@ -24,9 +24,9 @@ from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 from toolbox import Toolbox
 from dltb.base.data import Data
 from dltb.base.meta import Metadata
+from dltb.base.image import Region, PointsBasedLocation
 from dltb.datasource import Datasource, Datafetcher
 from dltb.tool.classifier import ClassIdentifier
-from util.image import Region, PointsBasedLocation
 
 # GUI imports
 from ..utils import QObserver, protect

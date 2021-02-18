@@ -124,6 +124,7 @@ class QDetectorWidget(QGroupBox, QObserver,
         The face detector will inform us whenever new faces where
         detected.
         """
+        LOG.info("setFaceDetector: %s", detector)
 
         if detector is self.faceDetector():
             return  # Nothing to do
@@ -139,6 +140,7 @@ class QDetectorWidget(QGroupBox, QObserver,
         self._toolSelector.setCurrentTool(detector)
 
         if detector is not None and not detector.busy:
+            LOG.debug("setFaceDetector: preparing detector")
             detector.prepare()
 
     def worker_changed(self, worker: Worker,

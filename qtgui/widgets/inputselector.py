@@ -7,8 +7,7 @@ from PyQt5.QtWidgets import QSizePolicy
 
 # toolbox imports
 from toolbox import Toolbox
-from datasource import Datasource, Random
-from util.image import Region, PointsBasedLocation
+from datasource import Datasource
 
 # GUI imports
 from ..utils import QObserver, protect

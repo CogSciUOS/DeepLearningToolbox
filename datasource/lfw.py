@@ -2,16 +2,9 @@
 """
 
 # standard imports
-import os
 import logging
 
-# third party imports
-import numpy as np
-
 # toolbox imports
-from util.image import BoundingBox, Region, Landmarks
-from dltb.base.data import Data
-from dltb.tool.classifier import ClassScheme
 from dltb.datasource import Imagesource, DataDirectory
 
 # logging
@@ -47,7 +40,7 @@ class LabeledFacesInTheWild(DataDirectory, Imagesource):
             should contain the 5.749 subdirectories holding images
             of the known persons.
         """
-        directory = '/net/projects/data/lfw/lfw' # FIXME[hack]
+        directory = '/net/projects/data/lfw/lfw'  # FIXME[hack]
         description = "Labeled Faces in the Wild"
         super().__init__(key=key or "lfw",
                          directory=directory,

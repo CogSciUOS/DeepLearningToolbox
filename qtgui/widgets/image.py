@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Union
+from typing import Union, List, Iterable
 import logging
 
 # Generic imports
@@ -12,7 +12,7 @@ import numpy as np
 from PyQt5.QtCore import Qt, QPoint, QPointF, QSize, QRect
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
-from PyQt5.QtGui import QKeyEvent, QMouseEvent
+from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPaintEvent
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
 from PyQt5.QtWidgets import QToolTip
 
@@ -20,11 +20,10 @@ from PyQt5.QtWidgets import QToolTip
 from dltb.base.data import Data
 from dltb.base.meta import Metadata
 from dltb.base.image import Image, Imagelike, ImageObservable
+from dltb.base.image import BoundingBox, PointsBasedLocation, Region
 from dltb.tool.image import ImageTool
-from dltb.util.image import imresize, imwrite
+from dltb.util.image import imresize, imwrite, grayscaleNormalized
 from toolbox import Toolbox
-from util.image import BoundingBox, PointsBasedLocation, Region
-
 
 # GUI imports
 from ..utils import QObserver, protect
@@ -36,6 +35,40 @@ LOG = logging.getLogger(__name__)
 
 # FIXME[todo]: add docstrings!
 # FIXME[todo]: rename: QImageView is an old name ...
+
+def imageToQImage(image: Imagelike) -> QImage:
+
+    if image is None:
+        return None
+
+    image = Image.as_array(image)
+
+    # To construct an 8-bit monochrome QImage, we need a
+    # 2-dimensional, uint8 numpy array
+    if image.ndim == 4:
+        image = image[0]
+
+    img_format = QImage.Format_Grayscale8
+    bytes_per_line = image.shape[1]
+
+    if image.ndim == 3:
+        # three channels -> probably rgb
+        if image.shape[2] == 3:
+            img_format = QImage.Format_RGB888
+            bytes_per_line *= 3
+        else:
+            image = image[:, :, 0]
+
+    if image.dtype != np.uint8:
+        if image.max() < 2:
+            image = (image * 255).astype(np.uint8)
+        else:
+            image = image.astype(np.uint8)
+    image = image.copy()
+
+    return QImage(image, image.shape[1], image.shape[0],
+                  bytes_per_line, img_format)
+
 
 class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         Toolbox: {'input_changed'},
@@ -332,33 +365,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._raw = image
         self._marks = []
         self._regions = []
-        if image is not None:
-            # To construct an 8-bit monochrome QImage, we need a
-            # 2-dimensional, uint8 numpy array
-            if image.ndim == 4:
-                image = image[0]
-
-            img_format = QImage.Format_Grayscale8
-            bytes_per_line = image.shape[1]
-
-            if image.ndim == 3:
-                # three channels -> probably rgb
-                if image.shape[2] == 3:
-                    img_format = QImage.Format_RGB888
-                    bytes_per_line *= 3
-                else:
-                    image = image[:, :, 0]
-
-            if image.dtype != np.uint8:
-                image = (image * 255).astype(np.uint8)
-            image = image.copy()
-
-            self._image = QImage(image,
-                                 image.shape[1], image.shape[0],
-                                 bytes_per_line, img_format)
+        self._image = imageToQImage(image)
+        if self._image is not None:
+            pass
             # self.resize(self._image.size())
-        else:
-            self._image = None
 
         # self.updateGeometry()
         self._updateImageTool()
@@ -485,7 +495,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self.update()
 
     @protect
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent) -> None:
         """Process the paint event by repainting this Widget.
 
         Parameters
@@ -802,8 +812,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         if info.input_changed:
             self._updateImage()
 
-        return  #FIXME[old]
-        if info.activation_changed: #  or info.unit_changed: FIXME[old]
+        return  # FIXME[old]
+        if info.activation_changed:  # or info.unit_changed: FIXME[old]
             try:
                 activation = engine.get_activation()
                 unit = engine.unit
@@ -814,9 +824,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             # For convolutional layers add a activation mask on top of the
             # image, if a unit is selected
             if (activation is not None and unit is not None and
-                activation.ndim > 1):
+                    activation.ndim > 1):
                 # exclude dense layers
-                from util.image import grayscaleNormalized
                 activation_mask = grayscaleNormalized(activation[..., unit])
                 self.setMask(activation_mask)
                 field = engine.receptive_field
@@ -921,6 +930,14 @@ class QImageBatchView(QWidget):
                   index: int = 0) -> None:
         """Set the images to be displayed in this
         :py:class:`QImageBatchView`.
+
+        Arguments
+        ---------
+        images:
+            The images belonging to the batch.
+
+        index:
+            The index of the image to display.
         """
         self._images = images
         if images is not None:
@@ -937,3 +954,50 @@ class QImageBatchView(QWidget):
         """A slot to react to changes of the batch index.
         """
         self.setIndex(index)
+
+
+class QMultiImageView(QWidget):
+    """Display multiple images.
+    """
+
+    _qimages: List[QImage] = None
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._qimages = []
+        self._initLayout()
+
+    def _initLayout(self) -> None:
+        # set the size policy
+        #
+        # QSizePolicy.MinimumExpanding: The sizeHint() is minimal, and
+        # sufficient. The widget can make use of extra space, so it
+        # should get as much space as possible.
+        sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding,
+                                 QSizePolicy.MinimumExpanding)
+        # sizePolicy.setHeightForWidth(True)
+        self.setSizePolicy(sizePolicy)
+
+    def setImages(self, images: Iterable[Imagelike]) -> None:
+        self._qimages = [imageToQImage(image) for image in images]
+        self.update()
+
+    @protect
+    def paintEvent(self, event: QPaintEvent) -> None:
+        """Process the paint event by repainting this Widget.
+
+        Parameters
+        ----------
+        event:
+            The :py:class:`QPaintEvent`paint eve
+        """
+
+        painter = QPainter()
+        painter.begin(self)
+
+        ypos = 0
+        for qimage in self._qimages:
+            painter.drawImage(QPoint(0, ypos), qimage)
+            ypos += qimage.height()
+
+        painter.end()
