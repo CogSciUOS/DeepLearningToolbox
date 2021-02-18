@@ -52,8 +52,8 @@ preprocessing step, and then applying canoncial correlation analysis
 (CCA) to the reduced layers. They assess the similarity of $L_1$ and
 $L_2$ by the mean correlation coefficient:
 
-$$\operatorname{similarity}_{\text{SVCCA}}(L_1,L_2) =
-\frac{1}{c}\sum_{i=1}^{c}\rho^{(i)}$$
+\[\operatorname{similarity}_{\text{SVCCA}}(L_1,L_2) =
+\frac{1}{c}\sum_{i=1}^{c}\rho^{(i)}\]
 
 with $c$ being the number of correlated pairs obtained by CCA, and
 $\rho^{(i)}$ the correlation coefficient for the $i$-th such
@@ -90,9 +90,9 @@ initializations.
 The RV coefficient is a relatively old approach to linear mutlivariate
 statistical analysis.
 
-$$\operatorname{RV}(\mathbf{X}, \mathbf{Y})=
+\[\operatorname{RV}(\mathbf{X}, \mathbf{Y})=
   \frac{\operatorname{tr}(\mathbf{X}\mathbf{X}'\mathbf{Y}\mathbf{Y}'}
-  {\sqrt{\operatorname{tr}[(\mathbf{X}\mathbf{X}')^2]\operatorname{tr}[(\mathbf{Y}\mathbf{Y}')^2]}}$$
+  {\sqrt{\operatorname{tr}[(\mathbf{X}\mathbf{X}')^2]\operatorname{tr}[(\mathbf{Y}\mathbf{Y}')^2]}}\]
 
 * P. Robert and Y. Escoufier (1976): *A Unifying Tool for Linear
   Multivariate Statistical Methods: The RV-Coefficient*, Journal of
