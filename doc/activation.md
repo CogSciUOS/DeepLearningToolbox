@@ -50,16 +50,7 @@ Raghu et al. (2017) determine the similarity between two layers by
 first pruning the layers with a singular value decomposition
 preprocessing step, and then applying canoncial correlation analysis
 (CCA) to the reduced layers. They assess the similarity of $L_1$ and
-$L_2$ by the mean correlation coefficient:
-
-\[\operatorname{similarity}_{\text{SVCCA}}(L_1,L_2) =
-\frac{1}{c}\sum_{i=1}^{c}\rho^{(i)}\]
-
-with $c$ being the number of correlated pairs obtained by CCA, and
-$\rho^{(i)}$ the correlation coefficient for the $i$-th such
-pair. This similarity measure can have a maximal value of $1$ (if all
-pairs perfectly correlate), and a minimum value of $0$ (if there is no
-correlation at all).
+$L_2$ by the mean correlation coefficient.
 
 * Maithra Raghu, Justin Gilmer, Jason Yosinski, and Jascha
   Sohl-Dickstein (2017): *SVCCA: Singular Vector Canonical Correlation
@@ -81,7 +72,7 @@ between representations in networks trained from different
 initializations.
 
 * Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey Hinton (2019):
-  [*Similarity of Neural Network Representations Revisited*}(http://proceedings.mlr.press/v97/kornblith19a.html), in:
+  [*Similarity of Neural Network Representations Revisited*](http://proceedings.mlr.press/v97/kornblith19a.html), in:
   Proceedings of the 36th International Conference on Machine Learning (ICML),
   3519-3529.
 
@@ -89,10 +80,6 @@ initializations.
 
 The RV coefficient is a relatively old approach to linear mutlivariate
 statistical analysis.
-
-\[\operatorname{RV}(\mathbf{X}, \mathbf{Y})=
-  \frac{\operatorname{tr}(\mathbf{X}\mathbf{X}'\mathbf{Y}\mathbf{Y}'}
-  {\sqrt{\operatorname{tr}[(\mathbf{X}\mathbf{X}')^2]\operatorname{tr}[(\mathbf{Y}\mathbf{Y}')^2]}}\]
 
 * P. Robert and Y. Escoufier (1976): *A Unifying Tool for Linear
   Multivariate Statistical Methods: The RV-Coefficient*, Journal of
