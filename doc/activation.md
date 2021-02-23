@@ -11,18 +11,18 @@ entanglement arise.
 
 ## Principal Component Analysis (PCA)
 
-PCA is a standard method, realized as an orhtogonal
+PCA is a standard method, realized as an orthogonal
 transformation. Principal components are ordered by the amount of
 variance they capture, allowing for a simple dimensionality reduction
 scheme.  This can also be used to estimate the number of relevant
-dimenions of activations in a network layer.
+dimensions of activations in a network layer.
 
 * Harold Hotelling (1933): *Analysis of a complex of statistical
   variables into principal components*, Journal of Educational
   Psychology 24(6), 417-441,
   DOI: [10.1037/h0071325](https://doi.org/10.1037/h0071325)
 
-# Bivariate anaylysis
+# Bivariate analysis
 
 Comparing activation patterns of two layers, for example:
 * of the same network, at different times during training
@@ -48,7 +48,7 @@ forward in literature. Some selection:
 
 Raghu et al. (2017) determine the similarity between two layers by
 first pruning the layers with a singular value decomposition
-preprocessing step, and then applying canoncial correlation analysis
+preprocessing step, and then applying canonical correlation analysis
 (CCA) to the reduced layers. They assess the similarity of $L_1$ and
 $L_2$ by the mean correlation coefficient.
 
