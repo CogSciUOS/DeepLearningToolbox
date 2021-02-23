@@ -139,6 +139,8 @@ def check_module_requirements(module: str) -> bool:
         for requirement in _MODULES[module]['modules']:
             if not importlib.util.find_spec(requirement):
                 return False
+        else:
+            return True
     return bool(importlib.util.find_spec(module))
 
 

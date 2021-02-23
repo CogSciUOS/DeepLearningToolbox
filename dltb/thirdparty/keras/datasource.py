@@ -20,6 +20,15 @@ from dltb.datasource import Imagesource
 from dltb.datasource.array import LabeledArray
 from dltb.tool.classifier import ClassScheme
 
+# FIXME[old]: may be this could still be used somehow to check which
+#             dataset is available ...
+# for keras_id in KerasDatasource.KERAS_IDS:
+#    try:
+#        KerasDatasource(keras_id)
+#    except ValueError as err:
+#        LOG.error("Error instantiating keras data source '%s': %s",
+#                  keras_id, err)
+
 
 class KerasScheme(ClassScheme):
     """:py:class:`ClassScheme` for Keras datasources.

@@ -297,8 +297,11 @@ class ClassRegisterEntry(StatefulRegisterEntry):
     def __str__(self) -> str:
         """String representation of this :py:class:`ClassRegisterEntry`
         """
-        return (f"{self.module_name}.{self.class_name}: "
-                f"initialized={self.initialized}")
+        info = f"class {self.module_name}.{self.class_name}: "
+        info += f"initialized={self.initialized}"
+        if not self.initialized:
+            info += f" ({'' if self.initializable else 'not '} initializable)"
+        return info
 
     @property
     def key(self):

@@ -3,6 +3,7 @@
 
 # standard imports
 import os
+import sys
 import logging
 
 # third party imports
@@ -140,6 +141,14 @@ class DetectorCNN(FaceDetector):
     def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
         """The dlib CNN face detector.
         """
+        # The dlib detector expects images to be 8-bit RGB or grayscale
+        if image.dtype is not np.uint8:  # FIXME[hack]:
+            # FIXME[todo]: better solution: make sure that images are
+            # provided in correct format or provide preprocessing ...
+            print(f"dlib: error: image is {image.dtype} "
+                  f"(min={image.min()}, max={image.max()}) "
+                  "but should be np.uint8!", file=sys.stderr)
+            image = image.astype(np.uint8)
 
         # It is also possible to pass a list of images to the
         # detector - like this:

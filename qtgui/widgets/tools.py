@@ -12,7 +12,7 @@ abstract interfaces defined in `tools`.
 import logging
 
 # Qt imports
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 
 # toolbox imports
 from toolbox import Toolbox
@@ -20,7 +20,7 @@ from dltb.tool import Tool
 
 # GUI imports
 from ..utils import protect
-from .register import QRegisterListWidget, QRegisterComboBox
+from .register import QRegisterListWidget, QInstanceRegisterComboBox
 from .register import ToolboxAdapter
 
 # logging
@@ -87,19 +87,21 @@ class ToolAdapter(ToolboxAdapter, qobservables={
         :py:class:`ToolAdapter`.
         """
         item = self._currentItem()
-        if self._toolbox is not None:
-            # items are of type Tool
+
+        # in Toolbox mode, the items will be of type Tool
+        if item is None or isinstance(item, Tool):
             return item
 
-        # items are of type InstanceRegisterEntry
-        return None if item is None else item.obj
+        # otherwise items are of type InstanceRegisterEntry
+        return item.obj  # may be None, if not yet initialized
 
     def setCurrentTool(self, tool: Tool) -> None:
         """Make the given Tool the currently selected tool.
         """
         # get an InstanceRegisterEntry for the tool
         item = None if tool is None else Tool.instance_register[tool.key]
-        self._setCurrentItem(item)       
+        self._setCurrentItem(item)
+
 
 class QToolListWidget(ToolAdapter, QRegisterListWidget):
     """A list displaying the :py:class:`Tool`s of a
@@ -125,19 +127,18 @@ class QToolListWidget(ToolAdapter, QRegisterListWidget):
         self.toolSelected.emit(self.itemData(index))
 
 
-class QToolComboBox(ToolAdapter, QRegisterComboBox):
+class QToolComboBox(ToolAdapter, QInstanceRegisterComboBox):
     """A widget to select a :py:class:`tool.Tool` from a list of
     :py:class:`tool.Tool`s.
 
-
-    The class provides the common :py:class:`QComboBox` signals, including
+    The class provides the common :py:class:`QComboBox` signals,
+    including the following:
 
     activated[str/int]:
         An item was selected (no matter if the current item changed)
 
     currentIndexChanged[str/int]:
         An new item was selected.
-
     """
 
     def __init__(self, **kwargs) -> None:

@@ -4,8 +4,8 @@ from unittest import TestCase
 
 # toolbox imports
 from ...base.image import Image
-from datasource.widerface import WiderFace
-from datasource.helen import Helen
+from ..datasource.widerface import WiderFace
+from ..datasource.helen import Helen
 
 
 class WiderfaceTest(TestCase):

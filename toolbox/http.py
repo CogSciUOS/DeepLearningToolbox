@@ -6,12 +6,17 @@ via a web browser (Experimental!).
 
 """
 
+# standard imports
 import http.server
 import urllib
+
+# toolbox imports
+from dltb.datasource import Datasource
+from util.error import handle_exception
+
+# logging
 import logging
 logger = logging.getLogger(__name__)
-
-from util.error import handle_exception
 
 
 class ToolboxHandler(http.server.BaseHTTPRequestHandler):
@@ -51,7 +56,6 @@ class ToolboxHandler(http.server.BaseHTTPRequestHandler):
         message += "  <body>"
         message += "    <h1>Datasources</h1>"
         message += "    <ul>"
-        from datasource import Datasource
         for key in Datasource.instance_register.keys():
             message += f'      <li><a href="datasource/{key}">{key}</a></li>'
         message += "    </ul>"

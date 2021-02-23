@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Union, List, Iterable
+from typing import Union, List, Iterable, Tuple
 import logging
 
 # Generic imports
@@ -154,6 +154,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     """
     modeChanged = pyqtSignal(bool)
 
+    currentRegionChanged = pyqtSignal(int)
+
     def __init__(self, toolbox: Toolbox = None, **kwargs) -> None:
         """Construct a new :py:class:`QImageView`.
 
@@ -174,6 +176,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._metadata = None
         self._metadata2 = None
         self._regions = []
+        self._currentRegion = -1  # -1 means no region selected
 
         self._overlay = None
 
@@ -252,14 +255,20 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     def hasHeightForWidth() -> bool:
         return True
 
-    # @pyqtSlot(QPoint)
     @protect
-    def onContextMenu(self, point):
+    def onContextMenu(self, point: QPoint):
+        """React to the display of a context menu.
+
+        Arguments
+        ---------
+        point:
+            The location where the context menu is to be displayed, in
+            widgets coordinates (relative to the left upper corner
+            of this :py:class:`QImageView`).
+        """
         # show context menu
-        print(f"QImageView.onContextMenu({point}) [{type(point)}]")
         self._contextMenu.exec_(self.mapToGlobal(point))
 
-    # @pyqtSlot(bool)
     @protect
     def onAspectClicked(self, checked):
         self.keepAspectRatio = checked
@@ -309,13 +318,26 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             QToolTip.hideText()
 
     def imageTool(self) -> ImageTool:
+        """The :py:class:`ImageTool` used by this :py:class:`QImageView`.
+        """
         return self._imageTool
 
     def setImageTool(self, imageTool: ImageTool) -> None:
+        """Set an :py:class:`ImageTool` for this :py:class:`QImageView`.
+
+        Arguments
+        ---------
+        imageTool:
+            The :py:class:`ImageTool` to be used by this
+            :py:class:`QImageView`.  `None` means that no
+            :py:class:`ImageTool` is used.
+        """
         self._imageTool = imageTool
         self._updateImageTool()
 
     def _updateImageTool(self) -> None:
+        """Update the :py:class:`ImageTool`
+        """
         imageTool, image = self._imageTool, self._raw
 
         if imageTool is None or image is None:
@@ -330,6 +352,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             size = QSize(*imageTool.size_of_image(image))
             imageSize = QSize(image.shape[1], image.shape[0])
             self._imageToolSize = size
+
             # imageToolTransform: map tool coordinates to image coordinates
             self._imageToolTransform = QTransform()
             print(size, imageSize, self._imageToolRect.size())
@@ -348,6 +371,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
                   "new=%s, none=%s", data, attribute, index,
                   data is not self._data, data is None)
         data = data[index] if data is not None and data.is_batch else data
+        if data is self._data:
+            return  # nothing changed
         self._data = data
         self.setImage(None if data is None else getattr(data, attribute))
 
@@ -365,6 +390,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._raw = image
         self._marks = []
         self._regions = []
+        self._currentRegion = -1
         self._image = imageToQImage(image)
         if self._image is not None:
             pass
@@ -504,6 +530,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         """
         # FIXME[bug?]: this methods seems to be invoked quite often
         # - check if this is so and why!
+
         painter = QPainter()
         painter.begin(self)
 
@@ -516,20 +543,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._drawReceptiveField(painter)
         self._drawMask(painter)
         self._drawMarks(painter)
+        self._drawMetadata(painter)
 
-        if self._image is not None and self.showMetadata:
-            line_width = 4
-            color = Qt.green
-            pen = QPen(color)
-            pen.setWidth(line_width * (1+max(self._image.width(),
-                                             self._image.height())//400))
-            painter.setPen(pen)
-
-            for region in self._regions:
-                self._drawRegion(painter, region)
-
-            self._drawMetadata(painter, self._metadata, color=Qt.green)
-            self._drawMetadata(painter, self._metadata2, color=Qt.red)
         painter.end()
 
     def _drawImage(self, painter: QPainter):
@@ -597,8 +612,26 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
                 painter.setPen(pen)
                 painter.drawRect(mark)
 
-    def _drawMetadata(self, painter: QPainter, metadata: Metadata,
-                      pen: QPen = None, line_width=4, color=Qt.green):
+    def _drawMetadata(self, painter: QPainter) -> None:
+        if self._image is not None and self.showMetadata:
+            line_width = 4
+            line_width *= (1+max(self._image.width(),
+                                 self._image.height())//400)
+            greenPen = QPen(Qt.green)
+            greenPen.setWidth(line_width)
+            redPen = QPen(Qt.red)
+            redPen.setWidth(line_width)
+
+            for index, region in enumerate(self._regions):
+                painter.setPen(redPen if index == self._currentRegion else
+                               greenPen)
+                self._drawRegion(painter, region)
+
+            self._drawMetadataHelper(painter, self._metadata, color=Qt.green)
+            self._drawMetadataHelper(painter, self._metadata2, color=Qt.red)
+
+    def _drawMetadataHelper(self, painter: QPainter, metadata: Metadata,
+                            pen: QPen = None, line_width=4, color=Qt.green):
         if metadata is None or not metadata.has_regions():
             return
 
@@ -612,6 +645,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self._drawRegion(painter, region)
 
     def _drawRegion(self, painter: QPainter, region: Region) -> None:
+        """Draw a :py:class:`Region` on top of image. Currently supported
+        regions are :py:class:`BoundingBox` (displayed as rectangle) and
+        :py:class:`PointsBasedLocation` (displayed as points).
+        """
         location = region.location
         if isinstance(location, BoundingBox):
             painter.drawRect(location.x, location.y,
@@ -643,6 +680,16 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self.showMetadata = not self.showMetadata
         elif key == Qt.Key_Space:
             self.setMode(not self._processed)
+        elif key == Qt.Key_I:
+            LOG.info("image: %s, regions(%s): %s, "
+                     "metadata: %s, metadata2: %s, "
+                     "mode=%s, keep aspect ratio=%s, show meta data=%s, "
+                     "tooltip=%s",
+                     self._image is not None,
+                     type(self._regions), self._regions and len(self._regions),
+                     self._metadata is not None, self._metadata2 is not None,
+                     self.mode(), self.keepAspectRatio, self.showMetadata,
+                     self._toolTipActive)
         else:
             super().keyPressEvent(event)
 
@@ -651,8 +698,26 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         """A mouse press toggles between raw and processed mode.
         """
         self.setMode(not self.mode())
+
+        # remember start position (for dragging the image around)
         self._mouseStartPosition = event.pos()
-        print(self.mode())
+
+        # get the mouse position im image coordinates
+        transform = self.transform()
+        if transform is None or not transform.isInvertible():
+            return  # we can not determine the image coordinates
+        inverted, _invertible = transform.inverted()
+        imagePosition = inverted.map(event.pos())
+
+        # check if mouse clicked into some region of interest
+        for index, region in enumerate(self._regions):
+            point = (imagePosition.x(), imagePosition.y())
+            if point in region:
+                self.setCurrentRegion(None if index == self._currentRegion
+                                      else index)
+                break
+        else:
+            self.setCurrentRegion(None)
 
     @protect
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
@@ -661,13 +726,11 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         if self._mouseStartPosition is None:
             return  # something strange happened - we will ignore this
         self._offset += event.pos() - self._mouseStartPosition
-        print("Moved: ", self._offset)
         self._mouseStartPosition = None
         self.update()
 
     @protect
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        print("double click")
         self._zoom = 1.0
         self._offset = QPointF(0, 0)
         self._mouseStartPosition = None
@@ -786,6 +849,9 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     @protect
     def image_changed(self, observable: ImageObservable,
                       change: ImageObservable.Change) -> None:
+        """A new image is available.  Display that image in this
+        :py:class:`QImagView`.
+        """
         self.setImage(observable.image)
 
     #
@@ -876,6 +942,21 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self.modeChanged.emit(processed)
             self._updateImage()
 
+    @pyqtSlot(int)
+    def setCurrentRegion(self, index: int) -> None:
+        """Set the index of the currently selected region.
+
+        Arguments
+        ---------
+        index:
+            The new index. A value of `-1` means that no region is
+            selected.
+        """
+        if index != self._currentRegion:
+            self._currentRegion = index
+            self.currentRegionChanged.emit(index)
+            self.update()
+
 
 class QImageBatchView(QWidget):
     """A :py:class:`QWidget` to display a batch of images.
@@ -958,13 +1039,27 @@ class QImageBatchView(QWidget):
 
 class QMultiImageView(QWidget):
     """Display multiple images.
+
+    The :py:class:`QMultiImageView` allows to select one image as
+    current image.  When the current image is changed, the
+    `currentImageChanged` signal is emitted with the index of the
+    current image.  A value of `-1` means that no image is selected.
+
     """
 
-    _qimages: List[QImage] = None
+    currentImageChanged = pyqtSignal(int)
 
-    def __init__(self, **kwargs) -> None:
+    _qimages: List[QImage] = None
+    _orientation: Qt.Orientation = None
+
+    def __init__(self, orientation: Qt.Orientation = Qt.Horizontal,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
+        self._orientation = orientation
+        self._imageSize = QSize(100, 100)
+        self._spacing = 10
         self._qimages = []
+        self._currentIndex = -1  # -1 means no image selected
         self._initLayout()
 
     def _initLayout(self) -> None:
@@ -973,14 +1068,63 @@ class QMultiImageView(QWidget):
         # QSizePolicy.MinimumExpanding: The sizeHint() is minimal, and
         # sufficient. The widget can make use of extra space, so it
         # should get as much space as possible.
-        sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding,
-                                 QSizePolicy.MinimumExpanding)
-        # sizePolicy.setHeightForWidth(True)
-        self.setSizePolicy(sizePolicy)
+        self.setMinimumSize(self._imageSize.width() + self._spacing,
+                            self._imageSize.height() + self._spacing)
+        if self._orientation == Qt.Horizontal:
+            self.setSizePolicy(QSizePolicy.MinimumExpanding,
+                               QSizePolicy.Fixed)
+        else:
+            self.setSizePolicy(QSizePolicy.Fixed,
+                               QSizePolicy.MinimumExpanding)
+
+    def count(self) -> int:
+        return len(self._qimages)
 
     def setImages(self, images: Iterable[Imagelike]) -> None:
+        self._currentIndex = -1
         self._qimages = [imageToQImage(image) for image in images]
-        self.update()
+
+        if self._orientation == Qt.Horizontal:
+            width = self.count() * (self._imageSize.width() + self._spacing)
+            self.setMinimumWidth(width)
+            self.resize(width, self.height())
+        else:
+            height = self.count() * (self._imageSize.height() + self._spacing)
+            self.setMinimumHeight(height)
+            self.resize(self.width(), height)
+        # self.updateGeometry()
+        # self.resize(size)
+        # resize() seems to invoke update(), even if size does not change
+
+    def setRegions(self, image: Imagelike, regions: Iterable[Region]) -> None:
+        if image is None:
+            self._image = None
+            self._regions = []
+            self.setImages([])
+        elif True:
+            self._image = Image.as_array(image)
+            self._regions = list(regions)
+            self.setImages(region.extract_from_image(self._image)
+                           for region in self._regions)
+        else:  # FIXME[todo]
+            self._qimage = imageToQImage(image)
+            self._regions = list(regions)
+            self._rects = [self._rect_for_image(index)
+                           for index in range(len(self._regions))]
+
+    def _rect_for_image(self, index: int) -> Tuple[QRect, QRect]:
+        bbox = self._rects[index]
+        source = QRect(bbox.x, bbox.y, bbox.width, bbox.height)
+        position = QPoint(self._spacing // 2, self._spacing // 2)
+        if self._orientation == Qt.Horizontal:
+            position.setX(position.x() +
+                          index * (self._imageSize.width() + self._spacing))
+        else:
+            position.setY(position.y() +
+                          index * (self._imageSize.height() + self._spacing))
+
+        target = QRect(position, self._imageSize)
+        return source, target
 
     @protect
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -991,13 +1135,96 @@ class QMultiImageView(QWidget):
         event:
             The :py:class:`QPaintEvent`paint eve
         """
-
         painter = QPainter()
         painter.begin(self)
 
-        ypos = 0
-        for qimage in self._qimages:
-            painter.drawImage(QPoint(0, ypos), qimage)
-            ypos += qimage.height()
+        line_width = 4
+        color = Qt.red
+        pen = QPen(color)
+        pen.setWidth(line_width)
+        painter.setPen(pen)
+
+        half_spacing = self._spacing // 2
+        position = QPoint(half_spacing, half_spacing)
+        for index, qimage in enumerate(self._qimages):
+            rect = QRect(position, self._imageSize)
+            painter.drawImage(rect, qimage)
+
+            # draw decoration around current image
+            if index == self._currentIndex:
+                painter.drawRect(rect.x()-2, rect.y()-2,
+                                 rect.width()+4, rect.height()+4)
+
+            # update position
+            if self._orientation == Qt.Horizontal:
+                position.setX(position.x() + rect.width() + self._spacing)
+            else:
+                position.setY(position.y() + rect.height() + self._spacing)
 
         painter.end()
+
+    def currentImage(self) -> int:
+        """The index of the currently selected image.
+        """
+        return self._currentIndex
+
+    @pyqtSlot(int)
+    def setCurrentImage(self, index: int) -> None:
+        """Set the index of the currently selected image.
+        """
+        if index != self._currentIndex:
+            self._currentIndex = index
+            self.currentImageChanged.emit(index)
+            self.update()
+
+    @protect
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """A mouse press selects the current image.
+        """
+        index = ((event.x() // (self._imageSize.width() + self._spacing))
+                 if self._orientation == Qt.Horizontal else
+                 (event.y() // (self._imageSize.width() + self._spacing)))
+        self.setCurrentImage(None if index == self._currentIndex else index)
+
+    def imagePosition(self, index: int = None) -> QPoint:
+        """Return the center point of an image.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the desired image. If no index is
+            provided, the currently selected image is used.
+
+        Result
+        ------
+        center:
+            The center point of the given image or `None` if no valid
+            image was specified.
+        """
+        if index is None:
+            index = self.currentImage()
+        if not 0 <= index < len(self._qimages):
+            return None
+        position = QPoint((self._imageSize.width() + self._spacing) // 2,
+                          (self._imageSize.height() + self._spacing) // 2)
+        if self._orientation == Qt.Horizontal:
+            position.setX(position.x() + index *
+                          (self._imageSize.width() + self._spacing))
+        else:
+            position.setY(position.y() + index *
+                          (self._imageSize.height() + self._spacing))
+        return position
+
+    def imageMargin(self) -> QPoint:
+        """Determine the margin to ensure that the image is fully visible.
+        The method is intended to be used if this
+        :py:class:`QMultiImageView` is embedded into a
+        :py:class:`QScrollArea`.
+        """
+        margin = QPoint((self._imageSize.width() + self._spacing),
+                        (self._imageSize.height() + self._spacing))
+        if self._orientation == Qt.Horizontal:
+            margin.setY(margin.y() // 2)
+        else:
+            margin.setX(margin.x() // 2)
+        return margin

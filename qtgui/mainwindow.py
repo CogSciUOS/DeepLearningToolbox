@@ -25,11 +25,11 @@ from PyQt5.QtWidgets import (QMenu, QAction, QMainWindow,
 # Toolbox imports
 from base import Runner
 from toolbox import Toolbox
-from network import Network
 
 # FIXME[old]: this should not be needed for the MainWindow
 from util import resources
-from datasource import Datasource
+from network import Network
+from dltb.datasource import Datasource
 
 # Toolbox GUI imports
 from .utils import QtAsyncRunner, QObserver, QBusyWidget, QDebug, protect

@@ -29,9 +29,9 @@ import numpy as np
 import PIL.Image
 
 # toolbox imports
-from datasource import Imagesource
 from ..base.data import Data
 from ..base.image import Image, Imagelike
+from ..datasource import Imagesource
 
 # logging
 LOG = logging.getLogger(__name__)

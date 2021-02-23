@@ -390,6 +390,7 @@ class QAdaptedComboBox(ItemAdapter, QComboBox):
         :py:class:`QAdaptedComboBox`.
         """
         self.addItem(self._textForItem(item), item)
+        self._formatItem(item)
 
     def _removeItem(self, item: Any) -> None:
         """Remove an item from this :py:class:`QAdaptedComboBox`.

@@ -75,8 +75,8 @@ class DataFiles(Indexed, Datasource):
         """This :py:class:`DataFiles` object can only be prepared if
         the base directory exists.
         """
-        return (self.directory is not None and
-                os.path.isdir(self.dirname) and
+        return (self._directory is not None and
+                os.path.isdir(self._directory) and
                 super()._preparable())
 
     def _prepared(self) -> bool:

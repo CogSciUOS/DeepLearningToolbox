@@ -51,7 +51,7 @@ import importlib.util
 import logging
 from argparse import ArgumentParser
 
-# third party imports
+# thirdparty imports
 import numpy as np
 
 # toolbox imports
@@ -63,9 +63,6 @@ from dltb.util.image import imread
 from dltb.base import run
 from dltb.tool import Tool
 from dltb.base.data import Data
-
-# FIXME[hack]: provide predefined Datasources
-import datasource.predefined
 
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
@@ -811,7 +808,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         tools.append('lucid')
         if args is not None:
             if args.face or args.face_all:
-                for key in ('widerface', '5celeb'):
+                for key in ('widerface', '5celeb', 'Movie'):
                     self.add_datasource(key)
                 # 'haar': opencv
                 # 'cnn': opencv
@@ -840,7 +837,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         #
         # Datasources
         #
-        for id in 'Webcam', 'Noise', 'Helen', 'Movie':
+        for id in 'Webcam', 'Noise':  # FIXME[todo]:, 'Helen', 'Movie':
             self.add_datasource(Datasource[id])
 
         if args is not None:

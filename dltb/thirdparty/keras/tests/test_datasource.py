@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from ..keras import KerasDatasource
+from ..datasource import KerasDatasource
 
 
 class TestKeras(TestCase):

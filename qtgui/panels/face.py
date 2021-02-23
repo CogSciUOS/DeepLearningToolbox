@@ -14,6 +14,7 @@ import logging
 import numpy as np
 
 # Qt imports
+from PyQt5.QtCore import Qt, pyqtSlot
 from PyQt5.QtWidgets import (QGroupBox, QWidget, QLabel,
                              QVBoxLayout, QHBoxLayout, QGridLayout)
 from PyQt5.QtGui import QResizeEvent
@@ -83,6 +84,7 @@ class QDetectorWidget(QGroupBox, QObserver,
         self._prepareButton = QPrepareButton()
         self._label = QLabel()
         self._busy = QBusyWidget()
+        self._status = QLabel()
 
         self._toolSelector = QToolComboBox()
         self.addAttributePropagation(Toolbox, self._toolSelector)
@@ -97,6 +99,7 @@ class QDetectorWidget(QGroupBox, QObserver,
         layout.addStretch(3)
         layout.addWidget(self._toolSelector)
         layout.addWidget(self._prepareButton)
+        layout.addWidget(self._status)
         self.setLayout(layout)
         self.setCheckable(True)
 
@@ -140,8 +143,11 @@ class QDetectorWidget(QGroupBox, QObserver,
         self._toolSelector.setCurrentTool(detector)
 
         if detector is not None and not detector.busy:
-            LOG.debug("setFaceDetector: preparing detector")
-            detector.prepare()
+            if detector.preparable:
+                LOG.debug("setFaceDetector: preparing detector")
+                detector.prepare()
+            else:
+                LOG.debug("setFaceDetector: detector is not preparable")
 
     def worker_changed(self, worker: Worker,
                        change: Worker.Change) -> None:
@@ -179,19 +185,23 @@ class QDetectorWidget(QGroupBox, QObserver,
     def update(self):
         """Update the display of this :py:class:`QDetectorWidget`.
         """
+        detector = self._worker.tool
         if self._worker.tool is None or not self.isChecked():
             self._view.setData(None)
             self._batchView.setImages(None)
-            self._label.setText("Off.")
+            self._label.setText("No detector." if detector is None else "Off.")
+            self._status.setText("no detector" if detector is None else "off")
             return
 
-        detector = self._worker.tool
         data = self._worker.data
         detections = detector.detections(data)
         LOG.debug("QDetectorWidget[%s].update(): data = %s, detections = %s",
                   detector, data, detections)
 
         self._view.setData(data)
+        self._status.setText(f"failed: {detector.failed}, "
+                             f"preparable: {detector.preparable}, "
+                             f"prepared: {detector.prepared}")
         if detections is None:
             self._label.setText("No detections.")
             self._batchView.setImages(None)
@@ -209,13 +219,15 @@ class QDetectorWidget(QGroupBox, QObserver,
         else:
             self._label.setText(f"Nothing detected in {duration:.3f}s")
 
+    @pyqtSlot(bool)
     @protect
     def onToggled(self, _state: bool) -> None:
-        """We want to update this QDetectorWidget when it gets
+        """We want to update this :py:class:`QDetectorWidget` when it gets
         (de)activated.
         """
         self.update()
 
+    @pyqtSlot(Tool)
     @protect
     def onToolSelected(self, tool: Tool) -> None:
         """A slot to be informed if a new Tool is selected.
@@ -227,7 +239,11 @@ class QDetectorWidget(QGroupBox, QObserver,
             it will be treated as `None`, meaning this
             :py:class:`QDetectorWidget` will be deactivated
         """
-        self.setFaceDetector(tool if isinstance(tool, FaceDetector) else None)
+        print("QDetectorWidget.onToolSelected:", tool, type(tool))
+        if not isinstance(tool, FaceDetector):
+            LOG.warning("%s is not a FaceDetector.", tool)
+            tool = None
+        self.setFaceDetector(tool)
 
 
 class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
@@ -310,7 +326,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         #
 
         # QImageView: a widget to display the input data
-        self._dataSelector = QDataSelector()
+        self._dataSelector = QDataSelector(orientation=Qt.Vertical)
         self._dataView = self._dataSelector.dataView()
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
@@ -321,7 +337,6 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
 
         self._inputCounter = QLabel("0")
         self._processCounter = QLabel("0")
-
 
         self._detectorViews = []
         for detector in range(2):

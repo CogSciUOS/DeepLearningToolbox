@@ -235,7 +235,7 @@ class ToolboxAdapter(RegisterAdapter, qobservables={Toolbox: set()}):
                       f" ({index}) {datasource} [{type(datasource)}]")
 
 
-class QRegisterListWidget(RegisterAdapter, QAdaptedListWidget):
+class QRegisterListWidget(QAdaptedListWidget, RegisterAdapter):
     """A :py:class:`QListWidget` for selecting entries from a
     :py:class:`Register`.
     """
@@ -268,6 +268,10 @@ class QRegisterClassView(QWidget):
 
     instanceSelected: pyqtSignal = pyqtSignal(object)
     classSelected: pyqtSignal = pyqtSignal(type)
+
+    colorInitialized: QColor = QColor(Qt.white).lighter()
+    colorInitializable: QColor = QColor(Qt.blue).lighter()
+    colorUninitializable: QColor = QColor(Qt.red).lighter()
 
     def __init__(self, registerClass: RegisterClass = None, **kwargs) -> None:
         """
@@ -379,7 +383,9 @@ class QRegisterClassView(QWidget):
         if isinstance(entry, InstanceRegisterEntry):
             self.instanceSelected.emit(entry)
         elif isinstance(entry, ClassRegisterEntry):
-            self.classSelected.emit(entry)
+            self.classSelected.emit(entry)  # FIXME[bug]: TypeError
+            # QRegisterClassView.classSelected[type].emit():
+            # argument 1 has unexpected type 'ClassRegisterEntry'
 
     @protect
     def _onRadioButtonClicked(self, _checked: bool) -> None:
@@ -398,12 +404,16 @@ class QRegisterClassView(QWidget):
             :py:class:`ClassRegisterEntry`.
         """
         entry = item.data(Qt.UserRole)
+        if entry.initialized:
+            color = self.colorInitialized
+        elif entry.initializable:
+            color = self.colorInitializable
+        else:
+            color = self.colorUninitializable
         if self._mode == 'class':
-            item.setBackground(Qt.white if entry.initialized else
-                               QColor(Qt.red).lighter())
+            item.setBackground(color)
         elif self._mode == 'instance':
-            item.setBackground(Qt.white if entry.initialized else
-                               QColor(Qt.blue).lighter())
+            item.setBackground(color)
 
 
 #
@@ -623,8 +633,19 @@ class QInitializeButton(QPrepareButton, qobservables={
     def __init__(self, initialize: str = "Initialize", **kwargs) -> None:
         """Initialize the :py:class:`QInitializeButton`.
         """
+        # _initialize: bool
+        #     A flag indicating if this button is in initialize mode (True)
+        #     or in prepare mode (False).
         self._initialize = False
+
+        # _initializeText: str
+        #     The label to be displayed on the button if it is in
+        #     initialize mode.
         self._initializeText = initialize
+
+        # _prepareText: str
+        #     The label to be displayed on the button if it is in
+        #     prepare mode (that is not in initalize mode).
         self._prepareText = "Prepare"
         super().__init__(**kwargs)
 
@@ -642,18 +663,24 @@ class QInitializeButton(QPrepareButton, qobservables={
         state of the :py:class:`Preparable`.
         """
         if self._preparable is None and self._initialize:
+            # we are in initialize mode
             entry = self._instanceRegisterEntry
-            if entry is not None:
-                self.setEnabled(not entry.busy)
-                self.setChecked(True)
+            if entry is None:
+                self.setEnabled(False)
+                self.setChecked(False)
+                self.setText("no object")
+            else:
                 if entry.busy:
+                    self.setEnabled(False)
+                    self.setChecked(True)
                     if entry.initialized:
                         self.setText("Uninitializing")
                     else:
                         self.setText("Initializing")
                 else:
-                    self.setText("Initialize")
+                    self.setEnabled(entry.initializable)
                     self.setChecked(entry.initialized)
+                    self.setText("Initialize")
         else:
             self._initialize = False
             self.setText(self._prepareText)
@@ -672,7 +699,7 @@ class QInitializeButton(QPrepareButton, qobservables={
 
 
 class QInstanceRegisterEntryController(QRegisterClassEntryController,
-            qobservables={InstanceRegisterEntry: {'state_changed'}}):
+        qobservables={InstanceRegisterEntry: {'state_changed'}}):
     """A controller for an :py:class:`InstanceRegisterEntry`. This
     controller allows to instantiate and initialize a registered
     instance of a class.
@@ -756,3 +783,24 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController,
     def entry_changed(self, entry: InstanceRegisterEntry,
                       change: InstanceRegisterEntry.Change) -> None:
         self.update()
+
+
+class QInstanceRegisterComboBox(QRegisterComboBox):
+    """A :py:class:`QComboBox` for selecting entries from a
+    :py:class:`Register`.
+    """
+
+    def _formatItemAt(self, index: int) -> None:
+        """Format the item at the given index to reflect
+        the state of the underlying item.
+
+        This method may be extended by subclasses.
+        """
+        super()._formatItemAt(index)
+
+        # disable item if tool is not instantiable
+        instance = self._getItemAt(index)  # instance or InstanceRegisterEntry
+        if (isinstance(instance, InstanceRegisterEntry) and
+                not instance.initializable):
+            item = self.model().item(index)  # QtGui.QStandardItem
+            item.setFlags(item.flags() & ~ Qt.ItemIsEnabled)

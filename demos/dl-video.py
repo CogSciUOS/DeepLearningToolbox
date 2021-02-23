@@ -12,7 +12,7 @@ import os
 from argparse import ArgumentParser
 
 # toolbox imports
-from datasource import Datasource, DataDirectory, Imagesource
+from dltb.datasource import Datasource, DataDirectory, Imagesource
 from dltb.base.data import Data
 from dltb.base.image import ImageDisplay
 from dltb.base.video import Reader as VideoReader, Writer as VideoWriter

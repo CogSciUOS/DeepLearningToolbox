@@ -963,7 +963,7 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
 
     The :py:class:`QPrepareButton` can observe a
     :py:class:`Preparable` and adapt its appearance and function based
-    on the state of the datasource.
+    on the state of the :py:class:`Preparable`.
 
     """
     # FIXME[todo]: This could be made a 'QPreaparableObserver'
@@ -999,7 +999,7 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
     @protect
     def onClicked(self, checked: bool) -> None:
         """React to a button activation by the user. This will
-        adapt the preparation state of the :py:class:`Datasource`
+        adapt the preparation state of the :py:class:`Preparable`
         based on the state of the button.
 
         Arguments
@@ -1015,9 +1015,10 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
 
     def updateState(self) -> None:
         """Update this :py:class:`QPrepareButton` based on the state of the
-        :py:class:`Datasource`.
+        :py:class:`Preparable`.
         """
         enabled = (isinstance(self._preparable, Preparable) and
+                   self._preparable.preparable and
                    not self._preparable.busy)
         if isinstance(self._preparable, Preparable) and self._preparable.busy:
             if self._preparable.prepared:

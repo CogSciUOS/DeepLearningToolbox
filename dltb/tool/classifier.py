@@ -177,9 +177,11 @@ class ClassScheme(metaclass=RegisterClass):
         return self._labels.keys()
 
 
-ClassScheme.register_instance('ImageNet', 'datasource.imagenet',
+ClassScheme.register_instance('ImageNet',
+                              'dltb.thirdparty.datasource.imagenet',
                               'ImagenetScheme')
-ClassScheme.register_instance('WiderFace', 'datasource.widerface',
+ClassScheme.register_instance('WiderFace',
+                              'dltb.thirdparty.datasource.widerface',
                               'WiderfaceScheme')
 
 

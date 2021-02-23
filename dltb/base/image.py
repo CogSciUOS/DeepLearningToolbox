@@ -982,6 +982,12 @@ class PointsBasedLocation:
         super().__init__()
         self._points = points
 
+    def __contains__(self, point) -> bool:
+        return ((self._points[:, 0].min() <= point[0] <=
+                 self._points[:, 0].max()) and
+                (self._points[:, 1].min() <= point[1] <=
+                 self._points[:, 1].max()))
+
     def mark_image(self, image, color=(1, 0, 0)):
         for point in self._points:
             image[max(point[1]-1, 0):min(point[1]+1, image.shape[0]),
@@ -1204,6 +1210,12 @@ class Region:
         self._location = location
         self._attributes = attributes
 
+    def __str__(self) -> str:
+        return f"{self._location} with {len(self._attributes)} attributes"
+
+    def __contains__(self, point) -> bool:
+        return point in self._location
+    
     @property
     def location(self):
         return self._location
@@ -1211,7 +1223,7 @@ class Region:
     def mark_image(self, image: Imagelike, color=None):
         self._location.mark_image(image, color=color)
 
-    def extract_from_image(self, image: Imagelike):
+    def extract_from_image(self, image: Imagelike) -> np.ndarray:
         return self._location.extract_from_image(image)
 
     def scale(self, factor) -> None:

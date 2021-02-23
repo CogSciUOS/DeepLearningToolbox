@@ -122,7 +122,8 @@ class Preparable(BusyObservable, method='preparable_changed',
             raise RuntimeError(f"{self} is not preparable.")
 
         try:
-            with self.failure_manager(cleanup=self._unprepare):
+            with self.failure_manager(cleanup=self._unprepare, catch=True):
+                # FIXME[todo]: catch only if running in own thread
                 self._prepare()
                 self._post_prepare()
         finally:
@@ -188,6 +189,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         """
         # To be implemented by subclasses
 
+    @property
     def preparable(self) -> bool:
         """Check if this :py:class:`Preparable` can be prepared. This
         is intended to be a first sanity check - the actual preparation

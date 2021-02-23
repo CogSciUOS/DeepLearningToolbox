@@ -9,7 +9,7 @@ from collections.abc import Sized
 import numpy as np
 
 # toolbox imports
-from base import Observable
+from . import Observable
 
 
 # Datalike is intended to be everything that can be used as data.

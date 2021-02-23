@@ -368,6 +368,26 @@ class Webcam(video.Webcam, VideoReader):
     _capture: cv2.VideoCapture
         A capture object
     """
+    # FIXME[problem]: it seems to be problematic to use two webcams
+    # at the same time. It may help to reduce the resolution or
+    # to connect the webcams to different USB ports:
+    # import cv2
+    # cap0 = cv2.VideoCapture(0)
+    # cap0.set(3,160)
+    # cap0.set(4,120)
+    # cap1 = cv2.VideoCapture(1)
+    # cap1.set(3,160)
+    # cap1.set(4,120)
+    # ret0, frame0 = cap0.read()
+    # assert ret0 # succeeds
+    # ret1, frame1 = cap1.read()
+    # assert ret1 # fails?!
+    #
+    # import imageio
+    # reader0 = image.get_reader('<video0>', size=(160, 120))
+    # reader1 = image.get_reader('<video1>', size=(160, 120))
+    # frame0 = reader0.get_next_data()
+    # frame1 = reader1.get_next_data()
 
     _devices: Tuple = None
 

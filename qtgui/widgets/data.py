@@ -19,6 +19,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
+from PyQt5.QtWidgets import QScrollArea
 
 # toolbox imports
 from toolbox import Toolbox
@@ -30,7 +31,7 @@ from dltb.tool.classifier import ClassIdentifier
 
 # GUI imports
 from ..utils import QObserver, protect
-from .image import QImageView
+from .image import QImageView, QMultiImageView
 from .navigation import QIndexControls
 from .datasource import QDatasourceNavigator
 
@@ -294,29 +295,49 @@ class QDataView(QWidget, QObserver, qobservables={
         Datafetcher: {'data_changed'}, Toolbox: {'input_changed'}}):
     """A Display for :py:class:`Data` objects.
 
-    The display is split into two parts:
+    The actual components and layout of this display depend on type of
+    data to be displayed. In case of an :py:class:`Image` the display
+    is split into (at least) two parts:
     * _imageView: a :py:class:`QImageView` for displaying image data.
     * _inputInfo: a :py:class:`QDataInfoBox` for displaying the
         :py:class:`Data` object.
+    Additional components may be included depending of the metadata
+    provided by the :py:class:`Data` object.
 
     In case the :py:class:`Data` object represents a batch of data,
     a :py:class:`QBatchNavigator` will be included to allow navigating
     through the batch.
     """
 
-    def __init__(self, style: str = 'high', **kwargs) -> None:
+    def __init__(self, orientation: Qt.Orientation = Qt.Vertical,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
+        self._orientation = orientation
         self._data = None
         self._attributes = []
         self._initUI()
-        self._layoutUI(style)
+        self._layoutUI()
 
-    def _initUI(self):
+    def _initUI(self) -> None:
         """Initialize the user interface of this :py:class:`QDataView`.
         """
         # QImageView: a widget to display the input data
         self._imageView = QImageView()
         self.addAttributePropagation(Toolbox, self._imageView)
+
+        # QMultiImageView for displaying multiple regions of interest
+        orientation = (Qt.Vertical if self._orientation == Qt.Horizontal else
+                       Qt.Horizontal)
+        self._multiImageView = QMultiImageView(orientation=orientation)
+        self._multiImageScroller = QScrollArea()
+        self._multiImageScroller.setWidget(self._multiImageView)
+
+        self._multiImageView.currentImageChanged.\
+            connect(self._imageView.setCurrentRegion)
+        self._imageView.currentRegionChanged.\
+            connect(self._multiImageView.setCurrentImage)
+        self._imageView.currentRegionChanged.\
+            connect(self.setCurrentRegion)
 
         self._dataInfo = QDataInfoBox()
         self.addAttributePropagation(Toolbox, self._dataInfo)
@@ -329,22 +350,43 @@ class QDataView(QWidget, QObserver, qobservables={
         self._batchNavigator = QBatchNavigator()
         self._batchNavigator.indexChanged.connect(self.onIndexChanged)
 
-    def _layoutUI(self, style: str) -> None:  # style='high'/'wide'
+    def _layoutUI(self) -> None:
 
         dataInfo = QVBoxLayout()
         dataInfo.addWidget(self._dataInfo)
         dataInfo.addWidget(self._batchNavigator)
         self._batchNavigator.hide()
 
-        if style == 'high':
+        if self._orientation == Qt.Horizontal:
+            scrollbar = self._multiImageScroller.verticalScrollBar()
+            width = (self._multiImageView.width() +
+                     scrollbar.sizeHint().width())
+            self._multiImageScroller.setMinimumSize(width, 0)
+            self._multiImageScroller.\
+                setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+            self._multiImageScroller.\
+                setSizePolicy(QSizePolicy.Fixed, QSizePolicy.MinimumExpanding)
+        else:  # self._orientation == Qt.Vertical:
+            scrollbar = self._multiImageScroller.horizontalScrollBar()
+            height = (self._multiImageView.height() + 5 +  # FIXME[hack]: bug
+                      scrollbar.sizeHint().height())
+            self._multiImageScroller.setMinimumSize(0, height)
+            self._multiImageScroller.\
+                setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+            self._multiImageScroller.\
+                setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
+
+        if self._orientation == Qt.Vertical:
             # vertical layout: image above info
             layout = QVBoxLayout()
-            layout.addWidget(self._imageView, stretch=20)
+            layout.addWidget(self._imageView)
+            layout.addWidget(self._multiImageScroller)
             layout.addLayout(dataInfo)
-        else:  # style == 'wide
+        else:  # self._orientation == Qt.Horizontal
             # horizontal layout: image left of info
             layout = QHBoxLayout()
             layout.addWidget(self._imageView)
+            layout.addWidget(self._multiImageScroller)
             layout.addLayout(dataInfo)
 
         self.setLayout(layout)
@@ -353,6 +395,14 @@ class QDataView(QWidget, QObserver, qobservables={
         """Get the :py:class:`QImageView` of this :py:class:`QDataView`.
         """
         return self._imageView
+
+    @pyqtSlot(int)
+    def setCurrentRegion(self, index: int) -> None:
+        position = self._multiImageView.imagePosition(index)
+        if position is not None:
+            margin = self._multiImageView.imageMargin()
+            self._multiImageScroller.ensureVisible(position.x(), position.y(),
+                                                   margin.x(), margin.y())
 
     #
     # Toolbox.Observer
@@ -420,6 +470,7 @@ class QDataView(QWidget, QObserver, qobservables={
         self._batchNavigator.setVisible(isBatch)
         if isBatch:
             self._batchNavigator.setData(data)
+        
         self.update()
 
     #
@@ -438,6 +489,7 @@ class QDataView(QWidget, QObserver, qobservables={
         if not self._data:
             self._imageView.setImage(None)
             self._imageView.setMetadata(None)
+            self._multiImageView.setRegions(None, [])
             self._dataInfo.setData(None)
             return
 
@@ -454,14 +506,18 @@ class QDataView(QWidget, QObserver, qobservables={
 
         # we have an image
         self._imageView.setImage(data.array)
+        regions = []
         for attribute in data.attributes(batch=False):
             value = getattr(data, attribute)
             if isinstance(value, Region):
                 self._imageView.addRegion(value)
+                regions.append(value)
             elif isinstance(value, list):
                 for val in value:
                     if isinstance(val, Region):
                         self._imageView.addRegion(val)
+                        regions.append(val)
+        self._multiImageView.setRegions(data, regions)
 
     @protect
     def onIndexChanged(self, _index: int) -> None:
@@ -550,21 +606,36 @@ class QDataSelector(QWidget, QObserver, qattributes={
     A :py:class:`QDataSelector` can be associated with a
     :py:class:`Toolbox`. In this case, the datasource navigator
     (if any) will navigate the current datasource of the toolbox.
+
+
+    Arguments
+    ---------
+    toolbox:
+        If associated with a :py:class:`Toolbox`, the
+        :py:class:`QDataSelector` will select data from
+        the current :py:class:`Datasource` of that :py:class:`Toolbox`.
+
+    datafetcher:
+        The :py:class:`Datafetcher` object to be used by this
+        :py:class:`QDataSelector` to fetch data from the underlying
+        :py:class:`Datasource`. If none is provided, the
+        :py:class:`QDataSelector` will create its own instance.
     """
 
     def __init__(self, toolbox: Toolbox = None,
                  datafetcher: Datafetcher = None,
-                 datasource_selector = True,
+                 orientation: Qt.Orientation = Qt.Vertical,
+                 datasource_selector: bool = True,
                  **kwargs) -> None:
         super().__init__()
-        self._layoutScheme = 2
+        self._orientation = orientation
         self._initUI(datasource_selector)
         self._layoutUI()
         self.setToolbox(toolbox)
         self.setDatafetcher(datafetcher)
 
-    def _initUI(self, datasource_selector) -> None:
-        self._dataView = QDataView()
+    def _initUI(self, datasource_selector: bool) -> None:
+        self._dataView = QDataView(orientation=self._orientation)
         self.addAttributePropagation(Toolbox, self._dataView)
         self.addAttributePropagation(Datafetcher, self._dataView)
 
@@ -580,13 +651,13 @@ class QDataSelector(QWidget, QObserver, qattributes={
         """Layout the user interface. There are different ways in which
         the components of a :py:class:`QDataSelector` can be arranged.
         """
-        if self._layoutScheme == 1:
+        if self._orientation == Qt.Horizontal:
             row = QHBoxLayout()
             row.addWidget(self._dataView)
             row.addWidget(self._datasourceNavigator)
             row.addWidget(self._button)
             self.setLayout(row)
-        elif self._layoutScheme == 2:
+        else:  # if self._orientation == Qt.Vertical:
             column = QVBoxLayout()
             column.addWidget(self._dataView)
             column.addWidget(self._datasourceNavigator)
@@ -614,10 +685,10 @@ class QDataSelector(QWidget, QObserver, qattributes={
 
     @protect
     def _onButtonClicked(self, _checked: bool) -> None:
-        if self._layoutScheme == 1:
-            self._layoutScheme = 2
-        elif self._layoutScheme == 2:
-            self._layoutScheme = 1
+        if self._orientation == Qt.Horizontal:
+            self._orientation = Qt.Vertical
+        elif self._orientation == Qt.Vertical:
+            self._orientation = Qt.Horizontal
         self._updateUI()
 
     def imageView(self) -> QImageView:

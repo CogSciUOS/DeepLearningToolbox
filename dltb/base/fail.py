@@ -100,6 +100,10 @@ class Failable(object):
             if cleanup is not None:
                 cleanup()
             if catch:
+                # FIXME[concept]: this will output the exception
+                # (including stack trace) on the terminal. Maybe useful
+                # for debugging, but not necessary in general (as we store
+                # the exception in the object and also provide logging)
                 handle_exception(exception)
             else:
                 raise exception

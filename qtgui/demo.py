@@ -18,8 +18,8 @@ from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
 
 # toolbox imports
 from toolbox import Toolbox
-from datasource import Datasource
-from network import Network
+from dltb.network import Network
+from dltb.datasource import Datasource
 from dltb import thirdparty
 
 # GUI imports
@@ -222,7 +222,7 @@ class QDemo(QWidget):
         widget.setRegisterEntry('datasource.widerface.WiderFace')
 
         # importing the class should be noticed by the widget.
-        # from datasource.widerface import WiderFace
+        # from dltb.thirdparty.datasource.widerface import WiderFace
         self.setWidget(widget)
 
     def demoQInstanceRegisterEntryController(self) -> None:
@@ -234,7 +234,7 @@ class QDemo(QWidget):
         widget.setRegisterEntry('widerface')
 
         # importing the class should be noticed by the widget.
-        # from datasource.widerface import WiderFace
+        # from dltb.thirdparty.datasource.widerface import WiderFace
         self.setWidget(widget)
 
     def demoQImageView(self) -> None:

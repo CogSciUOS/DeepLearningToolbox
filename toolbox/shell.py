@@ -8,12 +8,12 @@ from functools import wraps
 from typing import Iterable
 
 # toolbox imports
+from dltb.datasource import Datasource
 from dltb.tool import Tool
 from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
 from dltb.thirdparty.sounddevice import SoundPlayer as SoundDevicePlayer
 from toolbox import Toolbox
 from network import Network
-from datasource import Datasource
 from util.error import handle_exception
 
 # FIXME[bug]: a (syntax) error in this file lets the toolbox crash!

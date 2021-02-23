@@ -15,6 +15,9 @@ import sys
 import importlib
 import logging
 
+# toolbox imports
+from ...datasource import Datasource
+
 # logging
 LOG = logging.getLogger(__name__)
 
@@ -123,3 +126,14 @@ def info() -> None:
     print(f"HAVE_TENSORFLOW_KERAS: {HAVE_TENSORFLOW_KERAS}")
     print(f"HAVE_KERAS_IO: {HAVE_KERAS_IO}")
     print(f"Keras version: {keras.__version__}")
+
+
+Datasource.register_instance('mnist-train', __name__ + '.datasource.keras',
+                             'KerasDatasource', name='mnist',
+                             section='train')
+Datasource.register_instance('mnist-test', __name__ + '.datasource.keras',
+                             'KerasDatasource', name='mnist',
+                             section='test')
+Datasource.register_instance('cifar10-train', __name__ + '.datasource.keras',
+                             'KerasDatasource', name='cifar10',
+                             section='train')

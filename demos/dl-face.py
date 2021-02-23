@@ -12,8 +12,8 @@ from argparse import ArgumentParser
 import os
 
 # toolbox imports
-from datasource import ImageDirectory
 from dltb.base.data import Data
+from dltb.datasource import ImageDirectory
 from dltb.tool import Tool
 from dltb.tool.detector import ImageDetector
 from dltb.util.image import imshow

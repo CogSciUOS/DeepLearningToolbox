@@ -19,7 +19,8 @@ import numpy as np
 from dltb.base.data import Data
 from dltb.datasource import Datasource, Datafetcher
 from dltb.datasource import argparse as DatasourceArgparse
-import datasource.predefined as _
+# import dltb.thirdparty.datasource as _
+# import dltb.thirdparty.keras.datasource as _
 
 # logging
 LOG = logging.getLogger(__name__)

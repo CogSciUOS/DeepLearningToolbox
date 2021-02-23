@@ -20,8 +20,8 @@ import numpy as np
 import torch
 
 # toolbox imports
-from datasource import Datasource
 from ...base.data import Data, Datalike
+from ...datasource import Datasource
 
 # logging
 LOG = logging.getLogger(__name__)

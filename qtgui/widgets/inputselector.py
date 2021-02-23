@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QSizePolicy
 
 # toolbox imports
 from toolbox import Toolbox
-from datasource import Datasource
+from dltb.datasource import Datasource
 
 # GUI imports
 from ..utils import QObserver, protect

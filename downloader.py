@@ -9,6 +9,7 @@ data
 
 '''
 
+# standard imports
 import sys
 import os
 import os.path
@@ -18,10 +19,11 @@ import argparse
 import urllib.request
 import urllib.parse
 
-import datasource
+# toolbox imports
+import dltb.datasource as datasource
 
-datasets = datasource.datasources
-models = ['alexnet', 'resnet']
+datasets = []  # FIXME[todo]: datasource.datasources
+models = ['alexnet', 'resnet']  # FIXME[hack]
 
 
 # https://stackoverflow.com/questions/51658/cross-platform-space-remaining-on-volume-using-python

@@ -6,7 +6,7 @@ a Datasource interface for accessing the a webcam.
 Examples
 --------
 
-    from datasource.webcam import Webcam
+    from dltb.datasource.webcam import Webcam
 
     webcam = Webcam()
     webcam.prepare()
@@ -22,8 +22,8 @@ import threading
 import logging
 
 # toolbox imports
-from dltb.base.video import Webcam
-from dltb.base.data import Data
+from ..base.video import Webcam
+from ..base.data import Data
 from .datasource import Imagesource, Livesource
 
 # logging

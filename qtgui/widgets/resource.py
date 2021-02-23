@@ -287,7 +287,8 @@ class QNetworkInspector(QResourceInspector):
 
 class QDatasourceInspector(QResourceInspector, qattributes={
         Datasource: False, Datafetcher: False}):
-    """
+    """The :py:class:`QDatasourceInspector` contains widgets for
+    inspecting :py:class:`Datasource`s.
 
     Attributes
     ----------
@@ -341,7 +342,7 @@ class QDatasourceInspector(QResourceInspector, qattributes={
         self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
         self.addAttributePropagation(Datasource, self._datasourceNavigator)
 
-        self._dataView = QDataView(style='wide')
+        self._dataView = QDataView(orientation=Qt.Horizontal)
         self._dataView.setDatafetcher(self._datasourceNavigator.datafetcher())
         self.addAttributePropagation(Datafetcher, self._dataView)
 

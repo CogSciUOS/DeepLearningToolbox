@@ -7,7 +7,7 @@
 import numpy as np
 
 # Toolbox imports
-from datasource import Datasource
+from ..datasource import Datasource
 from .tool import Tool
 from .classifier import Classifier, ClassIdentifier
 
