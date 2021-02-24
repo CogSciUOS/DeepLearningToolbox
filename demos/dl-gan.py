@@ -162,7 +162,7 @@ def main():
                 image = gan.mix(mix=mix)
                 display.show(image, timeout=1., title=f"{mix}/{mix_max}")
 
-    elif True:  # FIXME[hack]: add option "--slideshow" once this is finished
+    elif False:  # FIXME[hack]: add option "--slideshow" once this is finished
         slideshow = Slideshow(gan)
         with ImageDisplay() as display:
             while True:  # not display.closed:  # FIXME[todo]: context manager should show the window
@@ -178,7 +178,7 @@ def main():
             while True:  # not display.closed:  # FIXME[todo]: context manager should show the window
                 seed = random.randint(0, 10000)
                 image = gan.generate(seed=seed)
-                display.show(image, timeout=1.0, unblock='freeze',
+                display.show(image, timeout=0, unblock='freeze',
                              title=f"Seed={seed} -> {image.array.shape}")
                 if display.closed:
                     break  # FIXME[todo]

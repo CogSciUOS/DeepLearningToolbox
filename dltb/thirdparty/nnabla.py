@@ -8,16 +8,24 @@ neural architecture search [5], and a Windows GUI app [6].
 Installation
 ------------
 
-The core package `nnabla` can be installed directly with
-pip. Installing the CUDA extension package `nnabla-ext-cuda` requires
+The core package `nnabla` can be installed directly with pip.
+
+  pip install nnabla
+
+Installing the CUDA extension package `nnabla-ext-cuda` requires
 knowing the version of the CUDA toolkit installed (install, for example,
 pip package `nnabla-ext-cuda101` for CUDA toolkit 10.1).
 
+  pip install nnabla-ext-cuda101
+
 There is no pip package for `nabla-examples`. For running the
-examples, the `nnabla-examples` repository [3] should be cloned.  That
-repository is split into several subdirectories, many with specific
-requirements specified by a `requirements.txt` file. These can be
-install by `pip -r example_subdirectory/requirements.txt`.
+examples, the `nnabla-examples` repository [3] should be cloned.
+
+  git clone https://github.com/sony/nnabla-examples.git
+
+That repository is split into several subdirectories, many with
+specific requirements specified by a `requirements.txt` file. These
+can be install by `pip -r example_subdirectory/requirements.txt`.
 
 The package `nnabla` has several third-party dependencies, like
 * `boto3` and `s3transfer`:
@@ -149,7 +157,8 @@ class StyleGAN2(ImageGAN, NNablaExample):
 
     assert os.path.isdir(config.nnabla_examples_directory)
     nnabla_stylegan2_directory = \
-        os.path.join(config.nnabla_examples_directory, 'GANs', 'stylegan2')
+        os.path.join(config.nnabla_examples_directory, 'GANs')
+        #os.path.join(config.nnabla_examples_directory, 'GANs', 'stylegan2')
     if nnabla_stylegan2_directory not in sys.path:
         sys.path.insert(0, nnabla_stylegan2_directory)
 
@@ -157,7 +166,10 @@ class StyleGAN2(ImageGAN, NNablaExample):
               "'%s/generate.py'", nnabla_stylegan2_directory)
 
     # FIXME[problem]: this will place a module 'generate' in sys.modules
-    import generate as _nnabla_stylegan2
+    # FIXME[bug]: with "Python 3.6.10 :: Anaconda, Inc."
+    #   ImportError: attempted relative import with no known parent package
+    #import generate as _nnabla_stylegan2
+    from stylegan2 import generate as _nnabla_stylegan2
 
     sys.path.remove(nnabla_stylegan2_directory)
 
@@ -287,3 +299,9 @@ class StyleGAN2(ImageGAN, NNablaExample):
         self._rgb_output.forward(clear_buffer=True)
         images = self.convert_images_to_uint8(self._rgb_output, drange=[-1, 1])
         return images[0]
+
+    def _data_shape(self):
+        # swap color channel
+        #return (self._generator.output_shape[2:] +
+        #        self._generator.output_shape[1:2])
+        return (1024, 1024, 3)  # FIXME[hack]

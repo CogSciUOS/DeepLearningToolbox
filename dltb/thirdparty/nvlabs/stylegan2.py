@@ -2,6 +2,20 @@
 
 [1] https://github.com/NVlabs/stylegan2
 """
+# FIXME[bug]: there are some changes that have to be done to the
+# code in the stylegan2 github repository in order to make it work
+# with tensorflow2:
+# 1. Remove tensorflow.contrib (seems not to be used anyhow)
+#    sed -i '/tensorflow.contrib/s/^[^#]/#&/' stylegan2/dnnlib/tflib/tfutil.py
+# 2. In the file 'stylegan2/dnnlib/tflib/custom_ops.py', which is
+#    responsible for running 'nvcc' to compile additional cuda modules,
+#    certain adaptations have to be made (depending on the cuda system):
+# 2a: Compilation fails with the message "C++ versions less than C++11
+#     are not supported." This may be due to an old compiler version. Add
+#     a suitable flag to the nvcc invocation by inserting a line into
+#     the function '':
+#         '-std=c++11'
+#
 
 # standard imports
 import os
@@ -47,16 +61,16 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
     # stylegan2_directory:
     #     path to a directory, into which the `stylegan2` repository
     #     (https://github.com/NVlabs/stylegan2.git) was cloned.
-    config.set_default_value('stylegan2_directory',
+    config.set_default_value('nvlabs_stylegan2_directory',
                              os.path.join(config.github_directory,
                                           'stylegan2'))
 
     # Prepare import of stylegan package
-    if not os.path.isdir(config.stylegan2_directory):
-        LOG.error("stylegan directory not found in '%s'",
-                  config.stylegan2_directory)
+    if not os.path.isdir(config.nvlabs_stylegan2_directory):
+        LOG.error("nvlabs stylegan2 directory not found in '%s'",
+                  config.nvlabs_stylegan2_directory)
         LOG.info("install it by typing: git clone %s %s",
-                 stylegan2_github, config.stylegan2_directory)
+                 stylegan2_github, config.nvlabs_stylegan2_directory)
         sys.exit(1)  # FIXME[hack]: do not exit - find a better exception handling mechanism
 
     def __init__(self, model: str = None, filename: str = None,
@@ -94,17 +108,17 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
 
         # Step 1: Import modules from stylegan repository
         # import dnnlib
-        if config.stylegan2_directory not in sys.path:
-            sys.path.insert(0, config.stylegan2_directory)
+        if config.nvlabs_stylegan2_directory not in sys.path:
+            sys.path.insert(0, config.nvlabs_stylegan2_directory)
         LOG.debug("Importing module 'dnnlib' from '%s'",
-                  config.stylegan2_directory)
+                  config.nvlabs_stylegan2_directory)
 
         # dnnlib is contained in the stylegan2 repository
         global tflib
         import dnnlib.tflib as tflib
         import pretrained_networks
 
-        sys.path.remove(config.stylegan2_directory)
+        sys.path.remove(config.nvlabs_stylegan2_directory)
 
         # Step 2: Inititialize Tensorflow  (version 2)
         #
@@ -190,11 +204,11 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
                  self._model_filename)
         try:
             # FIXME[todo]: check if chdir is necessary or can be omitted
-            print(f"*** Changing to StyleGAN2 directory: '{config.stylegan2_directory}'")
+            print(f"*** Changing to StyleGAN2 directory: '{config.nvlabs_stylegan2_directory}'")
             LOG.debug("Changing to StyleGAN2 directory: '%s'",
-                      config.stylegan2_directory)
+                      config.nvlabs_stylegan2_directory)
             cwd = os.getcwd()
-            os.chdir(config.stylegan2_directory)
+            os.chdir(config.nvlabs_stylegan2_directory)
             os.environ['CPATH'] = '/space/conda/user/ulf/envs/dl-toolbox/lib/python3.7/site-packages/tensorflow/include'
             with open(self._model_filename, 'rb') as file:
                 self._generator_snapshot, self._discriminator_snapshot, \

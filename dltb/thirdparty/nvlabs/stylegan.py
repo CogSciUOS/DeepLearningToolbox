@@ -55,9 +55,11 @@ class StyleGAN(ImageGAN, KerasTensorflowModel):
     ----------
     [1] https://github.com/NVlabs/stylegan
     """
+    config.set_default_value('nvlabs_stylegan_directory',
+                             os.path.join(config.github_directory,
+                                          'stylegan'))
 
-    github_dir = '/space/home/ulf/github'
-    stylegan_dir = os.path.join(github_dir, 'stylegan')
+    stylegan_dir = config.nvlabs_stylegan_directory
     stylegan_github = 'https://github.com/NVlabs/stylegan.git'
 
     # FIXME[hack]: we need a better import mechanism ...

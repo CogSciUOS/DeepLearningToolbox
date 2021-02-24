@@ -35,5 +35,6 @@ deep learning module based on tensorflow (via `dnnlib.tflib`).
 # a default session, the function will do nothing).
 
 
-from .stylegan import StyleGAN
+#from .stylegan import StyleGAN
 from .stylegan2 import StyleGAN2
+StyleGAN = StyleGAN2
