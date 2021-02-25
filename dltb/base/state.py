@@ -1,7 +1,7 @@
 """Base class for classes that have an internal state.
 """
 
-from base import Observable
+from .observer import Observable
 
 
 class Stateful(Observable, method='state_changed', changes={'state_changed'}):

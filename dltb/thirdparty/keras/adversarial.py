@@ -15,7 +15,6 @@ print(f"numpy: {np.__version__}")
 print(f"tensorflow: {tf.__version__}")
 
 from dltb.base.observer import Observable
-import util
 
 import cleverhans
 from cleverhans.attacks import FastGradientMethod

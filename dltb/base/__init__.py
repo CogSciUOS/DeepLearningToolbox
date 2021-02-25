@@ -1,7 +1,11 @@
+
+# standard imports
 # concurrent.futures is new in Python 3.2.
 from concurrent.futures import ThreadPoolExecutor, Future
 import threading
 
+# Toolbox imports
+from .types import Extendable
 from .observer import Observable
 from .prepare import Preparable
 

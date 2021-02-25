@@ -13,7 +13,7 @@ import logging
 import numpy as np
 
 # toolbox imports
-from base import Observable
+from .observer import Observable
 from . import run
 
 # logging

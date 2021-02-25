@@ -89,7 +89,7 @@ Examples:
 
 """
 
-from .types import Extendable, Identifiable
+from dltb.base.types import Identifiable
 from dltb.base.observer import Observable, change
 #from .fail import Failable, FailableObservable
 #from .busy import BusyObservable, busy

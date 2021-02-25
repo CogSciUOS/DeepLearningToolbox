@@ -25,11 +25,11 @@ from PyQt5.QtWidgets import (QMenu, QAction, QMainWindow,
 # Toolbox imports
 from base import Runner
 from toolbox import Toolbox
+from dltb.network import Network
+from dltb.datasource import Datasource
 
 # FIXME[old]: this should not be needed for the MainWindow
-from util import resources
-from network import Network
-from dltb.datasource import Datasource
+import dltb.base.hardware as hardware  # needed for the status bar
 
 # Toolbox GUI imports
 from .utils import QtAsyncRunner, QObserver, QBusyWidget, QDebug, protect
@@ -595,15 +595,15 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         # message += (f", {self._runner.active_workers}/"
         #             f"{self._runner.max_workers} threads")
         message += (", Memory: " +
-                    "Shared={:,} kiB, ".format(resources.mem.shared) +
-                    "Unshared={:,} kiB, ".format(resources.mem.unshared) +
-                    "Peak={:,} kiB".format(resources.mem.peak))
-        if len(resources.gpus) > 0:
-            message += (f", GPU: temperature={resources.gpus[0].temperature}/"
-                        f"{resources.gpus[0].temperature_max}\u00b0C")
+                    "Shared={:,} kiB, ".format(hardware.mem.shared) +
+                    "Unshared={:,} kiB, ".format(hardware.mem.unshared) +
+                    "Peak={:,} kiB".format(hardware.mem.peak))
+        if len(hardware.gpus) > 0:
+            message += (f", GPU: temperature={hardware.gpus[0].temperature}/"
+                        f"{hardware.gpus[0].temperature_max}\u00b0C")
             message += (", memory={:,}/{:,}MiB".
-                        format(resources.gpus[0].mem,
-                               resources.gpus[0].mem_total))
+                        format(hardware.gpus[0].mem,
+                               hardware.gpus[0].mem_total))
         if self._runner is not None:
             message += (f", Tasks: {self._runner.active_workers}/"
                         f"{self._runner.max_workers}")

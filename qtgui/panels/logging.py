@@ -5,23 +5,29 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QListWidget,
-                             QCheckBox, QRadioButton, QButtonGroup,
-                             QListWidget, QListWidgetItem,
-                             QVBoxLayout, QHBoxLayout, QGroupBox,
-                             QSplitter, QComboBox)
-
-from qtgui.widgets.logging import QLogHandler, QExceptionView
-from .panel import Panel
-
+# standard imports
 import logging
+
+# Qt imports
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QWidget, QLabel, QPushButton
+from PyQt5.QtWidgets import QCheckBox, QRadioButton, QButtonGroup
+from PyQt5.QtWidgets import QListWidget, QListWidgetItem, QComboBox
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox
+
+# toolbox imports
+from util import RecorderHandler
+from util.error import protect
+from toolbox import Toolbox
+
+# GUI imports
+from .panel import Panel
+from ..widgets.logging import QLogHandler, QExceptionView
+
+# logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-import util
-from util.error import protect
-from toolbox import Toolbox
 
 class LoggingPanel(Panel):
     """A panel containing elements to log messages.
@@ -203,7 +209,7 @@ class LoggingPanel(Panel):
         if self._loggingRecorder is not None:
             logger.removeHandler(self._loggingRecorder)
 
-    def setLoggingRecorder(self, recorder: util.RecorderHandler) -> None:
+    def setLoggingRecorder(self, recorder: RecorderHandler) -> None:
         """Set a logging recorder for this :py:class:LoggingPanel.
         Having a logging recorder allows to replay the log messages
         recorded by that recorder.

@@ -13,6 +13,7 @@ import importlib
 import numpy as np
 
 # toolbox imports
+from ..base import Extendable
 from ..base.register import RegisterClass
 from ..base.prepare import Preparable
 from ..base.data import Data, Datalike
@@ -22,7 +23,7 @@ from ..tool.image import ImageTool
 from ..tool.classifier import SoftClassifier
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
 from ..util.terminal import Terminal, DEFAULT_TERMINAL
-from base import Identifiable, Extendable
+from base import Identifiable
 
 # logging
 LOG = logging.getLogger(__name__)

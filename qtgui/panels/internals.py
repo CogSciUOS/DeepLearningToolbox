@@ -5,27 +5,29 @@ Email: krumnack@uni-osnabrueck.de
 Github: https://github.com/krumnack
 """
 
-import sys
-from util.resources import (Resource, ModuleResource)
-from ..utils import QObserver, QAttribute
-
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QWidget, QGroupBox, QLabel, QPushButton)
-from PyQt5.QtWidgets import (QGridLayout, QHBoxLayout, QVBoxLayout,
-                             QPlainTextEdit, QComboBox)
-from PyQt5.QtGui import QFontDatabase
-
-from .panel import Panel
-
+# standard imports
 import importlib
-
+import sys
 import os
 import re
-import util.resources
-import util
 
+# Qt imports
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import QWidget, QGroupBox, QLabel, QPushButton
+from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QPlainTextEdit, QComboBox
+from PyQt5.QtGui import QFontDatabase
+
+# toolbox imports
+from base.util.resource import Resource, ModuleResource,
+from base.util.hardware import cpus, gpus, cuda
+from util import add_timer_callback
 from util.error import protect
 from toolbox import Toolbox
+
+# GUI imports
+from .panel import Panel
+from ..utils import QObserver, QAttribute
 
 
 class ModuleInfo(QGroupBox, QObserver, qobservables={
@@ -280,11 +282,11 @@ class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
 
         hardwareBox = QGroupBox('Hardware')
         boxLayout = QVBoxLayout()
-        for i, cpu in enumerate(util.resources.cpus):
-            prefix = f"{i+1}. " if len(util.resources.cpus) > 1 else ""
+        for i, cpu in enumerate(cpus):
+            prefix = f"{i+1}. " if len(cpus) > 1 else ""
             boxLayout.addWidget(QLabel(f"{prefix}CPU: {cpu.name}"))
-        for i, gpu in enumerate(util.resources.gpus):
-            prefix = f"{i+1}. " if len(util.resources.gpus) > 1 else ""
+        for i, gpu in enumerate(gpus):
+            prefix = f"{i+1}. " if len(gpus) > 1 else ""
             boxLayout.addWidget(QLabel(f"{prefix}GPU: {gpu.name}"))
         # Memory (1)
         import os
@@ -353,7 +355,7 @@ class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
                                    format(rusage.ru_maxrss)))
 
 
-        if util.resources.cuda is not None:
+        if cuda is not None:
             button = QPushButton("CUDA")
             #button.setFlat(True)
             @protect
@@ -448,16 +450,16 @@ class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
 
 
             boxLayout.addWidget(QLabel(f"NVIDIA Kernel driver: "
-                                       f"{util.resources.cuda.driver_version}"))
+                                       f"{cuda.driver_version}"))
             boxLayout.addWidget(QLabel(f"CUDA Toolkit version: "
-                                       f"{util.resources.cuda.toolkit_version}"))
+                                       f"{cuda.toolkit_version}"))
 
             text = QPlainTextEdit()
             fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
             text.document().setDefaultFont(fixedFont)
             text.setReadOnly(True)
-            text.setPlainText(str(util.resources.cuda.nvidia_smi))
-            text.appendPlainText(str(util.resources.cuda.nvidia_smi_l))
+            text.setPlainText(str(cuda.nvidia_smi))
+            text.appendPlainText(str(cuda.nvidia_smi_l))
             boxLayout.addWidget(text)
 
         # Now use the python module pycuda
@@ -493,7 +495,7 @@ class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
         try:
             nvmlInfo = QNvmlInfo()
             boxLayout.addWidget(nvmlInfo)
-            util.add_timer_callback(nvmlInfo.update)
+            add_timer_callback(nvmlInfo.update)
         except ImportError as e:
             print(e, file=sys.stderr)
             boxLayout.addWidget(QLabel("Python NVML module (py3nvml) not availabe"))

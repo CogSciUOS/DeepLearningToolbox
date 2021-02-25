@@ -12,7 +12,7 @@ from threading import Event
 # toolbox imports
 from ..base.data import Datalike
 from ..base.register import RegisterClass
-from ..base.resource import Resource
+from ..base.prepare import Preparable
 from ..base.data import Data, BatchWrapper, BatchDataItem
 
 # logging
@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 # to prior application. This may be caused by a change of configuration
 # parameters, exchange of the underlying engine, or the tool
 # becoming perpared ...
-class Tool(Resource, metaclass=RegisterClass, method='tool_changed'):
+class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     # pylint: disable=too-many-ancestors
     """:py:class:`Tool` is an abstract base class for tools.
     A Tool can be applied to process data. This abstract base class
