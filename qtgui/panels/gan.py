@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import QSizePolicy
 from dltb.base.prepare import Preparable
 from dltb.base.image import ImageObservable
 from dltb.tool.generator import ImageGeneratorWorker
+from dltb.thirdparty import modules_with_class, implementations, import_class
 
 # GUI imports
 from .panel import Panel
@@ -55,6 +56,9 @@ class GANPanel(Panel, QObserver, qobservables={
         Name of the currently selected GAN module (one of the keys of
         of the `GANModules` dictionary).
 
+    _ganClass: str
+        The class from which the GAN can be instantiated.
+    
     _gan: GAN
         The currently selected GAN. An instance of the class
         named by `_ganName`. `None` means that the class was not yet
@@ -65,11 +69,16 @@ class GANPanel(Panel, QObserver, qobservables={
         generation and informs the GUI once images are available.
     """
 
-    GANModules = {
-        'StyleGAN': 'dltb.thirdparty.stylegan.StyleGAN'
-    }
+    GANClasses = dict()
+    
+    for implementation in implementations('ImageGAN'):
+        module, name = implementation.rsplit('.', maxsplit=1)
+        if name in GANClasses:
+            name += f" ({module.rsplit('.', maxsplit=1)[1]})"
+        GANClasses[name] = implementation
 
     _ganName: str = None
+    _ganClass: type = None
     _gan = None
 
     def __init__(self, **kwargs) -> None:
@@ -79,6 +88,8 @@ class GANPanel(Panel, QObserver, qobservables={
         self._gan = None
         self._worker = None
         self._busy = False
+        self._features1 = None
+        self._features2 = None
         self._initUI()
         self._initLayout()
         self.update()
@@ -91,12 +102,13 @@ class GANPanel(Panel, QObserver, qobservables={
         # Initialization
         #
 
-        # A QComboBox for selecting the GAN class (currently only StyleGAN)
+        # A QComboBox for selecting the GAN class
         self._ganModuleLabel = QLabel("Module:")
         self._ganSelector = QAdaptedComboBox()
-        self._ganSelector.setFromIterable(self.GANModules.keys())
+        self._ganSelector.setFromIterable(self.GANClasses.keys())
         self._ganSelector.currentTextChanged. \
             connect(self.onGanChanged)
+        self._ganName = self._ganSelector.currentText()
 
         # The "Initialize" button will trigger loading the GAN model
         self._initializeButton = QPushButton("Initialize")
@@ -210,7 +222,7 @@ class GANPanel(Panel, QObserver, qobservables={
 
     @protect
     def onInitializeClicked(self, checked: bool) -> None:
-        if 'experiments.stylegan' in sys.modules:
+        if self._ganClass is not None:
             return  # module already initialized
 
         self._busyWidget.setBusy(True)
@@ -220,30 +232,30 @@ class GANPanel(Panel, QObserver, qobservables={
         Thread(target=self.doInitialize).start()
         self.update()
 
-    def doInitialize(self):
+    def doInitialize(self) -> None:
         """Import the StyleGAN module and update the interface.
         """
 
-        # import the StyleGAN class (this may take some time ...)
-        # FIXME[hack]: create better import mechanism
-        from dltb.thirdparty.stylegan import StyleGAN
+        # import the ImageGAN class (this may take some time ...)
+        self._ganClass = import_class(self.GANClasses[self._ganName])
 
+        gan = self._ganClass()
+        self._setGan(gan)
+        
         # now update the interface to allow selecting one of the
         # pretrained stylegan models
-        self._modelSelector.setFromIterable(StyleGAN.models)
+        if hasattr(self._ganClass, 'models'):
+            self._modelSelector.setFromIterable(self.ganClass.models)
         self._busy = False
         self._busyWidget.setBusy(False)
         self.update()
 
-    @protect
-    def onModelChanged(self, name: str) -> None:
-        # FIXME[hack]: create better import mechanism
-        from dltb.thirdparty.stylegan import StyleGAN
-
-        self._busyWidget.setBusy(True)
+    def _setGan(self, gan) -> None:
         if self._gan is not None:
             self.unobserve(self._gan)
-        self._gan = StyleGAN(model=name)
+
+        self._gan = gan
+
         if self._gan is not None:
             self.observe(self._gan)
 
@@ -254,9 +266,23 @@ class GANPanel(Panel, QObserver, qobservables={
             self._worker.generator = self._gan
 
         self._prepareButton.setPreparable(self._gan)
+        self._busyWidget.setBusyObservable(self._gan)
         # self._gan.prepare()
         self._gan.info()
+
+    @protect
+    def onModelChanged(self, name: str) -> None:
+
+        self._busyWidget.setBusy(True)
+        # FIXME[hack]: we need a better model/config mechanism ...
+        if hasattr(self._ganClass, 'models'):
+            gan = self._ganClass(model=name)
+        else:
+            gan = self._ganClass()
+
+        self._setGan(gan)
         self._busyWidget.setBusy(False)
+        
         self.update()
 
     @protect
@@ -267,11 +293,11 @@ class GANPanel(Panel, QObserver, qobservables={
             self._newRandomFeatures(index=1)
 
     def _newRandomFeatures(self, index: int = None) -> None:
-        if index is None or index == 0:
+        if index is None or index == 0 or self._features1 is None:
             seed1 = random.randint(0, 10000)
             self._features1 = self._gan.random_features(seed=seed1)
 
-        if index is None or index == 1:
+        if index is None or index == 1 or self._features2 is None:
             seed2 = random.randint(0, 10000)
             self._features2 = self._gan.random_features(seed=seed2)
 
@@ -301,21 +327,24 @@ class GANPanel(Panel, QObserver, qobservables={
         This method is called when the image generator has finished
         creating a new image.
         """
+        print(f"GANPanel.image_changed({observable}, {change})")  # FIXME[debug]
         image = observable.image  # type Image
         if image.is_batch:
             self._imageA.setImagelike(image[0])
             self._imageB.setImagelike(image[1])
             self._imageView.setImagelike(image[2])
         else:
-            self._imageView.setImagelike(image)  # FIXME[todo]: should setImage
+            self._imageView.setImagelike(image)  # FIXME[todo]: should be setImage, not setImageLike
 
     def preparable_changed(self, preparable: Preparable,
                            info: Preparable.Change) -> None:
+        print(f"GANPanel.image_changed({preparable}, {info})")  # FIXME[debug]
         if preparable.prepared:
             self._infoLabel.setText(f"{self._gan.feature_dimensions} -> "
                                     f"?")
             if self._features1 is None:
                 self._newRandomFeatures()
+            self._gan.info()
         else:
             self._infoLabel.setText("")
             self._features1, self._features1 = None, None
@@ -327,8 +356,8 @@ class GANPanel(Panel, QObserver, qobservables={
 
         # update GAN class initialization
         ganId = self._ganSelector.currentText()
-        if ganId in self.GANModules:
-            module, name = self.GANModules[ganId].rsplit('.', maxsplit=1)
+        if ganId in self.GANClasses:
+            module, name = self.GANClasses[ganId].rsplit('.', maxsplit=1)
             initialized = module in sys.modules
             self._initializeButton.setEnabled(not initialized and
                                               not self._busy)
@@ -352,7 +381,8 @@ class GANPanel(Panel, QObserver, qobservables={
         else:
             self._ganModelLabel.setVisible(False)
             self._modelSelector.setVisible(False)
-            self._prepareButton.setVisible(False)
+            #self._prepareButton.setVisible(False)
+            self._prepareButton.setVisible(True)
 
         haveGan = self._gan is not None
         enabled = haveGan and not self._busy and self._gan.prepared

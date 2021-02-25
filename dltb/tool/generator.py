@@ -329,7 +329,7 @@ class ImageGeneratorWorker(ImageObservable, BusyObservable):
         while self._next_features is not None:
             features = self._next_features
             self._next_features = None
-            self._image = self._generator.generate_image(features)
+            self._image = self._generator.generate(features)
             self.change('image_changed')
 
     def random(self, seed: int = None) -> None:

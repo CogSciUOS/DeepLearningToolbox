@@ -169,7 +169,7 @@ class ItemAdapter(QDebug):
         try:
             return next((x for i, x in enumerate(self._items()) if i == index))
         except StopIteration:
-            raise IndexError()
+            raise IndexError(f"Index {i} beyond end of items.")
 
     def _getTextAt(self, index: int) -> str:
         """
@@ -189,9 +189,9 @@ class ItemAdapter(QDebug):
             The given item is not found in this :py:class:`ItemAdapter`.
         """
         try:
-            return next(i for i, x in enumerate(self._items()) if x is item)
+            return next(i for i, x in enumerate(self._items()) if x == item)
         except StopIteration:
-            raise LookupError()
+            raise LookupError(f"Item {item} not found.")
 
     def _indexOfText(self, text: str) -> int:
         """
@@ -203,7 +203,7 @@ class ItemAdapter(QDebug):
         try:
             return next(i for i, t in enumerate(self._texts()) if t == text)
         except StopIteration:
-            raise LookupError()
+            raise LookupError(f"Item with text '{text}' not found")
 
     def _findItem(self, text: str) -> Any:
         """
@@ -216,7 +216,7 @@ class ItemAdapter(QDebug):
             return next(item for item in self._items()
                         if self._textForItem(item) == text)
         except StopIteration:
-            raise LookupError()
+            raise LookupError(f"Item with text '{text}' not found.")
 
     def _setCurrentText(self, text: str) -> None:
         """

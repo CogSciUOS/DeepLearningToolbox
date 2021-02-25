@@ -18,6 +18,7 @@ config.thirdparty_info = False
 
 # FIXME[hack]: put this into some configuration file
 config.github_directory = '/space/home/ulf/github'
+config.github_directory = '/work/krumnack/git/'
 
 
 # model_directory: str
@@ -26,3 +27,4 @@ config.github_directory = '/space/home/ulf/github'
 #    third-party repository.
 # FIXME[hack]: put this into some configuration file
 config.model_directory = '/space/home/ulf/models'
+config.model_directory = '/work/krumnack/models'

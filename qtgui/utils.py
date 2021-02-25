@@ -4,11 +4,11 @@ import os
 import logging
 
 # Qt imports
-from PyQt5.QtCore import (Qt, QObject, QEvent, QThreadPool, QRunnable,
-                          pyqtSignal, pyqtSlot, QMetaObject, Q_ARG)
+from PyQt5.QtCore import Qt, QObject, QEvent, QThread, QThreadPool, QRunnable
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, QMetaObject, Q_ARG
 from PyQt5.QtGui import QKeyEvent, QMouseEvent, QHideEvent, QShowEvent
 from PyQt5.QtGui import QMovie
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
+from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QApplication
 
 # toolbox imports
 from toolbox import Toolbox
@@ -534,8 +534,16 @@ class QObserver(QAttribute):
             if not create:
                 raise RuntimeError("No QObserverHelper for observing "
                                    f"{type(observable)} in {self}")
-            self._qObserverHelpers[key] = \
-                QObserver.QObserverHelper(self, observable, interests, notify)
+            helper = QObserver.QObserverHelper(self, observable,
+                                               interests, notify)
+            # make sure that event processing for the helper object
+            # is done in th main thread:
+            mainThread = QApplication.instance().thread()
+            if mainThread != QThread.currentThread():
+                LOG.warning("Moving observer helper for %s to main Thread",
+                            observable)
+                helper.moveToThread(mainThread)
+            self._qObserverHelpers[key] = helper
         elif remove:
             return self._qObserverHelpers.pop(key)
         return self._qObserverHelpers[key]
@@ -584,6 +592,8 @@ class QObserver(QAttribute):
         if not isinstance(observable, Observable):
             raise TypeError(f"{type(self).__name__} is trying to observe "
                             f"a non-observable ({type(observable)})")
+        mainThread = QApplication.instance().thread()
+        currentThread = QThread.currentThread()
         qObserverHelper = \
             self.helperForObservable(observable, create=True,
                                      interests=interests, notify=notify)
@@ -710,7 +720,12 @@ class QObserver(QAttribute):
             The actuall Observer that finally should receive the
             notifications.
         _interests: Change
-            The changes, the Observer is interested in.
+            The changes, the observer is interested in. This will be
+            used as the `interests` argument when adding this
+            :py:class:`Observer` to an :py:class:`Observable` using
+            the :py:meth:`Observable.add_observer` method.  A value
+            of `None` means that the :py:class:`Observer` is interested
+            in all changes.
         _change: Change
             The unprocessed changes accumulated so far.
         _notify: Callable[[Observable, Change], None]
@@ -791,7 +806,9 @@ class QObserver(QAttribute):
             change:
                 The change that caused this notification.
             """
-            if self._change is None:
+            # LOG.debug("%s._qNotify: change=%s [%s]",
+            #           self._observer, change, self._change)
+            if self._change is None or True:  # FIXME[hack]
                 # Currently, there is no change event pending for this
                 # object. So we will queue a new one and remember the
                 # change:
@@ -800,10 +817,16 @@ class QObserver(QAttribute):
                 # This will use Qt.AutoConnection: the member is invoked
                 # synchronously if obj lives in the same thread as the caller;
                 # otherwise it will invoke the member asynchronously.
-                QMetaObject.invokeMethod(self, '_qAsyncNotify',
-                                         Q_ARG("PyQt_PyObject", observable))
-                #     Q_ARG("PyQt_PyObject", change))
-                #   RuntimeError: QMetaObject.invokeMethod() call failed
+                try:
+                    # LOG.debug("%s._qNotify: invokeMethod(_qAsyncNotify, %s)"
+                    #           "in QThread %s",
+                    #           self._observer, observable, self.thread())
+                    argument = Q_ARG("PyQt_PyObject", observable)
+                    QMetaObject.invokeMethod(self, '_qAsyncNotify', argument)
+                    #     Q_ARG("PyQt_PyObject", change))
+                    #   RuntimeError: QMetaObject.invokeMethod() call failed
+                except Exception as ex:
+                    util.error.handle_exception(ex)
             else:
                 # There is already one change pending in the event loop.
                 # We will just update the change, but not queue another
@@ -821,6 +844,8 @@ class QObserver(QAttribute):
             observer.
 
             """
+            # print(f"%s._qAsyncNotify: notify=%s change=%s in thread %s",
+            #       self._observer, self._notify, self._change, self.thread())
             change = self._change
             kwargs = self._kwargs
             if change is not None:

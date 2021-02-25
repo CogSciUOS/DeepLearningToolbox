@@ -425,6 +425,9 @@ class Observable(object):
         else:
             self._thread_local.change |= set(args)
             self._thread_local.change |= {k for k, v in kwargs.items() if v}
+            if debug:
+                LOG.debug("%s.change(%s): Storing in change context: %s",
+                          type(self).__name__, args, self._thread_local.change)
 
     #
     # Managing observables
@@ -440,8 +443,9 @@ class Observable(object):
             Object which wants to be notified of changes. Must supply
             a suitable change method.
         interests: Change
-            The changes the observer is interested in. Default is
-            all changes.
+            The changes the observer is interested in. `None` means that
+            the the observer is interested in all chanages. Default is
+            `None` (all changes).
         notify: Callable
             Method to be called to notify the observer. Default is
             self.notify()
@@ -557,7 +561,7 @@ class Observable(object):
             LOG.debug("-- Notifying %d observers on changes: %s",
                       len(self._observers), changes)
         for index, (observer, observation) in enumerate(self._observations()):
-            debug_text = f"{index+1}) {observer}: " if debug else None
+            debug_text = f"{index+1}) {observer}" if debug else None
             self._notify(observation, changes, debug=debug_text, **kwargs)
         if debug:
             LOG.debug("-- Notifying observers done -------------------------")

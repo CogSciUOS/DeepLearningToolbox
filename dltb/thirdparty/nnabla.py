@@ -76,6 +76,8 @@ import nnabla_ext.cuda
 # Toolbox imports
 from ..config import config
 from ..base import Preparable
+from ..base.busy import BusyObservable, busy
+from ..base.image import Image
 from ..tool.generator import ImageGAN
 from ..util.download import download
 
@@ -83,7 +85,7 @@ from ..util.download import download
 LOG = logging.getLogger(__name__)
 
 
-class NNabla(Preparable):
+class NNabla(Preparable, BusyObservable):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -187,23 +189,26 @@ class StyleGAN2(ImageGAN, NNablaExample):
 
     def _prepare(self) -> None:
         super()._prepare()
+        LOG.info("prepare: starting nnabla stylegan2 preparation")
         self._prepare_model()
         self._prepare_nnabla_generator()
         # self._prepare_nnabla_generator2()
+        LOG.info("prepare: finished nnabla stylegan2 preparation")
 
     def _prepare_model(self) -> None:
         #
         # Load the model data
         #
-        LOG.info("prepare: stylegan2 model data: %s", self.weights_file)
 
         # make sure the weights file is available
         if not os.path.isfile(self.weights_file):
             url = ('https://nnabla.org/pretrained-models/nnabla-examples/'
                    'GANs/stylegan2/styleGAN2_G_params.h5')
+            LOG.debug("prepare: downloading model data: %s", url)
             download(url, self.weights_file)
 
         # load the weights file
+        LOG.debug("prepare: loading the weights: %s", self.weights_file)
         nn.load_parameters(self.weights_file)
 
     def _prepare_nnabla_generator(self) -> None:
@@ -258,11 +263,15 @@ class StyleGAN2(ImageGAN, NNablaExample):
             self._nnabla_stylegan2.generate(batch_size, self._style_noises,
                                             noise_seed, truncation_psi)
 
-    def _generate_batch(self, features: np.ndarray) -> np.ndarray:
+    #@busy("generating")
+    #def generate(self, **kwargs) -> Image:
+    #    return super().generate(**kwargs)
+
+    def _generate_single(self, features: np.ndarray) -> np.ndarray:
         """
         """
         for style_noise in self._style_noises:
-            style_noise.d = features
+            style_noise.d = features[np.newaxis, ...]
 
         # rgb_output.forward()  # RuntimeError: memory error in alloc
         self._rgb_output.forward(clear_buffer=True)
@@ -305,3 +314,7 @@ class StyleGAN2(ImageGAN, NNablaExample):
         #return (self._generator.output_shape[2:] +
         #        self._generator.output_shape[1:2])
         return (1024, 1024, 3)  # FIXME[hack]
+
+    def info(self) -> None:
+        print(f"Info: {self} ({type(self)})")
+        super().info()

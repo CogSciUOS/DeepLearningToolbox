@@ -78,8 +78,6 @@ def main():
                         default=False, help='list GAN implementations')
     parser.add_argument('--class', type=str, default='ImageGAN',
                         help='GAN implementation')
-    parser.add_argument('--module', type=str, default=None,
-                        help='GAN implementation')
 
     parser.add_argument('--model', type=str, default=None,
                         help='use pretrained model')
@@ -120,20 +118,14 @@ def main():
     args = parser.parse_args()
 
     if args.list:
-        print("Modules providing an ImageGAN:")
-        for module in modules_with_class('ImageGAN'):
-            print(f" - {module}")
-
         for implementation in implementations('ImageGAN'):
             print(f" - {implementation}")
 
         return
 
-    ImageGANImplementation = \
-        import_class(getattr(args, 'class'), module=args.module)
-
+    # Instantiation and initialization
+    ImageGANImplementation = import_class(getattr(args, 'class'))
     gan = ImageGANImplementation(model=args.model, filename=args.filename)
-
     gan.prepare()
     gan.info()
 
