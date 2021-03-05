@@ -12,6 +12,7 @@ import os
 from argparse import ArgumentParser
 
 # toolbox imports
+import dltb.argparse as ToolboxArgparse
 from dltb.datasource import Datasource, DataDirectory, Imagesource
 from dltb.base.data import Data
 from dltb.base.image import ImageDisplay
@@ -46,7 +47,10 @@ def main():
                         help='run face detection')
     parser.add_argument('--output', type=str,
                         help='write output in the given video file')
+    ToolboxArgparse.add_arguments(parser)
+
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(args)
 
     if args.detect:
         detector = Tool['haar']

@@ -20,6 +20,7 @@ from network import Layer
 from dltb.tool.activation import ActivationWorker
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 from dltb.util.image import grayscaleNormalized
+from dltb.util.error import print_exception
 
 # GUI imports
 from ..utils import QObserver, protect
@@ -390,7 +391,6 @@ class QActivationView(QWidget, QObserver, qobservables={
                 activations = worker.activations(self._layer, data_format=
                                                  DATA_FORMAT_CHANNELS_FIRST)
             except (ValueError, TypeError) as error:
-                from util.error import print_exception
                 #LOG.warning("QActivationView.worker_changed: error=%s", error)
                 print_exception(error)
                 activations = None

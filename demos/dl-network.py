@@ -17,8 +17,9 @@ import logging
 import argparse
 
 # toolbox imports
+import dltb.argparse as ToolboxArgparse
 from dltb.network import argparse as NetworkArgparse
-from util.error import print_exception
+from dltb.util.error import print_exception
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -37,8 +38,11 @@ def main():
                         help="display backend specific summary of the network")
     parser.add_argument('--layer', help='describe the specified layer')
 
+    ToolboxArgparse.add_arguments(parser)
     NetworkArgparse.prepare(parser)
+
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(args)
 
     network = NetworkArgparse.network(parser, args)
     if network is None:

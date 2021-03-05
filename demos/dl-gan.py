@@ -17,6 +17,7 @@ import argparse
 # third party imports
 
 # toolbox imports
+import dltb.argparse as ToolboxArgparse
 from dltb.util.image import ImageDisplay, imshow, imwrite
 from dltb.thirdparty import modules_with_class, implementations, import_class
 
@@ -115,7 +116,9 @@ def main():
     parser.add_argument('--store', action='store_true', default=False,
                         help='store generated image to disk')
 
+    ToolboxArgparse.add_arguments(parser)
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(parser)
 
     if args.list:
         for implementation in implementations('ImageGAN'):

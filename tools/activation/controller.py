@@ -3,7 +3,7 @@
 # third party imports
 
 # toolbox imports
-from base import Observable  # FIXME: should not be needed!
+from dltb.base import Observable  # FIXME: should not be needed!
 from base import View as BaseView, Controller as BaseController
 from network import Network, Controller as NetworkController
 from .engine import Engine
@@ -21,7 +21,7 @@ class View(BaseView, view_type=Engine):
 
     """
 
-    def __init__(self, activation: Engine=None, **kwargs):
+    def __init__(self, activation: Engine = None, **kwargs):
         super().__init__(observable=activation, **kwargs)
 
 
@@ -32,7 +32,7 @@ class Controller(View, BaseController, Network.Observer):
 
     _network_controller: NetworkController = None
 
-    def __init__(self, network: NetworkController=None, **kwargs) -> None:
+    def __init__(self, network: NetworkController = None, **kwargs) -> None:
         """
         Parameters
         ----------

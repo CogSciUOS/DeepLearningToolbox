@@ -72,7 +72,7 @@ def imshow(image: Imagelike, module: str = None, **kwargs) -> None:
     return display
 
 
-def imresize(image: np.ndarray, size: Tuple[int, int],
+def imresize(image: Imagelike, size: Tuple[int, int],
              **kwargs) -> np.ndarray:
     """Resize the given image. The result will be a new image
     of the specified size.
@@ -84,7 +84,7 @@ def imresize(image: np.ndarray, size: Tuple[int, int],
     return _resizer.resize(image, size, **kwargs)
 
 
-def imscale(image: np.ndarray, scale: Union[float, Tuple[float, float]],
+def imscale(image: Imagelike, scale: Union[float, Tuple[float, float]],
             **kwargs) -> np.ndarray:
     """Scale the given image. The result will be a new image
     scaled by the specified scale.

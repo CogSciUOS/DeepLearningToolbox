@@ -13,8 +13,8 @@ from contextlib import contextmanager
 import logging
 
 # toolbox imports
-from util.error import handle_exception
 from .fail import FailableObservable
+from ..util.error import handle_exception
 
 # logging
 LOG = logging.getLogger(__name__)

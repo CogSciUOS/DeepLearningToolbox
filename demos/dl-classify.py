@@ -13,12 +13,13 @@ import argparse
 # third party imports
 
 # toolbox imports
-from dltb.datasource import Datasource
-from dltb.thirdparty.datasource.imagenet import ImageNet
+import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
 from dltb.tool.classifier import Classifier, ImageClassifier
 from dltb.network import argparse as NetworkArgparse
+from dltb.datasource import Datasource
 from dltb.util.terminal import Terminal
+from dltb.thirdparty.datasource.imagenet import ImageNet
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -136,10 +137,12 @@ def main():
                         help='evaluate the classifier on the given datasource')
     parser.add_argument('--top', type=int, default=None,
                         help='evaluate top-n accuracy of classifier')
+    ToolboxArgparse.add_arguments(parser)
     NetworkArgparse.prepare(parser)
     parser.add_argument('image', metavar='IMAGE', nargs='*',
                         help='images to classify')
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(parser, args)
 
     network = NetworkArgparse.network(parser, args)
     if network is None:

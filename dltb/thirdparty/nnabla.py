@@ -157,10 +157,22 @@ class StyleGAN2(ImageGAN, NNablaExample):
     # Import functions from the example script
     # {nnabla_examples}/GANs/stylegan2/generate.py
 
+    # version trouble: there are some changes to the repository,
+    # that make it hard to use this consistently:
+    #
+    # * git checkout d646fd9cc58f0914db0f5c5a4043c4756209f9d4:
+    #   - no relative imports
+    #     -> import directly from the 'GANs/stylegan2/' directory,
+    #        not from 'GANs/' directory
+    #   - moderate use of the 'inplace' argument
+    #     -> does work with nnabla-1.7.0
+    #
+    # * newer versions
+
     assert os.path.isdir(config.nnabla_examples_directory)
     nnabla_stylegan2_directory = \
-        os.path.join(config.nnabla_examples_directory, 'GANs')
-        #os.path.join(config.nnabla_examples_directory, 'GANs', 'stylegan2')
+        os.path.join(config.nnabla_examples_directory, 'GANs', 'stylegan2')
+    #    os.path.join(config.nnabla_examples_directory, 'GANs')
     if nnabla_stylegan2_directory not in sys.path:
         sys.path.insert(0, nnabla_stylegan2_directory)
 
@@ -170,8 +182,8 @@ class StyleGAN2(ImageGAN, NNablaExample):
     # FIXME[problem]: this will place a module 'generate' in sys.modules
     # FIXME[bug]: with "Python 3.6.10 :: Anaconda, Inc."
     #   ImportError: attempted relative import with no known parent package
-    #import generate as _nnabla_stylegan2
-    from stylegan2 import generate as _nnabla_stylegan2
+    import generate as _nnabla_stylegan2
+    # from stylegan2 import generate as _nnabla_stylegan2
 
     sys.path.remove(nnabla_stylegan2_directory)
 

@@ -10,11 +10,11 @@ import importlib
 import logging
 
 # Toolbox imports
-from util.debug import debug_object
 from .observer import Observable
 from .busy import BusyObservable, busy
 from .prepare import Preparable
 from .fail import Failable
+from ..util.debug import debug_object
 from ..thirdparty import check_module_requirements
 
 

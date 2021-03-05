@@ -5,19 +5,21 @@
 .. moduleauthor:: Antonia Hain, Ulf Krumnack
 """
 
+# standard imports
 import os
-import sys
 import argparse
 import signal
-import util
-
 import logging
-#logging.basicConfig(level=logging.DEBUG)
+
+# toolbox imports
+from dltb.config import config
+from tools.am import Engine, Config
+
+# logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.debug(f"Logger[debug]: {logger.getEffectiveLevel()}")
 
-from tools.am import Engine, Config
 
 def main():
     '''Start the program.'''
@@ -35,7 +37,7 @@ def main():
                         default=False)
     args = parser.parse_args()
 
-    util.use_cpu = args.cpu
+    config.use_cpu = args.cpu
 
     from network.tensorflow import Network as TensorFlowNetwork
     checkpoint = os.path.join('models', 'example_tf_alexnet',

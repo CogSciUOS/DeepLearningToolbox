@@ -1,8 +1,11 @@
-from .conf import MODELS_DIRECTORY
-from unittest import TestCase
 
+# standard imports
+from unittest import TestCase
 import os
 import numpy as np
+
+# third-party imports
+import keras
 from keras.datasets import mnist
 
 ## The following lines allow the test to be run from within the test
@@ -10,18 +13,20 @@ from keras.datasets import mnist
 # if __package__: from . import MODELS_DIRECTORY
 # else: from __init__ import MODELS_DIRECTORY
 
+# toolbox imports
+from ...config import config
 
 import network.tensorflow
 from network.tensorflow import Network as TensorFlowNetwork
-from network.exceptions import ParsingError
 import tensorflow as tf
-import keras
+
 
 class TestTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        checkpoints = os.path.join(MODELS_DIRECTORY, 'example_tf_mnist_model',
+        checkpoints = os.path.join(config.models_directory,
+                                   'example_tf_mnist_model',
                                    'tf_mnist_model.ckpt')
         cls.loaded_network = TensorFlowNetwork(checkpoint=checkpoints)
         cls.data = mnist.load_data()[1][0].astype('float32')

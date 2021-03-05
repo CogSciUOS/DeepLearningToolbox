@@ -4,16 +4,18 @@ Author: Ulf Krumnack
 Email: krumnack@uni-osnabrueck.de
 """
 
-# Generic imports
-import sys
+# standard imports
 import logging
 import random
 
+# third-party imports
+import numpy as np
+
 # Qt imports
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QPushButton, QSlider
+from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtWidgets import QPushButton, QSlider
 from PyQt5.QtWidgets import QLabel, QGroupBox
-from PyQt5.QtWidgets import QStackedLayout, QVBoxLayout, QHBoxLayout
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout
 from PyQt5.QtWidgets import QSizePolicy
 
 # toolbox imports
@@ -21,14 +23,17 @@ from PyQt5.QtWidgets import QSizePolicy
 #from models.styletransfer import StyletransferTool
 
 from dltb.base.prepare import Preparable
+from dltb.base.busy import BusyObservable
 from dltb.base.image import ImageObservable
 from dltb.tool.generator import ImageGeneratorWorker
-from dltb.thirdparty import modules_with_class, implementations, import_class
+from dltb.util.importer import Importer
+from dltb.thirdparty import implementations
 
 # GUI imports
 from .panel import Panel
 from ..adapter import QAdaptedComboBox
 from ..widgets.image import QImageView
+from ..widgets.features import QFeatureView, QFeatureInfo
 from ..utils import QBusyWidget, QPrepareButton, QObserver, protect
 
 # logging
@@ -37,7 +42,8 @@ LOG = logging.getLogger(__name__)
 
 class GANPanel(Panel, QObserver, qobservables={
         ImageObservable: {'image_changed', 'data_changed'},
-        Preparable: {'state_changed'}}):
+        Preparable: {'state_changed'},
+        BusyObservable: {'busy_changed'}}):
     """The :py:class:`GANPanel` provides a graphical interface provides
     controls that allow to run different forms of GANs. The panel
     contains the following groups of controls:
@@ -58,7 +64,7 @@ class GANPanel(Panel, QObserver, qobservables={
 
     _ganClass: str
         The class from which the GAN can be instantiated.
-    
+
     _gan: GAN
         The currently selected GAN. An instance of the class
         named by `_ganName`. `None` means that the class was not yet
@@ -69,11 +75,11 @@ class GANPanel(Panel, QObserver, qobservables={
         generation and informs the GUI once images are available.
     """
 
+    # initialize the GAN classes dictionary
     GANClasses = dict()
-    
     for implementation in implementations('ImageGAN'):
         module, name = implementation.rsplit('.', maxsplit=1)
-        if name in GANClasses:
+        if name in GANClasses or True:
             name += f" ({module.rsplit('.', maxsplit=1)[1]})"
         GANClasses[name] = implementation
 
@@ -84,22 +90,27 @@ class GANPanel(Panel, QObserver, qobservables={
     def __init__(self, **kwargs) -> None:
         """Initialize the :py:class:`StyletransferPanel`.
         """
+        LOG.info("GANPanel: Initializing")
         super().__init__(**kwargs)
         self._gan = None
-        self._worker = None
         self._busy = False
+        self._features = None
         self._features1 = None
         self._features2 = None
+        self._worker = ImageGeneratorWorker()
+        self._importer = Importer()
         self._initUI()
         self._initLayout()
-        self.update()
+        self.observe(self._worker)
+        self.observe(self._importer)
+        self.setGan(None)
 
     def _initUI(self) -> None:
         """Initialize craphical components of the :py:class:`GANPanel`
         """
 
         #
-        # Initialization
+        # GAN Initialization widgets
         #
 
         # A QComboBox for selecting the GAN class
@@ -109,6 +120,7 @@ class GANPanel(Panel, QObserver, qobservables={
         self._ganSelector.currentTextChanged. \
             connect(self.onGanChanged)
         self._ganName = self._ganSelector.currentText()
+        self._ganClass = self.GANClasses[self._ganName]
 
         # The "Initialize" button will trigger loading the GAN model
         self._initializeButton = QPushButton("Initialize")
@@ -125,6 +137,9 @@ class GANPanel(Panel, QObserver, qobservables={
         self._prepareButton = QPrepareButton()
         self._infoLabel = QLabel()
 
+        self._debugButton = QPushButton("Debug")
+        self._debugButton.clicked.connect(self.onDebugClicked)
+
         #
         # Generated image
         #
@@ -135,6 +150,10 @@ class GANPanel(Panel, QObserver, qobservables={
         # Feature view for displaying current features
         self._featureView = QFeatureView()
         self._featureInfo = QFeatureInfo()
+        self._featureView.featuresChanged.\
+            connect(self.updateImage)
+        self._featureView.featuresChanged.\
+            connect(self._featureInfo.updateFeatures)
 
         #
         # Interpolation
@@ -161,7 +180,7 @@ class GANPanel(Panel, QObserver, qobservables={
         rows = QVBoxLayout()
 
         #
-        # Initialization
+        # GAN Initialization panel
         #
         group = QGroupBox("GAN model")
         row = QHBoxLayout()
@@ -177,6 +196,7 @@ class GANPanel(Panel, QObserver, qobservables={
         row.addWidget(self._prepareButton)
         row.addWidget(self._busyWidget)
         row.addWidget(self._infoLabel)
+        row.addWidget(self._debugButton)
         group.setLayout(row)
         rows.addWidget(group)
 
@@ -215,74 +235,83 @@ class GANPanel(Panel, QObserver, qobservables={
 
     @protect
     def onGanChanged(self, name: str) -> None:
+        """A new GAN was selected in the `ganSelector` widget.
+        If the corresponding GAN class is available (has already been
+        imported), it will be instantiated and set as active GAN.
+        Otherwise the import of the relevant module(s) will be
+        initiated and the active GAN is set to `None`.
+
+        Arguments
+        ---------
+        name:
+            The name (identifier) of the new GAN.
+        """
+        LOG.info("GANPanel: GAN changed in selector: '%s' -> '%s'",
+                 self._ganName, name)
         if name == self._ganName:
             return  # nothing changed
-        self._ganName = name
+
+        # set the current GAN name
         self._gan = None
+        self._ganName = name
+        self._ganClass = self.GANClasses[self._ganName]
+        self.update()
 
     @protect
     def onInitializeClicked(self, checked: bool) -> None:
-        if self._ganClass is not None:
+        if self._gan is not None:
             return  # module already initialized
 
-        self._busyWidget.setBusy(True)
-        self._busy = True
-        # FIXME[hack]: we need a better initialization mechanism here!
-        from threading import Thread
-        Thread(target=self.doInitialize).start()
+        # import class in background thread
+        self._busyWidget.setBusyObservable(self._importer)
+        self._importer.import_class(self._ganClass)
         self.update()
 
-    def doInitialize(self) -> None:
+    def _initializeGan(self) -> None:
         """Import the StyleGAN module and update the interface.
         """
+        if self._gan is not None:
+            return  # GAN already initialized
 
-        # import the ImageGAN class (this may take some time ...)
-        self._ganClass = import_class(self.GANClasses[self._ganName])
+        if self._ganClass is None:
+            return  # nothing to initialize
 
-        gan = self._ganClass()
-        self._setGan(gan)
-        
-        # now update the interface to allow selecting one of the
-        # pretrained stylegan models
-        if hasattr(self._ganClass, 'models'):
-            self._modelSelector.setFromIterable(self.ganClass.models)
-        self._busy = False
-        self._busyWidget.setBusy(False)
-        self.update()
+        if isinstance(self._ganClass, str):
+            if not self._importer.class_is_imported(self._ganClass):
+                return  # class definition has not been imported
+            self._ganClass = self._importer.imported_class(self._ganClass)
 
-    def _setGan(self, gan) -> None:
+        self.setGan(self._ganClass())
+
+    def setGan(self, gan) -> None:
         if self._gan is not None:
             self.unobserve(self._gan)
 
         self._gan = gan
+        self._worker.generator = self._gan
 
         if self._gan is not None:
             self.observe(self._gan)
 
-        if self._worker is None:
-            self._worker = ImageGeneratorWorker(self._gan)
-            self.observe(self._worker)
-        else:
-            self._worker.generator = self._gan
-
         self._prepareButton.setPreparable(self._gan)
         self._busyWidget.setBusyObservable(self._gan)
-        # self._gan.prepare()
-        self._gan.info()
+
+        # now update the interface to allow selecting one of the
+        # pretrained stylegan models
+        if hasattr(self._ganClass, 'models'):
+            self._modelSelector.setFromIterable(self._ganClass.models)
+            self._gan.model = self._modelSelector.currentText()
+        else:
+            self._modelSelector.clear()
+
+        self.update()
 
     @protect
     def onModelChanged(self, name: str) -> None:
+        if self._gan is None:
+            return  # we can not change the model ...
 
-        self._busyWidget.setBusy(True)
-        # FIXME[hack]: we need a better model/config mechanism ...
-        if hasattr(self._ganClass, 'models'):
-            gan = self._ganClass(model=name)
-        else:
-            gan = self._ganClass()
-
-        self._setGan(gan)
-        self._busyWidget.setBusy(False)
-        
+        self._gan.model = name
         self.update()
 
     @protect
@@ -306,20 +335,23 @@ class GANPanel(Panel, QObserver, qobservables={
         features[0] = self._features1
         features[1] = self._features2
         scaled = self._interpolationSlider.value() / 100
-        features[2] = (1-scaled) * self._features1 + scaled * self._features2
+        self._features = ((1-scaled) * self._features1 +
+                          scaled * self._features2)
+        features[2] = self._features
         self._worker.generate(features)
-        self._featureView.setFeatures(features[2])
-        self._featureInfo.setFeatures(features[2])
+        self._featureView.setFeatures(self._features)
+        self._featureInfo.setFeatures(self._features)
 
     @protect
     def onInterpolationChanged(self, value: int) -> None:
         """React to a change of the interpolation slider.
         """
         scaled = value / 100
-        features = (1-scaled) * self._features1 + scaled * self._features2
-        self._worker.generate(features)  # will call gan.generate()
-        self._featureView.setFeatures(features)
-        self._featureInfo.setFeatures(features)
+        self._features = ((1-scaled) * self._features1 +
+                          scaled * self._features2)
+        self._worker.generate(self._features)  # will call gan.generate()
+        self._featureView.setFeatures(self._features)
+        self._featureInfo.setFeatures(self._features)
 
     def image_changed(self, observable: ImageObservable,
                       change: ImageObservable.Change) -> None:
@@ -327,7 +359,6 @@ class GANPanel(Panel, QObserver, qobservables={
         This method is called when the image generator has finished
         creating a new image.
         """
-        print(f"GANPanel.image_changed({observable}, {change})")  # FIXME[debug]
         image = observable.image  # type Image
         if image.is_batch:
             self._imageA.setImagelike(image[0])
@@ -338,7 +369,6 @@ class GANPanel(Panel, QObserver, qobservables={
 
     def preparable_changed(self, preparable: Preparable,
                            info: Preparable.Change) -> None:
-        print(f"GANPanel.image_changed({preparable}, {info})")  # FIXME[debug]
         if preparable.prepared:
             self._infoLabel.setText(f"{self._gan.feature_dimensions} -> "
                                     f"?")
@@ -348,186 +378,60 @@ class GANPanel(Panel, QObserver, qobservables={
         else:
             self._infoLabel.setText("")
             self._features1, self._features1 = None, None
+            self._imageA.setImage(None)
+            self._imageB.setImage(None)
+            self._imageView.setImage(None)
+            self._featureView.setFeatures(None)
+            self._featureInfo.setFeatures(None)
         self.update()
+
+    def busy_changed(self, importer: Importer,
+                     change: Importer.Change) -> None:
+        if importer is self._importer:
+            if (self._gan is None and isinstance(self._ganClass, str) and
+                    importer.class_is_imported(self._ganClass)):
+                self._initializeGan()
+            else:  # some error occured
+                self.update()
 
     def update(self) -> None:
         """Update this :py:class:`GANPanel`.
         """
 
-        # update GAN class initialization
-        ganId = self._ganSelector.currentText()
-        if ganId in self.GANClasses:
-            module, name = self.GANClasses[ganId].rsplit('.', maxsplit=1)
-            initialized = module in sys.modules
-            self._initializeButton.setEnabled(not initialized and
-                                              not self._busy)
-            self._initializeButton.setVisible(not initialized)
-        else:
-            initialized = False
-            self._initializeButton.setVisible(False)
-            self._initializeButton.setEnabled(False)
+        initialized = self._gan is not None
+        self._initializeButton.setVisible(not initialized)
+        self._prepareButton.setVisible(initialized)
+        self._ganSelector.setEnabled(not self._importer.busy)
 
-        self._ganSelector.setEnabled(not self._busy)
+        have_models = initialized and self._modelSelector.count() > 0
+        self._ganModelLabel.setVisible(have_models)
+        self._modelSelector.setVisible(have_models)
 
         if not initialized:
-            self._ganModelLabel.setVisible(False)
-            self._modelSelector.setVisible(False)
-            self._prepareButton.setVisible(False)
-        elif self._modelSelector.count() > 0:
-            self._ganModelLabel.setVisible(True)
-            self._modelSelector.setVisible(True)
-            self._modelSelector.setEnabled(initialized)
-            self._prepareButton.setVisible(True)
-        else:
-            self._ganModelLabel.setVisible(False)
-            self._modelSelector.setVisible(False)
-            #self._prepareButton.setVisible(False)
-            self._prepareButton.setVisible(True)
+            self._initializeButton.setEnabled(not self._importer.busy)
+        elif have_models:
+            self._modelSelector.setEnabled(True)
 
-        haveGan = self._gan is not None
-        enabled = haveGan and not self._busy and self._gan.prepared
-        self._randomButtonA.setEnabled(enabled)
-        self._randomButtonB.setEnabled(enabled)
-        self._interpolationSlider.setEnabled(enabled)
+        prepared = self._gan is not None and self._gan.prepared
+        self._randomButtonA.setEnabled(prepared)
+        self._randomButtonB.setEnabled(prepared)
+        self._interpolationSlider.setEnabled(prepared)
         super().update()
 
+    @pyqtSlot()
+    def updateImage(self) -> None:
+        self._worker.generate(self._features)
 
-import numpy as np
-
-from PyQt5.QtCore import QSize
-from PyQt5.QtGui import QPainter, QPen
-from PyQt5.QtWidgets import QSizePolicy
-
-class QFeatureView(QWidget):
-
-    STYLE_HORIZONTAL = 1
-    STYLE_VERTICAL = 2
-
-    style = STYLE_HORIZONTAL
-
-    def __init__(self, style: int = STYLE_HORIZONTAL, **kwargs) -> None:
-        """Initialize the :py:class:`StyletransferPanel`.
-        """
-        super().__init__(**kwargs)
-        self._features = None
-        self._style = style
-        if style == self.STYLE_HORIZONTAL:
-            self.setSizePolicy(QSizePolicy.MinimumExpanding,
-                               QSizePolicy.Preferred)
-        else:
-            self.setSizePolicy(QSizePolicy.Preferred,
-                               QSizePolicy.MinimumExpanding)
-
-    def setFeatures(self, features: np.ndarray) -> None:
-        self._features = features
+    @protect
+    def onDebugClicked(self, checked: bool) -> None:
+        print(f"DEBUG")
+        print(f"gan: {self._gan}")
+        if self._gan is not None:
+            print(f" -prepared: {self._gan.prepared}")
+            print(f" -busy: {self._gan.busy}")
+            print(f" -models: {hasattr(self._gan, 'models')}")
+        print(f"name: {self._ganName}")
+        print(f"class: {self._ganClass}")
         self.update()
-
-    def minimumSizeHint(self):
-        """The minimum size hint.
-
-        Returns
-        -------
-        QSize : The minimal size of this :py:class:`QFeatureView`
-        """
-        features = 200 if self._features is None else len(self._features)
-        return QSize(features if self._style == self.STYLE_HORIZONTAL else 200,
-                     200 if self._style == self.STYLE_HORIZONTAL else features)
-
-    def paintEvent(self, event) -> None:
-        """Process the paint event by repainting this Widget.
-
-        Parameters
-        ----------
-        event : QPaintEvent
-        """
-        if self._features is not None:
-            qp = QPainter()
-            qp.begin(self)
-            self._drawWidget(qp, event.rect())
-            qp.end()
-
-    def _drawWidget(self, qp, rect) -> None:
-        """Draw a given portion of this widget.
-        Parameters
-        ----------
-        qp : QPainter
-        rect : QRect
-        """
-        pen = QPen(Qt.red)
-        pen_width = 1
-        pen.setWidth(pen_width)
-
-        width = self.width()
-        height = self.height()
-
-        if self._style == self.STYLE_HORIZONTAL:
-            center_y = height // 2
-            stretch_y = center_y / np.abs(self._features).max()
-
-            stretch_x = width / len(self._features)
-            for x, feature in enumerate(self._features):
-                pos_x = int(x*stretch_x)
-                pos_y = int(center_y + feature * stretch_y)
-                qp.drawLine(pos_x, center_y, pos_x, pos_y)
-        else:
-            width = self.width()
-            center_x = width // 2
-            stretch_x = center_x / np.abs(self._features).max()
-
-            stretch_y = height / len(self._features)
-            for y, feature in enumerate(self._features):
-                pos_x = int(center_x + feature * stretch_x)
-                pos_y = int(y*stretch_y)
-                qp.drawLine(center_x, pos_y, pos_x, pos_y)
-
-
-from PyQt5.QtWidgets import QLabel, QGridLayout
-
-
-class QFeatureInfo(QWidget):
-
-    def __init__(self, **kwargs) -> None:
-        """Initialize the :py:class:`QFeatureInfo`.
-        """
-        super().__init__(**kwargs)
-        self._initUI()
-        self.setFeatures(None)
-
-    def _initUI(self) -> None:
-        grid = QGridLayout()
-        # Dimensionality
-        grid.addWidget(QLabel("Dimensionality"), 0, 0)
-        self._dimensionality = QLabel()
-        grid.addWidget(self._dimensionality, 0, 1)
-        # Min/max
-        grid.addWidget(QLabel("min/max"), 1, 0)
-        self._minmax = QLabel()
-        grid.addWidget(self._minmax, 1, 1)
-        # Min/max
-        grid.addWidget(QLabel("L2-norm"), 2, 0)
-        self._l2norm = QLabel()
-        grid.addWidget(self._l2norm, 2, 1)
-        # density
-        grid.addWidget(QLabel("density"), 3, 0)
-        self._density = QLabel()
-        grid.addWidget(self._density, 3, 1)
-
-        # add the layout
-        self.setLayout(grid)
-
-    def setFeatures(self, features: np.ndarray) -> None:
-        self._features = features
-        if features is None:
-            self._dimensionality.setText('')
-            self._minmax.setText('')
-            self._l2norm.setText('')
-            self._density.setText('')
-        else:
-            self._dimensionality.setText(f"{len(features)}")
-            self._minmax.setText(f"{features.min():.4f}/{features.max():.4f}")
-            l2norm = np.linalg.norm(features)
-            self._l2norm.setText(f"{l2norm:.2f}")
-            # Gaussian density
-            density = 1/np.sqrt(2*np.pi) * np.exp(-0.5 * l2norm**2)
-            self._density.setText(f"{density:1.2e}")
-        self.update()
+        if self._gan is not None:
+            self._gan.info()

@@ -12,6 +12,7 @@ from argparse import ArgumentParser
 import os
 
 # toolbox imports
+import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
 from dltb.datasource import ImageDirectory
 from dltb.tool import Tool
@@ -55,7 +56,10 @@ def main():
                         help='run face detection')
     parser.add_argument('--loop', action='store_true', default=True,
                         help='run in loop mode')
+    ToolboxArgparse.add_arguments(parser)
+
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(args)
 
     if args.detect:
         detector = Tool['haar']

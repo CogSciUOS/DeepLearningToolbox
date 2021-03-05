@@ -1,3 +1,5 @@
+
+from .exception import NetworkParsingError
 from .network import Network
 from .layer import Layer
 

@@ -11,10 +11,8 @@ import numpy as np
 from dltb.thirdparty.tensorflow import v1 as tf
 
 # toolbox imports
-import util
-from dltb.network.network import Network as BaseNetwork
+from dltb.network import Network as BaseNetwork, NetworkParsingError
 from dltb.network.network import ImageNetwork, Classifier
-from .exceptions import ParsingError
 from .layers.tensorflow_layers import TensorFlowLayer as Layer
 from .layers.tensorflow_layers import TensorFlowNeuralLayer as NeuralLayer
 from .layers.tensorflow_layers import TensorFlowStridingLayer as StridingLayer
@@ -24,6 +22,7 @@ from .layers.tensorflow_layers import TensorFlowMaxPooling2D as MaxPooling2D
 from .layers.tensorflow_layers import TensorFlowDropout as Dropout
 from .layers.tensorflow_layers import TensorFlowFlatten as Flatten
 from dltb.base.image import Image, Imagelike, Colorspace
+from dltb.config import config
 from dltb.util.image import imresize
 from dltb.util.array import DATA_FORMAT_CHANNELS_LAST
 
@@ -332,7 +331,7 @@ class Network(BaseNetwork):
         if self._session is None:
             LOG.info("online -> starting tf.Session")
             # tf_config = tf.ConfigProto(log_device_placement=True)
-            if util.use_cpu:
+            if not config.use_cpu:
                 tf_config = tf.ConfigProto(device_count={'GPU': 0})
             else:
                 tf_config = tf.ConfigProto()
@@ -442,7 +441,8 @@ class Network(BaseNetwork):
             op_idx += 1
 
         if not layer_dict:
-            raise ParsingError('Could not find any layers in TensorFlow graph.')
+            raise NetworkParsingError("Could not find any layers in "
+                                      "TensorFlow graph.")
 
         if False:
             self._debug_layer_dict(layer_dict)
@@ -853,6 +853,12 @@ class Alexnet(Classifier, ImageNetwork, Network):
         if isinstance(image, Data) and image.is_batch:
             result = np.ndarray((len(image), 227, 227, 3))
             for index, img in enumerate(image.array):
+                result[index] = self._prepare_image(img)
+            print("Alexnet.image_to_internal: new batch:", result.shape)
+            return result
+        elif isinstance(image, list):
+            result = np.ndarray((len(image), 227, 227, 3))
+            for index, img in enumerate(image):
                 result[index] = self._prepare_image(img)
             print("Alexnet.image_to_internal: new batch:", result.shape)
             return result

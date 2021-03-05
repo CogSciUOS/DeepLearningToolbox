@@ -73,23 +73,42 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
                  stylegan2_github, config.nvlabs_stylegan2_directory)
         sys.exit(1)  # FIXME[hack]: do not exit - find a better exception handling mechanism
 
+    model_dict = {
+        'ffhq': 'gdrive:networks/stylegan2-ffhq-config-f.pkl',
+        'church': 'gdrive:networks/stylegan2-church-config-f.pkl'
+    }
+    models = list(model_dict.keys())
+
     def __init__(self, model: str = None, filename: str = None,
                  **kwargs) -> None:
         super().__init__(**kwargs)
-        if (model or filename) is None:
-            model = 'ffhq'  # default
-
-        #self._network_pkl = 'gdrive:networks/stylegan2-ffhq-config-f.pkl'
-        self._network_pkl = 'gdrive:networks/stylegan2-church-config-f.pkl'
-        self._model_filename = \
-            os.path.join(config.model_directory,
-                         self._network_pkl.rsplit('/', maxsplit=1)[-1])
-
         self._generator = None
         self._generator_snapshot = None
         self._discriminator_snapshot = None
         self._generator_stabil = None
         self._noise_vars = None
+
+        self._model = model
+        self._model_filename = filename
+        self._network_pkl = None
+        if (model or filename) is None:
+            self.model = 'ffhq'  # default
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @model.setter
+    def model(self, model: str) -> None:
+        if self._model == model:
+            return  # nothing todo
+
+        self.unprepare()
+        self._model = model
+        self._network_pkl = self.model_dict[model]
+        self._model_filename = \
+            os.path.join(config.model_directory,
+                         self._network_pkl.rsplit('/', maxsplit=1)[-1])
 
     def _prepared(self) -> bool:
         """The :py:class:`StyleGAN2` preparation is finished by assigning
@@ -287,7 +306,7 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
         Gs_kwargs.randomize_noise = False
         Gs_kwargs.truncation_psi = truncation_psi
 
-        print(f"StyleGAN2 Features: {features.shape}, {features.dtype}")
+        # print(f"StyleGAN2 Features: {features.shape}, {features.dtype}")
         if False:
             # FIXME[bug]: for "stylegan2-church-config-f.pkl"
             # KeyError: "The name 'G_synthesis_1/noise0/setter:0' refers
@@ -300,7 +319,7 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
 
         # [minibatch, height, width, channel]
         images = self._generator.run(features, None, **Gs_kwargs)
-        print(f"StyleGAN2 images: {images.shape}, {images.dtype}")
+        # print(f"StyleGAN2 images: {images.shape}, {images.dtype}")
         # PIL.Image.fromarray(images[0], 'RGB'))
         return images
 

@@ -12,7 +12,7 @@ import urllib
 
 # toolbox imports
 from dltb.datasource import Datasource
-from util.error import handle_exception
+from dltb.util.error import handle_exception
 
 # logging
 import logging

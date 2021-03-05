@@ -1,5 +1,10 @@
 
+# The following line allows the test to be run from within the test
+# directory:
+# if not __package__: import __init__
+
 # standard imports
+from typing import Tuple
 from collections import OrderedDict  # new in version 2.7
 from unittest import TestCase
 
@@ -7,14 +12,7 @@ from unittest import TestCase
 import numpy as np
 
 # toolbox imports
-from .conf import MODELS_DIRECTORY
-
-
-# The following line allows the test to be run from within the test
-# directory:
-# if not __package__: import __init__
-
-from network import Network as BaseNetwork
+from .. import Network as BaseNetwork
 
 
 class MockLayer:
@@ -25,6 +23,7 @@ class MockLayer:
 
 class MockNetwork(BaseNetwork):
     """Mock to allow instantiation."""
+
     def __init__(self, data_format: str, input_shape: Tuple[int]):
         self._data_format = data_format
         layer = MockLayer(input_shape)
@@ -37,7 +36,6 @@ class TestBaseNetwork(TestCase):
                                         input_shape=(1, 28, 30, 1))
         self.network_first = MockNetwork(data_format='channels_first',
                                          input_shape=(1, 1, 28, 30))
-
 
     def test_transform_input(self):
 

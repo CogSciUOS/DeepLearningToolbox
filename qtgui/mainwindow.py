@@ -998,9 +998,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         print("FIXME[old]: MainWindow.setLucidEngine() was called!")
         lucidPanel = self.panel('lucid')
         if lucidPanel is not None:
-            from controller import LucidController
-            controller = LucidController(engine, runner=self._runner)
-            lucidPanel.setController(controller)
+            LOG.error("Outdated implementation for setLucidEngine")
 
     def setDatasource(self, datasource: Datasource) -> None:
         """Set the datasource.

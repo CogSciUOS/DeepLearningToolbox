@@ -1,12 +1,23 @@
-import os
-import threading
-import logging
-logger = logging.getLogger(__name__)
 
+
+# standard imports
+import os
+import logging
+import traceback
+
+# Qt imports
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QPlainTextEdit
 
-from util.error import protect
+# toolbox imports
+from dltb.util.debug import edit
+
+# GUI imports
+from ..utils import protect
+
+# logging
+LOG = logging.getLogger(__name__)
+
 
 class QLogHandler(QPlainTextEdit, logging.Handler):
     """A log handler that displays log messages in a QWidget.
@@ -80,22 +91,18 @@ class QLogHandler(QPlainTextEdit, logging.Handler):
         if block < len(self._records):
             print(self._records[block])
             record = self._records[block]
-            logger.info(f"Trying to open file {record.pathname}, "
-                        f"line {record.lineno}, in an external editor.")
+            LOG.info(f"Trying to open file {record.pathname}, "
+                     f"line {record.lineno}, in an external editor.")
             try:
-                retcode = util.debug.edit(record.pathname, record.lineno)
+                retcode = edit(record.pathname, record.lineno)
                 if retcode < 0:
-                    logger.error("Edit command was terminated by signal "
-                                 f"{-retcode}")
+                    LOG.error("Edit command was terminated by signal "
+                              f"{-retcode}")
                 else:
-                    logger.info(f"Edit command returned: {retcode}")
+                    LOG.info(f"Edit command returned: {retcode}")
             except OSError as error:
-                logger.error(f"Edit command failed: {error}")
+                LOG.error(f"Edit command failed: {error}")
 
-
-from PyQt5.QtWidgets import QPlainTextEdit
-import traceback
-import util.debug
 
 class QExceptionView(QPlainTextEdit):
     """A view for Python exceptions.  This is basically a text field in
@@ -146,15 +153,15 @@ class QExceptionView(QPlainTextEdit):
         external editor.
 
         """
-        logger.info(f"Trying to open file {frame.filename}, "
-                    f"line {frame.lineno}, in an external editor.")
+        LOG.info(f"Trying to open file {frame.filename}, "
+                 f"line {frame.lineno}, in an external editor.")
         try:
-            retcode = util.debug.edit(frame.filename, frame.lineno)
+            retcode = edit(frame.filename, frame.lineno)
             if retcode < 0:
-                logger.error("Edit command was terminated by signal "
-                             f"{-retcode}")
+                LOG.error("Edit command was terminated by signal "
+                          f"{-retcode}")
             else:
-                logger.info(f"Edit command returned: {retcode}"
-                            f"({'error' if retcode else 'success'})")
+                LOG.info(f"Edit command returned: {retcode}"
+                         f"({'error' if retcode else 'success'})")
         except OSError as error:
-            logger.error(f"Edit command failed: {error}")
+            LOG.error(f"Edit command failed: {error}")

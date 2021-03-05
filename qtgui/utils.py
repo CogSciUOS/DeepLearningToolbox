@@ -11,13 +11,12 @@ from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QApplication
 
 # toolbox imports
-from toolbox import Toolbox
 from dltb.base.observer import Observable
 from dltb.base.busy import BusyObservable
 from dltb.base.prepare import Preparable
+from dltb.util.error import protect, handle_exception
+from toolbox import Toolbox
 from base import AsyncRunner
-import util
-from util.error import protect, handle_exception
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -826,7 +825,7 @@ class QObserver(QAttribute):
                     #     Q_ARG("PyQt_PyObject", change))
                     #   RuntimeError: QMetaObject.invokeMethod() call failed
                 except Exception as ex:
-                    util.error.handle_exception(ex)
+                    handle_exception(ex)
             else:
                 # There is already one change pending in the event loop.
                 # We will just update the change, but not queue another
@@ -854,7 +853,7 @@ class QObserver(QAttribute):
                     self._kwargs = {}
                     self._notify(observable, change, **kwargs)
                 except Exception as ex:
-                    util.error.handle_exception(ex)
+                    handle_exception(ex)
 
         def __str__(self) -> str:
             return (f"QObserver[{self._observer}]: "

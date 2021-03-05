@@ -15,11 +15,11 @@ from PyQt5.QtWidgets import QVBoxLayout
 
 # toolbox imports
 from dltb.base.sound import Sound, SoundDisplay
+from dltb.util.error import print_exception
 from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
 from dltb.thirdparty.sounddevice import (SoundPlayer as SoundDevicePlayer,
                                          SoundRecorder as SoundDeviceRecorder)
 from toolbox import Toolbox
-from util.error import print_exception
 
 # GUI imports
 from .panel import Panel

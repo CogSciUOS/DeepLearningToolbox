@@ -23,7 +23,7 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
     object.
 
     Working can be done asynchronously. The worker is observable
-    and will notify observers on the progress. All workers support
+    and will notify observers on the progress. All workers post
     the following notifications:
 
     data_changed:
@@ -130,7 +130,8 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
             self._next_data = data
             self._work(**kwargs)
         else:
-            self._data = data
+            self._next_data = data
+            # FIXME[bug/concept]: additional **kwargs arguments are ignored!
 
     @busy("working")
     # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...

@@ -16,6 +16,7 @@ from collections.abc import Sized, Iterable, Sequence
 import numpy as np
 
 # toolbox imports
+import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
 from dltb.datasource import Datasource, Datafetcher
 from dltb.datasource import argparse as DatasourceArgparse
@@ -45,8 +46,11 @@ def main():
                         help='use a fetcher to traverse the datasource')
     parser.add_argument('--batch', type=int,
                         help='process data in batches of given size')
+    ToolboxArgparse.add_arguments(parser)
     DatasourceArgparse.prepare(parser)
+
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(args)
 
     datasource = DatasourceArgparse.datasource(parser, args)
     if datasource is None:

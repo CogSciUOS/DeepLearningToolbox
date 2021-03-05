@@ -12,9 +12,9 @@ from contextlib import contextmanager
 import logging
 
 # toolbox imports
-from util.error import handle_exception
-from util.debug import debug_object as object
-from dltb.base.observer import Observable
+from .observer import Observable
+from ..util.error import handle_exception
+from ..util.debug import debug_object as object
 
 
 class Failable(object):

@@ -16,12 +16,12 @@ from PyQt5.QtWidgets import QListWidget, QListWidgetItem, QComboBox
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox
 
 # toolbox imports
-from util import RecorderHandler
-from util.error import protect
+from dltb.util.logging import RecorderHandler
 from toolbox import Toolbox
 
 # GUI imports
 from .panel import Panel
+from ..utils import protect
 from ..widgets.logging import QLogHandler, QExceptionView
 
 # logging

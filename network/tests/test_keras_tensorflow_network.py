@@ -10,7 +10,7 @@ import tensorflow as tf
 
 from network.keras_tensorflow import Network as KerasTensorFlowNetwork
 from network.layers import keras_tensorflow_layers
-from network.exceptions import ParsingError
+from dltb.network import NetworkParsingError
 
 
 class TestKerasTensorFlowNetwork(TestCase):
@@ -18,7 +18,8 @@ class TestKerasTensorFlowNetwork(TestCase):
     @classmethod
     def setUpClass(cls):
 
-        model_file = os.path.join(MODELS_DIRECTORY, 'example_keras_mnist_model.h5')
+        model_file = os.path.join(MODELS_DIRECTORY,
+                                  'example_keras_mnist_model.h5')
         cls.loaded_network = KerasTensorFlowNetwork(model_file=model_file)
         cls.data = mnist.load_data()[1][0]
 
@@ -51,10 +52,9 @@ class TestKerasTensorFlowNetwork(TestCase):
             np.allclose(prediction, activations, atol=1e-6)
         )
 
-
-
-
+    #
     # Test layer properties from layer dict.
+    #
 
     def test_layer_dict(self):
         # Check the names.
@@ -77,9 +77,6 @@ class TestKerasTensorFlowNetwork(TestCase):
         self.assertTrue(isinstance(self.loaded_network.layer_dict['dropout_2'], keras_tensorflow_layers.KerasTensorFlowDropout))
         self.assertTrue(isinstance(self.loaded_network.layer_dict['dense_2'], keras_tensorflow_layers.KerasTensorFlowDense))
 
-
-
-
     # Testing the layer properties.
     def test_input_shape(self):
         self.assertEqual((None, 13, 13, 32), self.loaded_network.layer_dict['conv2d_2'].input_shape)
@@ -89,7 +86,6 @@ class TestKerasTensorFlowNetwork(TestCase):
 
     def test_num_parameters(self):
         self.assertEqual(9248, self.loaded_network.layer_dict['conv2d_2'].num_parameters)
-
 
     def test_weights(self):
         self.assertTrue(
@@ -139,21 +135,27 @@ class TestKerasTensorFlowNetwork(TestCase):
         with self.assertRaises(AttributeError):
             self.loaded_network.layer_dict['conv2d_2'].pool_size
 
+    #
     # Testing wrappers around layer properties.
+    #
 
     def test_get_layer_input_shape(self):
-        self.assertEqual((None, 13, 13, 32), self.loaded_network.get_layer_input_shape('conv2d_2'))
+        self.assertEqual((None, 13, 13, 32),
+                         self.loaded_network.get_layer_input_shape('conv2d_2'))
 
     def test_get_layer_output_shape(self):
-        self.assertEqual((None, 11, 11, 32), self.loaded_network.get_layer_output_shape('conv2d_2'))
+        self.assertEqual((None, 11, 11, 32),
+                         self.loaded_network.get_layer_output_shape('conv2d_2'))
 
 
     def test_get_layer_weights(self):
-        # _model.get_weights() gives a list with the weights of each layer. "conv2d_2 is the third layer, hence at index 2.
+        # _model.get_weights() gives a list with the weights of each
+        # layer. "conv2d_2 is the third layer, hence at index 2.
         self.assertTrue(
             (self.loaded_network._model.get_weights()[2] ==
              self.loaded_network.get_layer_weights('conv2d_2')).all()
         )
+
 
 class TestKerasTensorFlowParser(TestCase):
     """Test model parsing."""
@@ -164,9 +166,13 @@ class TestKerasTensorFlowParser(TestCase):
         tf.reset_default_graph()
 
     def test_separate_activations(self):
-        """Create a model with separate activation functions, to check if they will get merged."""
+        """Create a model with separate activation functions,
+        to check if they will get merged.
+        """
         model = keras.models.Sequential()
-        model.add(keras.layers.Convolution2D(32, (3, 3), input_shape=(28, 28, 1), activation='relu'))
+        model.add(keras.layers.Convolution2D(32, (3, 3),
+                                             input_shape=(28, 28, 1),
+                                             activation='relu'))
         model.add(keras.layers.Dense(1024))
         model.add(keras.layers.Activation('sigmoid'))
 
@@ -174,26 +180,33 @@ class TestKerasTensorFlowParser(TestCase):
         self.assertEqual(['conv2d_1',
                           'dense_1'], list(network.layer_dict.keys()))
 
-        self.assertEqual(network.layer_dict['dense_1'].input, model.get_layer('dense_1').input)
-        self.assertEqual(network.layer_dict['dense_1'].output, model.get_layer('activation_1').output)
-
+        self.assertEqual(network.layer_dict['dense_1'].input,
+                         model.get_layer('dense_1').input)
+        self.assertEqual(network.layer_dict['dense_1'].output,
+                         model.get_layer('activation_1').output)
 
     def test_missing_activation(self):
-        """Create a model with missing activation function to check that that raises an error."""
+        """Create a model with missing activation function to check that that
+        raises an error."""
         model = keras.models.Sequential()
-        model.add(keras.layers.Convolution2D(32, (3, 3), input_shape=(28, 28, 1)))
+        model.add(keras.layers.Convolution2D(32, (3, 3),
+                                             input_shape=(28, 28, 1)))
         model.add(keras.layers.Dense(1024))
         model.add(keras.layers.Activation('sigmoid'))
-        with self.assertRaises(ParsingError):
+        with self.assertRaises(NetworkParsingError):
             KerasTensorFlowNetwork(model=model)
 
-
     def test_double_activation_function(self):
-        # Create a model with two consectutive activation functions to check that that raises an error.
+        """Create a model with two consectutive activation functions to check
+        that that raises an error.
+
+        """
         model = keras.models.Sequential()
-        model.add(keras.layers.Convolution2D(32, (3, 3), input_shape=(28, 28, 1), activation='relu'))
+        model.add(keras.layers.Convolution2D(32, (3, 3),
+                                             input_shape=(28, 28, 1),
+                                             activation='relu'))
         model.add(keras.layers.Dense(1024))
         model.add(keras.layers.Activation('sigmoid'))
         model.add(keras.layers.Activation('relu'))
-        with self.assertRaises(ParsingError):
+        with self.assertRaises(NetworkParsingError):
             KerasTensorFlowNetwork(model=model)

@@ -14,8 +14,7 @@ import argparse
 import numpy as np
 
 # toolbox imports
-
-
+import dltb.argparse as ToolboxArgparse
 from dltb.tool.probe import ProbeClassifier, PhdLabWrapper
 
 
@@ -23,6 +22,9 @@ from dltb.tool.probe import ProbeClassifier, PhdLabWrapper
 def main():
     """The main program.
     """
+    # ToolboxArgparse.add_arguments(parser)
+    # ToolboxArgparse.process_arguments(args)
+
     print("Hello")
     probe = ProbeClassifier()
 

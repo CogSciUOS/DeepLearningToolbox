@@ -36,7 +36,7 @@ class Generator:
     least one of the methdos :py:class:`_generate_single` (sample a
     single datapoint) or :py:class:`_generate_batch` (sample a batch
     of data points).
-    
+
     In the context of deep learning, prominent approaches to
     generative models are generative adversarial networks (GAN),
     variational autoencoders (VAE), autoregressive architectures, and
@@ -56,7 +56,7 @@ class Generator:
 
     @property
     def data_shape(self) -> Tuple[int]:
-        """The dimensionality of the feature vector.
+        """The dimensionality of the data vector.
         """
         return self._data_shape()
 
@@ -104,9 +104,12 @@ class Generator:
                                  f"and number of seeds ({len(result)}).")
             return np.asarray(result)
 
-        rnd = np.random.RandomState(seed)
         shape = ((self._feature_dimensions,) if not batch else
                  (batch, self._feature_dimensions))
+        return self._randn(shape, seed)
+
+    def _randn(self, shape, seed=0):
+        rnd = np.random.RandomState(seed)
         return rnd.randn(*shape)
 
     def _check_arguments(self, features: np.ndarray,

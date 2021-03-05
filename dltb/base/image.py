@@ -28,15 +28,14 @@ import threading
 import logging
 import time
 
-# third party imports
+# third-party imports
 import numpy as np
 
-# FIXME[todo]: incoroporate into dltb ...
-from util.error import handle_exception
 
 # toolbox imports
 from .observer import Observable
 from .data import Data, BatchDataItem
+from ..util.error import handle_exception
 from .. import thirdparty
 
 # logging
@@ -328,7 +327,7 @@ class ImageIO:
 
 
 class ImageReader(ImageIO):
-    """An :py:class:`ImageReader` can read iamges from file or URL.
+    """An :py:class:`ImageReader` can read images from file or URL.
     The :py:meth:`read` method is the central method of this class.
     """
 

@@ -5,11 +5,18 @@ import qtgui.debug
 from qtgui.demo import QDemo
 demo = QDemo()
 demo.show()
-
-
 """
+
+# pylint: disable=wrong-import-position
+if __name__ == '__main__':
+    print(f"Chaning package from '{__package__}' to 'qtqui'")
+    __package__ = 'qtgui'  # make relative imports work
+
 # standard imports
 import logging
+
+# third-party imports
+import numpy as np
 
 # Qt imports
 from PyQt5.QtCore import pyqtSignal, pyqtBoundSignal, pyqtSlot
@@ -23,6 +30,7 @@ from dltb.datasource import Datasource
 from dltb import thirdparty
 
 # GUI imports
+from . import debug
 from .utils import QObserver, protect
 from .adapter import QAdaptedListWidget, QAdaptedComboBox
 from .widgets.register import QRegisterClassView
@@ -31,7 +39,7 @@ from .widgets.register import QInstanceRegisterEntryController
 from .widgets.image import QImageView
 from .widgets.network import QLayerSelector
 from .widgets.datasource import QDatasourceListWidget, QDatasourceComboBox
-
+from .widgets.features import QFeatureView
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -51,7 +59,8 @@ class QDemo(QWidget):
         QImageView,
         QLayerSelector,
         QDatasourceListWidget,
-        QDatasourceComboBox
+        QDatasourceComboBox,
+        QFeatureView
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -162,7 +171,7 @@ class QDemo(QWidget):
     def signalHandler(self, *args, **kwargs) -> None:
         """
         """
-        print(f"signalHandler({args}, {kwargs})")
+        print(f"signalHandler(args={args}, kwargs={kwargs})")
 
     @protect
     def onWidgetClassSelected(self, widgetClassName: str) -> None:
@@ -174,7 +183,7 @@ class QDemo(QWidget):
         if demoMethod is not None:
             demoMethod()
         else:
-            widgetClass = next((cls for cls in self._widgetClass
+            widgetClass = next((cls for cls in self._widgetClasses
                                 if cls.__name__ == widgetClassName), None)
             if widgetClass is not None:
                 self.setWidget(widgetClass())
@@ -269,3 +278,16 @@ class QDemo(QWidget):
         """
         widget = QDatasourceComboBox()
         self.setWidget(widget)
+
+    def demoQFeatureView(self) -> None:
+        """Demonstration of the :py:class:`QDatasourceComboBox`.
+        """
+        widget = QFeatureView()
+        widget.setFeatures(np.random.randn(512))
+        self.setWidget(widget)
+
+
+if __name__ == '__main__':
+    demo = QDemo()
+    demo.show()
+    result = debug.application.exec_()

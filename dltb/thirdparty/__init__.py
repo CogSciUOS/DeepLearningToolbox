@@ -116,6 +116,12 @@ _MODULES = {
         'classes': {
             'ImageGAN': 'StyleGAN2'
         }
+    },
+    'experiments': {
+        'modules': ['torch'],
+        'classes': {
+            'ImageGAN': 'VGAN'
+        }
     }
 }
 
@@ -281,7 +287,9 @@ def import_class(name: str, module: Union[str, List[str]] = None) -> type:
 
     module:
         A single module or a list of modules. If no value is provided,
-        all modules providing this class will be considered.
+        all modules providing this class will be considered. This
+        argument will be ignored if `name` is a fully qualified class
+        name.
     """
 
     # FIXME[hack]: integrate with the rest of the function

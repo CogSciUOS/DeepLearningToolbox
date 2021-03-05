@@ -24,11 +24,11 @@ by the interplay of Loggers, Filters, and Handlers:
 This module only require the standard python logging module.
 """
 
-#
-# Logging
-#
-
+# standard imports
 import logging
+
+# toolbox imports
+from .terminal import Terminal
 
 
 class RecorderHandler(logging.Handler):
@@ -46,7 +46,7 @@ class RecorderHandler(logging.Handler):
     To record all :py:class:`logging.LogRecord`s produced by a
     program, the :py:class:`RecorderHandler` has to be attached to the
     :py:class:`logging.RootLogger`.  This can be achieved as follows:
-    
+
         logRecorder = util.RecorderHandler()
         root_logger = logging.getLogger()
         root_logger.addHandler(logRecorder)
@@ -58,10 +58,9 @@ class RecorderHandler(logging.Handler):
         logRecorder = util.RecorderHandler()
         logging.getLogger('numpy').addHandler(logRecorder)
         logging.getLogger('matplotlib').addHandler(logRecorder)
-    
+
     This will record all :py:class:`logging.LogRecord`s emitted
     by numpy and matplotlib.
-    
 
     Attributes
     ----------
@@ -78,7 +77,7 @@ class RecorderHandler(logging.Handler):
     # hashable elements, but Python lists are not hashable (as their
     # content can change), resulting in a "TypeError: unhashable type:
     # 'RecorderHandler'" upon initialization.
-    
+
     def __init__(self):
         super().__init__()
         self._records = []
@@ -87,7 +86,7 @@ class RecorderHandler(logging.Handler):
         """The emit() method is invoked as a reaction to the invocation of
         the handle() by a Logger. It will only be invoked, if no Filter
         blocks the :py:class:`logging.LogRecord`. This method simply
-        store the :py:class:`logging.LogRecord` in this 
+        store the :py:class:`logging.LogRecord` in this
         :py:class:`RecorderHandler`.
         """
         self._records.append(record)
@@ -111,3 +110,28 @@ class RecorderHandler(logging.Handler):
 
         """
         return len(self._records)
+
+
+class TerminalFormatter(logging.Formatter):
+    """
+    """
+
+    def __init__(self, *args, terminal: Terminal = None, **kwargs) -> None:
+        """
+        """
+        super().__init__(*args, **kwargs)
+        self._terminal = terminal or Terminal()
+
+    def format(self, record: logging.LogRecord) -> None:
+        """
+        """
+        message = super().format(record)
+        if record.levelno <= logging.DEBUG:
+            color = Terminal.Bformat.BLUE
+        elif record.levelno <= logging.INFO:
+            color = Terminal.Bformat.GREEN
+        elif record.levelno <= logging.WARNING:
+            color = Terminal.Bformat.YELLOW
+        else:
+            color = Terminal.Bformat.RED
+        return self._terminal.form(message, color)

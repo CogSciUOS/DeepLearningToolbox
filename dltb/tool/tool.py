@@ -108,12 +108,25 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
             do batch_processing.
         internal: bool
             A flag indicating that arguments are given in internal format,
-            no preprocessing of the given data is required
+            no preprocessing of the given data is required and no
+            postprocessing is applied.
         result: Union[str, Tuple[str]]
             A description of the result values to return. If None is
             given, the Tools default will be used (if the `internal` flag
             is set, the internal result will be returned without
-            posprocessing)
+            postprocessing)
+
+        Result
+        ------
+        result:
+            The result of applying this :py:class:`Tool`. This is usually
+            a postprocessed result, as specified by the property
+            :py:prop:`external_result`.  If other return values are
+            desired, those can be specified by the argument `result`.
+            If the argument `internal` is `True`, instead of the
+            postprocessed results, the internal result is returned,
+            as specified by the property `internal` and computed
+            by the :py:meth:`_process`.
         """
         # FIXME[todo]: batch processing:
         #  - a tool may implement (either or both)
@@ -182,7 +195,14 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
                        batch: bool = False,
                        result: Union[str, Tuple[str]] = None,
                        **kwargs) -> Data:
-        """
+        """Perform preprocessing of arguments.
+
+        Arguments
+        ---------
+
+        internal:
+        batch:
+        result:
         """
         if result is None and not internal:
             result = self.external_result
@@ -201,6 +221,14 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         return data
 
     def _do_postprocess(self, data: Data) -> Any:
+        """Perform postprocessing and provide return value(s).
+
+        Arguments
+        ---------
+        data:
+            The (auxiliary) :py:class:`Data` object used for storing
+            internal values.
+        """
         result = data.result_
         for name in result:
             self._postprocess(data, name)
@@ -233,17 +261,72 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     #
 
     def _preprocess(self, *arg, batch: bool = False, **kwargs) -> Data:
+        """Perform preprocessing of arguments. Preprocessed arguments
+        are stored as attributes of an auxiliary :py:class:`Data` object.
+
+        This method should be extended by subclasses to incorporate
+        additional preprocessing operations.
+
+        Arguments
+        ---------
+        batch:
+        *args:
+             positional arguments passed when invoking the tool.
+        **kwargs:
+             keyword arguments passed when invoking the tool.
+
+        Result
+        ------
+        data:
+            The auxiliary :py:class:`Data` object to which preprocessed
+            information have been added.  Alle intermediate results
+            obtained during application of the :py:class:`Tool`
+            should also be stored in that object.
+        """
         data = Data(batch=batch)
         if self.timer:
             self.add_data_attribute(data, 'start', time.time())
         return data
 
     def _process(self, *args, **kwargs) -> Any:
+        """Do the actual processing.
+
+        To be implemented by subclasses.
+
+        Arguments
+        ---------
+        *args:
+            The positional arguments of the functions. These are
+            the (preprocessed) arguments named by the property
+            :py:prop:`internal_arguments`.
+        **kwargs:
+            Optional keyword arguments passed when invoking the tool.
+        """
         raise NotImplementedError()
 
     def _postprocess(self, data: Data, what: str) -> None:
+        """Perform postprocessing.
+
+        This method is intended to be extended by subclasses. If doing
+        so, such methods should call `super()._postprocess(data, what)`
+        in case they can not handle the property `what` themself.
+
+        Arguments
+        ---------
+        data:
+            The auxiliary :py:class:`Data` object to which results
+            of the postprocessing should be stored.
+        what:
+            An identifier specifying what kind of postprocessing operation
+            should be performed on `data`.  If the method can handle
+            this type of processing, it should store the results as
+            propery `what` in the `data` object and return. If the
+            method can not handle that type of processing, it should
+            call the method :py:meth:`_postprocess` of the super class.
+        """
         if what == 'duration':
-            data.add_attribute('duration', time.time() - data.start_)
+            data.add_attribute('duration', time.time() - data.start_,
+                               batch=False)
         elif not hasattr(data, what):
             raise ValueError(f"Unknown property '{what}' for tool {self}")
 
@@ -255,19 +338,36 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
               **kwargs) -> None:
         """Apply the tool to the given data object. Results are stored
         as data attributes.
+
+        Arguments
+        ---------
+        data:
+            The :py:class:`Data` object to which this :py:class:`Tool`
+            should be applied.  Results will be stored as attributes
+            of that object.
+        result:
+            The name(s) of the attribute(s) under which the results
+            should be stored in the `data` object.  These names
+            are prefixed by the name of this :py:class:`Tool`.
         """
         # FIXME[todo]: batch data ...
         if result is None:
             result = self.external_result
         LOG.debug("Applying tool %r to data %r, result=%s", self, data, result)
         values = self(data, *args, result=result, **kwargs)
+
+        # Store the result(s) in the data object
         if isinstance(result, str):
-            self.add_data_attribute(data, result, values)
+            result, values = (result,), (values, )
         elif len(result) == 1:
-            self.add_data_attribute(data, result[0], values)
-        elif result is not None:
+            values = (values, )
+
+        if result is not None:
             for name, value in zip(result, values):
-                self.add_data_attribute(data, name, value)
+                # FIXME[hack]: batch handling
+                batch = (data.is_batch and isinstance(value, list) and
+                         len(value) == len(data))
+                self.add_data_attribute(data, name, value, batch=batch)
 
     def add_data_attribute(self, data: Data, name: str, value: Any = None,
                            batch: bool = True) -> None:

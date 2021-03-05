@@ -22,6 +22,7 @@ from ..tool import Tool
 from ..tool.image import ImageTool
 from ..tool.classifier import SoftClassifier
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
+from ..util.image import imresize
 from ..util.terminal import Terminal, DEFAULT_TERMINAL
 from base import Identifiable
 
@@ -306,9 +307,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # @busy("getting activations")
     def get_activations(self, inputs: np.ndarray,
                         layer_ids: Any = None,
-                        data_format: str = None,
-                        image: bool = False
-                        ) -> Union[np.ndarray, List[np.ndarray]]:
+                        data_format: str = None) \
+            -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
 
@@ -323,15 +323,19 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             The layers the activations should be fetched for. Single
             layer_id or list of layer_ids.
         data_format: {DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST}
-            The format in which the data is provided.
-        image: bool
-            The data provided are an image.
+            The format in which the `inputs` is provided.  If this is
+            different from the `data_format` of this :py:class:`Network`,
+            an appropriate transformation is performed prior to computing
+            the activation values and and the activation values will
+            be back-transformed accordingly. If `None` (default), the
+            method will try to automatically determine the data format
+            of `inputs`.
 
         Returns
         -------
-        Array of shape
-        (input_samples, image_height, image_width, feature_maps).
-
+        activations:
+            Depending on the `layers` argument, either a single
+            array or a list of arrays providing the activation values.
         """
         LOG.debug("Network[%s].get_activations: inputs[%s]: %s (%s, %s), "
                   "layers=%s", self.key, type(inputs).__name__,
@@ -1080,7 +1084,7 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
     """
     @property
     def input_size(self) -> Tuple[int, int]:
-        return self.get_input_shape()
+        return self.get_input_shape()[1:-1]
 
     # FIXME[hack]: this changes the semantics of the function:
     # the base class expects inputs: np.ndarray, while we expect an Imagelike.
@@ -1090,12 +1094,18 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
                         layer_ids: Any = None,
                         data_format: str = None
                         ) -> Union[np.ndarray, List[np.ndarray]]:
+        """
+        """
 
         LOG.debug("ImageNetwork.getActivations: inputs=%s [%s], layers=%s",
-                  inputs.shape, DATA_FORMAT_CHANNELS_LAST, layer_ids)
+                  type(inputs), DATA_FORMAT_CHANNELS_LAST, layer_ids)
         internal = self.image_to_internal(inputs)
         is_list = isinstance(layer_ids, list)
-        batched = isinstance(inputs, Data) and inputs.is_batch
+        # batched: True = the input data where given a batch and hence
+        # the result will be batch(es) of activation values
+        # (the activation arrays have a batch dimension as their first axis)
+        batched = (isinstance(inputs, Data) and inputs.is_batch or
+                   isinstance(inputs, list))
 
         # Check whether the layer_ids are actually a list.
         layer_ids, is_list = self._force_list(layer_ids)
@@ -1112,6 +1122,7 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
                                                unbatch=not batched,
                                                internal=False)
                        for activation in activations]
+
         LOG.debug("ImageNetwork.getActivations: output activations=%s (%s/%s)",
                   #activations[0].shape, data_format, self.data_format)
                   len(activations), data_format, self.data_format)
@@ -1131,6 +1142,32 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
         data = super(self, image=None, *args, **kwargs)
         data.add_attribute('image', self.image_to_internal(image))
         return data
+
+    def extract_receptive_field(self, layer: 'Layer', unit: Tuple[int],
+                                image: Imagelike) -> Imagelike:
+        resized = self.resize(image)
+        (fr1, fc1), (fr2, fc2) = layer.receptive_field(unit)
+        extract_shape = (fr2 - fr1, fc2 - fc1)
+        if resized.ndim == 3:  # add color channel
+            extract_shape += (resized.shape[-1], )
+        extract = np.zeros(extract_shape)
+        sr1, tr1 = max(fr1, 0), max(-fr1, 0)
+        sc1, tc1 = max(fc1, 0), max(-fc1, 0)
+        sr2, tr2 = min(fr2, resized.shape[0]), \
+            extract_shape[0] + min(0, resized.shape[0] - fr2),
+        sc2, tc2 = min(fc2, resized.shape[1]), \
+            extract_shape[1] + min(0, resized.shape[1] - fc2),
+        # print(f"field: [{fr1}:{fr2}, {fc1}:{fc2}] ({fr2-fr1}x{fc2-fc1}), "
+        #       f"extract: {extract_shape[:2]}, "
+        #       f"source:[{sr1}:{sr2}, {sc1}:{sc2}] ({sr2-sr1}x{sc2-sc1}), "
+        #       f"target:[{tr1}:{tr2}, {tc1}:{tc2}] ({tr2-tr1}x{tc2-tc1})")
+        extract[tr1:tr2, tc1:tc2] = resized[sr1:sr2, sc1:sc2]
+        return extract
+
+    def resize(self, image: Imagelike) -> Imagelike:
+        # FIXME[hack]: this should be integrated into (or make use of)
+        # the preprocessing logic
+        return imresize(image, self.input_size)
 
 
 class Classifier(SoftClassifier, Network):

@@ -38,18 +38,18 @@ class Terminal:
         EMPHASIZE = '\033[94m'  # BLUE
 
     def form(self, text: str, color: str = '') -> str:
-        """
+        """Format a text in a given color.
         """
         return color + text + self.Bformat.ENDC
 
     def status(self, text: str, status: str = None) -> str:
-        """
+        """Format a text with a given status code.
         """
         return self.form(text, status and
                          getattr(self.Bstatus, status.upper()))
 
     def markup(self, text: str, markup: str = None) -> str:
-        """
+        """Format a text with a given Markup code.
         """
         return self.form(text, markup and
                          getattr(self.Markup, markup.upper()))

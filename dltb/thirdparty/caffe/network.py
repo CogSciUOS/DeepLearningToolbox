@@ -1,21 +1,19 @@
 # standard imports
 from typing import List
 from collections import OrderedDict
+from tempfile import NamedTemporaryFile
 
 # third party imports
 import numpy as np
 import caffe
 from caffe.proto import caffe_pb2
-
 import google.protobuf.text_format
-from tempfile import NamedTemporaryFile
 
 # toolbox imports
-from network.exceptions import ParsingError
-from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
-
-from . import Network as BaseNetwork
-from .layers import caffe_layers
+from ...util.array import DATA_FORMAT_CHANNELS_FIRST
+from ...network import Network as BaseNetwork
+from ...network import NetworkParsingError as ParsingError
+from . import layer
 
 
 class Network(BaseNetwork):
@@ -26,17 +24,23 @@ class Network(BaseNetwork):
     }
 
     _LAYER_TYPES = {
-        'activation_functions': {'ReLU', 'PReLU', 'ELU', 'Sigmoid', 'TanH', 'Softmax'},
-        'net_input_layers': {'Convolution', 'InnerProduct'},
-        'input': {'Data', 'Input'}
+        'activation_functions': {
+            'ReLU', 'PReLU', 'ELU', 'Sigmoid', 'TanH', 'Softmax'
+        },
+        'net_input_layers': {
+            'Convolution', 'InnerProduct'
+        },
+        'input': {
+            'Data', 'Input'
+        }
     }
 
     _LAYER_TYPES_TO_CLASSES = {
-        'Convolution': caffe_layers.CaffeConv2D,
-        'InnerProduct': caffe_layers.CaffeDense,
-        'Pooling': caffe_layers.CaffeMaxPooling2D,
-        'Dropout': caffe_layers.CaffeDropout,
-        'Flatten': caffe_layers.CaffeFlatten
+        'Convolution': layer.CaffeConv2D,
+        'InnerProduct': layer.CaffeDense,
+        'Pooling': layer.CaffeMaxPooling2D,
+        'Dropout': layer.CaffeDropout,
+        'Flatten': layer.CaffeFlatten
     }
 
     _TRANSFORMATION_LAYER_TYPES = {'Pooling', 'Flatten', 'Dropout'}
@@ -56,8 +60,10 @@ class Network(BaseNetwork):
                 Path the .caffemodel weights file.
         """
         self.protonet = self._remove_inplace(kwargs['model_def'])
-        # Write the new protobuf model definition to a file, so it can be read to create a caffe net.
-        # This would probably not be necessary with boost > 1.58, see https://stackoverflow.com/a/34172374/4873972
+        # Write the new protobuf model definition to a file, so it can
+        # be read to create a caffe net.
+        # This would probably not be necessary with boost > 1.58, see
+        # https://stackoverflow.com/a/34172374/4873972
         with NamedTemporaryFile(mode='w', delete=True) as fp:
             fp.write(str(self.protonet))
             fp.seek(0)
@@ -67,7 +73,6 @@ class Network(BaseNetwork):
         self.layer_dict = self._create_layer_dict()
 
         super().__init__(**kwargs)
-
 
     def _create_layer_dict(self):
         layer_dict = OrderedDict()

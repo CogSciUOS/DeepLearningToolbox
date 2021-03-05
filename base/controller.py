@@ -1,7 +1,8 @@
 import logging
 
 from base import Runner
-from base import Observable
+from dltb.base import Observable
+
 
 def run(function):
 

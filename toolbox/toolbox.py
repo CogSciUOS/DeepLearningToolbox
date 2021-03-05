@@ -55,14 +55,19 @@ from argparse import ArgumentParser
 import numpy as np
 
 # toolbox imports
-import util
 from util import addons
 from base import Runner, Controller as BaseController
+import dltb.argparse as ToolboxArgparse
+from dltb.config import config
 from dltb.base.busy import BusyObservable
-from dltb.util.image import imread
 from dltb.base import run
 from dltb.tool import Tool
 from dltb.base.data import Data
+from dltb.util.error import handle_exception, print_exception
+from dltb.util.error import set_exception_handler
+from dltb.util.logging import RecorderHandler
+from dltb.util.image import imread
+
 
 # FIXME[todo]: speed up initialization by only loading frameworks
 # that actually needed
@@ -336,7 +341,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                 self.add_network(network)
 
         except Exception as exception:
-            util.error.handle_exception(exception)
+            handle_exception(exception)
 
     #
     # Networks
@@ -745,20 +750,15 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
                             action=addons.UseAddon, default=False)
 
         #
-        # Debugging
-        #
-        parser.add_argument('--info', default=[], action='append',
-                            metavar='MODULE',
-                            help='Show info messages from MODULE')
-        parser.add_argument('--debug', default=[], action='append',
-                            metavar='MODULE',
-                            help='Show debug messages from MODLE')
-
-        #
         # Bugs
         #
         parser.add_argument('--firefox-bug', help='avoid the firefox bug',
                             action='store_true', default=False)
+
+        #
+        # Common arguments
+        #
+        ToolboxArgparse.add_arguments(parser)
 
         return parser
 
@@ -769,36 +769,12 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         parser = self._prepare_argument_parser()
         args = parser.parse_args()
         self._command_line_arguments = args
+        ToolboxArgparse.process_arguments(parser, args)
 
         #
         # Global flags
         #
-        util.use_cpu = args.cpu
-
-        #
-        # Debugging
-        #
-        if args.info:
-            info_handler = logging.StreamHandler(sys.stderr)
-            info_handler.setLevel(logging.INFO)
-            info_handler.setFormatter(self.logging_formatter)
-            print(f"Toolbox: outputing info messages from '{args.info}' "
-                  "on {info_handler}")
-            for module in args.info:
-                logger = logging.getLogger(module)
-                logger.addHandler(info_handler)
-                logger.info(f"Outputing debug messages from module {module}")
-
-        if args.debug:
-            debug_handler = logging.StreamHandler(sys.stderr)
-            debug_handler.setLevel(logging.DEBUG)
-            debug_handler.setFormatter(self.logging_formatter)
-            print(f"Toolbox: outputing debug messages from '{args.debug}' "
-                  "on {debug_handler}")
-            for module in args.debug:
-                logger = logging.getLogger(module)
-                logger.addHandler(debug_handler)
-                logger.debug(f"Outputing debug messages from module {module}")
+        config.use_cpu = args.cpu
 
         #
         # Tools
@@ -1157,7 +1133,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         Arguments
         ---------
         record: bool
-            A flag indicating if :py:class:`util.RecorderHandler` should
+            A flag indicating if :py:class:`RecorderHandler` should
             be added to this :py:class:`Toolbox`.
         level: int
             The basic log level to be set.
@@ -1174,7 +1150,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             for handler in original_handlers:
                 self.remove_logging_handler(handler)
 
-            # use a util.RecorderHandler
+            # use a RecorderHandler
             if record:
                 self.record_logging()
 
@@ -1203,7 +1179,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         root_logger.removeHandler(handler)
 
     @property
-    def logging_recorder(self) -> util.RecorderHandler:
+    def logging_recorder(self) -> RecorderHandler:
         """The logging RecorderHandler. May be None if the
         :py:class:`Toolbox` was not instructed to record
         :py:class:`LogRecord`s.
@@ -1218,7 +1194,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         if flag == hasattr(self, '_logging_recorder'):
             return  # nothing to do
         if flag:
-            self._logging_recorder = util.RecorderHandler()
+            self._logging_recorder = RecorderHandler()
             self.add_logging_handler(self._logging_recorder)
         else:
             self.remove_logging_handler(self._logging_recorder)
@@ -1241,7 +1217,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
     def _initialize_exception_handler(self, record: bool = True) -> None:
         """Initialize exception handling by this Toolbox.
         This will register als the global exception handler, that is
-        calls to :py:func:`util.error.handle_exception` will be
+        calls to :py:func:`handle_exception` will be
         consumed by this :py:class:`Toolbox`.
 
         Arguments
@@ -1252,11 +1228,11 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
             can be obtained via the property exceptions.
         """
         self._exception_handlers = set()
-        self.add_exception_handler(util.error.print_exception)
+        self.add_exception_handler(print_exception)
         if record:  # record exceptions
             self._exceptions = []
             self.add_exception_handler(self._record_exception)
-        util.error.set_exception_handler(self.handle_exception)
+        set_exception_handler(self.handle_exception)
 
     def handle_exception(self, exception: BaseException) -> None:
         """Handle an exceptoin

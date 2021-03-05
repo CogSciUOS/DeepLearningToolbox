@@ -18,7 +18,7 @@ import argparse
 import signal
 import time
 
-# third party imports
+# third-party imports
 import numpy as np
 
 # GUI imports
@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow
 from qtgui.widgets.activationview import QActivationView
 
 # toolbox imports
+import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
 from dltb.util.image import imread
 from dltb.network import Network, Layer, argparse as NetworkArgparse
@@ -68,9 +69,11 @@ def signal_handler(signum, frame):
     elif signum == signal.SIGQUIT:
         print("SIGQUIT")
 
-def extract_activations(network: Network,
-                        datasource: Datasource, layers: List[Layer] = None,
-                        batch_size: int = 128) -> None:
+def extract_activations1(network: Network,
+                         datasource: Datasource, layers: List[Layer] = None,
+                         batch_size: int = 128) -> None:
+    """Extract activations from a :py:class:`Datasource`.
+    """
     tool = ActivationTool(network)
     worker = ActivationWorker(tool=tool)
     worker.set_layers(layers)
@@ -190,6 +193,25 @@ def demo_image_activations5(network, image) -> None:
                      "ActivationWorker(tool).work(data):")
 
 
+def demo_iterate_activations(network: Network, datasource: Datasource) -> None:
+    tool = ActivationTool(network)
+    worker = ActivationWorker(tool=tool)
+    worker._init_layer_top_activations()
+    for idx, activations in enumerate(worker.iterate_activations(datasource)):
+        print(f"({idx})")
+        #      (", ".join(f"{l}: {a.shape}" for l, a in activations.items())))
+        worker._update_layer_top_activations()
+
+
+def demo_top_activations(network: Network, datasource: Datasource) -> None:
+    tool = ActivationTool(network)
+    worker = ActivationWorker(tool=tool)
+    worker._init_layer_top_activations()
+    for idx, activations in enumerate(worker.iterate_activations(datasource)):
+        print(f"({idx})")
+        worker._update_layer_top_activations()
+
+
 def main():
     """The main program.
     """
@@ -198,13 +220,18 @@ def main():
         argparse.ArgumentParser(description="Activation extraction from "
                                 "layers of a neural network")
     parser.add_argument('--gui', action='store_true',
-                        help='display activations in graphica user interface')
+                        help='display activations in graphical user interface')
+    parser.add_argument('--iterate', action='store_true',
+                        help='iterate over activation values')
     parser.add_argument('image', metavar='IMAGE', nargs='*',
                         help='input image(s)')
 
+    ToolboxArgparse.add_arguments(parser)
     NetworkArgparse.prepare(parser, layers=True)
     DatasourceArgparse.prepare(parser)
+
     args = parser.parse_args()
+    ToolboxArgparse.process_arguments(parser)
 
     network, layers = NetworkArgparse.network(parser, args, layers=True)
 
@@ -225,11 +252,14 @@ def main():
     else:
         show_activations = console_show_activations
 
-    if datasource is not None:
+    if args.iterate:
+        demo_iterate_activations(network, datasource)
+
+    elif datasource is not None:
         #
         # loop over the dataset
         #
-        extract_activations(network, datasource, layers=layers)
+        extract_activations1(network, datasource, layers=layers)
 
     else:
         # image_file = 'images/elephant.jpg'
@@ -240,7 +270,6 @@ def main():
             demo_image_activations3(network, image)
             demo_image_activations4(network, image)
             demo_image_activations5(network, image)
-
 
 
 if __name__ == "__main__":

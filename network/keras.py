@@ -11,9 +11,10 @@ import keras.layers
 from keras import backend as K
 
 # toolbox imports
-from . import Network as BaseNetwork, Classifier as Classifier
-from .exceptions import ParsingError
+from . import Classifier
 from . import layers
+from dltb.network import Network as BaseNetwork
+from dltb.network import NetworkParsingError as ParsingError
 from dltb.thirdparty.keras import keras
 
 

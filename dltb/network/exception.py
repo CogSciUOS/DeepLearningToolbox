@@ -1,0 +1,2 @@
+class NetworkParsingError(Exception):
+    pass

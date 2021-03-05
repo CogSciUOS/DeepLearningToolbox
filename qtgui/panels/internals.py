@@ -19,15 +19,14 @@ from PyQt5.QtWidgets import QPlainTextEdit, QComboBox
 from PyQt5.QtGui import QFontDatabase
 
 # toolbox imports
-from base.util.resource import Resource, ModuleResource,
-from base.util.hardware import cpus, gpus, cuda
+from dltb.util.resource import Resource, ModuleResource
+from dltb.util.hardware import cpus, gpus, cuda
 from util import add_timer_callback
-from util.error import protect
 from toolbox import Toolbox
 
 # GUI imports
 from .panel import Panel
-from ..utils import QObserver, QAttribute
+from ..utils import QObserver, QAttribute, protect
 
 
 class ModuleInfo(QGroupBox, QObserver, qobservables={

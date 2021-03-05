@@ -7,7 +7,7 @@ Github: https://github.com/krumnack
 
 from toolbox import Toolbox
 from tools.train import Training, TrainingController
-from network import Network, AutoencoderController
+from network import Network
 
 from .panel import Panel
 from qtgui.utils import QObserver
@@ -22,8 +22,9 @@ from PyQt5.QtWidgets import (QPushButton, QSpinBox, QLineEdit,
 
 
 class AutoencoderPanel(Panel, QObserver, qobservables={
+        Network: Network.Change.all(),
+        Training: Training.Change.all()}):
         # FIXME[hack]: check what we are really interested in ...
-        Network: Network.Change.all(), Training: Training.Change.all()):
     """A panel displaying autoencoders.
 
     Attributes
@@ -32,10 +33,10 @@ class AutoencoderPanel(Panel, QObserver, qobservables={
         A controller for a network trained as autoencoder.
     """
     _toolbox: Toolbox = None
-    _autoencoder: AutoencoderController = None
+    #_autoencoder: AutoencoderController = None
 
     def __init__(self, toolbox: Toolbox,
-                 autoencoderController: AutoencoderController,
+                 # autoencoderController: AutoencoderController,
                  trainingController: TrainingController,
                  parent=None) -> None:
         """Initialization of the LoggingPael.

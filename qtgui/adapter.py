@@ -169,7 +169,7 @@ class ItemAdapter(QDebug):
         try:
             return next((x for i, x in enumerate(self._items()) if i == index))
         except StopIteration:
-            raise IndexError(f"Index {i} beyond end of items.")
+            raise IndexError(f"Index {index} beyond end of items.")
 
     def _getTextAt(self, index: int) -> str:
         """

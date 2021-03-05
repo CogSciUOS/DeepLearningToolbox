@@ -16,31 +16,33 @@ External requirements:
  - packaging (via .check)
 """
 
-import sys
-import logging
-from . import check, error
-from .logging import RecorderHandler
+from dltb.util import error
+from dltb.util.logging import RecorderHandler
+from . import check
 
-
+#
+# async
+#
 
 from concurrent.futures import ThreadPoolExecutor
 
 _executor = ThreadPoolExecutor(max_workers=4,
                                thread_name_prefix='async')
 
-
 runner = None
 
+# FIXME[old]: currently not used
 def run_async(function, *args, **kwargs):
     _executor.submit(function, *args, **kwargs)
 
 
+# FIXME[old]: currently not used
 def async_decorator(function):
-    """A decorator to enforce asyncronous execution. 
+    """A decorator to enforce asyncronous execution.
     """
     def wrapper(*args, **kwargs):
         runner.runTask(function, *args, **kwargs)
-        #run_async(function, *args, **kwargs)
+        # run_async(function, *args, **kwargs)
     return wrapper
 
 #
@@ -52,8 +54,8 @@ import time, threading
 # FIXME[problem]: resources requires stuff from base (while base)
 # also requires stuff from util) -> cyclic import!
 #  => disentangle, maybe split into several (sub)packages
-#from . import resources
-          
+#from . import resource
+
 _timer = None
 _timer_callbacks = []
 
@@ -81,10 +83,3 @@ def stop_timer():
 def add_timer_callback(callback):
     global _timer_callbacks
     _timer_callbacks.append(callback)
-
-#
-# Global Flags
-#
-
-# Should we use CPU (even if GPU is available)?
-use_cpu = True

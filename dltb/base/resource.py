@@ -4,6 +4,10 @@ import logging
 import importlib
 from pathlib import Path
 
+# toolbox imports
+from .busy import BusyObservable, busy
+
+
 # logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -89,8 +93,6 @@ class Metaclass(type):
                 len += 1
         return len
 
-
-from dltb.base.busy import BusyObservable, busy
 
 
 class Resource(BusyObservable, method='resource_changed',
@@ -332,8 +334,7 @@ class ModuleResource(Resource):
 
 
 
-class Installable(Resource):
-    ...
+class Installable(Resource, BusyObservable):
 
     @property
     def installed(self) -> bool:
@@ -344,6 +345,7 @@ class Installable(Resource):
         This should be implemented by subclasses and do the actual test.
         """
 
+    @busy("installing")
     def install(self) -> None:
         """Install the :py:class:`Installable`.
         """
@@ -354,6 +356,7 @@ class Installable(Resource):
         implemented by subclasses.
         """
 
+    @busy("uninstalling")
     def uninstall(self) -> None:
         """Uninstall the :py:class:`Installable`.
         """
@@ -363,7 +366,6 @@ class Installable(Resource):
         """Do the actuall deinstallation. This method should be
         implemented by subclasses.
         """
-
 
 class Package(Installable):
     """
