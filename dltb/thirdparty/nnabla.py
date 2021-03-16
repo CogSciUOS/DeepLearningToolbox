@@ -86,6 +86,8 @@ LOG = logging.getLogger(__name__)
 
 
 class NNabla(Preparable, BusyObservable):
+    """Abstract base class for networks realized in `nnabla`.
+    """
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -146,13 +148,22 @@ class StyleGAN2(ImageGAN, NNablaExample):
     contains the following files:
 
     `generate.py`:
-        Defines the functions `generate` and `synthesis`.
-
+        Defines the functions `generate` and `synthesis` (and `main`).
+        The function `synthesis` defines a convolutional generator,
+        mapping a latent vector w through a chain of activation maps,
+        starting from (*, 512, 4, 4) -> (*, 512, 8, 8) ->
+        (*, 512, 16, 16) -> (*, 512, 32, 32) -> (*, 512, 64, 64) ->
+        (*, 256, 128, 128) -> (*, 128, 256, 256) -> (*, 64, 512, 512) ->
+        (*, 32, 32, 512).
+    
     `networks.py`:
         Defines `mapping_network`
 
     `ops.py`:
         Several utility functions:
+
+    The nnabla StyleGAN2 demo seems to only contain the generator, no
+    discriminator.
     """
     # Import functions from the example script
     # {nnabla_examples}/GANs/stylegan2/generate.py
@@ -169,6 +180,8 @@ class StyleGAN2(ImageGAN, NNablaExample):
     #
     # * newer versions
 
+    # FIXME[hack]: some proper error handling is needed here!
+    # (notice that this code is executed during import)
     assert os.path.isdir(config.nnabla_examples_directory)
     nnabla_stylegan2_directory = \
         os.path.join(config.nnabla_examples_directory, 'GANs', 'stylegan2')

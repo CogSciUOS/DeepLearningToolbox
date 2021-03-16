@@ -218,6 +218,25 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
         # 3. For some reason, the CUDA code is compiled everytime I
         #    load the pickle file. There should be some possibility to
         #    keep the result, but I was not able to find it yet.
+        #
+        #
+        # Successful:
+        #
+        #
+        # Not successful:
+        #   Ubuntu 16.04,
+        #     - /usr/bin/nvcc: Cuda compilation tools, release 8.0, V8.0.44
+        #     - /usr/bin/gcc: (Ubuntu 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609
+        #     - conda:
+        #        cudatoolkit-10.0.130
+        #        tensorflow-gpu-1.14.0
+        #       -
+        #       -D_GLIBCXX_USE_CXX11_ABI=0
+        #       -D_GLIBCXX_USE_CXX11_ABI=1
+        #       -D__CORRECT_ISO_CPP11_MATH_H_PROTO
+        #       --std=c++11
+        #           -> tensorflow/include/absl/strings/string_view.h(495):
+        #                error: constexpr function return is non-constant
 
         LOG.info("Initializing StyleGAN2 models from '%s'",
                  self._model_filename)
