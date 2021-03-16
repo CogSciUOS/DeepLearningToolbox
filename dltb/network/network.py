@@ -307,7 +307,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # @busy("getting activations")
     def get_activations(self, inputs: np.ndarray,
                         layer_ids: Any = None,
-                        data_format: str = None) \
+                        data_format: str = None,
+                        as_dict: bool = False) \
             -> Union[np.ndarray, List[np.ndarray]]:
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
@@ -365,6 +366,9 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         # return just an array.
         if not is_list:
             activations = activations[0]
+        elif as_dict:
+            activations = {layer_id: activation for layer_id, activation
+                           in zip(layer_ids, activations)}
         return activations
 
     def get_net_input(self, layer_ids: Any,
@@ -1092,7 +1096,8 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
     # more flexible)
     def get_activations(self, inputs: Imagelike,
                         layer_ids: Any = None,
-                        data_format: str = None
+                        data_format: str = None,
+                        as_dict: bool = False
                         ) -> Union[np.ndarray, List[np.ndarray]]:
         """
         """
@@ -1131,7 +1136,9 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
         # return just an array.
         if not is_list:
             activations = activations[0]
-
+        elif as_dict:
+            activations = {layer_id: activation for layer_id, activation
+                           in zip(layer_ids, activations)}
         return activations
 
     #
@@ -1145,6 +1152,30 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
 
     def extract_receptive_field(self, layer: 'Layer', unit: Tuple[int],
                                 image: Imagelike) -> Imagelike:
+        """Extract the receptive field for a unit in this :py:class:`Network`
+        from an input image.
+
+        Arguments
+        ---------
+        layer:
+            The layer of the unit.
+        unit:
+            Coordinates for the unit in the `layer`. These may or may not
+            include the channel (the channel does not influence the
+            receptive field).
+        image:
+            The image from which the receptive field should be extracted.
+            The image will undergo the same preprocessing (resizing/cropping),
+            as it would undergo if the image would be processed by
+            this :py:class:`Network`.
+
+        Result
+        ------
+        extract:
+            The part of the image in the receptive field of the unit,
+            resized to fit the native input resolution of this
+            :py:class:`Network`.
+        """
         resized = self.resize(image)
         (fr1, fc1), (fr2, fc2) = layer.receptive_field(unit)
         extract_shape = (fr2 - fr1, fc2 - fc1)

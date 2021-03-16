@@ -117,6 +117,10 @@ class Identifiable:
         return self._id
 
     @property
+    def key(self) -> str:
+        return self.get_id()
+
+    @property
     def id(self) -> str:
         return self.get_id()
     

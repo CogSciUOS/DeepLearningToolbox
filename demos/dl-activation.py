@@ -9,6 +9,15 @@ Invocation:
 
 dl-activation.py
 
+
+Iterate a Datasource, compute activation values and store them in an
+archive:
+
+  dl-activation.py --alexnet --imagenet-val --store
+
+Determine top n activation valus for a Network on a Datasource:
+
+  dl-activation.py
 """
 
 # standard imports
@@ -20,6 +29,7 @@ import time
 
 # third-party imports
 import numpy as np
+from tqdm import tqdm
 
 # GUI imports
 from PyQt5.QtWidgets import QApplication, QMainWindow
@@ -33,6 +43,8 @@ from dltb.network import Network, Layer, argparse as NetworkArgparse
 from dltb.datasource import Datasource, Datafetcher
 from dltb.datasource import argparse as DatasourceArgparse
 from dltb.tool.activation import ActivationTool, ActivationWorker
+from dltb.tool.activation import ActivationsArchiveNumpy
+from dltb.tool.activation import TopActivations
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -203,6 +215,36 @@ def demo_iterate_activations(network: Network, datasource: Datasource) -> None:
         worker._update_layer_top_activations()
 
 
+def demo_store_activations(network: Network, datasource: Datasource) -> None:
+    archive = ActivationsArchiveNumpy(network=network, datasource=datasource,
+                                      mode='w')
+    with archive:
+        archive.info()
+        try:
+            for index in tqdm(range(archive.valid, archive.total),
+                              initial=archive.valid, total=archive.total):
+                archive += network.get_activations(datasource[index])
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt")
+        finally:
+            print(f"End: {archive.valid}/{archive.total}")
+
+def demo_store_top_activations(network: Network, datasource: Datasource,
+                               top: int = 9) -> None:
+    archive = TopActivations(network=network, datasource=datasource,
+                             top=top, mode='w')
+    with archive:
+        archive.info()
+        try:
+            for index in tqdm(range(archive.valid, archive.total),
+                              initial=archive.valid, total=archive.total):
+                archive += network.get_activations(datasource[index])
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt")
+        finally:
+            print(f"End: {archive.valid}/{archive.total}")
+
+
 def demo_top_activations(network: Network, datasource: Datasource) -> None:
     tool = ActivationTool(network)
     worker = ActivationWorker(tool=tool)
@@ -223,6 +265,12 @@ def main():
                         help='display activations in graphical user interface')
     parser.add_argument('--iterate', action='store_true',
                         help='iterate over activation values')
+    parser.add_argument('--top', type=int,
+                        help='obtain top n activation values')
+    parser.add_argument('--store', action='store_true',
+                        help='store activation values')
+    parser.add_argument('--store-top', action='store_true',
+                        help='store top activation values')
     parser.add_argument('image', metavar='IMAGE', nargs='*',
                         help='input image(s)')
 
@@ -254,6 +302,12 @@ def main():
 
     if args.iterate:
         demo_iterate_activations(network, datasource)
+    elif args.store:
+        demo_store_activations(network, datasource)
+    elif args.top:
+        demo_top_activations(network, datasource)
+    elif args.store_top:
+        demo_store_top_activations(network, datasource)
 
     elif datasource is not None:
         #

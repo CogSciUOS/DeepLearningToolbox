@@ -6,6 +6,8 @@
 * module `packaging`
 * module `imageio` or some other module that provides `imread`
 * module `frozendict`: for network
+* module `numpy` with following functions:
+  - `numpy.take_along_axis` (new in version 1.15.0)
 
 Big modules (should be made optional!):
 * module `matplotlib`:

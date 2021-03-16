@@ -37,12 +37,13 @@ def main():
                         default=False,
                         help="display backend specific summary of the network")
     parser.add_argument('--layer', help='describe the specified layer')
+    parser.add_argument('--field', help='extract receptive field')
 
     ToolboxArgparse.add_arguments(parser)
     NetworkArgparse.prepare(parser)
 
     args = parser.parse_args()
-    ToolboxArgparse.process_arguments(args)
+    ToolboxArgparse.process_arguments(parser, args)
 
     network = NetworkArgparse.network(parser, args)
     if network is None:
@@ -78,6 +79,17 @@ def main():
         print(f"  input: '{layer.input_shape}'")
         print(f"  output: '{layer.output_shape}'")
 
+    if args.field:
+        unit = tuple(map(int, args.field.split(',')))
+        print(f"Receptive field: {args.field}, {unit}, "
+              f"{layer.receptive_field(unit)}")
+
+        image = 'images/elephant.jpg'
+        extract = network.extract_receptive_field(layer, unit, image)
+        print(extract.shape)
+
+        from dltb.util.image import imshow
+        imshow(extract)
 
 if __name__ == "__main__":
     try:

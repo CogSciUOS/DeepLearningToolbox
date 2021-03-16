@@ -81,6 +81,26 @@ class Preparable(BusyObservable, method='preparable_changed',
         self._unprepare()
         super().__del__()
 
+    def __enter__(self) -> None:
+        """The context manager for :py:class:`Preparable` objects allows
+        to use such objects in a prepared state.
+        """
+        # FIXME[todo]: check if super().__enter__() has to be called ...
+        result = self  # super().__enter__()
+        if not hasattr(self, '_prepare_entered') and not self.prepared:
+            self._prepare_entered = True
+            self.prepare()
+        return result
+
+    def __exit__(self, _exception_type, _exception_value, _traceback) -> None:
+        """Exit the runtime context related to this :py:class:`Preparable`.
+        Only if the object was prepared when entering the context, it
+        will be unprepared here, otherwise it will stay prepared.
+        """
+        if hasattr(self, '_prepare_entered'):
+            self.unprepare()
+            delattr(self, '_prepare_entered')
+        
     @property
     def prepared(self) -> bool:
         """Report if this :py:class:`Preparable` is prepared for use.
