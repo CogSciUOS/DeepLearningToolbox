@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 import sys
 import logging
+import time
 import datetime
 import threading
 
@@ -29,6 +30,7 @@ class Video:
 Videolike = Union[Video]
 
 
+# FIXME[design]: what is this Reader/VideoReader etc. all about?
 class Reader:
     """An abstract interface to read videos. A :py:class:`Reader`
     allows to read a video source frame by frame.
@@ -73,11 +75,11 @@ class Reader:
     #
 
     def __next__(self) -> np.ndarray:
-        """Implementation of the :py:class:`Iterator` interface.
+        """Implementation of the :py:class:`Iterator` interface. Will read and
+        return the next frame.
         """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
-                                  "be a Reader, but does not implement "
-                                  "the __next__ method.")
+        return self.read_frame()
+
     #
     # Context manager
     #
@@ -141,13 +143,35 @@ class Reader:
         """
 
     @abstractmethod
-    def get_frame_at(self, time: Union[int, float, str]):
+    def frame_at(self, time: Union[int, float, str]) -> int:
         """
         """
 
-    @abstractmethod
-    def frame_at(self, time: Union[int, float, str]) -> int:
+    #
+    # public interfac
+    #
+
+    def read_frame(self, time: Union[int, float, str] = None,
+                   **kwargs) -> np.ndarray:
+        """Read a frame from this :py:class:`VideoReader`.
         """
+        if time is not None:
+            index = self.frame_at(time)
+        if index is not None:
+            frame = self._read_frame(index=index, **kwargs)
+        else:
+            frame = self._read_frame(**kwargs)
+        LOG.debug("Read frame of shape %s, dtype=%s with shape %s",
+                  frame.shape, frame.dtype, self)
+        return frame
+
+    #
+    # to be implemented by subclasses
+    #
+
+    @abstractmethod
+    def _read_frame(self, **kwargs) -> np.ndarray:
+        """Read the next from this :py:class:`Reader`.
         """
 
 
@@ -166,11 +190,13 @@ class RandomReader(Reader):
         except AttributeError:
             self._random_integers = rng.randint
 
-    def __next__(self) -> np.ndarray:
+    def _read_frame(self, size=None) -> np.ndarray:
         """Implementation of the :py:class:`Iterator` interface.
         """
-        return self._random_integers(0, 256, size=self._size[::-1] + (3,),
-                                     dtype=np.uint8)
+        if size is None:
+            size = self._size
+        shape = self._size[::-1] + (3,)
+        return self._random_integers(0, 256, size=shape, dtype=np.uint8)
 
 
 class VideoReader(Reader):
@@ -202,17 +228,6 @@ class VideoReader(Reader):
         raise NotImplementedError(f"{self.__class__.__name__} claims to "
                                   "be a VideoReader, but provides no "
                                   "'__getitem__' method.")
-
-    @property
-    def frame(self) -> int:
-        """The index of the frame the next read will yield.
-        """
-        return self._get_frame()
-
-    @abstractmethod
-    def _get_frame(self) -> int:
-        """Get the index of the frame the next read will yield.
-        """
 
 
 class FileBase:
@@ -269,18 +284,29 @@ class Webcam(Reader):
         A lock to avoid race conditions due to simultanous access to
         the webcam.
     """
+
+    # maximal acceptable delay due to buffering
+    maximal_buffering_delay: float = 0.1
+
     def __init__(self, device: int, **kwargs) -> None:
         LOG.info("Acqiring Webcam (%d) for %s.", device, type(self))
+        self._lock = None
         super().__init__(**kwargs)
         self._device = device
         self._lock = threading.Lock()
+        # Store time of last capture operation
+        self._last_read_timestamp = time.time()
 
     def __del__(self) -> None:
         if self._lock is not None:
             del self._lock
             self._lock = None
 
-    def get_frame(self, clear_buffer: bool = True) -> np.ndarray:
+    @property
+    def device(self) -> int:
+        return self._device
+
+    def read_frame(self, clear_buffer: bool = None) -> np.ndarray:
         """The default (and only) mode of getting data from the webcam
         is reading the next frame.
 
@@ -292,11 +318,19 @@ class Webcam(Reader):
             the buffer may avoid this problem, but may delay the whole
             process.
         """
-        LOG.debug("%s.get_data(clear_buffer=%s)", type(self), clear_buffer)
+        LOG.debug("Capturing frame from %s (clear_buffer=%s)",
+                  self, clear_buffer)
         with self._lock:
+            if clear_buffer is None:
+                time_passed = time.time() - self._last_read_timestamp
+                clear_buffer = time_passed > self.maximal_buffering_delay
             if clear_buffer:
                 self._clear_buffer()
-            return next(self)
+            frame = self._read_frame()
+            self._last_read = time.time()
+        LOG.debug("Captured frame of shape %s, dtype=%s with shape %s",
+                  frame.shape, frame.dtype, self)
+        return frame
 
     def _clear_buffer(self) -> None:
         """Clear the webcam buffer.
@@ -309,7 +343,7 @@ class Webcam(Reader):
         if sys.platform == 'linux':
             ignore = 4
             for _ in range(ignore):
-                next(self)
+                self._read_frame()
 
 
 class Writer(Preparable):

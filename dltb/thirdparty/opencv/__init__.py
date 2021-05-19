@@ -104,7 +104,7 @@ class ImageDisplay(image.ImageDisplay):
 
     def __del__(self) -> None:
         cv2.destroyAllWindows()
-        super().__del__()
+        # super().__del__()  # 'super' object has no attribute '__del__'
 
     def _show(self, image: np.ndarray, title: str = None) -> None:
         cv2.imshow(self._window_name, cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -204,7 +204,7 @@ class VideoReader(video.Reader):
     # Iterator
     #
 
-    def __next__(self) -> np.ndarray:
+    def _read_frame(self) -> np.ndarray:
         """Get the next frame from the OpenCV Video Capture.
         """
         if not self.prepared:
@@ -215,7 +215,7 @@ class VideoReader(video.Reader):
         if not ok:
             raise RuntimeError("Error reading frame fom video.")
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
+        
     #
     # FIXME[question]: when is this needed?
     #
@@ -259,52 +259,6 @@ class VideoFileReader(VideoReader, video.FileReader):
         # -> describe this in more detail - find examples and analyze!
         return int(self._capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    def __getitem__(self, frame: int = None) -> np.ndarray:
-        """Get the frame for a given frame number.
-
-        Note: after getting a frame, the current frame number (obtained
-        by :py:meth:`frame`) will be frame+1, that is the number of
-        the next frame to read.
-
-        Arguments
-        ---------
-        frame: int
-            The number of the frame to be read. If no frame is given,
-            the next frame available will be read from the capture
-            object.
-        """
-        with self._lock:
-            if frame is not None and frame != self.frame:
-                LOG.debug("OpencvVideoBackend: actively setting frame "
-                          "from %d to %d", self.frame, frame)
-                self._capture.set(cv2.CAP_PROP_POS_FRAMES, frame)
-            # note: read() will advance the frame position to the next
-            # frame to be read.
-            ret, image = self._capture.read()
-            if not ret:
-                raise RuntimeError("Reading an image from video capture "
-                                   f"at frame {frame} failed!")
-        return image[:, :, ::-1]  # convert OpenCV BGR representation to RGB
-
-    def get_frame_at(self, time: Union[int, float, str]):
-        """Get the frame at the given timepoint.
-
-        Arguments
-        ---------
-        time:
-            The time in any format understood by
-            :py:meth:`time_in_seconds()`.
-        """
-        time_in_seconds = self.time_in_seconds(time)
-        with self._lock:
-            self._capture.set(cv2.CAP_PROP_POS_MSEC, time_in_seconds * 1000)
-            ret, frame = self._capture.read()
-            if not ret:
-                raise RuntimeError("Reading an image from video capture "
-                                   f"at {time_in_seconds:.4f}s "
-                                   f"({time}) failed!")
-        return frame[:, :, ::-1]  # convert OpenCV BGR representation to RGB
-
     @property
     def frame(self) -> int:
         """The number of the current frame.
@@ -343,6 +297,56 @@ class VideoFileReader(VideoReader, video.FileReader):
             :py:meth:`time_in_seconds()`.
         """
         return int(self.frames_per_second * self.time_in_seconds(time))
+
+    def _read_frame(self, index: int = None) -> np.ndarray:
+        """Get the frame for a given frame number.
+
+        Note: after getting a frame, the current frame number (obtained
+        by :py:meth:`frame`) will be frame+1, that is the number of
+        the next frame to read.
+
+        Arguments
+        ---------
+        index: int
+            The number of the frame to be read. If no frame is given,
+            the next frame available will be read from the capture
+            object.
+        """
+        with self._lock:
+            if index is not None and index != self.frame:
+                LOG.debug("OpencvVideoBackend: actively setting frame "
+                          "from %d to %d", self.frame, index)
+                self._capture.set(cv2.CAP_PROP_POS_FRAMES, index)
+            # note: read() will advance the frame position to the next
+            # frame to be read.
+            ret, image = self._capture.read()
+            if not ret:
+                raise RuntimeError("Reading an image from video capture "
+                                   f"at frame {index} failed!")
+        return image[:, :, ::-1]  # convert OpenCV BGR representation to RGB
+
+    # FIXME[old]: opencv seems to have its own means to jump to
+    # a specific time - is there any benefit compared to our
+    # manual method?
+    # Maybe offer an option by adding a method: jump_to(time)
+    def _old_read_frame_at(self, time: Union[int, float, str]):
+        """Get the frame at the given timepoint.
+
+        Arguments
+        ---------
+        time:
+            The time in any format understood by
+            :py:meth:`time_in_seconds()`.
+        """
+        time_in_seconds = self.time_in_seconds(time)
+        with self._lock:
+            self._capture.set(cv2.CAP_PROP_POS_MSEC, time_in_seconds * 1000)
+            ret, frame = self._capture.read()
+            if not ret:
+                raise RuntimeError("Reading an image from video capture "
+                                   f"at {time_in_seconds:.4f}s "
+                                   f"({time}) failed!")
+        return frame[:, :, ::-1]  # convert OpenCV BGR representation to RGB
 
 
 class VideoFileWriter(video.Writer):
@@ -423,3 +427,6 @@ class Webcam(video.Webcam, VideoReader):
         LOG.info("Camera device: %d", device)
         LOG.info("Frames per second: %f",
                  self._capture.get(cv2.CAP_PROP_FPS))
+
+    def __str__(self) -> str:
+        return f"OpenCV Webcam ({self.device})"

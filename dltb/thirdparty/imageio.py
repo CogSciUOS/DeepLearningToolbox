@@ -205,8 +205,8 @@ class Webcam(video.Webcam):
             self._reader = None
         super().__del__()
 
-    def _get_frame(self) -> np.ndarray:
-        """Get the next frame from the ImageIO Video Reader.
+    def _read_frame(self) -> np.ndarray:
+        """Read the next frame from the ImageIO Video Reader.
         """
         # frame, meta = self._reader.get_next_data()
         frame = self._reader.get_next_data()
@@ -214,9 +214,6 @@ class Webcam(video.Webcam):
             raise RuntimeError("Reading a frame from "
                                "ImageIO Video Reader failed!")
         return frame
-
-    def __next__(self) -> np.ndarray:
-        return self._get_frame()
 
 
 class VideoWriter(video.FileWriter):

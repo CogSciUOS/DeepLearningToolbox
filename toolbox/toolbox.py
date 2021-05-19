@@ -63,6 +63,7 @@ from dltb.base.busy import BusyObservable
 from dltb.base import run
 from dltb.tool import Tool
 from dltb.base.data import Data
+from dltb.base.register import Register
 from dltb.util.error import handle_exception, print_exception
 from dltb.util.error import set_exception_handler
 from dltb.util.logging import RecorderHandler
@@ -94,7 +95,7 @@ LOG.info("Effective log level for logger '%s': %d",
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 
-class Toolbox(BusyObservable, Datafetcher.Observer,
+class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
               method='toolbox_changed',
               changes={'networks_changed',
                        'tools_changed',
@@ -240,6 +241,15 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         self._uninitialize_datasources()
         # self._uninitialize_networks()
 
+    def register_changed(self, register: Register,
+                         change: Register.Change, key: str) -> None:
+        LOG.info(f"Toolbox: register %s changed: %s '%s'",
+                 register, change, key)
+        if register is Network.instance_register:
+            self.add_network(key)
+        elif register is Datasource.instance_register:
+            self.add_datasource(key)
+
     @property
     def runner(self) -> Runner:
         return self._runner
@@ -349,6 +359,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
 
     def _initialize_networks(self):
         self._networks = []
+        self.observe(Network.instance_register, Register.Change('entry_added'))
 
     def add_network(self, network: Union[str, Network],
                     prepare: bool = False) -> None:
@@ -400,6 +411,11 @@ class Toolbox(BusyObservable, Datafetcher.Observer,
         """Initialized the datasources managed by this :py:class:`Toolbox`.
         """
         self._datasources = []
+
+        # observe the Datasource instance register to get informed when
+        # new Datasources are instantiated
+        self.observe(Datasource.instance_register,
+                     Register.Change('entry_added', 'entry_changed'))
 
         # a datafetcher for the currently selected datasource.
         self._datafetcher = Datafetcher()

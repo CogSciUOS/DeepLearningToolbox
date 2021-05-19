@@ -1204,7 +1204,23 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
 class Classifier(SoftClassifier, Network):
     """A :py:class:`Network` to be used as classifier.
 
+    _labeling: str
+        The name of the label lookup table of the :py:class:`ClassScheme`
+        by which the activation vector of the output layer(s), i.e.
+        the probit/score is indexed.
     """
+
+    def __init__(self, labeling: str = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._labeling = labeling
+
+    @property
+    def labeling(self) -> str:
+        """The name of the label lookup table of the :py:class:`ClassScheme`
+        by which the activation vector of the output layer(s), i.e.
+        the probit/score is indexed.
+        """
+        return self._labeling
 
     @property
     def logit_layer(self) -> 'Layer':
@@ -1246,24 +1262,36 @@ class Classifier(SoftClassifier, Network):
     # Implementation of the SoftClassifier API
     #
 
-    def class_scores(self, data: Datalike) -> np.ndarray:
+    def class_scores(self, data: Datalike,
+                     probit: bool = False) -> np.ndarray:
         """Implementation of the :py:class:`SoftClassifier` interface.
-        """
-        data_internal = self.image_to_internal(data)
-        scores_internal = self._class_scores(data_internal)
-        scores = self.internal_to_numpy(scores_internal, unbatch=True)
-        return scores
 
-    def _class_scores(self, inputs: np.ndarray) -> np.ndarray:
-        # FIXME[todo]: at least in tensorflow it seems possible to feed
-        # a list of inputs!
-        # output = sess.run(network_output_tensor,
-        #                   feed_dict={network_input_tensor:inputs})
-        # However, we do not allow this yet!
-        # print(f"network.Classifier.class_scores: inputs={type(inputs)}")
-        inputs = np.asarray(inputs)
-        scores = self._get_activations(inputs, [self.score_layer])
-        return scores[0]
+        Arguments
+        ---------
+        data:
+            The input data (either individual datum or batch of data).
+
+        Results
+        -------
+        scores:
+            The class scores obtained by classifying the input,
+            indexed according to the :py:clas:`ClassScheme` of this
+            :py:class:`Classifier`.
+        """
+        # obtain activation values for the score_layer
+        activations = self._get_activations(data, self.score_layer)
+
+        # convert scores from internal format into numpy array
+        return self.to_class_scheme(activations)
+
+    def to_class_scheme(self, activations: np.ndarray) -> np.ndarray:
+        """Reindex a given activation vector acoording to the
+        :py:class:`ClassScheme` of this :py:class:`Classifier`. The
+        reindexed activations vector can be used to directly read out
+        activation values, using the :py:class:`ClassIdentifier`s of
+        the :py:class:`ClassScheme` as index.
+        """
+        return self._scheme.reindex(activations, source=self._labeling)
 
 
 class Autoencoder(Network, method='network_changed'):

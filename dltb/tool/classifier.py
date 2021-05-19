@@ -176,6 +176,48 @@ class ClassScheme(metaclass=RegisterClass):
         """
         return self._labels.keys()
 
+    def reindex(self, values: np.ndarray, axis: int = None,
+                source: str = None, target: str = None) -> np.ndarray:
+        """Reindex the given
+        """
+        if len(values) != len(self):
+            raise ValueError("Invalid values for reindexing: length is "
+                             f"{len(values)} but should be {len(self)}")
+        if source == target:
+            return values
+
+        translation = self.translate(np.arange(len(self)),
+                                     source=source, target=target)
+        return values[translation]
+
+    def translate(self, labels: np.ndarray,
+                  source: str = None, target: str = None) -> np.ndarray:
+        """Translate an array of indices from a given indexing format
+        into another format.
+
+        Arguments
+        ---------
+        labels:
+            The array of indices.
+        source:
+            The name of the source index format.  If no source name
+            is provided, the indices are assumed to be in the standard
+            format of this :py:class:`ClassScheme`.
+        target:
+            The name of the target format. If no target name is provided,
+            the standard indices of this :py:class:`ClassScheme` are used.
+
+        Result
+        ------
+        translated
+            An array containing the translated labels.
+        """
+        if source is not None:
+            labels = self._lookup[source][labels]
+        if target is not None:
+            labels = self._labels[target][labels]
+        return labels
+
 
 ClassScheme.register_instance('ImageNet',
                               'dltb.thirdparty.datasource.imagenet',
@@ -287,11 +329,6 @@ class Classifier(ABC, Preparable):
     _scheme: ClassScheme
         The classification scheme applied by this classifier.
 
-    _lookup: str
-        The name of the lookup table used to map :py:class:`Classifier`
-        outputs to classes of the :py:class:`ClassScheme`.
-        The classification scheme has to support this lookup table.
-
     """
 
     def __init__(self, scheme: Union[ClassScheme, str, int],
@@ -310,14 +347,6 @@ class Classifier(ABC, Preparable):
         """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
         """
         return self._scheme
-
-    @property
-    def class_scheme_lookup(self) -> str:
-        """The lookup table to be used to map the (internal) results of this
-        :py:class:`Classifier` to a class from the
-        :py:class:`ClassScheme`.
-        """
-        return self._lookup
 
     def _prepare(self) -> None:
         """Prepare this :py:class:`Classifier`.

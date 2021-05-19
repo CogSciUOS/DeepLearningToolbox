@@ -13,6 +13,7 @@ import dlib
 # toolbox imports
 from ..base.meta import Metadata
 from ..base.image import BoundingBox
+from ..base.install import Installable
 from ..tool.face.detector import Detector as FaceDetector
 from ..tool.face.landmarks import (Detector as LandmarkDetector,
                                    FacialLandmarks68)
@@ -21,7 +22,7 @@ from ..tool.face.landmarks import (Detector as LandmarkDetector,
 LOG = logging.getLogger(__name__)
 
 
-class DetectorHOG(FaceDetector):
+class DetectorHOG(FaceDetector, Installable):
     # pylint: disable=too-many-ancestors
     """The dlib HOG face detector.
 
@@ -76,6 +77,22 @@ class DetectorHOG(FaceDetector):
             image = image.astype(np.uint8)
 
         # dlib: image must be 8bit gray or RGB image.
+
+        # Remarks:
+        # 1. Dlib's face detector has no GPU support
+        # 2. Detector does not use color information - greyscale images
+        #    will work faster
+        # 3. For best performance you can downscale images, because dlib
+        #    works with small 80x80 faces for detection and use
+        #    scanner.set_max_pyramid_levels(1) to exclude scanning of
+        #    large faces. And also face detector has 5 cascades inside -
+        #    they can be splitted if you need only frontal-looking faces
+        #    for example; Unfortunately, scanner.set_max_pyramid_levels is not
+        #    available for python API. Splitting cascades can be done in C++
+        # 4. GCC-compiled code works much faster than any MSVC.
+        #    MSVC 2015 works much faster than MSVC 2013
+        # 5. OpenCV's function cv::equalizeHist will make it find more faces
+
         rects = self._detector(image, 2)
 
         detections = Metadata(
@@ -87,7 +104,7 @@ class DetectorHOG(FaceDetector):
         return detections
 
 
-class DetectorCNN(FaceDetector):
+class DetectorCNN(FaceDetector, Installable):
     # pylint: disable=too-many-ancestors
     """The dlib CNN detector.
     _model_file: str
@@ -142,12 +159,12 @@ class DetectorCNN(FaceDetector):
         """The dlib CNN face detector.
         """
         # The dlib detector expects images to be 8-bit RGB or grayscale
-        if image.dtype is not np.uint8:  # FIXME[hack]:
+        if image.dtype != np.uint8:
             # FIXME[todo]: better solution: make sure that images are
             # provided in correct format or provide preprocessing ...
-            print(f"dlib: error: image is {image.dtype} "
-                  f"(min={image.min()}, max={image.max()}) "
-                  "but should be np.uint8!", file=sys.stderr)
+            LOG.warning("dlib CNN face detector: image is %s (min=%d, max=%d) "
+                        "but should be %s!",
+                        image.dtype, image.min(), image.max(), np.uint8)
             image = image.astype(np.uint8)
 
         # It is also possible to pass a list of images to the
@@ -155,7 +172,51 @@ class DetectorCNN(FaceDetector):
         #   dets = detector([image # list], upsample_num, batch_size = 128)
         # In this case it will return a mmod_rectangless object. This object
         # behaves just like a list of lists and can be iterated over.
-        detections = self._detector(image, 2)
+
+        # Remark: in my conda dlib (19.21.0) installation, this is incredible
+        # slow, taking 5.3 seconds on a (480, 640, 3) image with 0 upsamples
+        # and 83.130 seconds on the same image with 0 upsamples
+        # According to the Dlib documentation
+        # [http://dlib.net/faq.html#Whyisdlibslow], it is crucial
+        # to compile Dlib correctly, that is not in debug mode and
+        # with compile optimizations enabled and either
+        # SSE4 or AVX instruction turned on.
+        #
+        # The speed of face detection depends on the the resolution of
+        # the image because with smaller resolution images, you look
+        # for a smaller range of face sizes. The downside is that you
+        # will miss out smaller faces. An easy way to speed up face
+        # detection is to resize the frame.
+        #
+        # You should either install the Intel MKL (or OpenBLAS) to run
+        # on the CPU or install CUDA. (Installing OpenBLAS can speed
+        # up the process by a factor of 3 or 4)
+        #
+        # CUDA:
+        # conda install -c zeroae dlib-cuda
+        #
+        # sudo apt-get install libopenblas-dev
+        # # + install cudnn (from nvidia)
+        # conda create -n faces python=3.6 cudatoolkit cudnn cmake numpy ipython
+        # conda activate faces
+        # git clone https://github.com/davisking/dlib.git
+        # cd dlib
+        # mkdir build
+        # cd build
+        # cmake .. -DDLIB_USE_CUDA=1 -DUSE_AVX_INSTRUCTIONS=1
+        # cmake --build .
+        # cd ..
+        # python setup.py install --set DLIB_USE_CUDA=1
+
+        upsample_num = 0
+        import time  # FIXME[hack]
+        start = time.time()
+        LOG.debug("dlib CNN face detector: detected faces "
+                  "in image of shape %s with %d upsamples",
+                  image.shape, upsample_num)
+        detections = self._detector(image, upsample_num)
+        LOG.info("dlib CNN face detector: detected %d faces in %.3f seconds",
+                 len(detections), time.time() - start)
 
         # The result is of type dlib.mmod_rectangles, which is
         # basically a list of rectangles annotated with conficence

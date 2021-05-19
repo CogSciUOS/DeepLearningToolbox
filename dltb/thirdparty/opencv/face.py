@@ -2,26 +2,78 @@
 """
 
 # standard imports
+from typing import Tuple
 import os
+import logging
 
 # third party imports
 import cv2
 import numpy as np
 
 # toolbox imports
+from ...base.data import Data
 from ...base.meta import Metadata
 from ...base.image import BoundingBox
+from ...base.install import Installable
 from ...tool.face.detector import Detector
 
+# logging
+LOG = logging.getLogger(__name__)
 
-class DetectorHaar(Detector):
+
+class DetectorHaar(Detector, Installable):
     # pylint: disable=too-many-ancestors
-    """ The OpenCV Haar cascade face detector.
+    """The OpenCV Haar cascade face detector.
+
+    The OpenCV Haar-Cascade Detector
+    --------------------------------
+
+    The method `detectMultiScale` allows to detect objects at multiple
+    scales.  Background: A Haar Cascade detector is trained to detect
+    objects of a fixed size (the detector size is stored in the
+    detector file, for example, `haarcascade_frontalface_default.xml`
+    has a size of 24x24, meaning that it will detect faces of roughly
+    that size).  However, a core property a of Haar Cascade detector
+    is that it can easily be scaled, allowing to also detect object of
+    different sizes.  So typically approach, if the size of the object
+    in the input image is not known, the detector is run multiple
+    times, each time scaled to a different size.  To control this
+    process, the functions uses the following arguments:
+
+    minSize: tuple
+        A tuple describing the minimal object size. Objects smaller
+        than that size will be ignored. For face recognition, `(30,30)`
+        is recommended as a reasonable value.
+
+    maxSize: tuple
+        A tuple describing the maximal object size. Objects larger
+        than that size will be ignored. If no value is given, no upper bound
+        is used, that is, arbitrary large objects can be detected.
+
+    scaleFactor: float = 1.1
+        This is the factor by which the detector size is scaled up at
+        each iteration (scaling up the detector has similar effects to
+        scaling down the image).  The default value of `1.1.` means
+        that the image is first processed with an detector of minSize,
+        than the detector is scaled up by a factor of 1.1, and the
+        image is scaled up again, etc.
+
+    In addition ther is the following parameter:
+
+    minNeighbors: int = 3
+    
+    Notice that there are different versions of this function, that
+    differ in the information they return. `detectMultiScale3` will
+    return additional information `rejectLevels` and `levelWeights`.
+
+    Arguments
+    ---------
 
     _model_file: str
         Absolute path to the model file.
     _detector: cv2.CascadeClassifier
         The OpenCV CascadeClassifier
+
     """
 
     def __init__(self, *args,
@@ -38,6 +90,8 @@ class DetectorHaar(Detector):
         self._detector = None
         self._model_file = None
         self.set_model_file(model_file)
+        LOG.info("OpenCV Cascade Classifier initialized (file=%s).",
+                 self._model_file)
 
     @staticmethod
     def _get_cascade_dir() -> str:
@@ -73,6 +127,8 @@ class DetectorHaar(Detector):
     def _prepare(self, **kwargs) -> None:
         """Prepare this :py:class:`DetectorHaar`.
         """
+        LOG.debug("Preparing OpenCV Cascade Classifier (file=%s).",
+                  self._model_file)
         super()._prepare(**kwargs)
         self._detector = cv2.CascadeClassifier(self._model_file)
 
@@ -83,6 +139,7 @@ class DetectorHaar(Detector):
     def _unprepare(self) -> None:
         """Free resources occupied by this :py:class:`DetectorHaar`.
         """
+        LOG.debug("Unpreparing OpenCV Cascade Classifier.")
         self._detector = None
         super()._unprepare()
 
@@ -95,26 +152,36 @@ class DetectorHaar(Detector):
     # Detection
     #
 
-    def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
-        """Detect faces using this :py:class:`DetectorHaar` detector.
-        """
-        # The OpenCV CascadeClassifier expects the input image to
-        # be of type CV_8U (meaning unsigned 8-bit, gray scale image
-        # with pixel values from 0 to 255). If not given as in this
-        # format, we will try to convert it.
-        if issubclass(image.dtype.type, np.float):
-            image = (image*256).astype(np.uint8)
+    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+        """Preprocess the image. The OpenCV CascadeClassifier expects the
+        input image to # be of type CV_8U (meaning unsigned 8-bit, gray scale
+        image # with pixel values from 0 to 255).
 
+        """
+        # super preprocessing should obtain an image of appropriate size
+        # and dtype = np.uint8
+        image = super()._preprocess_image(image)
+
+        # Convert to grayscale
         if image.ndim == 3 and image.shape[2] == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         elif image.ndim == 3 and image.shape[2] == 1:
-            gray = image[:, :, 0].copy()
-        elif image.ndim == 2:
-            gray = image.copy()
-        else:
+            image = image[:, :, 0]
+        elif image.ndim != 2:
             raise ValueError("The image provided has an illegal format: "
                              f"shape={image.shape}, dtype={image.dtype}")
+        return image
 
+    def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
+        """Detect faces using this :py:class:`DetectorHaar` detector.
+
+        Arguments
+        ---------
+        image:
+            The image to be scanned for faces.  The image is expected to
+            be of type `CV_8U`, that is unsigned 8-bit, gray scale image
+            with pixel values from 0 to 255
+        """
         # There seem to be two Python interfaces to the CascadeClassifier:
         #
         # detectMultiScale(image[,
@@ -142,7 +209,18 @@ class DetectorHaar(Detector):
         #           Objects larger than that are ignored.
         #
         # rejectLevels, levelWeights, outputRejectLevels: ?
-        rects = self._detector.detectMultiScale(gray)
+        # minimum_size = (10, 10)
+        # maximum_size = (100, 100)
+        rects, num = self._detector.detectMultiScale2(image, 1.3, 5)
+        #                                        minSize=minimum_size,
+        #                                        maxSize=maximum_size)
+
+        # In case that the detector file was not found, the function
+        # will abort with the following error:
+        # cv2.error: .../opencv-.../modules/objdetect/src/cascadedetect.cpp:...
+        #    error: (-215) !empty() in function detectMultiScale
+        LOG.debug("OpenCV CascadeClassifier detected %d/%s faces in image "
+                  "of shape %s", len(rects), num, image.shape)
 
         detections = Metadata(
             description='Detections by the OpenCV CascadeClassifier')
@@ -152,7 +230,7 @@ class DetectorHaar(Detector):
         return detections
 
 
-class DetectorSSD(Detector):
+class DetectorSSD(Detector, Installable):
     # pylint: disable=too-many-ancestors
     """The OpenCV Single Shot MultiBox Face Detector (SSD).
 
@@ -165,14 +243,14 @@ class DetectorSSD(Detector):
     2. 8 bit quantized version using Tensorflow
        (2.7 MB)
 
-    The required files can be fount in the opencv_extra repository
+    The required files can be found in the opencv_extra repository
         #
         #    git clone https://github.com/opencv/opencv_extra.git
         #
         # You can find the data in the directory testdata/dnn.
-        # The functions readNetFrom...() will look for relative filenames
-
-        # in the current working directory (where the toolbox was started).
+        # The functions cv2.dnn.readNetFrom...() will look for relative
+        # filenames (in the current working directory, where the toolbox
+        # was started).
     """
 
     _detector = None
@@ -195,11 +273,17 @@ class DetectorSSD(Detector):
         self._dnn = dnn
         self.set_model_file()
         self._add_requirement('cv2', 'module', 'cv2')
+        LOG.info("OpenCV SSD initialized.")
 
     def set_model_file(self, model_file: str = None,
                        config_file: str = None) -> None:
         """Set the model file to be used by this :py:class:`DetectorSSD`.
         """
+        # FIXME[hack]:
+        opencv_directory = '/home/ulf/projects/github/opencv'
+        model_directory = \
+            os.path.join(opencv_directory, 'samples', 'dnn', 'face_detector')
+
         if self._dnn == 'CAFFE':
             model_file = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
             config_file = "deploy.prototxt"
@@ -208,7 +292,11 @@ class DetectorSSD(Detector):
             config_file = "opencv_face_detector.pbtxt"
 
         if model_file != self._model_file or config_file != self._config_file:
+            if not os.path.isabs(model_file):
+                model_file = os.path.join(model_directory, model_file)
             self._model_file = model_file
+            if not os.path.isabs(config_file):
+                config_file = os.path.join(model_directory, config_file)
             self._config_file = config_file
             self._add_requirement('model_file', 'file', model_file)
             self._add_requirement('config_file', 'file', config_file)
@@ -217,6 +305,7 @@ class DetectorSSD(Detector):
         """Prepare this :py:class:`DetectorSSD`.
         This will load the model data from file.
         """
+        LOG.debug("Preparing OpenCV SSD face detector.")
         super()._prepare(**kwargs)
         if self._dnn == 'CAFFE':
             constructor = cv2.dnn.readNetFromCaffe
@@ -229,6 +318,7 @@ class DetectorSSD(Detector):
         """Release resources acquired by this :py:class:`DetectorSSD`.
         This will delete the actual OpenCV model.
         """
+        LOG.debug("Unpreparing OpenCV SSD face detector.")
         self._detector = None
         super()._unprepare()
 
@@ -241,19 +331,49 @@ class DetectorSSD(Detector):
     # Detection
     #
 
+    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+        """Preprocess the image. The OpenCV SSD expects 3-channel images
+        (BGR!).
+
+        """
+        # super preprocessing should obtain an image of appropriate size
+        # and dtype = np.uint8
+        image = super()._preprocess_image(image)
+
+        # Convert gray scale image to 3-channel image (BGR!)
+        if image.ndim < 3:  # gray scale image
+            image = np.repeat(image[:, :, np.newaxis], 3, axis=2)
+        elif image.shape[2] == 1:  # gray scale image
+            image = np.repeat(image, 3, axis=2)
+        return image
+
     def _detect(self, image: np.ndarray, **kwargs) -> Metadata:
         """Detect faces with this :py:class:`DetectorSSD`.
         """
+        LOG.debug("Detecting with OpenCV SSD face detector on image "
+                  "of shape %s, dtype %s", image.shape, image.dtype)
 
-        # The detector expects 3-channel images (BGR!)
-        if image.ndim < 3:
-            image = np.repeat(image[:, :, np.newaxis], 3, axis=2)
-        elif image.shape[2] == 1:
-            image = np.repeat(image, 3, axis=2)
 
-        # the image is converted to a blob
+        # the image is converted to a blob, meaning:
+        # 1. mean substraction
+        # 2. scaling
+        # 3. optional channel swapping
+        #
+        # Arguments:
+        #  image
+        #  scalefactor               # 
+        #  size: Tuple[int,int]      # size for the output image
+        #  mean:                     # (mean-red, mean-green, mean-blue)
+        #  swapRB = [104, 117, 123]  # swap red and blue channel
+        #  crop = False              # crop after resize
+        #  ddepth = CV_32F
+        # Results:
+        #                            # NCHW dimensions order. 
         blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300),
                                      [104, 117, 123], False, False)
+        
+        #  error: (-215:Assertion failed)
+        #     image.depth() == blob_.depth() in function 'blobFromImages'
 
         # the blob passed through the network using the forward() function.
         self._detector.setInput(blob)
@@ -276,6 +396,9 @@ class DetectorSSD(Detector):
         # The results are sorted according to the confidence score,
         # that is once we reached our threshold we can stop searching
         # for more detections.
+        LOG.debug("OpenCV SSD face detector detected %d faces in image "
+                  "of shape %s (blob: %s of %s)",
+                  result.shape[2], image.shape, blob.shape, blob.dtype)
 
         conf_threshold = .1  # FIXME[hack]
         #frameWidth, frameHeight = 300, 300

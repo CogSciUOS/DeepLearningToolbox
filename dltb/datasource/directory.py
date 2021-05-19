@@ -8,6 +8,7 @@ from typing import Union
 import os
 import glob
 import random
+import logging
 
 # toolbox imports
 from dltb.base.data import Data
@@ -15,6 +16,9 @@ from dltb.tool.classifier import ClassScheme
 from dltb.util import read_cache, write_cache
 from .files import DataFiles
 from .datasource import Imagesource
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 class DataDirectory(DataFiles):
@@ -34,9 +38,12 @@ class DataDirectory(DataFiles):
         relative to the data directory). An empty list
         indicates that no suitable files where found in the directory.
         None means that the list has not yet been prepared.
+    suffix: str
+        The suffix of filenames of interest (default: '`*`').
     """
 
-    def __init__(self, directory: str = None, description: str = None,
+    def __init__(self, directory: str = None, suffix: str = '*',
+                 description: str = None,
                  label_from_directory: Union[bool, str] = False,
                  scheme: ClassScheme = None, **kwargs) -> None:
         """Create a new DataDirectory
@@ -56,6 +63,7 @@ class DataDirectory(DataFiles):
         super().__init__(directory=directory, description=description,
                          **kwargs)
         self._label_from_directory = label_from_directory
+        self._suffix = suffix
         self._scheme = scheme
 
     def __str__(self):
@@ -69,6 +77,16 @@ class DataDirectory(DataFiles):
         """
         super()._set_directory(directory)
         self.unprepare()
+
+    @property
+    def suffix(self) -> str:
+        """The suffix of files of interest in the directory. Only
+        files with that suffix will be considered when listing the
+        directory.  The suffix may be `None` to indicate that no suffix
+        checks should be performed, or `'*'` to allows for arbitrary
+        suffixes (but not files without any suffix).
+        """
+        return self._suffix
 
     #
     # Preparable
@@ -92,11 +110,18 @@ class DataDirectory(DataFiles):
         filenames_cache: str
             Name of a cache file to store the list of filenames.
         """
+        LOG.debug("Preparing DataDirectory: %s", self.directory)
         super()._prepare(**kwargs)
         self._filenames = filenames_cache and read_cache(filenames_cache)
         if self._filenames is None:
+            LOG.info("DataDirectory: creating new cache file '%s' for "
+                     "data directory '%s'", filenames_cache, self.directory)
             self._prepare_filenames()
             write_cache(filenames_cache, self._filenames)
+        else:
+            LOG.debug("DataDirectory: read %d filenames from cache '%s' for "
+                      "data directory '%s'", len(self._filenames),
+                      filenames_cache, self.directory)
         if self._scheme is None:
             directories = set()
             for name in self._filenames:
@@ -121,11 +146,13 @@ class DataDirectory(DataFiles):
         # self._filenames = \
         #         [f for f in os.listdir(self._directory)
         #          if os.path.isfile(os.path.join(self._directory, f))]
-        pattern = os.path.join(self._directory, "**", "*.*")
+        pattern = os.path.join(self._directory, "**", f"*.{self.suffix}")
         filenames = glob.glob(pattern, recursive=True)
         # we need relative filenames!
-        index = len(self._directory) + 1
+        index = len(str(self._directory)) + 1
         self._filenames = [filename[index:] for filename in filenames]
+        LOG.info("DataDirectory: prepared %d filenames from directory '%s'.",
+                 len(self._filenames), self._directory)
 
     #
     # Data

@@ -192,6 +192,11 @@ class RegisterAdapter(QObserver, ItemAdapter, qobservables={
 
 
 class ToolboxAdapter(RegisterAdapter, qobservables={Toolbox: set()}):
+    """A :py:class:`ToolboxAdapter` is a :py:class:`RegisterAdapter`
+    that can be updated from a :py:class:`Toolbox`. If a
+    :py:class:`Toolbox` is set, it will get the values from that
+    toolbox instead of the register.
+    """
 
     def __init__(self, toolbox: Toolbox = None, **kwargs) -> None:
         """
@@ -212,6 +217,13 @@ class ToolboxAdapter(RegisterAdapter, qobservables={Toolbox: set()}):
         else:
             self.unobserve(self._register)
             self.updateFromToolbox()
+
+        # Indicate presence of Toolbox by background color:
+        # red = no Toolbox, blue = Toolbox present
+        pal = QPalette()
+        pal.setColor(QPalette.Background,
+                     Qt.red if toolbox is None else Qt.blue)
+        self.setPalette(pal)
 
     def updateFromToolbox(self) -> None:
         """Update the list from the :py:class:`Toolbox`.
@@ -747,7 +759,8 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController,
 
     @protect
     def _onButtonClicked(self, checked: bool) -> None:
-        """The button has been clicked.
+        """The "initialize" button has been clicked. This triggers the
+        initialization of the register entry.
         """
         LOG.info("%s.buttonClicked(checked=%r): text=%s, key=%s",
                  type(self).__name__, checked, self._button.text(),
@@ -782,6 +795,7 @@ class QInstanceRegisterEntryController(QRegisterClassEntryController,
 
     def entry_changed(self, entry: InstanceRegisterEntry,
                       change: InstanceRegisterEntry.Change) -> None:
+        print(f"QInstanceRegisterEntryController: ... entry_changed {change}")
         self.update()
 
 

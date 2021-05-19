@@ -176,6 +176,8 @@ class Image(Data):
         """
         for source_class, converter in cls.converters['array']:
             if isinstance(image, source_class):
+                LOG.debug("Using image converter for type %s (copy=%s)",
+                          type(image), copy)
                 image, copy = converter(image, copy)
                 break
         else:
@@ -184,12 +186,16 @@ class Image(Data):
                 # dependencies ...
                 # pylint: disable=import-outside-toplevel
                 from dltb.util.image import imread
+                LOG.debug("Loading image '%s' using imread.", image)
                 image, copy = imread(image), False
             else:
                 raise NotImplementedError(f"Conversion of "
                                           f"{type(image).__module__}"
                                           f".{type(image).__name__} to "
                                           "numpy.ndarray is not implemented")
+        LOG.debug("Obtained image of shape %s, dtype=%s.",
+                  image.shape, image.dtype)
+
         if colorspace == Colorspace.RGB:
             if len(image.shape) == 2:  # grayscale image
                 rgb = np.empty(image.shape + (3,), dtype=image.dtype)
@@ -199,12 +205,15 @@ class Image(Data):
             elif len(image.shape) == 3 and image.shape[2] == 4:  # RGBD
                 image = image[:, :, :3]
 
-        if dtype != image.dtype:
+        if dtype is not None and dtype != image.dtype:
             image = image.astype(dtype)  # /256.
             copy = False
 
         if copy:
             image = image.copy()
+
+        LOG.debug("Returning image of shape %s, dtype=%s.",
+                  image.shape, image.dtype)
         return image
 
     @staticmethod
@@ -214,17 +223,15 @@ class Image(Data):
         if isinstance(image, Data) and not copy:
             return image
 
-        array = Image.as_array(image, copy)
-        data = Data(array)
-        data.type = Data.TYPE_IMAGE
+        data = Image(image, copy=copy)
         if isinstance(image, str):
             data.add_attribute('url', image)
         return data
 
     def __init__(self, image: Imagelike = None, array: np.ndarray = None,
-                 **kwargs) -> None:
+                 copy: bool = False, **kwargs) -> None:
         if image is not None:
-            array = self.as_array(image)
+            array = self.as_array(image, copy=copy)
         super().__init__(array=array, **kwargs)
 
 
@@ -337,6 +344,9 @@ class ImageReader(ImageIO):
         else:
             new_cls = cls
         return super(ImageReader, new_cls).__new__(new_cls)
+
+    def __str__(self) -> str:
+        return type(self).__module__ + '.' + type(self).__name__
 
     def read(self, filename: str, **kwargs) -> np.ndarray:
         """Read an image from a file or URL.
@@ -627,14 +637,74 @@ class ImageOperator:
 
 
 class ImageDisplay(ImageIO, ImageGenerator.Observer):
-    """An `ImageDisplay` can display images.
+    """An :py:class:`ImageDisplay` can display images.  Typically, it will
+    use some graphical user interface to open a window in which the
+    image is displayed. It may also provide some additional controls
+    to addapt display properties.
 
-    Usage scenarios:
+    Blocking and non-blocking display
+    ---------------------------------
+
+    There are two ways how an image can be displayed.  In blocking
+    mode the execution of the main program is paused while the image
+    is displayed and is only continued when the display is closed.  In
+    non-blocking mode, the the execution of the main program is
+    continued while the image is displayed.
+
+    The blocking behaviour can be controlled by the `blocking`
+    argument. It can be set to `True` (running the GUI event loop in
+    the calling thread and thereby blocking it) or `False` (running
+    the GUI event loop in some other thread).  It can also be set to
+    `None` (meaning that no GUI event loop is started, which is
+    similar to the non-blocking mode, however it will usually result
+    in an inresponsive display window if no additional actions are
+    undertaken; see the section on "GUI Event loop" below for more
+    information).
+
+    Ending the display
+    ------------------
+
+    Different conditions can be set up to determine when the display
+    should end.  The most natural one is to wait until the display
+    window is closed (using the standard controls of the window
+    system). Additionally, the display can be terminated when a key is
+    pressed on the keyboard or after a given amount of time.
+    If run in a multi-threaded setting, it is also possible to end
+    the display programatically, calling :py:meth:`close`.
+
+    The next question is: what should happen once the display ended?
+    Again the most natural way is to close the window.  However,
+    if more images are going to be displayed it may be more suitable
+    to leave the window on screen an just remove the image, until the
+    next image is available.
+
+    GUI Event loop
+    --------------
+
+    An :py:class:`ImageDisplay` displays the image using some
+    graphical user interface (GUI).  Such a GUI usually requires to
+    run an event loop to stay responsive, that is to react to mouse
+    and other actions, like resizing, closing and even repainting the
+    window. The event loop regularly checks if such events have
+    occured and processes them. Running a display without an event
+    loop usually results in unpleasant behaviour and hence should be
+    avoided.
+
+    Nevertheless, running an event loop is not always straight forward.
+    Different GUI libraries use different concepts. For example, some
+    libraries require that event loops are run in the main thread of
+    the application, which can not always be realized (for example, it
+    would not be possible to realize a non-blocking display in the
+    main thread).  The :py:class:`ImageDisplay` provides different
+    means to deal with such problems.
+
+    Usage scenarios
+    ---------------
 
     Example 1: show an image in a window and block until the window is
     closed:
 
-    >>> display = Display()
+    >>> display = Display()  # blocking=True (default)
     >>> display.show(imagelike)
 
     Example 2: show an image in a window without blocking (the event loop
@@ -652,11 +722,12 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
     >>> display.show(imagelike)
 
     Example 4: show an image for five seconds duration.
+    After 5 seconds the display is closed.
 
     >>> display = Display()
     >>> display.show(imagelike, timeout=5.0)
 
-    Example 5: show three images, each for five seconds, but don't close
+    Example 5: show multiple images, each for five seconds, but don't close
     the window in between:
 
     >>> with Display() as display:
@@ -673,6 +744,7 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
     >>>
     >>> display = Display()
     >>> display.present(presenter, (video,))
+
     """
 
     def __new__(cls, module: Union[str, List[str]] = None,
@@ -687,11 +759,26 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
                  blocking: bool = True, **kwargs) -> None:
         # pylint: disable=unused-argument
         super().__init__(**kwargs)
-        self._opened = None
-        self._entered = 0
+
+        # _opened: a flag indicating the current state of the display
+        # window: True = window is open (visible), False = window is closed
+        self._opened: bool = False
+
+        # _blocking: a flag indicating if the display should operate
+        # in blocking mode (True) or non-blocking mode (False).
+        self._blocking: bool = blocking
+
+        # _entered: a counter to for tracing how often the context manager
+        # is used (usually it should only be used once!)
+        self._entered: int = 0
+
+        # _event_loop: some Thread object, referring to the thread running the
+        # event loop.  If None, then currently no event loop is running.
         self._event_loop = None
-        self._presentation = None
-        self._blocking = blocking
+
+        # _presentation: a Thread object running a presentation, initiated
+        # by the method `present`
+        self._presentation: threading.Thread = None
 
     @property
     def blocking(self) -> bool:
@@ -722,12 +809,15 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
 
     def __enter__(self) -> 'ImageDisplay':
         self._entered += 1
-        if not self._opened:
-            self._opened = True
-            self._open()
+        if self._entered > 1:
+            LOG.warning("Entering Display multiple times: %d", self._entered)
+        else:
+            LOG.debug("Entering Display")
+        self.open()
         return self
 
     def __exit__(self, _exception_type, _exception_value, _traceback) -> None:
+        LOG.debug("Exiting Display (%d)", self._entered)
         self._entered -= 1
         if self._entered == 0:
             self.close()
@@ -736,46 +826,73 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
     # public interface
     #
 
-    def show(self, image: Imagelike, close: bool = None,
+    def show(self, image: Imagelike, blocking: bool = None, close: bool = None,
              timeout: float = None, **kwargs) -> None:
         """Display the given image.
 
-        This method may optionally pause execution until to display
-        the image, if the wait_for_key or timeout arguments are given.
-        If both are given, the first one will stop pausing.
+        This method may optionally pause execution of the main program
+        to display the image, if the wait_for_key or timeout arguments
+        are given.  If both are given, the first event that occurs
+        will stop pausing.
 
         Arguments
         ---------
         image: Imagelike
             The image to display. This may be a single image or a
             batch of images.
+        blocking: bool
+            A flag indicating if the image should be shown in blocking
+            mode (`True`) or non-blocking mode (`False`).  If no value
+            is specified, the value of the property :py:prop:`blocking`
+            is used.
+        close: bool
+            A flag indicating if the display should be closed after
+            showing. Closing the display will also end all event
+            loops that are running. If no value is provided, the
+            display will be kept open, if it was already open when
+            this method is called, and it will be closed in case it
+            was closed before.
         wait_for_key: bool
             A flag indicating if the display should pause execution
             and wait or a key press.
         timeout: float
             Time in seconds to pause execution.
+
         """
+        if self._presentation is not None:
+            blocking = None
+        else:
+            blocking = self._blocking if blocking is None else blocking
+
         if close is None:
-            close = self.closed and (self._blocking is True)
+            close = self.closed and (blocking is True)
 
         # make sure the window is open
         if self.closed:
-            self._open()
-            self._opened = True
+            if self._presentation is threading.current_thread():
+                raise RuntimeError("Presentation is trying to use closed "
+                                   "ImageDisplay.")
+            self.open()
 
         # show the image
-        self._show(Image.as_array(image, dtype=np.uint8), **kwargs)
+        array = Image.as_array(image, dtype=np.uint8)
+        LOG.debug("Showing image of shape %s, close=%s, timout=%s, "
+                  "event loop=%s, presentation=%s",
+                  array.shape, close, timeout, self.event_loop_is_running(),
+                  self._presentation is not None)
+        self._show(array, **kwargs)
 
         # run the event loop
-        if self._blocking is True:
-            self._run_blocking_event_loop(timeout=timeout)
-        elif self._blocking is False:
+        if blocking is True:
+            if not self.event_loop_is_running() is None:
+                self._run_blocking_event_loop(timeout=timeout)
+        elif blocking is False:
             if timeout is not None:
                 LOG.warning("Setting timeout (%f) has no effect "
                             " for non-blocking image Display", timeout)
-            if self._event_loop is None:
+            if not self.event_loop_is_running():
                 self._run_nonblocking_event_loop()
-        elif self._blocking is None:
+        elif blocking is None:
             self._process_events()
 
         # close the window if desired
@@ -784,47 +901,186 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
                 LOG.warning("Closing image Display inside a context manager.")
             self.close()
 
-    def close(self) -> None:
-        """Close this :py:class:`ImageDisplay`. This should also stop
-        all background threads, like event loops or ongoing presentatons
-        """
-        if self._opened:
-            self._opened = False
-            self._close()
-        if self._presentation is not None:
-            self._presentation.join()
-            self._presentation = None
-        if self._event_loop is not None:
-            self._event_loop.join()
-            self._event_loop = None
-
     def present(self, presenter, args=(), kwargs={}) -> None:
         # pylint: disable=dangerous-default-value
         """Run the given presenter in a background thread while
         executing the GUI event loop in the calling thread (which
         by some GUI library is supposed to be the main thread).
 
-        The presenter may will get the display as its first argument,
+        The presenter will get the display as its first argument,
         and `args`, `kwargs` as additional arguments. The presenter
         may update the display by calling the :py:meth:`show` method.
         The presenter should observe the display's `closed` property
         and finish presentation once it is set to `True`.
+
+        Arguments
+        ---------
+        presenter:
+            A function expecting a display object as first argument
+            and `args`, and `kwargs` as additional arguments.
         """
-        def target(self) -> None:
-            presenter(self, *args, **kwargs)
-            self.close()
+        def target() -> None:
+            # pylint: disable=broad-except
+            LOG.info("ImageDisplay[background]: calling presenter")
+            try:
+                presenter(self, *args, **kwargs)
+            except BaseException as exception:
+                LOG.error("Unhandled exception in presentation.")
+                handle_exception(exception)
+            finally:
+                self.close()
 
         with self:
+            LOG.info("ImageDisplay[main]: Starting presentation")
             self._presentation = threading.Thread(target=target)
+            self._presentation.start()
             self._run_blocking_event_loop()
+
+    def open(self) -> None:
+        if not self._opened and self._presentation is None:
+            self._open()
+            self._opened = True
+
+    def close(self) -> None:
+        """Close this :py:class:`ImageDisplay`. This should also stop
+        all background threads, like event loops or ongoing presentatons
+        """
+        LOG.info("Closing ImageDisplay "
+                 "(opened=%s, presentation=%s, event loop=%s)",
+                 self._opened, self._presentation is not None,
+                 self.event_loop_is_running())
+        if self._opened:
+            self._opened = False
+            self._close()
+
+        presentation = self._presentation
+        if presentation is not None:
+            # we have started a presentation in a background Thread and
+            # hence we will wait that this presentation finishes. In
+            # order for this to work smoothly, the presentation should
+            # regularly check the display.closed property and exit
+            # (before calling display.show) if that flag is True.
+            if presentation is not threading.current_thread():
+                presentation.join()
+                self._presentation = None
+
+        event_loop = self._event_loop
+        if isinstance(event_loop, threading.Thread):
+            if event_loop is not threading.current_thread():
+                event_loop.join()
+            self._event_loop = None
+
+    @property
+    def opened(self) -> bool:
+        """Check if this image :py:class:`Display` is opened, meaning
+        the display window is shown and an event loop is running.
+        """
+        return self._opened
+
+    @property
+    def closed(self) -> bool:
+        """Check if this image :py:class:`Display` is closed, meaning
+        that no window is shown (and no event loop is running).
+        """
+        return not self._opened
+
+    #
+    # ImageObserver
+    #
 
     def image_changed(self, tool, change) -> None:
         """Implementation of the :py:class:`ImageObserver` interface.
+        The display will be updated if the image has changed.
         """
         if change.image_changed:
             self.show(tool.image)
 
-    # FIXME[old/todo]:
+    #
+    # methods to be implemented by subclasses
+    #
+
+    def _open(self) -> None:
+        """Open the display window. The function is only called if
+        no window is open yet.
+        """
+        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
+                                  "but does not implement an _open() method.")
+
+    def _show(self, image: np.ndarray, wait_for_key: bool = False,
+              timeout: float = None, **kwargs) -> None:
+        raise NotImplementedError(f"{type(self).__name__} claims to "
+                                  "be an ImageDisplay, but does not implement "
+                                  "the _show method.")
+
+    def _close(self) -> None:
+        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
+                                  "but does not implement an _close() method.")
+
+    def _process_events(self) -> None:
+        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
+                                  "but does not implement "
+                                  "_process_events().")
+
+    def _run_event_loop(self) -> None:
+        if self.blocking is True:
+            self._run_blocking_event_loop()
+        elif self.blocking is False:
+            self._run_nonblocking_event_loop()
+
+    def _dummy_event_loop(self, timeout: float = None) -> None:
+        # pylint: disable=broad-except
+        interval = 0.1
+
+        start = time.time()
+        try:
+            print("ImageDisplay: start dummy event loop. "
+                  f"closed={self.closed}")
+            while (not self.closed and
+                   (timeout is None or time.time() < start + timeout)):
+                self._process_events()
+                time.sleep(interval)
+        except BaseException as exception:
+            LOG.error("Unhandled exception in event loop")
+            handle_exception(exception)
+        finally:
+            LOG.info("ImageDisplay: ended dummy event loop (closed=%s).",
+                     self.closed)
+            self._event_loop = None
+            self.close()
+
+    def _run_blocking_event_loop(self, timeout: float = None) -> None:
+        self._event_loop = threading.current_thread
+        self._dummy_event_loop(timeout)
+
+    def _run_nonblocking_event_loop(self) -> None:
+        """Start a dummy event loop. This event loop will run in the
+        background and regularly trigger event processing. This may be
+        slightly less responsive than running the official event loop,
+        but it has the advantage that this can be done from a background
+        Thread, allowing to return the main thread to the caller.
+        In other words: this function is intended to realize a non-blocking
+        image display with responsive image window.
+
+        FIXME[todo]: check how this behaves under heavy load (GPU computation)
+        and if in case of problems, resorting to a QThread would improve
+        the situation.
+        """
+        if self.event_loop_is_running():
+            raise RuntimeError("Only one event loop is allowed.")
+        self._event_loop = \
+            threading.Thread(target=self._nonblocking_event_loop)
+        self._event_loop.start()
+
+    def _nonblocking_event_loop(self) -> None:
+        self._dummy_event_loop()
+
+    def event_loop_is_running(self) -> bool:
+        """Check if an event loop is currently running.
+        """
+        return self._event_loop is not None
+
+    # ------------------------------------------------------------------------
+    # FIXME[old/todo]: currently used by ./contrib/styletransfer.py ...
     def run(self, tool):
         """Monitor the operation of a Processor. This will observe
         the processor and update the display whenever new data
@@ -849,84 +1105,13 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
         thread.join()
         print("Thread joined")
 
-    @property
-    def closed(self) -> bool:
-        """Check if this image :py:class:`Display` is closed.
-        """
-        return not self._opened
-
+    # FIXME[old/todo]: currently used by ./dltb/thirdparty/qt.py/dltb/thirdparty/qt.py ...
     @property
     def active(self) -> bool:
-        """Check if this image :py:class:`Display` is active.
+        """Check if this :py:class:`ImageDisplay` is active.
         """
         return True  # FIXME[hack]
 
-    def _show(self, image: np.ndarray, wait_for_key: bool = False,
-              timeout: float = None, **kwargs) -> None:
-        raise NotImplementedError(f"{type(self).__name__} claims to "
-                                  "be an ImageDisplay, but does not implement "
-                                  "the _show method.")
-
-    def _open(self) -> None:
-        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
-                                  "but does not implement an _open() method.")
-
-    def _close(self) -> None:
-        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
-                                  "but does not implement an _close() method.")
-
-    def _process_events(self) -> None:
-        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
-                                  "but does not implement "
-                                  "_process_events().")
-
-    def _run_event_loop(self) -> None:
-        if self.blocking is True:
-            self._run_blocking_event_loop()
-        elif self.blocking is False:
-            self._run_nonblocking_event_loop()
-
-    def _run_blocking_event_loop(self, timeout: float = None) -> None:
-        raise NotImplementedError(f"{type(self)} claims to be a ImageDisplay, "
-                                  "but does not implement "
-                                  "_run_blocking_event_loop().")
-
-    def _run_nonblocking_event_loop(self) -> None:
-        """Start a dummy event loop. This event loop will run in the
-        background and regularly trigger event processing. This may be
-        slightly less responsive than the running official event loop,
-        but it has the advantage that this can be done from a background
-        Thread, allowing to return the main thread to the caller.
-        In other words: this function is intended to realize a non-blocking
-        image display with responsive image window.
-
-        FIXME[todo]: check how this behaves under heavy load (GPU computation)
-        and if in case of problems, resorting to a QThread would improve
-        the situation.
-        """
-        if self._event_loop is not None:
-            raise RuntimeError("Only one event loop is allowed.")
-        self._event_loop = \
-            threading.Thread(target=self._nonblocking_event_loop)
-        self._event_loop.start()
-
-    def _nonblocking_event_loop(self) -> None:
-        interval = 0.1
-        # pylint: disable=broad-except
-        try:
-            print("ImageDisplay: start dummy event loop. "
-                  f"closed={self.closed}")
-            while not self.closed:
-                self._process_events()
-                time.sleep(interval)
-        except BaseException as exception:
-            LOG.error("Unhandled exception in event loop")
-            handle_exception(exception)
-        finally:
-            print("ImageDisplay: end dummy event loop. "
-                  f"closed={self.closed}")
-            self._event_loop = None
-            self.close()
 
 
 class Location:
@@ -975,6 +1160,8 @@ class PointsBasedLocation:
     Attributes
     ----------
     _points: np.ndarray
+        An array of shape (n, 2), providing n points in form of (x, y)
+        coordinates.
     """
 
     def __init__(self, points: np.ndarray) -> None:
@@ -987,7 +1174,9 @@ class PointsBasedLocation:
                 (self._points[:, 1].min() <= point[1] <=
                  self._points[:, 1].max()))
 
-    def mark_image(self, image, color=(1, 0, 0)):
+    def mark_image(self, image: np.ndarray, color=(1, 0, 0)):
+        """Mark this :py:class:`PointsBasedLocation` in an image.
+        """
         for point in self._points:
             image[max(point[1]-1, 0):min(point[1]+1, image.shape[0]),
                   max(point[0]-1, 0):min(point[0]+1, image.shape[1])] = color
@@ -998,14 +1187,17 @@ class PointsBasedLocation:
         Arguments
         ---------
         image:
+            The image from which this :py:class:`PointsBasedLocation`
+            is to be extracted.
         """
         image = Image.as_array(image)
         height, width = image.shape[:2]
-        x1, y1 = self._points.min(axis=0)
-        x2, y2 = self._points.max(axis=0)
-        x1, y1 = max(0, int(x1)), max(0, int(y1))
-        x2, y2 = min(width, int(x2)), min(height, int(y2))
-        return image[y1:y2, x1:x2]
+        point1_x, point1_y = self._points.min(axis=0)
+        point2_x, point2_y = self._points.max(axis=0)
+        point1_x, point1_y = max(0, int(point1_x)), max(0, int(point1_y))
+        point2_x, point2_y = \
+            min(width, int(point2_x)), min(height, int(point2_y))
+        return image[point1_y:point2_y, point1_x:point2_x]
 
     def scale(self, factor) -> None:
         """Scale the :py:class:`Location`.
@@ -1037,6 +1229,7 @@ class Landmarks(PointsBasedLocation):
 
 
 class BoundingBox(PointsBasedLocation):
+    # pylint: disable=invalid-name
     """A bounding box describes a rectangular arae in an image.
     """
 
@@ -1173,7 +1366,7 @@ class BoundingBox(PointsBasedLocation):
             slice_box1 = slice(max(-x1, 0), width-max(x2-image_size[0], 0))
             slice_image0 = slice(max(y1, 0), min(y2, image_size[1]))
             slice_image1 = slice(max(x1, 0), min(x2, image_size[0]))
-            LOG.debug("Extracting[%s]: image[%s, %s] -> box[%s, %s]", self, 
+            LOG.debug("Extracting[%s]: image[%s, %s] -> box[%s, %s]", self,
                       slice_image0, slice_image1, slice_box0, slice_box1)
             box[slice_box0, slice_box1] = image[slice_image0, slice_image1]
         else:
@@ -1205,6 +1398,9 @@ class Region:
     _location = None
     _atributes = None
 
+    color_min_confidence = np.asarray((255., 0., 0.))  # red
+    color_max_confidence = np.asarray((0., 255., 0.))  # green
+
     def __init__(self, location, **attributes):
         self._location = location
         self._attributes = attributes
@@ -1214,15 +1410,53 @@ class Region:
 
     def __contains__(self, point) -> bool:
         return point in self._location
-    
+
+    def __getattr__(self, name: str):
+        if name in self._attributes:
+            return self._attributes[name]
+        raise AttributeError(f"Region has no attribute '{name}'. Valid "
+                             f"attributes are: {self._attributes.keys()}")
+
     @property
     def location(self):
+        """The :py:class:`Location` describing this :py:class:`Region`.
+        """
         return self._location
 
-    def mark_image(self, image: Imagelike, color=None):
+    def mark_image(self, image: Imagelike, color: Tuple = None):
+        """Mark this :py:class:`region` in a given image.
+
+        Arguments
+        ---------
+        image:
+            The image into which the region is to be marked.
+        color:
+            The color to be used for marking.
+        """
+        # FIXME[concept]: how to proceed for images that can not (easily)
+        # be modified in place (e.g. filename/URL) -> should we rather
+        # return the marked image?
+        if color is None and 'confidence' in self._attributes:
+            confidence = max(0, min(1.0, self._attributes['confidence']))
+            color = ((1-confidence) * self.color_min_confidence +
+                     confidence * self.color_max_confidence)
+            color = tuple(color.astype(np.uint8))
         self._location.mark_image(image, color=color)
 
     def extract_from_image(self, image: Imagelike) -> np.ndarray:
+        """Extract this :py:class:`Region` from a given image.
+
+        Arguments
+        ---------
+        image:
+            The image from the the region is to be extracted.
+
+        Result
+        ------
+        patch:
+            A numpy array (`dtype=np.uint8`) containing the extracted
+            region.
+        """
         return self._location.extract_from_image(image)
 
     def scale(self, factor) -> None:

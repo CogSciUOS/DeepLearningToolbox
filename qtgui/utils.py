@@ -807,7 +807,7 @@ class QObserver(QAttribute):
             """
             # LOG.debug("%s._qNotify: change=%s [%s]",
             #           self._observer, change, self._change)
-            if self._change is None or True:  # FIXME[hack]
+            if self._change is None:
                 # Currently, there is no change event pending for this
                 # object. So we will queue a new one and remember the
                 # change:

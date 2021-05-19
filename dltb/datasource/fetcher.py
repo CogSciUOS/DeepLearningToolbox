@@ -23,7 +23,7 @@ LOG = logging.getLogger(__name__)
 
 class Datafetcher(BusyObservable, Datasource.Observer,
                   method='datafetcher_changed',
-                  changes={'state_changed', 'data_changed',
+                  changes={'state_changed', 'data_changed', 'config_changed',
                            'datasource_changed', 'prepared_changed'}):
     """A :py:class:`Datafetcher` asynchronously fetches a
     :py:class:`Data` object from a :py:class:`Datasource` and
@@ -55,6 +55,9 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         The preparation of the underlying datasource has changed.
         This merely propagates the corresponding notification from
         the underlying datasource.
+    config_changed:
+        A configuration value (property) of this `Datafetcher` has
+        changed.
 
     Attributes
     ----------
@@ -115,7 +118,7 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         """
         self._data = None
         self.change('data_changed')
-            
+
     @property
     def fetched(self) -> bool:
         """Check if data have been fetched and are now available.
@@ -307,7 +310,9 @@ class Datafetcher(BusyObservable, Datasource.Observer,
         may be fetched multiple times, if lower, some frames from the
         datasource may be skipped.
         """
-        self._frames_per_second = frames_per_second
+        if self._frames_per_second != frames_per_second:
+            self._frames_per_second = frames_per_second
+            self.change('config_changed')
 
     #
     # Public interface (convenience functions)

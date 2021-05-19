@@ -3,6 +3,7 @@
 
 # standard imports
 from typing import Union, Tuple
+import logging
 
 # third party imports
 import numpy as np
@@ -10,6 +11,9 @@ import numpy as np
 # toolbox imports
 from ..base.image import Imagelike
 from ..base.image import ImageReader, ImageWriter, ImageDisplay, ImageResizer
+
+# logging
+LOG = logging.getLogger(__name__)
 
 _reader: ImageReader = None
 _writer: ImageWriter = None
@@ -23,11 +27,22 @@ def imread(filename: str, **kwargs) -> np.ndarray:
     global _reader
     if _reader is None:
         _reader = ImageReader()
-    return _reader.read(filename, **kwargs)
+    image = _reader.read(filename, **kwargs)
+    LOG.debug("imread: read image of shape %s, dtype=%s from '%s' with %s.",
+              image.shape, image.dtype, filename, _reader)
+    return image
 
 
 def imwrite(filename: str, image: Imagelike, **kwargs) -> None:
-    """Write an image to given file.
+    """Write an image to a file.
+
+    Arguments
+    ---------
+    filename:
+        The (fully qualified) filename (including file extension)
+        to which the file should be stored.
+    image:
+        The image to be stored.
     """
     global _writer
     if _writer is None:
@@ -65,10 +80,10 @@ def imshow(image: Imagelike, module: str = None, **kwargs) -> None:
     """
     display = get_display(module=module)
 
-    if image is not None:
-        display.show(image, **kwargs)
-    else:
+    if image is None:
         display.close()
+    else:
+        display.show(image, **kwargs)
     return display
 
 
@@ -155,23 +170,36 @@ def imimport(img: Union[np.ndarray, str], dtype=np.uint8,
 
 
 def get_display(module: str = None) -> ImageDisplay:
-    # obtain a display:
-    # - if a module is given, use that module
-    # - otherwise use the default display
-    # FIXME[hack]
+    """Get a :py:class:`ImageDisplay` object.
+
+    If no global display is set yet, the new display will also become
+    the global display (calls to :py:func:`imshow` will use that
+    display).
+
+    Arguments
+    ---------
+    module:
+        The module that provides the :py:class:`ImageDisplay` class.
+        If this argument is given, a new :py:class:`ImageDisplay`
+        will be created.
+
+    Result
+    ------
+    display:
+        An :py:class:`ImageDisplay`.
+
+    """
     global _display
 
+    if module is None:
+        if _display is not None:
+            display = _display
+        else:
+            module = 'qt'  # FIXME[hack]:
     if module is not None:
         display = ImageDisplay(module=module)
         if _display is None:
             _display = display
-    elif _display is not None:
-        display = _display
-    else:
-        module = 'qt'  # FIXME[hack]:
-        display = ImageDisplay(module=module)
-    if _display is None:
-        _display = display
     return display
 
 

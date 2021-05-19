@@ -1,15 +1,23 @@
-"""An engine accessing network activations.
+"""A collection of tools for dealing with network activations. This
+comprises:
+
+* The :py:class:`ActivationTool` that allows to obtain activation values
+  from a :py:class:`Network`.
+
+* The :py:class:`ActivationWorker` is a controller for an
+  :py:class:`ActivationTool`, allowing to run it asynchronously.
+
+* The :py:class:`ActivationArchive` allows to store activation values
+  for later processing.
+
 """
 
 # standard imports
-from typing import Union, List, Tuple, Iterable
+from abc import ABC, abstractmethod
+from typing import Union, Sequence, List, Tuple, Iterable, Iterator, Set
 from pathlib import Path
 import os
-import json
 import logging
-# import math
-# import functools
-# import operator
 
 # third party imports
 import numpy as np
@@ -18,15 +26,873 @@ import numpy as np
 from network import Network, Classifier, ShapeAdaptor, ResizePolicy
 from network.layers import Layer
 from ..datasource import Datasource, Datafetcher
+from ..base.observer import BaseObserver
 from ..base.prepare import Preparable
+from ..base.store import Storable, FileStorage
 from ..base.data import Data
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_FIRST
-from ..util import nphelper
+from ..util import nphelper, formating
 from ..config import config
+from .highscore import Highscore, HighscoreGroup, HighscoreCollection
+from .highscore import HighscoreGroupNumpy
 from . import Tool, Worker
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+class Fillable(Storable, ABC, storables=['_valid', '_total']):
+    """A :py:class:`Fillable` object can be incrementally filled.
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._total = 0
+        self._valid = 0
+
+    def __len__(self) -> int:
+        """The length of this :py:class:`Fillable` is its
+        :py:prop:`valid` size.
+        """
+        return self.valid
+
+    @property
+    def total(self) -> int:
+        """The total size of this :py:class:`Fillable`. May be more than the
+        :py:prop:`valid`.
+
+        """
+        return self._total
+
+    @property
+    def valid(self) -> int:
+        """The valid size of the :py:class:`Fillable` to operate on.  May be
+        less than :py:prop:`total` if just a part has been filled yet.
+
+        """
+        return self._valid
+
+    @property
+    def full(self) -> bool:
+        """A flag indicating if this :py:class:`ActinvationsArchive` archive
+        is completely filled, meaning all activation values for the
+        :py:class:`Datasource` have been added to the archive.
+        """
+        return self.valid == self.total
+
+    def fill(self, overwrite: bool = False) -> None:
+        """Fill this :py:class:`ActinvationsArchive` by computing activation
+        values for data from the underlying :py:class:`Datasource`.
+
+        Arguments
+        ---------
+        overwrite:
+            If `True`, the fill process will start with the first
+            data item, overwriting results from previous runs.
+            If `False`, the fill process will start from where the
+            last process stopped (if the archive is already filled
+             completly, no further computation is started).
+        """
+        if overwrite:
+            self._valid = 0
+        with self:
+            for index in range(self.valid, self.total):
+                self.fill_item(index)
+                self.valid = index
+
+    @abstractmethod
+    def fill_item(self, index: int) -> None:
+        """Fill the given item.
+        """
+
+
+class DatasourceTool(Preparable):
+    """A tool that makes use of a :py:class:`Datasource`.
+
+    Properties
+    ---------
+    datasource: Datasource
+        The datasource to process
+    """
+
+    # _datasource:
+    #    The Datasource for which activation values are computed
+    _datasource: Union[str, Datasource] = None
+    _datasource_required: bool = True
+
+    def __init__(self, datasource: Union[Datasource, str] = None,
+                 layers=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        if isinstance(datasource, str):
+            self._datasource_key = datasource
+            self._datasource = None
+        elif isinstance(datasource, Datasource):
+            self._datasource_key = datasource.key
+            self._datasource = datasource
+        else:
+            raise ValueError(f"Invalid type {type(datasource)} "
+                             "for datasource argument.")
+
+        self._layers = layers and [layer.key if isinstance(layer, Layer)
+                                   else layer for layer in self._layers]
+
+    def _prepare(self) -> None:
+        super()._prepare()
+        if self._datasource_required:
+            self._prepare_datasource()
+
+    def _prepare_datasource(self) -> None:
+        if self._datasource is None:
+            self._datasource = Datasource[self._datasource_key]
+        self._datasource.prepare()
+
+    @property
+    def datasource_key(self) -> str:
+        """Datasource key.
+        """
+        return self._datasource_key
+
+
+class NetworkTool(Preparable):
+    """A :py:class:`NetworkTool` makes use of a :py:class:`Network`.
+    """
+    # _network:
+    #    The Network by which activation values are obtained.
+    _network: Union[str, Network] = None
+    _network_required: bool = True
+
+    # _layers:
+    #    The keys of the network layers that are used by this NetworkTool
+    _layers: List[str] = None  # sequence of layers
+
+    def __init__(self, network: Union[Network, str] = None,
+                 layers: Union[Layer, str] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if isinstance(network, str):  # we got a network key
+            self._network_key = network
+            self._network = None
+        elif isinstance(network, Network):
+            self._network_key = network.key
+            self._network = network
+        else:
+            raise ValueError(f"Invalid type {type(network)} "
+                             "for network argument.")
+
+        if layers is not None:
+            self._layers = [layer.key if isinstance(layer, Layer) else layer
+                            for layer in layers]
+        else:
+            self._layers = None
+
+    @property
+    def network_key(self) -> str:
+        """Network key.
+        """
+        return self._network_key
+
+    def _prepare(self) -> None:
+        super()._prepare()
+
+        if self._network_required:
+            self._prepare_network()
+
+        if self._layers is not None and self._network is not None:
+            self.check_layers(self._network.layer_names())
+
+    def _prepare_network(self) -> None:
+        if self._network is None:
+            self._network = Network[self._network_key]
+        self._network.prepare()
+
+    def layers(self, *what) -> Iterable[Tuple]:
+        """Iterate layer of layer information.
+
+        Arguments
+        ---------
+        what:
+            Specifies what information should be provided. Valid
+            values are: `'name'` the layer name,
+            `'layer'` the actual layer object,
+            `'shape'` the output shape (without batch axis).
+            The values `'layer'` and `'shape'` are only available if the
+            :py:class:`Network`, not just the network key, has been provided
+             upon initialization of this :py:class:`NetworkTool`).
+        """
+        if not what:
+            what = ('name', )
+        elif (('layer' in what or 'shape' in what) and
+              not isinstance(self._network, Network)):
+            raise ValueError(f"Iterating over {what} is only possible with "
+                             "an initialized Network.")
+        for layer in self._layers:
+            name = layer.key if isinstance(layer, Layer) else layer
+            layer = layer if isinstance(layer, Layer) else self._network[name]
+            values = tuple((name if info == 'name' else
+                            layer if info == 'layer' else
+                            layer.output_shape[1:] if info == 'shape' else
+                            '?')
+                           for info in what)
+            yield values[0] if len(what) == 1 else values
+
+    def check_layers(self, layers: Sequence[Union[Layer, str]],
+                     exact: bool = False) -> None:
+        """Check if the layers requested by the tool (stored in
+        :py:prop:`_layers`) are contained in the available layers.
+
+        Arguments
+        ---------
+        layers:
+            The available layers.
+        exact:
+            If `True`, then an exact match is required, if `False`
+            it is also ok if :py:prop:`_layers` are a subset of
+            `layers`.
+        """
+        # check if all requested layers are availabe
+        available_layers = set(layer.key if isinstance(layer, Layer)
+                               else layer for layer in layers)
+        requested_layers = set(self._layers)
+
+        if exact and (available_layers != requested_layers):
+            diff = requested_layers.symmetric_difference(available_layers)
+            raise ValueError(f"Requested layers {requested_layers} and "
+                             f"available layer {available_layers} differ:"
+                             f"{diff}")
+        if not requested_layers.issubset(available_layers):
+            raise ValueError(f"Some requested layers {requested_layers} "
+                             f"are not available {available_layers}")
+
+
+class IteratorTool(Storable, storables=['_current_index']):
+    """An :py:class:`IteratorTool` can be do iterative processing.  It has
+    an internal index which can will be stored (and restored) if the
+    tool is intialized with the `store=True` parameter.
+    """
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._current_index = 0
+
+    def current_range(self, end: int = None) -> Iterator[int]:
+        """Iterate over the valid indices for this tool, starting from the
+        current index.
+        """
+        if end is None:
+            end = len(self)
+        for index in range(self._current_index, end):
+            yield index
+            self._current_index = index
+
+
+class DatasourceActivations(DatasourceTool, NetworkTool, IteratorTool, ABC):
+    """An interface for classes that provide activation values for the of
+    an (indexed) :py:class:`Datasource`. The interface allows to
+    either access activation values for individual data items,
+    identified by their (numerical) index, or to iterate over the
+    activation values.  Activation values can be obtained for
+    individual layers, or for all simultanously.
+    """
+
+    @abstractmethod
+    def __getitem__(self, key) -> Union[np.ndarray, dict]:
+        """
+        Arguments
+        ---------
+        key:
+            Either `index`, or a tuple `(layer, index)`.
+
+        Result
+        ------
+        activations:
+            Either a single activation map of `(layer, index)`, or
+            a dictionary of activation maps for `index`.
+        """
+
+    def __iter__(self, layer: str = None) -> Iterator:
+        """Iterate over the activation values.
+        """
+        for index in self.current_range():
+            yield self[layer, index]
+
+
+class DatasourceNetworkActivations(DatasourceActivations):
+    """An implementation of the :py:class:`DatasourceActivations` that
+    obtains activation values by computing them using a
+    :py:class:`Network`.
+    """
+    _network_required: bool = True
+    _datasource_required: bool = True
+
+    def __getitem__(self, key) -> Union[np.ndarray, dict]:
+        """
+        Arguments
+        ---------
+        key:
+            Either `index`, or a tuple `(layer, index)`.
+
+        Result
+        ------
+        activations:
+            Either a single activation map of `(layer, index)`, or
+            a dictionary of activation maps for `index`.
+        """
+        layer, index = key if isinstance(key, tuple) else (None, key)
+        return self._network.get_activations(self._datasource[index], layer)
+
+
+class ActivationsArchive(DatasourceActivations, Fillable, Storable, ABC):
+    """An :py:class:`ActinvationsArchive` represents an archive of
+    activation values obtained by applying a
+    :py:class:`ActivationTool` to a :py:class:`Datsource`.
+
+    The total size of an :py:class:`ActivationsArchiveNumpy`, that is
+    the number of data points for which activations are stored in the
+    archive, has to be provided uppon initialization and cannot be
+    changed afterwards. This number be accessed via the property
+    :py:prop:`total`.  The archive supports incremental updates,
+    allowing to fill the archive in multiple steps and to continue
+    fill operations that were interrupted. The number of valid data
+    points filled so far is stored in the metadata as property
+    `valid` and can be accessed through the property :py:prop:`valid`.
+
+    Use cases
+    ---------
+
+    Fill the archive by iterating over a :py:class:`Datasource`:
+
+    >>> with ActivationsArchive(network, datasource, store=True) as archive:
+    >>>     archive.fill()
+
+    This can also be achieved explicitly:
+
+    >>> with ActivationsArchive(network, datasource, store=True) as archive:
+    >>>     for index in range(archive.valid, archive.total):
+    >>>         archive += network.get_activations(datasource[index])
+
+    Batchwise filling is also supported:
+
+    >>> with ActivationsArchive(network, datasource, store=True) as archive:
+    >>>     for batch in datasource.batches(batch_size=64,start=archive.valid):
+    >>>         activation_tool.process(batch)
+    >>>         archive += batch
+
+    Once the archive is (partly) filled, it can be used in read only mode:
+
+    >>> with ActivationsArchive(network, datasource, mode='r') as archive:
+    >>>     activations = archive[index, 'layer1']
+    >>>     batch_activations = archive[index1:index2, 'layer1']
+
+    Activations can also be obtained encapsuled in a :py:class:`Data`
+    object:
+
+    >>> with ActivationsArchive(network, datasource, mode='r') as archive:
+    >>>     data = archive.data(index, 'layer1')
+
+
+    Properties
+    ----------
+
+    Storable properties
+    -------------------
+    total: int
+        The total number of entries in the underlying :py:class:`Datasource`.
+    valid: int
+        The number of data entries alread processed.
+    _layers: List[str]
+
+    Arguments
+    ---------
+    layers: List[str]
+        The layers to be covered by this :py:class:`ActivationsArchive`.
+        If opened for reading (restore), this has to be a subset of
+        the layers present in the stored archive.  If creating a new
+        archive, this may be any subset of the layers present in the
+        :py:class:`Network` (if `None`, all layers of that network
+        will be covered). If updating an existing archive, if not `None`,
+        the layer list has to exactly match the layers of that archive.
+    store: bool
+        Open the archive for writing.
+    restore: bool
+        Open the archive for reading.
+    """
+
+    def __new__(cls, **_kwargs) -> 'ActivationsArchive':
+        if cls is ActivationsArchive:
+            new_cls = ActivationsArchiveNumpy
+        else:
+            new_cls = cls
+        return super(ActivationsArchive, new_cls).__new__(new_cls)
+
+    def __init__(self, **kwargs) -> None:
+        # Change the default Storable behaviour (store/restore), to
+        # just restore, if no explicit 'store' flag is given:
+        if 'store' not in kwargs:
+            kwargs['store'] = False
+            kwargs['restore'] = True
+        super().__init__(**kwargs)
+
+        if not isinstance(self._storage, FileStorage):
+            directory = Path(config.activations_directory) /\
+                (self._network_key + '-' + self._datasource_key)
+            self._storage = FileStorage(directory=directory)
+
+        if self._store_flag:
+            self._datasource_required = True
+            self._network_required = True
+        LOG.info("ActivationsArchiveNumpy with storage '%s' initalized.",
+                 self._storage)
+
+    @property
+    def directory(self) -> str:
+        """The directory in which the activation maps are stored.
+        """
+        return self._storage.directory
+
+    def _prepare(self) -> None:
+        super()._prepare()
+        if self._total is None:  # new archive
+            self._total = len(self._datasource)
+            self._valid = 0
+
+    def fill_item(self, index: int) -> None:
+        """Fill the given item.
+        """
+        self[index] = self._network.get_activations(self._datasource[index])
+
+    def __iadd__(self, values) -> object:
+        """Add activation values to this
+        :py:class:`ActivationsArchive`.
+
+        Arguments
+        ---------
+        values:
+            The activation values to add.  Currently only a list or
+            dictionary of activation values are supported.
+        """
+        # FIXME[todo]: allow to add a batch of values
+        self[self.valid] = values
+        self._valid += 1
+        return self
+
+
+class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
+        'shape', 'dtype']):
+    """The :py:class:`ActivationsArchiveNumpy` realizes an
+    :py:class:`ActivationsArchive` based on the Numpy `memmap`
+    mechanism.
+
+    All files of the :py:class:`ActivationsArchiveNumpy` are stored in
+    the directory :py:prop:`directory`. Each layer gets a separate
+    file, called `[LAYER_NAME].dat`. Metadata for the archive are
+    stored in JSON format into the file `meta.json`.
+
+
+    Notes
+    -----
+
+    Note: The numpy `memmap` mechanism does not provide means for
+    compression.  Files are stored uncompressed and may have extreme
+    sizes for larger activation maps of datasources.
+
+    Note: Depending on the file system, memmap may create files of
+    desired size but only allocate disk space while filling the files.
+    This may result in an (uncatchable) bus error if the device runs
+    out of space.
+
+    """
+
+    def __init__(self, dtype: str = 'float32', **kwargs) -> None:
+        self._layers_memmap = None
+        super().__init__(**kwargs)
+        self.dtype = dtype
+        self.shape = None
+        LOG.info("%s initalized (%s/%s).", type(self).__name__,
+                 self._network_key, self._datasource_key)
+
+    def layers(self, *what) -> Iterator[Tuple]:
+        """Iterate over the layer information for the layers covered by this
+        :py:class:`ActivationsArchiveNumpy`.
+
+        Arguments
+        ---------
+        what: str
+            Specifies the what information should be provided. Valid
+            values are: `'name'` the layer name,
+            `'dtype'` the dtype of the layer,
+            `'shape'` the layer layer,
+            `'layer'` the actual layer object (only available if the
+            :py:class:`Network`, not just the network key, has been provided
+             upon initialization of this :py:class:`ActinvationsArchive`).
+        """
+        if self._layers_memmap is None:
+            for value in super().layers(*what):
+                yield value
+            return
+
+        if not what:
+            what = ('name', )
+        elif 'layer' in what and not isinstance(self._network, Network):
+            raise ValueError("Iterating over Layers is only possible with "
+                             "an initialized Network.")
+        for layer in self._layers:
+            name = layer.key if isinstance(layer, Layer) else layer
+            memmap = self._layers_memmap[name]
+            yield ((name if info == 'name' else
+                    memmap.dtype if info == 'dtype' else
+                    memmap.shape[1:] if info == 'shape' else
+                    memmap.nbytes if info == 'bytes' else
+                    self._network[name] if info == 'layer' else '?')
+                   for info in what)
+
+    def _prepared(self) -> bool:
+        return self._layers_memmap is not None and super()._prepared()
+
+    def _prepare(self) -> None:
+        super()._prepare()
+
+        # make sure that all requested layers are available. In write
+        # mode, all available layers should be updated to avoid
+        # inconsistent data
+        if self._layers is None:
+            self._layers = list(self.shape.keys())
+        else:
+            self.check_layers(self.shape.keys(), exact=self._store_flag)
+
+        # prepare the layer memmaps
+        memmaps = {}
+        dtype = np.dtype(self.dtype)
+        for layer in self._layers:
+            filename = self._storage.filename(layer + '.dat')
+            shape = tuple(self.shape[layer])
+            mode = 'r' if not self._store_flag else \
+                ('r+' if filename.exists() else 'w+')
+            memmaps[layer] = \
+                np.memmap(filename, dtype=dtype, mode=mode, shape=shape)
+        self._layers_memmap = memmaps
+
+        LOG.info("ActivationsArchiveNumpy with storage '%s' and %d layers and "
+                 "%d/%d entries prepared for store_flag=%s.", self._storage,
+                 len(self._layers), self.valid, self.total, self._store_flag)
+
+    def _unprepare(self) -> None:
+        # close the memmap objects
+        if self._layers_memmap is not None:
+            for memmap in self._layers_memmap.values():
+                del memmap
+        self._layers_memmap = None
+        self._layers = None
+        LOG.info("ActivationsArchiveNumpy with storage '%s' unprepared.",
+                 self._storage)
+        super()._unprepare()
+
+    def _store(self) -> None:
+        """Write unwritten data to the disk.  This will also update the
+        metadata file to reflect the current state of the archive.
+        :py:meth:`store` is automatically called when upreparing or
+        deleting this :py:class:`ActivationsArchiveNumpy` object.
+        """
+        super()._store()
+        if self._layers_memmap is not None:
+            for memmap in self._layers_memmap.values():
+                memmap.flush()
+
+    def _fresh(self) -> None:
+        """Creating a fresh archive.
+        """
+        super()._fresh()
+        self._prepare_network()
+        self._prepare_datasource()
+        self._total = len(self._datasource)
+        self.shape = {}
+
+        if self._layers is None:
+            self._layers = list(self._network.layer_names())
+        total = (self.total,)
+        for name, shape in self.layers('name', 'shape'):
+            self.shape[name] = total + shape
+
+        # We require the storage directory to exist in order
+        # to place the memmeap files.
+        os.makedirs(self._storage.directory, exist_ok=True)
+
+    def __getitem__(self, key) -> None:
+        layer, index = key if isinstance(key, tuple) else (None, key)
+
+        if layer is None:
+            return {layer: memmap[index]
+                    for layer, memmap in self._layers_memmap.items()}
+
+        return self._layers_memmap[layer][index]
+
+    def __setitem__(self, key, values) -> None:
+        if not self._store_flag:
+            raise ValueError("Archive is not writable")
+
+        layer, index = key if isinstance(key, tuple) else (None, key)
+
+        if layer is None:
+            if isinstance(values, dict):
+                for layer, layer_values in values.items():
+                    self._update_values(layer, index, layer_values)
+            elif isinstance(values, list):
+                if len(values) != len(self._layers):
+                    raise ValueError("Values should be a list of length"
+                                     f"{len(self._layers)} not {len(values)}!")
+                for layer, layer_values in zip(self._layers, values):
+                    self._update_values(layer, index, layer_values)
+            else:
+                raise ValueError("Values should be a list (of "
+                                 f"length {len(self._layers)}) "
+                                 f"or a dictionary, not {type(values)}")
+        else:
+            self._update_values(layer, index, values)
+
+    def _update_values(self, layer, index, value) -> None:
+        if isinstance(layer, Layer):
+            layer = layer.key
+        try:
+            self._layers_memmap[layer][index] = value
+        except KeyError as error:
+            raise KeyError(f"Invalid layer '{layer}', valid layers are "
+                           f"{list(self._layers_memmap.keys())}") from error
+
+    def info(self) -> None:
+        """Output a summary of this :py:class:`ActivationsArchiveNumpy`.
+        """
+        print(f"Archive with storage {self._storage}: "
+              f"{self.valid}/{self.total}")
+        total_size = 0
+        for name, dtype, shape, size in \
+                self.layers('name', 'dtype', 'shape', 'bytes'):
+            print(f" - {name+':':20s} {str(shape):20s} "
+                  f"of type {str(dtype):10s} [{formating.format_size(size)}]")
+            total_size += size
+        print(f"Total {len(self._layers)} layers and "
+              f"{formating.format_size(total_size)}")
+
+
+class TopActivations(HighscoreCollection, DatasourceTool, NetworkTool,
+                     IteratorTool, Storable, storables=['_top', 'shape']):
+    """The :py:class:`TopActivations` stores the top activation values
+    for the layers of a :py:class:`Network`.
+
+    Iterative usage (the `+=` operator)
+    -----------------------------------
+
+    In iterative mode, the :py:class:`TopActivations` object will
+    use an internal counter for indexing.  Activation values can be
+    iteratively added using the `+=` operator.  New activation values
+    will get the current internal counter as index value.
+
+    >>> with TopActivations(top=5) as top_activations:
+    >>>     for data in datasource[len(top_activations):]:
+    >>>         top_activations += network.get_activations(data)
+
+
+    Properties
+    ----------
+
+    top: int
+        The number of activation layers to store
+
+    layers: Sequence[Layer]
+        The layers for which top activation values are stored.
+
+
+    """
+
+    def __init__(self, top: int = 9, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.shape = None
+        self._top = top
+
+    def disciplines(self) -> Iterator[Tuple[str, int]]:
+        """The disciplines in this high score. A discipline is described
+        by a layer name (key) and a channel index.
+        """
+        for layer in self.layers('name'):
+            for channel in range(self.shape[layer][-1]):
+                yield (layer.key, channel)
+
+    def highscore(self, discipline: Tuple[str, int]) -> Highscore:
+        """The highscore for a discipline (identified by layer name and
+        channel number).
+        """
+        return self.highscore_group(discipline[0])[discipline[1]]
+
+    def highscore_group(self, layer: Union[Layer, str]) -> HighscoreGroup:
+        """The highscore group for a layer.
+        """
+        name = layer.key if isinstance(layer, Layer) else layer
+        return self._highscores[name]
+
+    def activations(self, layer: Union[Layer, str],
+                    channel: slice = ...) -> np.ndarray:
+        """Top activation values for a given layer and channel.
+
+        Arguments
+        ---------
+        layer:
+            The layer for which the top activation values should
+            be returned.
+        channel:
+            The channel in the layer for which top actviations are
+            to be returned. If no channel is provided, the top activation
+            values for all channels of that layer are returned.
+
+        Result
+        ------
+        activations:
+            A numpy array providing the activation values. The
+            shape will be (top, ) if a channel was specified and
+            (channels, top) if no channel was specified.
+        """
+        return self.highscore_group[layer].scores[channel]
+
+    def indices(self, layer: Union[Layer, str],
+                channel: slice = ...) -> np.ndarray:
+        """Return indices identifying the input stimuli that
+        resulted in the top activation values.
+
+        Arguments
+        ---------
+        layer:
+            The layer for which the indices of top activation inputs
+            should be returned.
+        channel:
+            The channel in the layer for which the indices are to be
+            returned.  If no channel is provided, the indices
+            of top activation values for all channels of that layer
+            are returned.
+
+        Result
+        ------
+        indices:
+            A numpy array providing the activation values. The
+            shape will be (top, coordinates, ) if a channel was specified
+            and (channels, top, coordinates) if no channel was specified.
+        """
+        return self.highscore_group[layer].owners[channel]
+
+    @property
+    def filename_meta(self) -> Path:
+        """The name of the file holding the meta data for this
+        :py:class:`ActivationsArchiveNumpy`.
+        """
+        return self._storage.filename(f'top-{self._top}.json')
+
+    def filename_top(self, layer: str) -> Path:
+        """The name of a file for storing top activation values for
+        a given :py:class:`Layer`.
+        """
+        return self._storage.filename(f'top-{self._top}-{layer}.npy')
+
+    def _fresh(self) -> None:
+        """Prepare new meta data
+        """
+        super()._fresh()
+        self._prepare_datasource()
+        self._prepare_network()
+
+        self.shape = {}
+
+        if self._layers is None:
+            self._layers = list(self._network.layer_names())
+
+        for name, layer in self.layers('name', 'layer'):
+            shape = layer.output_shape
+            channels = shape[-1]
+            indices = len(shape) - 1  # -1 for the channel
+            # indices: (channels, top, indices)
+            self._highscores[name] = \
+                HighscoreGroupNumpy(top=self._top, size=channels,
+                                    owner_dimensions=indices)
+            self.shape[name] = shape
+
+    def _unprepare(self) -> None:
+        super()._unprepare()
+        LOG.info("TopActivations with storage '%s' unprepared.",
+                 self._storage)
+
+    def _store(self) -> None:
+        for name in self.layers('name'):
+            with self.filename_top(name).open('wb') as outfile:
+                self._highscores[name].store(outfile)
+        super()._store()
+
+    def _restore(self) -> None:
+        super()._restore()  # this should restore the meta data
+
+        for name in self.layers('name'):
+            # layer shape: (batch, position..., channel)
+            shape = self.shape[name]
+            channels = shape[-1]
+            # indices: (batch, position...)
+            indices = len(shape) - 1  # -1 for the channel
+            highscore = HighscoreGroupNumpy(top=self._top, size=channels,
+                                            owner_dimensions=indices)
+            with self.filename_top(name).open('rb') as file:
+                highscore.restore(file)
+            self._highscores[name] = highscore
+
+    def __iadd__(self, values) -> object:
+        # the index array (containing only one index: the current position)
+        index = np.asarray([self._current_index], dtype=np.int)
+
+        if isinstance(values, dict):
+            for layer, layer_values in values.items():
+                self._highscores[layer].update(index, layer_values[np.newaxis])
+        elif isinstance(values, list):
+            if len(values) != len(self._layers):
+                raise ValueError("Values should be a list of length"
+                                 f"{len(self._layers)} not {len(values)}!")
+            for layer, layer_values in zip(self._layers, values):
+                self._highscores[layer].update(index, layer_values[np.newaxis])
+        else:
+            raise ValueError("Values should be a list (of "
+                             f"length {len(self._layers)}) "
+                             f"or a dictionary, not {type(values)}")
+        self._current_index += 1
+        return self
+
+    def fill(self, activations: DatasourceActivations) -> None:
+        """Fill this :py:class:`TopActivations` from a
+        :py:class:`DatasourceActivations` object. The object have to
+        be compatible, that is the :py:class:`Network` and the
+        :py:class:`Datasource` have to agree.
+
+        """
+        if self._datasource_key != activations.datasource_key:
+            raise ValueError("Incompatible datasoures:"
+                             f"{self.datasource_key} for TopActivations vs."
+                             f"{activations.datasource_key} for "
+                             "DatasourceActivations")
+        if self.network_key != activations.network_key:
+            raise ValueError("Incompatible networks:"
+                             f"{self.network_key} for TopActivations vs."
+                             f"{activations.network_key} for "
+                             "DatasourceActivations")
+        while self._current_index < len(activations):
+            self += activations[self._current_index]
+
+    def receptive_field(self, layer: Union[Layer, str],
+                        channel: int, top: int = 0) -> np.ndarray:
+        """Optain the image patch that causes a top activation of
+        the :py:class:`network`.
+
+        This function is only available, if :py:class:`Network` and
+        :py:class:`Datasource` are available and prepared.
+        """
+        indices = self.indices(layer, channel)[top]
+        image = self._datasource[indices[0]]
+        return self._network.\
+            extract_receptive_field(layer, indices[1:-1], image)
+
+    def info(self) -> None:
+        """Output a summary of this :py:class:`TopActivations`.
+        """
+        print(f"TopActivations({self._top}): filled with "
+              f"{self._current_index} entries from {self._datasource}")
 
 
 # FIXME[todo]: this is essentially a wraper around Network.
@@ -78,6 +944,7 @@ class ActivationTool(Tool, Network.Observer):
         A dictionary mapping layer names to (numpy) arrays of activation
         values.
     """
+    _network: Network = None
 
     def __init__(self, network: Network = None, data_format: str = None,
                  **kwargs) -> None:
@@ -91,17 +958,20 @@ class ActivationTool(Tool, Network.Observer):
         super().__init__(**kwargs)
 
         # adapters
+        # FIXME[old]:
         self._shape_adaptor = ShapeAdaptor(ResizePolicy.Bilinear())
         self._channel_adaptor = ShapeAdaptor(ResizePolicy.Channels())
         self._data_format = data_format
 
         # network related
-        self._network = None
         self.network = network
 
     @property
     def data_format(self) -> str:
-        """
+        """The data format (channel first/channel last/...) to be used by this
+        :py:class:`ActivationTool`.  If no data format has been set
+        for this :py:class:`ActivationTool`, the data format of the
+        underlying network will be used.
         """
         if self._data_format is not None:
             return self._data_format
@@ -251,6 +1121,8 @@ class ActivationTool(Tool, Network.Observer):
 
         # activations: dict[layer: str, activation_values: np.ndarray]
         activations = self.get_data_attribute(data, 'activations')
+        if activations is None:
+            return None
 
         if data_format is None:
             data_format = self.data_format
@@ -264,8 +1136,8 @@ class ActivationTool(Tool, Network.Observer):
 
             # transform the data format of the activation values
             return list(map(lambda activation:
-                            adapt_data_format(activation, input_format=
-                                              self._data_format,
+                            adapt_data_format(activation,
+                                              input_format=self._data_format,
                                               output_format=data_format),
                             activations))
         if isinstance(layer, Layer):
@@ -283,264 +1155,290 @@ class ActivationTool(Tool, Network.Observer):
         return (activations[unit] if data_format == DATA_FORMAT_CHANNELS_FIRST
                 else activations[..., unit])
 
-
-class PersistentTool(Preparable):
-    """
-    Arguments
-    ---------
-    network:
-
-    datasource:
-
-    mode:
-        The mode of operation: `r` opens the archive for reading and
-        `w` for writing. In case of `w`, the archive will use existing
-        files if they exist or create new ones otherwise.
-
-    """
-    # FIXME[hack]: put this in the config file ...
-    config.activations_directory = Path('/space/home/ulf/activations')
-
-    # _datasource:
-    #    The Datasource for which activation values are computed
-    _datasource: Union[str, Datasource] = None
-
-    # _network:
-    #    The Network by which activation values are obtained.
-    _network: Union[str, Network] = None
-
-    # _layers:
-    #    The keys of the network layers for which activation values are
-    #    stored in the ActivationsArchive
-    _layers: List[str] = None  # sequence of layers
-
-    def __init__(self, network: Union[str, Network],
-                 datasource: Union[str, Datasource],
-                 layers = None, mode: str = 'r', **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._network = network
-        self._datasource = datasource
-        self._layers = layers and [layer.key if isinstance(layer, Layer)
-                                   else layer for layer in self._layers]
-        self._mode = mode
-        self._directory = Path(config.activations_directory) /\
-            ((network.key if isinstance(network, Network)
-              else network) + '-' +
-             (datasource.key if isinstance(datasource, Datasource)
-              else datasource))
-        LOG.info("ActivationsArchiveNumpy at '%s' initalized.",
-                 self._directory)
-
-    @property
-    def directory(self) -> Path:
-        """The name of the directory into which this
-        :py:class:`ActivationsArchiveNumpy` is stored on disk.
+    @staticmethod
+    def top_indices(activations: np.ndarray, top: int = 1,
+                    sort: bool = False) -> np.ndarray:
+        """Get the indices of the top activations.
         """
-        return self._directory
-
-    def __len__(self) -> int:
-        """The length of the archive. This is the :py:prop:`valid` size if the
-        archive is opened in read mode and the :py:prop:`total` size
-        if opened in write mode.
-
-        """
-        return self.valid if self._mode == 'r' else self.total
-
-    @property
-    def valid(self) -> int:
-        """The valid size of this archive. May be less than
-        :py:prop:`total` if the archive has not been fully filled yet.
-        """
-        return None if self._meta is None else self._meta['valid']
-
-    @property
-    def total(self) -> int:
-        """The total size of this archive. May be more than the
-        :py:prop:`valid` size if the archive has not been fully filled yet.
-        """
-        return None if self._meta is None else self._meta['total']
-
-    def _preparable(self) -> bool:
-        if self._mode == 'r' and not self._directory.is_dir():
-            return False
-        if self._mode == 'w' and not isinstance(self._network, Network):
-            return False
-        return super()._preparable()
-
-    def _prepared(self) -> bool:
-        return self._meta is not None and super()._prepared()
-
-    def flush(self) -> None:
-        if self._mode != 'w':
-            raise ValueError(f"TopActivations in mode '{self._mode}' "
-                             "is not writable")
-        if self._meta is not None:
-            with open(self.filename_meta, 'w') as outfile:
-                json.dump(self._meta, outfile)
-
-
-class TopActivations(PersistentTool):
-    """The :py:class:`TopActivations` stores the top activation values
-    for the layers of a :py:class:`Network`.
-
-    top: int
-        The number of activation layers to store
-    layers: Sequence[Layer]
-        The layers for which top activation values are stored.
-    top_indices: Mapping[Layer, np.ndarray]
-        A dictionary mapping layers to an array holding the indices
-        of data points for the top activations.
-        The arrays have a shape of (channels, top, indices), with indices
-        being the number of indices necessary to index an activation
-        map in the layer: for a dense layer, this is 1 (batch, )
-        while for 2D layers this is 3 (batch, row, column).
-    top_activations : Mapping[Layer, np.ndarray]
-        A dictionary mapping layers to an array holding the top activation
-        values. The arrays have the shape (channels, top),
-        with channels being the number of channels in the layer
-        and top the number of top activation values to be stored.
-    """
+        return nphelper.argmultimax(activations, num=top, sort=sort)
 
     @staticmethod
-    def _merge_top(target_indices, target_values,
-                   new_indices, new_values) -> None:
-        # indices: shape = (channels, top, indices)
-        # values: shape = (channels, top)
-        top = target_values.shape[1]
-        indices = np.append(target_indices, new_indices, axis=1)
-        values = np.append(target_values, new_values, axis=1)
+    def top_activations(activations: np.ndarray, top: int = 1,
+                        sort: bool = False) -> np.ndarray:
+        """Get the top activation values.
+        """
+        return nphelper.multimax(activations, num=top, sort=sort)
 
-        # top_indices: shape = (channels, top)
-        top_indices = nphelper.argtop(values, top, axis=1)
-        target_values[:] = np.take_along_axis(values, top_indices, axis=1)
-        # FIXME[bug]: ValueError: `indices` and `arr` must have the
-        # same number of dimensions
-        # target_indices[:] = np.take_along_axis(indices, top_indices, axis=1)
-        for coordinate in range(target_indices.shape[-1]):
-            target_indices[:, :, coordinate] = \
-                np.take_along_axis(indices[:, :, coordinate],
-                                   top_indices, axis=1)
 
-    def __init__(self, top: int = 9, **kwargs) -> None:
+class ActivationWorker(Worker):
+    """A :py:class:`Worker` specialized to work with the
+    :py:class:`ActivationTool`.
+
+    layers:
+        The layers for which activations shall be computed.
+
+    data: (inherited from Worker)
+        The current input data
+    activations: dict
+        The activations for the current data
+
+    """
+
+    class Observer(BaseObserver):
+        """An :py:class:`Observer` of a :py:class:`ActivationWorker`
+        should specify which layers should be computed.
+        """
+
+        def layers_of_interest(self, worker) -> Set[Layer]:
+            # pylint: disable=no-self-use,unused-argument
+            """The layers that this :py:class:`Observer` is interested in.
+            """
+            return set()
+
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._top = top
-        self._meta = None
-        self._top_indices = None
-        self._top_activations = None
+        self._layer_ids = []
+        self._fixed_layers = []
+        self._classification = False
+
+        self._activations = None
+
+    #
+    # Tool core functions
+    #
+
+    def _apply_tool(self, data: Data, **kwargs) -> None:
+        """Apply the :py:class:`ActivationTool` on the given data.
+        """
+        self.tool.apply(self, data, layers=self._layer_ids, **kwargs)
+
+    def activations(self, layer: Layer = None, unit: int = None,
+                    data_format: str = None) -> np.ndarray:
+        """Get the precomputed activation values for the current
+        :py:class:`Data`.
+        """
+        activations = \
+            self._tool.data_activations(self._data, layer=layer, unit=unit,
+                                        data_format=data_format)
+        LOG.debug("ActivationWorker.activations(%s,unit=%s,data_format=%s):"
+                  " %s", layer, unit, data_format,
+                  None if activations is None else
+                  len(activations) if layer is None else activations.shape)
+        return activations
+
+    def _ready(self) -> bool:
+        # FIXME[hack]
+        return (super()._ready() and
+                self._tool.network is not None and
+                self._tool.network.prepared)
 
     @property
-    def filename_meta(self) -> Path:
-        """The name of the file holding the meta data for this
-        :py:class:`ActivationsArchiveNumpy`.
+    def network(self) -> Network:
+        """The network employed by this :py:class:`ActivationWorker`.
         """
-        return self._directory / f'top-{self._top}.json'
+        return self._tool.network
 
-    def filename_top(self, layer: str) -> Path:
-        return self._directory / f'top-{self._top}-{layer}.npy'
+    # FIXME[todo]: should be renamed or become a setter
+    def set_network(self, network: Network,
+                    layers: List[Layer] = None) -> None:
+        """Set the current network. Update will only be published if
+        not already selected.
 
-    @property
-    def top_(self) -> int:
-        """The number of top values to record per layer/channel
+        Parameters
+        ----------
+        network : str or int or network.network.Network
+            Key for the network
         """
-        return self._top
+        LOG.info("Engine.set_network(%s): old=%s", network, self._network)
+        if network is not None and not isinstance(network, Network):
+            raise TypeError("Expecting a Network, "
+                            f"not {type(network)} ({network})")
 
-    def layers(self, *what) -> Iterable[Tuple[str, type, Tuple[int]]]:
-        """Iterate layer of layer information.
+        if self._tool is None:
+            raise RuntimeError("Trying to set a network "
+                               "without having a Tool.")
 
-        Arguments
-        ---------
-        what:
-            Specifies the what information should be provided. Valid
-            values are: `'name'` the layer name,
-            `'layer'` the actual layer object (only available if the
-            :py:class:`Network`, not just the network key, has been provided
-             upon initialization of this :py:class:`ActinvationsArchive`).
+        self._tool.network = network
+
+        # set the layers (this will also trigger the computation
+        # of the activations)
+        self.set_layers(layers)
+        self.change(tool_changed=True)
+
+    #
+    # Layer configuration
+    #
+
+    def set_layers(self, layers: List[Layer]) -> None:
+        """Set the layers for which activations shall be computed.
+
         """
-        if not what:
-            what = ('name', )
-        elif 'layer' in what and not isinstance(self._network, Network):
-            raise ValueError("Iterating over Layers is only possible with "
-                             "an initialized Network.")
-        for layer in self._layers:
-            name = layer.key if isinstance(layer, Layer) else layer
-            values = tuple((name if info == 'name' else
-                            self._network[name] if info == 'layer' else '?')
-                           for info in what)
-            yield values[0] if len(what) == 1 else values
+        self._fixed_layers = \
+            layers if isinstance(layers, list) else list(layers)
+        self._update_layers()
 
-    def _prepare(self) -> None:
-        super()._prepare()
-        filename_meta = self.filename_meta
-        self._top_indices = {}
-        self._top_activations = {}
-        if filename_meta.exists():
-            with open(filename_meta, 'r') as file:
-                meta = json.load(file)
-            for name in self.layers('name'):
-                with self.filename_top(name).open('rb') as file:
-                    self._top_indices[name] = np.load(file)
-                    self._top_activations[name] = np.load(file)
-        else:  # mode == 'w' and isinstance(network, Network):
-            length = len(self._datasource)
-            meta = {
-                'total': length,
-                'valid': 0,
-                'shape': {}
-            }
-            if self._layers is None:
-                self._layers = list(self._network.layer_names())
-            for name, layer in self.layers('name', 'layer'):
-                channels = layer.output_shape[-1]
-                indices = len(layer.output_shape) - 1  # -1 for the channel
-                # indices: (channels, top, indices)
-                self._top_indices[name] = \
-                    np.full((channels, self._top, indices), -1, np.int)
-                # activations: (channels, top)
-                self._top_activations[name] = \
-                    np.full((channels, self._top), np.NINF, np.float32)
-            meta['layers'] = self._layers
-        self._meta = meta
-
-    def _unprepare(self) -> None:
-        # make sure all information is stored
-        if self._mode == 'w':
-            self.flush()
-        self._meta = None
-        self._top_indices = None
-        self._top_activations = None
-        LOG.info("TopActivations at '%s' unprepared.",
-                 self._directory)
-        super()._unprepare()
-
-    def flush(self) -> None:
-        super().flush()
-        if self._top_indices is not None:
-            for name in self.layers('name'):
-                with self.filename_top(name).open('wb') as file:
-                    np.save(file, self._top_indices[name])
-                    np.save(file, self._top_activations[name])
-
-    def __iadd__(self, values) -> object:
-        index = np.asarray([self._meta['valid']], dtype=np.int)
-
-        if isinstance(values, dict):
-            for layer, layer_values in values.items():
-                self._update_values(layer, layer_values[np.newaxis], index)
-        elif isinstance(values, list):
-            if len(values) != len(self._layers):
-                raise ValueError("Values should be a list of length"
-                                 f"{len(self._layers)} not {len(values)}!")
-            for layer, layer_values in zip(self._layers, values):
-                self._update_values(layer, layer_values[np.newaxis], index)
+    def add_layer(self, layer: Union[str, Layer]) -> None:
+        """Add a layer to the list of activation layers.
+        """
+        if isinstance(layer, str):
+            self._fixed_layers.append(self.network[layer])
+        elif isinstance(layer, Layer):
+            self._fixed_layers.append(layer)
         else:
-            raise ValueError("Values should be a list (of "
-                             f"length {len(self._layers)}) "
-                             f"or a dictionary, not {type(values)}")
-        self._meta['valid'] += 1
-        return self
+            raise TypeError("Invalid type for argument layer: {type(layer)}")
+        self._update_layers()
 
-    def _update_values(self, layer: str, value: np.ndarray,
-                       index: np.ndarray = None) -> None:
+    def remove_layer(self, layer: Layer) -> None:
+        """Remove a layer from the list of activation layers.
+        """
+        self._fixed_layers.remove(layer)
+        self._update_layers()
+
+    def set_classification(self, classification: bool = True) -> None:
+        """Record the classification results.  This assumes that the network
+        is a classifier and the results are provided in the last
+        layer.
+        """
+        if classification != self._classification:
+            self._classification = classification
+            self._update_layers()
+
+    def _update_layers(self) -> None:
+        network = self.network
+        if network is None or not network.prepared:
+            return  # nothing to do
+
+        layers = set()
+        # FIXME[problem]: does not work with QObserver:
+        #   'QObserverHelper' object has no attribute 'layers_of_interest'
+        # for observer in self._observers:
+        #     layers |= observer.layers_of_interest(self)
+        layer_ids = set(map(lambda layer: layer.id, layers))
+
+        layer_ids |= set(map(lambda layer: layer.id, self._fixed_layers))
+        if self._classification and isinstance(network, Classifier):
+            layer_ids |= {network.score_layer.id}
+
+        # from set to list
+        layer_ids = [layer_id for layer_id in network.layer_ids
+                     if layer_id in layer_ids]
+
+        got_new_layers = layer_ids > self._layer_ids and self._data is not None
+        self._layer_ids = layer_ids
+        if got_new_layers:
+            self.work(self._data)
+
+    #
+    # work on Datasource
+    #
+
+    def extract_activations(self, datasource: Datasource,
+                            batch_size: int = 128) -> None:
+        """Compute network activation values for data from a
+        :py:class:`Datasource`.
+
+        Activation values are stored in a variable called `result`.
+        """
+        samples = len(datasource)
+        # Here we could:
+        #  np.memmap(filename, dtype='float32', mode='w+',
+        #            shape=(samples,) + network[layer].output_shape[1:])
+        results = {
+            layer: np.ndarray((samples,) +
+                              self.tool.network[layer].output_shape[1:])
+            for layer in self._layer_ids
+        }
+
+        fetcher = Datafetcher(datasource, batch_size=batch_size)
+
+        try:
+            index = 0
+            for batch in fetcher:
+                print("dl-activation: "
+                      f"processing batch of length {len(batch)} "
+                      f"with elements given as {type(batch.array)}, "
+                      f"first element having index {batch[0].index} and "
+                      f"shape {batch[0].array.shape} [{batch[0].array.dtype}]")
+                # self.work() will make `batch` the current data object
+                # of this Worker (self._data) and store activation values
+                # as attributes of that data object:
+                self.work(batch, busy_async=False)
+
+                # obtain the activation values from the current data object
+                activations = self.activations()
+
+                # print(type(activations), len(activations))
+                print("dl-activation: activations are of type "
+                      f"{type(activations)} of length {len(activations)}")
+                if isinstance(activations, dict):
+                    for index, (layer, values) in \
+                            enumerate(activations.items()):
+                        print(f"dl-activation:  [{index}]: {values.shape}")
+                        results[layer][index:index+len(batch)] = values
+                elif isinstance(activations, list):
+                    print("dl-activation: "
+                          f"first element is {type(activations[0])} "
+                          f"with shape {activations[0].shape} "
+                          f"[{activations[0].dtype}]")
+                    for index, values in enumerate(activations):
+                        print(f"dl-activation:  [{index}]: {values.shape}")
+                        layer = self._layer_ids[index]
+                        results[layer][index:index+len(batch)] = values
+                print("dl-activation: batch finished in "
+                      f"{self.tool.duration(self._data)*1000:.0f} ms.")
+        except KeyboardInterrupt:
+            # print(f"error procesing {data.filename} {data.shape}")
+            print("Keyboard interrupt")
+            # self.output_status(top, end='\n')
+        except InterruptedError:
+            print("Interrupted.")
+        finally:
+            print("dl-activation: finished processing")
+            # signal.signal(signal.SIGINT, original_sigint_handler)
+            # signal.signal(signal.SIGQUIT, original_sigquit_handler)
+
+    def iterate_activations(self, datasource: Datasource,
+                            batch_size: int = 128) -> Iterator:
+        """Iterate over a :py:class:`Datasource` and compute activation
+        values for all :py:class:`Data` from that source.
+
+        """
+
+        fetcher = Datafetcher(datasource, batch_size=batch_size)
+
+        index = 0
+        for data in fetcher:
+            print("iterate_activations: "
+                  f"processing {'batch' if data.is_batch else 'data'}")
+            self.work(data, busy_async=False)
+            activations = self.activations()
+            if data.is_batch:
+                for index, _view in enumerate(data):
+                    yield {layer: activations[layer][index]
+                           for layer in activations}
+            else:
+                yield activations
+
+
+#
+#
+# OLD
+#
+#
+
+
+class OldTopActivations(TopActivations):
+    """FIXME[old]: old methods, probably can be removed ...
+    """
+    activations = None
+    index_batch_start = None
+    _top_indices = None
+    _top_activations = None
+    _fixed_layers = None
+    _data = None
+
+    def _old_update_values(self, layer: str, value: np.ndarray,
+                           index: np.ndarray = None) -> None:
         """Update the top activation lists with new values.
 
         Arguments
@@ -564,10 +1462,10 @@ class TopActivations(PersistentTool):
         #   containing the indices in the value array for the top elements
         #   for each channel (i.e. values from 0 to len(slim_values))
         top = min(self._top, len(slim_values))
-        top_slim = nphelper.argtop(slim_values, top=top, axis=0)
+        top_slim = nphelper.argmultimax(slim_values, num=top, axis=0)
 
-        # top_activations: (channel, top)
-        top_activations = np.take_along_axis(slim_values, top_slim, axis=0).T
+        # top_activations: (top, channel)
+        top_activations = np.take_along_axis(slim_values, top_slim, axis=0)
 
         # the index shape is (batch, positions...), without channel
         shape = (len(value), ) + layer.output_shape[1:-1]
@@ -581,26 +1479,6 @@ class TopActivations(PersistentTool):
         # adapt the batch index
         if index is not None:
             top_indices[:, :, 0] = index[top_indices[:, :, 0]]
-
-        self._merge_top(self._top_indices[name], self._top_activations[name],
-                        top_indices, top_activations)
-
-    def activations(self, layer, channel=...) -> np.ndarray:
-        return self._top_activations[layer][channel]
-
-    def indices(self, layer, channel=...) -> np.ndarray:
-        return self._top_indices[layer][channel]
-
-    def receptive_field(self, layer, channel, top=0) -> np.ndarray:
-        indices = self.indices(layer, channel)[top]
-        image = self._datasource[indices[0]]
-        return self._network.\
-            extract_receptive_field(layer, indices[1:-1], image)
-
-    def info(self) -> None:
-        """Output a summary of this :py:class:`ActivationsArchiveNumpy`.
-        """
-        print(f"Archive at {self.directory}: {self.valid}/{self.total}")
 
     def old_merge_layer_top_activations(self, layer: Layer, top: int = None):
         # channel last (batch, height, width, channel)
@@ -639,9 +1517,8 @@ class TopActivations(PersistentTool):
             self._top_indices[layer] = merged_indices[:sort]
             self._top_activations[layer] = merged_activations[:sort]
 
-
     def old_top_activations(self, activations: np.ndarray, top: int = 9,
-                        datasource_index: int = None) -> None:
+                            datasource_index: int = None) -> None:
         """Get the top activattion values and their indices in a
         batch of activation maps.
 
@@ -691,6 +1568,7 @@ class TopActivations(PersistentTool):
             batch_shape = (shape[0], np.prod(shape[1:-1]))
             # batch_shape = \
             #     (shape[0], functools.reduce(operator.mul, shape[1:-1]))
+            # pylint: disable=unbalanced-tuple-unpacking
             batch_indices, position_indices = \
                 np.unravel_index(top_indices_unsorted, batch_shape)
             datasource_indices = datasource_index[batch_indices]
@@ -708,9 +1586,9 @@ class TopActivations(PersistentTool):
         return top_activations, top_indices
 
     def old_merge_top_activations(self, top_activations: np.ndarray,
-                               top_indices: np.ndarray,
-                               new_activations: np.ndarray,
-                               new_indices: np.ndarray) -> None:
+                                  top_indices: np.ndarray,
+                                  new_activations: np.ndarray,
+                                  new_indices: np.ndarray) -> None:
         """Merge activation values into top-n highscore. Both activation data
         consists of two arrays, the first (top_activations) the
         holding the actual activation values and the second
@@ -740,7 +1618,8 @@ class TopActivations(PersistentTool):
         top_indices[:] = merged_indices[sort[:top]]
         top_activations[:] = merged_activations[sort[:top]]
 
-    def old_init_layer_top_activations(self, layers = None, top: int = 9) -> None:
+    def old_init_layer_top_activations(self, layers=None,
+                                       top: int = 9) -> None:
         if layers is None:
             layers = self._fixed_layers
         for layer in layers:
@@ -751,7 +1630,7 @@ class TopActivations(PersistentTool):
                 np.full((layer.filters, 2, layer.filters),
                         np.nan, dtype=np.int)
 
-    def old_update_layer_top_activations(self, layers = None,
+    def old_update_layer_top_activations(self, layers=None,
                                          top: int = 9) -> None:
         if layers is None:
             layers = self._fixed_layers
@@ -759,514 +1638,28 @@ class TopActivations(PersistentTool):
             top_activations, top_indices = \
                 self._top_activations(self.activations(layer),
                                       datasource_index=self._data.index)
-            self._merge_top_activations(self._top_activations[layer],
-                                        self._top_indices[layer],
-                                        top_activations, top_indices)
+            self._old_merge_top_activations(self._top_activations[layer],
+                                            self._top_indices[layer],
+                                            top_activations, top_indices)
 
-
-class ActivationWorker(Worker):
-    """A :py:class:`Worker` specialized to work with the
-    :py:class:`ActivationTool`.
-
-    layers:
-        The layers for which activations shall be computed.
-
-    data: (inherited from Worker)
-        The current input data
-    activations: dict
-        The activations for the current data
-
-    """
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._layer_ids = []
-        self._fixed_layers = []
-        self._classification = False
-
-        self._activations = None
-
-    #
-    # Tool core functions
-    #
-
-    def _apply_tool(self, data: Data, **kwargs) -> None:
-        """Apply the :py:class:`ActivationTool` on the given data.
+    @staticmethod
+    def _old_merge_top(target_owners: np.ndarray, target_scores: np.ndarray,
+                       new_owners: np.ndarray, new_scores: np.ndarray) -> None:
+        """me
         """
-        self.tool.apply(self, data, layers=self._layer_ids, **kwargs)
-
-    def activations(self, layer: Layer = None, unit: int = None,
-                    data_format: str = None) -> np.ndarray:
-        """Get the precomputed activation values for the current
-        :py:class:`Data`.
-        """
-        activations = \
-            self._tool.data_activations(self._data, layer=layer, unit=unit,
-                                        data_format=data_format)
-        LOG.debug("ActivationWorker.activations(%s,unit=%s,data_format=%s):"
-                  " %s", layer, unit, data_format,
-                  len(activations) if layer is None else activations.shape)
-        return activations
-
-    def _ready(self) -> bool:
-        # FIXME[hack]
-        return (super()._ready() and
-                self._tool.network is not None and
-                self._tool.network.prepared)
-
-    def set_network(self, network: Network,
-                    layers: List[Layer] = None) -> None:
-        """Set the current network. Update will only be published if
-        not already selected.
-
-        Parameters
-        ----------
-        network : str or int or network.network.Network
-            Key for the network
-        """
-        LOG.info("Engine.set_network(%s): old=%s", network, self._network)
-        if network is not None and not isinstance(network, Network):
-            raise TypeError("Expecting a Network, "
-                            f"not {type(network)} ({network})")
-
-        if self._tool is None:
-            raise RuntimeError("Trying to set a network "
-                               "without having a Tool.")
-
-        self._tool.network = network
-
-        # set the layers (this will also trigger the computation
-        # of the activations)
-        self.set_layers(layers)
-        self.change(network_changed=True)
-
-    #
-    # Layer configuration
-    #
-
-    def set_layers(self, layers: List[Layer]) -> None:
-        """Set the layers for which activations shall be computed.
-
-        """
-        self._fixed_layers = \
-            layers if isinstance(layers, list) else list(layers)
-        self._update_layers()
-
-    def add_layer(self, layer: Union[str, Layer]) -> None:
-        """Add a layer to the list of activation layers.
-        """
-        if isinstance(layer, str):
-            self._fixed_layers.append(self.network[layer])
-        elif isinstance(layer, Layer):
-            self._fixed_layers.append(layer)
-        else:
-            raise TypeError("Invalid type for argument layer: {type(layer)}")
-        self._update_layers()
-
-    def remove_layer(self, layer: Layer) -> None:
-        """Remove a layer from the list of activation layers.
-        """
-        self._fixed_layers.remove(layer)
-        self._update_layers()
-
-    def set_classification(self, classification: bool = True) -> None:
-        """Record the classification results.  This assumes that the network
-        is a classifier and the results are provided in the last
-        layer.
-        """
-        if classification != self._classification:
-            self._classification = classification
-            self._update_layers()
-
-    def _update_layers(self) -> None:
-
-        # Determining layers
-        layer_ids = list(map(lambda layer: layer.id, self._fixed_layers))
-        if self._classification and isinstance(self._network, Classifier):
-            class_scores_id = self._network.scores.id
-            if class_scores_id not in layer_ids:
-                layer_ids.append(class_scores_id)
-
-        got_new_layers = layer_ids > self._layer_ids and self._data is not None
-        self._layer_ids = layer_ids
-        if got_new_layers:
-            self.work(self._data)
-
-    #
-    # work on Datasource
-    #
-
-    def extract_activations(self, datasource: Datasource,
-                            batch_size: int = 128) -> None:
-        samples = len(datasource)
-        # Here we could:
-        #  np.memmap(filename, dtype='float32', mode='w+',
-        #            shape=(samples,) + network[layer].output_shape[1:])
-        results = {
-            layer: np.ndarray((samples,) +
-                              self.tool.network[layer].output_shape[1:])
-            for layer in self._layer_ids
-        }
-
-        fetcher = Datafetcher(datasource, batch_size=batch_size)
-
-        try:
-            index = 0
-            for batch in fetcher:
-                print("dl-activation: "
-                      f"processing batch of length {len(batch)} "
-                      f"with elements given as {type(batch.array)}, "
-                      f"first element having index {batch[0].index} and "
-                      f"shape {batch[0].array.shape} [{batch[0].array.dtype}]")
-                # self.work() will make `batch` the current data object
-                # of this Worker (self._data) and store activation values
-                # as attributes of that data object:
-                self.work(batch, busy_async=False)
-
-                # obtain the activation values from the current data object
-                activations = self.activations()
-
-                # print(type(activations), len(activations))
-                print("dl-activation: activations are of type "
-                      f"{type(activations)} of length {len(activations)}")
-                if isinstance(activations, dict):
-                    for index, (layer, values) in \
-                            enumerate(activations.items()):
-                        print(f"dl-activation:  [{index}]: {values.shape}")
-                        results[layer][index:index+len(batch)] = values
-                elif isinstance(activations, list):
-                    print("dl-activation: "
-                          f"first element is {type(activations[0])} "
-                          f"with shape {activations[0].shape} "
-                          f"[{activations[0].dtype}]")
-                    for index, values in enumerate(activations):
-                        print(f"dl-activation:  [{index}]: {values.shape}")
-                        layer = self._layer_ids[index]
-                    results[layer][index:index+len(batch)] = values
-                print("dl-activation: batch finished in "
-                      f"{self.tool.duration(self._data)*1000:.0f} ms.")
-        except KeyboardInterrupt:
-            # print(f"error procesing {data.filename} {data.shape}")
-            print("Keyboard interrupt")
-            # self.output_status(top, end='\n')
-        except InterruptedError:
-            print("Interrupted.")
-        finally:
-            print("dl-activation: finished processing")
-            # signal.signal(signal.SIGINT, original_sigint_handler)
-            # signal.signal(signal.SIGQUIT, original_sigquit_handler)
-
-    def iterate_activations(self, datasource: Datasource,
-                            batch_size: int = 128):  # -> Iterator
-
-        fetcher = Datafetcher(datasource, batch_size=batch_size)
-
-        index = 0
-        for data in fetcher:
-            print("iterate_activations: "
-                  f"processing {'batch' if data.is_batch else 'data'}")
-            self.work(data, busy_async=False)
-            activations = self.activations()
-            if data.is_batch:
-                for index, view in enumerate(data):
-                    yield {layer: activations[layer][index]
-                           for layer in activations}
-            else:
-                yield activations
-
-
-
-class ActivationsArchive(Preparable):
-    """An :py:class:`ActinvationsArchive` represents an archive of
-    activation values obtained by applying a :py:class:`Network` to
-    a :py:class:`Datsource`.
-
-
-    Intended use:
-
-    >>> with ActivationsArchiveNumpy(network, datasource, mode='w') as archive:
-    >>>     for index in range(archive.valid, archive.total):
-    >>>         archive += network.get_activations(datasource[index])
-
-    >>> with ActivationsArchiveNumpy(network, datasource, mode='w') as archive:
-    >>>     for batch in datasource.batches(batch_size=128):
-    >>>         activation_tool.process(batch)
-    >>>         archive += batch
-
-    >>> with ActivationsArchiveNumpy(network, datasource, mode='w') as archive:
-    >>>     archive.fill()
-    """
-    # FIXME[todo]:
-    # - allow ActivationTool instead of Network
-    # - make this class an ActivationTool
-    # - documentation
-
-
-class ActivationsArchiveNumpy(ActivationsArchive, PersistentTool):
-    """The :py:class:`ActivationsArchiveNumpy` realizes an
-    :py:class:`ActivationsArchive` based on the Numpy `memmap`
-    mechanism.
-
-    All files of the :py:class:`ActivationsArchiveNumpy` are stored in
-    the directory :py:prop:`directory`. Each layer gets a separate
-    file, called `[LAYER_NAME].dat`. Metadata for the archive are
-    stored in JSON format into the file `meta.json`.
-
-    The total size of an :py:class:`ActivationsArchiveNumpy`, that is
-    the number of data points for which activations are stored in the
-    archive, has to be provided uppon initialization and cannot be
-    changed afterwards. This number be accessed via the property
-    :py:prop:`total`.  The archive supports incremental updates,
-    allowing to fill the archive in multiple steps and to continue
-    fill operations that were interrupted. The number of valid data
-    points filled so far is stored in the metadata as property
-    `valid` and can be accessed through the property :py:prop:`valid`.
-
-    Note: The numpy `memmap` mechanism does not provide means for
-    compression.  Files are stored uncompressed and may have extreme
-    sizes for larger activation maps of datasources.
-
-    Note: Depending on the file system, memmap may create files of
-    desired size but only allocate disk space while filling the files.
-    This may result in an (uncatchable) bus error if the device runs
-    out of space.
-
-    """
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._layers_memmap = None
-        self._meta = None
-        LOG.info("ActivationsArchiveNumpy at '%s' initalized.",
-                 self._directory)
-
-    @property
-    def filename_meta(self) -> Path:
-        """The name of the file holding the meta data for this
-        :py:class:`ActivationsArchiveNumpy`.
-        """
-        return self._directory / 'meta.json'
-
-    def layers(self, *what) -> Iterable[Tuple[str, type, Tuple[int]]]:
-        """Iterate layer of layer information.
-
-        Arguments
-        ---------
-        what:
-            Specifies the what information should be provided. Valid
-            values are: `'name'` the layer name,
-            `'dtype'` the dtype of the layer,
-            `'shape'` the layer layer,
-            `'layer'` the actual layer object (only available if the
-            :py:class:`Network`, not just the network key, has been provided
-             upon initialization of this :py:class:`ActinvationsArchive`).
-        """
-        if not what:
-            what = ('name', )
-        elif 'layer' in what and not isinstance(self._network, Network):
-            raise ValueError("Iterating over Layers is only possible with "
-                             "an initialized Network.")
-        for layer in self._layers:
-            name = layer.key if isinstance(layer, Layer) else layer
-            memmap = self._layers_memmap[name]
-            yield ((name if info == 'name' else
-                    memmap.dtype if info == 'dtype' else
-                    memmap.shape[1:] if info == 'shape' else
-                    memmap.nbytes if info == 'bytes' else
-                    self._network[name] if info == 'layer' else '?')
-                   for info in what)
-
-    def _prepare(self) -> None:
-        super()._prepare()
-
-        # prepare the meta data
-        filename_meta = self.filename_meta
-        if filename_meta.exists():
-            with open(filename_meta, 'r') as file:
-                meta = json.load(file)
-            if self._layers is None:
-                self._layers = list(meta['shape'].keys())
-        else:  # mode == 'w' and isinstance(network, Network):
-            length = len(self._datasource)
-            meta = {
-                'total': length,
-                'valid': 0,
-                'dtype': 'float32',  # FIXME[hack]: we should determine dtype
-                'shape': {}
-            }
-            if self._layers is None:
-                self._layers = list(self._network.layer_names())
-            for layer in self._layers:
-                meta['shape'][layer] = \
-                    (length,) + self._network[layer].output_shape[1:]
-            os.makedirs(self.directory, exist_ok=True)
-
-        # check if all requested layers are availabe
-        available_layers = set(meta['shape'].keys())
-        requested_layers = set(self._layers)
-        if not requested_layers.issubset(available_layers):
-            raise ValueError(f"Some requested layers {requested_layers} "
-                             f"are not available {available_layers}")
-        if self._mode == 'w' and available_layers != requested_layers:
-            # make sure that all available layers are written to avoid
-            # inconsistent data
-            raise ValueError(f"Some available layers {available_layers} "
-                             "are not mentioned as write layers "
-                             f"{requested_layers}")
-        self._meta = meta
-
-        # prepare the layer memmaps
-        layers = meta.shape.keys() if self._layers is None else self._layers
-        dtype = np.dtype(meta['dtype'])
-        self._layers_memmap = {}
-        for layer in layers:
-            layer_name = layer.key if isinstance(layer, Layer) else layer
-            layer_filename = self.directory / (layer_name + '.dat')
-            shape = tuple(meta['shape'][layer_name])
-            mode = 'r' if self._mode == 'r' else \
-                ('r+' if layer_filename.exists() else 'w+')
-            self._layers_memmap[layer_name] = \
-                np.memmap(layer_filename, dtype=dtype, mode=mode, shape=shape)
-
-        LOG.info("ActivationsArchiveNumpy at '%s' with %d layers and "
-                 "%d/%d entries prepared for mode '%s'.", self._directory,
-                 len(self._layers), self.valid, self.total, self._mode)
-
-    def _unprepare(self) -> None:
-        # make sure all information is stored
-        if self._mode == 'w':
-            self.flush()
-
-        # close the memmap objects
-        if self._layers_memmap is not None:
-            for layer, memmap in self._layers_memmap.items():
-                del memmap
-        self._layers_memmap = None
-        self._meta = None
-        LOG.info("ActivationsArchiveNumpy at '%s' unprepared.",
-                 self._directory)
-        super()._unprepare()
-
-    def flush(self) -> None:
-        """Flush unwritten data to the disk.  This will also update
-        the metadata file (:py:prop:`filename_meta`) to reflect the
-        current state of the archive.  :py:meth:`flush` is automatically
-        called when upreparing or deleting this
-        :py:class:`ActivationsArchiveNumpy` object.
-
-        Note: flusing the data is only allowed (and only makes sense),
-        if this :py:class:`ActivationsArchiveNumpy` is in write mode.
-        """
-        super().flush()
-        if self._layers_memmap is not None:
-            for layer, memmap in self._layers_memmap.items():
-                memmap.flush()
-
-    def __getitem__(self, key) -> None:
-        if isinstance(key, tuple):
-            layer = key[0]
-            index = key[1]
-        else:
-            layer = None
-            index = key
-
-        if layer is None:
-            return {layer: memmap[index]
-                    for layer, memmap in self._layers_memmap.items()}
-
-        return self._layers_memmap[layer][index]
-
-    def __setitem__(self, key, values) -> None:
-        if self._mode != 'w':
-            raise ValueError(f"Archive in mode '{self._mode}' is not writable")
-
-        if isinstance(key, tuple):
-            layer = key[0]
-            index = key[1]
-        else:
-            layer = None
-            index = key
-
-        if layer is None:
-            if isinstance(values, dict):
-                for layer, layer_values in values.items():
-                    self._update_values(layer, index, layer_values)
-            elif isinstance(values, list):
-                if len(values) != len(self._layers):
-                    raise ValueError("Values should be a list of length"
-                                     f"{len(self._layers)} not {len(values)}!")
-                for layer, layer_values in zip(self._layers, values):
-                    self._update_values(layer, index, layer_values)
-            else:
-                raise ValueError("Values should be a list (of "
-                                 f"length {len(self._layers)}) "
-                                 f"or a dictionary, not {type(values)}")
-        else:
-            self._update_values(layer, index, values)
-
-    def _update_values(self, layer, index, value) -> None:
-        if isinstance(layer, Layer):
-            layer = layer.key
-        try:
-            self._layers_memmap[layer][index] = value
-        except KeyError:
-            raise KeyError(f"Invalid layer '{layer}', valid layers "
-                           f"are {list(self._layers_memmap.keys())}")
-
-    def __iadd__(self, values) -> object:
-        """Add activation values to this
-        :py:class:`ActivationsArchiveNumpy`.
-
-        Arguments
-        ---------
-        values:
-            The activation values to add.  Currently only a list or
-            dictionary of activation values are supported.
-        """
-        # FIXME[todo]: allow to add a batch of values
-        index = self._meta['valid']
-        self[index] = values
-        self._meta['valid'] += 1
-        return self
-
-    def fill(self, overwrite: bool = False) -> None:
-        """Fill this :py:class:`ActinvationsArchive` by computing activation
-        values for data from the underlying :py:class:`Datasource`.
-
-        Arguments
-        ---------
-        overwrite:
-            If `True`, the fill process will start with the first
-            data item, overwriting results from previous runs.
-            If `False`, the fill process will start from where the
-            last process stopped (if the archive is already filled
-             completly, no further computation is started).
-        """
-        if not isinstance(self._network, Network):
-            self._network = Network[self._network]
-            self._network.prepare()
-        if not isinstance(self._datasource, Datasource):
-            self._datasource = Datasource[self._datasource]
-            self._datasource.prepare()
-        if overwrite:
-            self._meta['valid'] = 0
-        with self:
-            for index in range(self.valid, self.total):
-                self += self._network.get_activations(self._datasource[index])
-
-    def info(self) -> None:
-        """Output a summary of this :py:class:`ActivationsArchiveNumpy`.
-        """
-        print(f"Archive at {self.directory}: {self.valid}/{self.total}")
-        for name, dtype, shape, size in \
-                self.layers('name', 'dtype', 'shape', 'bytes'):
-            print(f" - {name+':':20s} {str(shape):20s} "
-                  f"of type {str(dtype):10s} [{format_size(size)}]")
-
-# FIXME[todo]: move to util
-def format_size(num, suffix='B'):
-    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi' 'Ei', 'Zi']:
-        if num < 1024:
-            return f"{num}{unit}{suffix}"
-        num //= 1024
-    return f"{num}Yi{suffix}"
+        # indices: shape = (size, top, indices)
+        # values: shape = (size, top)
+        top = target_scores.shape[1]
+        indices = np.append(target_owners, new_owners, axis=1)
+        values = np.append(target_scores, new_scores, axis=1)
+
+        # top_indices: shape = (size, top)
+        top_indices = nphelper.argmultimax(values, top, axis=1)
+        target_scores[:] = np.take_along_axis(values, top_indices, axis=1)
+        # FIXME[bug]: ValueError: `indices` and `arr` must have the
+        # same number of dimensions
+        # target_owners[:] = np.take_along_axis(indices, top_indices, axis=1)
+        for coordinate in range(target_owners.shape[-1]):
+            target_owners[:, :, coordinate] = \
+                np.take_along_axis(indices[:, :, coordinate],
+                                   top_indices, axis=1)

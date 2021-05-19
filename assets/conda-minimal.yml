@@ -6,20 +6,23 @@ channels:
 - defaults
 dependencies:
 - packaging
-- frozendict
 - numpy
-- matplotlib
 - imageio
-- opencv
-- keras
-- tensorflow-gpu
-- pytorch
-- torchvision
-- mtcnn
+- imageio-ffmpeg
+#old: - frozendict
 - pyqt
-- gtk3
-- pygobject
-- appdirs
-- imutils
-- gitpython
-- tqdm
+#- matplotlib
+#- opencv
+#- keras
+#- tensorflow-gpu
+#- pytorch
+#- torchvision
+#- mtcnn
+#- gtk3
+#- pygobject
+#- appdirs
+#- imutils
+#- gitpython
+#- tqdm
+# Tools:
+- jupyter

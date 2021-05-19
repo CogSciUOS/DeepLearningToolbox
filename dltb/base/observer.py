@@ -1,5 +1,5 @@
 """
-.. moduleauthor:: Rasmus Diederichsen
+.. moduleauthor:: Rasmus Diederichsen, Ulf Krumnack
 
 .. module:: observer
 
@@ -94,7 +94,7 @@ class BaseChange(set):
         """
         if attr not in self.CHANGES:
             raise AttributeError(f"{type(self).__name__} has no "
-                                 f"attribute '{attr}'."
+                                 f"attribute '{attr}'. "
                                  f"Valid values are: {self.CHANGES}")
         return attr in self
 

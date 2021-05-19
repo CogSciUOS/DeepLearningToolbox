@@ -1,4 +1,15 @@
 """A MTCCN face detector based on the `mtcnn` module.
+
+The `mtcnn` module can be installed with pip
+
+  pip install mtcnn
+
+or with conda
+
+  conda install -c conda-forge mtcnn
+
+The `mtcnn` implementation is based on TensorFlow.
+
 """
 
 # standard imports
@@ -148,7 +159,7 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
         # (1) Run the MTCNN detector
         #
         LOG.info("MTCNN: detecting facess ...")
-        faces = self.run_keras(self._detector.detect_faces, image)
+        faces = self.run_tensorflow(self._detector.detect_faces, image)
         LOG.info("MTCNN: ... found %d faces.", len(faces))
 
         #

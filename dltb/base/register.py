@@ -178,9 +178,7 @@ class Register(Observable, method='register_changed',
         """Add an new entry or change an existing entry
         in this :py:class:`Register`
         """
-        key = entry.key
-        self._entries[key] = entry
-        self.register_change(key, 'entry_added')
+        self.add(entry)
 
     def __delitem__(self, entry: Union[str, Registrable]) -> None:
         """Remove an entry from this :py:class:`Register`

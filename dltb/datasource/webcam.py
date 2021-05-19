@@ -114,7 +114,7 @@ class DataWebcam(Livesource, Imagesource):
         """
         LOG.debug("Webcam._get_data(snapshot=%r)", snapshot)
         data.array = (self._loop_data if self.looping else
-                      self._backend.get_frame(clear_buffer=snapshot))
+                      self._backend.read_frame(clear_buffer=snapshot))
         super()._get_snapshot(data, snapshot, **kwargs)
 
     #
@@ -152,7 +152,7 @@ class DataWebcam(Livesource, Imagesource):
         fetched = 0
         start_time = time.time()
         while not self.loop_stop_event.is_set():
-            self._loop_data = self._backend.get_frame(clear_buffer=False)
+            self._loop_data = self._backend.read_frame(clear_buffer=False)
             last_time = time.time()
             fetched += 1
             LOG.debug("Webcam: fetched: %d, frames per second: %.1f",

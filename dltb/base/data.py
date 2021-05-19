@@ -105,12 +105,6 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
             self.add_attribute('datasource', datasource)
         self.add_attribute('array', value=array, batch=True)
         self.add_attribute('type')
-        # FIXME[hack]: should be removed as not all data has to be labeled
-        # - but some parts of the program expect a label, e.g,
-        # self.label = "no label!"
-        #  File ".../qtgui/widgets/inputselector.py", line 225,
-        #                                           in datasource_changed
-        #    self._showInfo(data=data.array, label=data.label)
 
     def __bool__(self) -> bool:
         """Check if data has been assigned to this :py:class:`Data`

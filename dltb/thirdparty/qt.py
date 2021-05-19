@@ -62,6 +62,7 @@ class QImageDisplay(QImageView):
         hidden.
         """
         LOG.info("QImageDisplay.hideEvent: display was hidden")
+        self._application.quit()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """This event handler, for event event, can be reimplemented in a
@@ -129,15 +130,13 @@ class ImageDisplay(BaseImageDisplay):
         and the event loop will then occupy this thread.
     """
 
-    def __init__(self, view: QImageView = None,
-                 worker: Callable = None, **kwargs) -> None:
+    def __init__(self, view: QImageView = None, **kwargs) -> None:
         """
         """
         super().__init__(**kwargs)
+
         self._application = QApplication([])
         self._view = view or QImageDisplay(self._application)
-        if worker is not None:
-            self.run(worker=worker)
 
     def _show(self, image: np.ndarray, title: str = None, **kwargs) -> None:
         """Show the given image.
@@ -146,26 +145,6 @@ class ImageDisplay(BaseImageDisplay):
         ---------
         image: Imagelike
             The image to display.
-        blocking: bool
-            If `True`, run event loop in main thread, blocking further
-            processing. If `False`, run event loop in background thread
-            and return execution of main thread immediately to caller.
-            If `None`, no event loop will be started. The caller is
-            responsible for keeping a responsive interface, e.g., by
-            regularly updating the display.
-        unblock: str
-            How to proceed when finishing blocking display. Options are
-            'close': close the display and end all event loops,
-            'show': continue showing the display with a non-blocking event
-            loop (like blocking=False), or 'freeze': continue showing
-            the display without event loop (like blocking=None).
-        wait_for_key: bool
-            If True, blocking display will be stopped when a key is pressed
-            (or the window is closed).
-            FIXME[todo]: the value of the key is returned
-        timeout: float
-            If `True`, the display will be stopped after the given number
-            of seconds.
         title: str
             A title to be displayed as image title.
         """
@@ -179,33 +158,38 @@ class ImageDisplay(BaseImageDisplay):
         self._view.setWindowTitle(title)
 
     def _open(self) -> None:
+        LOG.info("Qt: open: show the window")
         self._view.show()
         if self._blocking is None:
             # Make sure the the showEvent is processed.
-            # FIXME[hack]: There seems to be some timing aspect to this:
-            # just calling _application.processEvents() seems to be
-            # too fast, we have to wait a bit otherwise _view.setData
-            # may not have triggered the paintEvent.
-            # This does only occur sometimes and I have no idea
-            # how long to wait or how to check if the situation is
-            # fine (interestingly it seems not to matter if we wait
-            # before or after calling _application.processEvents()).
+            #
+            # There seems to be some timing aspect to this: just
+            # calling _application.processEvents() seems to be too
+            # fast, we have to wait a bit otherwise _view.setData may
+            # not have triggered the paintEvent.  This does only occur
+            # sometimes and I have no idea how long to wait or how to
+            # check if the situation is fine (interestingly it seems
+            # not to matter if we wait before or after calling
+            # _application.processEvents()).
             time.sleep(0.1)
             self._process_events()
             # time.sleep(0.1)
+        LOG.debug("Qt: open: done.")
 
     def _close(self) -> None:
+        LOG.info("Qt: close: hide the window")
         self._view.hide()
-        if self._blocking is None:
+        if not self.event_loop_is_running():
             self._process_events()
+        LOG.debug("Qt: close: done.")
 
     def _run_blocking_event_loop(self, timeout: float = None) -> None:
         """Start the main event loop for this :py:class:`ImageDisplay`.
         """
-        LOG.debug("Starting Qt Main Event Loop (exec_)")
+        LOG.info("Running Qt Main Event Loop.")
         # Run the Qt main event loop to update the display and
         # process timeout and/or key events.
-        if self._event_loop is not None:
+        if self.event_loop_is_running():
             raise RuntimeError("Only one background thread is allowed.")
 
         self._event_loop = QThread.currentThread()
@@ -216,197 +200,22 @@ class ImageDisplay(BaseImageDisplay):
             timer.setSingleShot(True)
             timer.timeout.connect(self._view.onTimer)
             timer.start()
-        self._application.exec_()
-        if timeout is not None:
-            timer.stop()
-            timer.timeout.disconnect(self._view.onTimer)
-        self._event_loop = None
-
-        LOG.debug("Qt Main Event Loop (exec_) has ended.")
-
-    def _process_events(self) -> None:
-        print(f"{threading.currentThread()}: process qt events")
-        self._application.processEvents()
-
-    # ------------------------------------------------------------------------
-
-    @property
-    def closed(self) -> bool:
-        """A flag indicating if the :py:class:`ImageDisplay` was closed.
-        `True` means that currently no image is shown. The
-        :py:class:`ImageDisplay` can be reopened again by calling
-        :py:meth:`show` again.
-        """
-        return not self._view.isVisible()
-
-    @property
-    def active(self) -> bool:
-        """A flag indicating that the graphical user interface of this
-        :py:class:`ImageDisplay` is active, i.e., an event loop is
-        running.
-        """
-        return self._thread is not None
-
-    def __show(self, image: np.ndarray, blocking: bool = True,
-              unblock: str = 'close',
-              wait_for_key: bool = False,
-              timeout: float = None, title: str = None, **kwargs) -> None:
-        """Show the given image.
-
-        Arguments
-        ---------
-        image: Imagelike
-            The image to display.
-        blocking: bool
-            If `True`, run event loop in main thread, blocking further
-            processing. If `False`, run event loop in background thread
-            and return execution of main thread immediately to caller.
-            If `None`, no event loop will be started. The caller is
-            responsible for keeping a responsive interface, e.g., by
-            regularly updating the display.
-        unblock: str
-            How to proceed when finishing blocking display. Options are
-            'close': close the display and end all event loops,
-            'show': continue showing the display with a non-blocking event
-            loop (like blocking=False), or 'freeze': continue showing
-            the display without event loop (like blocking=None).
-        wait_for_key: bool
-            If True, blocking display will be stopped when a key is pressed
-            (or the window is closed).
-            FIXME[todo]: the value of the key is returned
-        timeout: float
-            If `True`, the display will be stopped after the given number
-            of seconds.
-        title: str
-            A title to be displayed as image title.
-        """
-        LOG.debug("show: wait_for_key=%s, timeout=%r.", wait_for_key, timeout)
-
-        if not blocking and wait_for_key:
-            raise ValueError("wait_for_key is illegal "
-                             "for non-blocking display.")
-
-        # It seems essential that the QImageView is visible (on the
-        # screen) before setting the data, otherwise _view.update()
-        # (and even _view.repaint()) will not trigger a paintEvent(),
-        # and only a black widget is shown. Notice that we not only have
-        # to call _view.show(), but have have to make sure that the
-        # event is processed.
-        if self.closed:
-            LOG.debug("show: showing the view.")
-            # showing the view seems not to trigger a repaint event
-            # for that widget.
-            self._view.show()
-            if not self.active:
-                # Make sure the the showEvent is processed.
-                # FIXME[hack]: There seems to be some timing aspect to this:
-                # just calling _application.processEvents() seems to be
-                # too fast, we have to wait a bit otherwise _view.setData
-                # may not have triggered the paintEvent.
-                # This does only occur sometimes and I have no idea
-                # how long to wait or how to check if the situation is
-                # fine (interestingly it seems not to matter if we wait
-                # before or after calling _application.processEvents()).
-                time.sleep(0.1)
-                self._application.processEvents()
-                # time.sleep(0.1)
-
-        # Setting the image for _view will trigger a paintEvent
-        # (via _view.update()) which we have to make sure is processed
-        # for the image to become visible.
-        self._view.setImagelike(image)
-
-        if title is not None:
-            self._view.setWindowTitle(title)
-
-        if blocking:
-            # Run the Qt main event loop to update the display and
-            # process timeout and/or key events.
-            if self._thread is not None:
-                raise RuntimeError("Only one background thread is allowed.")
-
-            self._thread = QThread.currentThread()
-            if timeout is not None:
-                milliseconds = int(timeout * 1000)
-                timer = QTimer()
-                timer.setInterval(milliseconds)
-                timer.setSingleShot(True)
-                timer.timeout.connect(self._view.onTimer)
-                timer.start()
-            self._runMainEventLoop()
-            if timeout is not None:
-                timer.stop()
-                timer.timeout.disconnect(self._view.onTimer)
-                timeout = None
-            self._thread = None
-            if unblock == 'close':
-                self.close()
-            elif unblock == 'show':
-                blocking = False
-            elif unblock == 'freeze':
-                blocking = None
-
-        if blocking is False:
-            # Run a dummy event loop in background thread
-            self._runDummyEventLoop(timeout=timeout)
-
-        elif blocking is None:
-            if self.active:
-                raise RuntimeError("ImageDisplay should be frozen, "
-                                   "but is still active.")
-            # Process Qt events (repaint) synchronously (blocking)
-            LOG.debug("show: updating the view")
-            self._application.processEvents()
-
-        LOG.debug("show: finished: view.isVisible(): %r",
-                  self._view.isVisible())
-
-    def close(self) -> None:
-        """Close this :py:class:ImageDisplay. This will close the display
-        window and stop all background threads.
-        """
-        self._view.hide()
-
-    class WorkerThread(QThread):
-        """An auxiliary class to realize the wait for key behaviour.
-        This has to be a `QThread` (not a python thread), in order
-        to connect to the Qt event system.
-        """
-
-        def __init__(self, worker: Callable, args: Tuple = (),
-                     **_kwargs) -> None:
-            super().__init__(**_kwargs)
-            self._worker = worker
-            self._args = args
-
-        def run(self):
-            """The code to be run in the thread. This will wait
-            for the `stopped` :py:class:`Event`, either caused
-            by the `keyPressedEvent` or abortion of the main
-            event loop.
-            """
-            LOG.debug("Background QTthread starts running")
-            self._worker(*self._args)
-            LOG.debug("Background QTthread ended running")
-
-    def run(self, worker: Callable, args: Tuple) -> None:
-        """Start the given worker in a background :py:class:`QThread`,
-        while the Qt main event loop in run in the current thread
-        (which has to be the main thread).
-        """
-        if self._thread is not None:
-            raise RuntimeError("Only one background thread is allowed.")
-
-        self._thread = self.WorkerThread(worker, self._stop_worker)
-        self._thread.finished.connect(self._application.quit)
-        self._thread.start()
-        self._runMainEventLoop()
-        # FIXME[todo]: make sure that thread has finished!
-        self._thread = None
-
-    def _runMainEventLoop(self) -> None:
-        """Start the main event loop for this :py:class:`ImageDisplay`.
-        """
         LOG.debug("Starting Qt Main Event Loop (exec_)")
         self._application.exec_()
         LOG.debug("Qt Main Event Loop (exec_) has ended.")
+        if timeout is not None:
+            timer.stop()
+            timer.timeout.disconnect(self._view.onTimer)
+
+        LOG.info("Qt Main Event Loop finished (event loop=%s, closed=%s).",
+                 self.event_loop_is_running(), self.closed)
+
+    def _process_events(self) -> None:
+        """Process events for the graphical user interface of
+        this :py:class:`ImageDisplay`. Pending events are processed
+        in a blocking mode.
+
+        Note: Qt requires that event processing is run in the main
+        thread.
+        """
+        self._application.processEvents()

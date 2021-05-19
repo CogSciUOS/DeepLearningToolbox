@@ -204,6 +204,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         classesViewLayout = QVBoxLayout()
         classesViewLayout.addWidget(self._classesView)
         self._classesViewBox.setLayout(classesViewLayout)
+        self.addAttributePropagation(ActivationWorker, self._classesView)
 
         #
         # (B) Input
@@ -444,7 +445,8 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # of the network input layer in format ((x1,y1), (x2,y2))
         field = self._receptiveField
         network = self.network()
-        print(f"AcivationsPanel: receptive field={field}, network: {network.get_input_shape(False, False)}")
+        print(f"AcivationsPanel: receptive field={field}, "
+              f"network: {network and network.get_input_shape(False, False)}")
         if field is None or network is None:
             self._imageView.setReceptiveField(None, None)
         else:

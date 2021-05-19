@@ -27,6 +27,7 @@ class ImageTool(Tool):
     """Abstract base class for tools that operate on images.
     Several convenience methods are provided by this class.
     """
+    internal_arguments: Tuple[str] = ('image', )
 
     def __init__(self, size: Tuple[int, int] = None,
                  max_size: Tuple[int, int] = None,
@@ -143,12 +144,34 @@ class ImageTool(Tool):
         return scaled_image
 
     def _preprocess(self, image: Imagelike, *args, **kwargs) -> Data:
-        array = Image.as_array(image)
-        data = super()._preprocess(self, array, *args, **kwargs)
-        data.add_attribute('image', array)
+        context = super()._preprocess(self, *args, **kwargs)
+
+        # get the input image as numpy array
+        array = Image.as_array(image, dtype=np.uint8)
+
+        # we store the original image, as some tools may use it
+        # for produding some output, e.g., painting bounding boxes
+        # or heat maps.
+        context.add_attribute('input_image', array)
+        context.add_attribute('input_size', array.shape[:-1:-1])
+
+        # now do the actual image preprocessing and stro results
+        # as 'image' and 'size'
+        array = self._preprocess_image(array)
+        context.add_attribute('size', array.shape[:-1:-1])
+        context.add_attribute('image', array)
+
+        return context
+
+    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+        """
+        """
+        # resizing the image
         if self._min_size is not None or self._max_size is not None:
-            data.add_attribute('scaled', self.fit_image(array))
-        return data
+            image = self.fit_image(image)
+
+        return image
+
 
     # FIXME[todo] names:
     #   image_region  <- region_of_image  [BoundingBox]

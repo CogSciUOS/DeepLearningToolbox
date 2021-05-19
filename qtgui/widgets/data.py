@@ -15,8 +15,8 @@ import logging
 import numpy as np
 
 # Qt imports
-from PyQt5.QtCore import Qt
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import Qt, QSize, QObject, QEvent, pyqtSlot, pyqtSignal
+from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 from PyQt5.QtWidgets import QScrollArea
@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import QScrollArea
 from toolbox import Toolbox
 from dltb.base.data import Data
 from dltb.base.meta import Metadata
-from dltb.base.image import Region, PointsBasedLocation
+from dltb.base.image import Region, PointsBasedLocation, Landmarks
 from dltb.datasource import Datasource, Datafetcher
 from dltb.tool.classifier import ClassIdentifier
 
@@ -52,9 +52,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         :py:class:`Data`.
     * _dataLabel: a multiline :py:class:`QLabel` showing statistical
         information on the current :py:class:`Data`.
-    * _button: a checkable :py:class:`QPushButton` labeled `'Statistics'`.
-        If the button is checked, additional statistical information will
-        be displayed in the _dataLabel (otherwise it will be empty)
 
     Data can be provided in different ways:
     (1) By calling the method :py:meth:`setData`.
@@ -62,47 +59,58 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     (3) From a :py:class:`Datafetcher`, using the current data
     Setting a Toolbox will invalidate the Datafetcher and vice versa.
 
+
+    Properties
+    ----------
+
+    mode: bool
+        A flag indicating if data is shown in raw format or whether some
+        preprocessing is applied.
+    statistics: bool
+        A flag indicating whether statistical information should be
+        shown (showing statistical information may require some extra
+        time for computation)
+
     _toolbox: Toolbox = None
     _datafetcher: Datafetcher = None
     """
     _processed: bool = False
 
+    statisticsChanged = pyqtSignal(bool)
+
     def __init__(self, toolbox: Toolbox = None,
                  datafetcher: Datafetcher = None, **kwargs) -> None:
-        '''Create a new QDataInfoBox.
+        """Initialize a new QDataInfoBox.
 
         parent: QWidget
             Parent widget
-        '''
+        """
         super().__init__(**kwargs)
-        self._data = None
         self._metaText = ""
+        self._data = None
+        self._statistics = False
         self._initUI()
         self._layoutUI()
-        self._showInfo()
         self.setToolbox(toolbox)
         self.setDatafetcher(datafetcher)
 
     def _initUI(self):
-        '''Initialise the UI'''
+        """Initialise the UI."""
         self._metaLabel = QLabel()
+        self._metaLabel.setWordWrap(True)
+        self._metaLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
         self._dataLabel = QLabel()
-        self._button = QPushButton('Statistics')
-        self._button.setCheckable(True)
-        self._button.toggled.connect(self.update)
-        self._button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self._dataLabel.setWordWrap(True)
+        self._dataLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
     def _layoutUI(self):
-        self._metaLabel.setWordWrap(True)
-        self._dataLabel.setWordWrap(True)
-
-        layout1 = QHBoxLayout()
-        layout1.addWidget(self._metaLabel)
-        layout1.addWidget(self._button)
-
+        """Layout the UI.
+        """
         layout = QVBoxLayout()
-        layout.addLayout(layout1)
+        layout.addWidget(self._metaLabel)
         layout.addWidget(self._dataLabel)
+        layout.addStretch()
         self.setLayout(layout)
 
     #
@@ -152,21 +160,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                   datafetcher, change)
         self.setData(datafetcher.data)
 
-    def _updateInfo(self):
-        if self._data is None:
-            data = None
-            label = None
-            description = None
-        else:
-            if self._processed:
-                data = self._data.input_data
-            else:
-                data = self._data.raw_input_data
-                label = getattr(data, 'label', None)
-                description = getattr(data, 'description', "No description"
-                                      if self._toolbox else "No toolbox")
-        self._showInfo(data=data, label=label, description=description)
-
     #
     # Data
     #
@@ -187,74 +180,57 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         if data is self._data:
             return  # nothing changed
 
-        # label = getattr(data, 'label', None)
-        # description = getattr(data, 'description', None)
-        # self._showInfo(data=data, description=description)
-
-        self._metaText = f"<b>Input Data ({type(data).__name__}):</b><br>\n"
-        if data:
-            for attribute in data.attributes(batch=False):
-                value = self._attributeValue(data, attribute)
-                self._metaText += f"{attribute}: {value}<br>\n"
-            if data.is_batch:
-                if index is not None:
-                    self._metaText += \
-                        f"<b>Batch Data ({index}/{len(data)}):</b><br>\n"
-                    data = data[index]
-                else:
-                    self._metaText += \
-                        f"<b>Batch Data ({len(data)}):</b><br>\n"
-            for attribute in data.attributes(batch=True):
-                value = ('*' if data.is_batch else
-                         self._attributeValue(data, attribute))
-                self._metaText += f"{attribute}[batch]: {value}<br>\n"
-        else:
-            self._metaText += "No data!<br>\n"
+        self._data = data
+        self._updateMeta(index=index)
+        self._updateStatistics()
         self.update()
 
+    def mode(self) -> bool:
+        """A flag indicating wether data is presented preprocessed (`True`)
+        or in raw format (`False`)
+        """
+        return self._processed
+
     @pyqtSlot(bool)
-    @protect
-    def onModeChanged(self, processed: bool):
-        """The display mode was changed.
+    # @protect
+    def setMode(self, processed: bool) -> None:
+        """Set the display mode for this :py:class:`QDataInfoBox`.
 
         Arguments
         ---------
         processed: bool
             The new display mode (False=raw, True=processed).
         """
-        self.setMode(processed)
-
-    def setMode(self, processed):
-        """Set the display mode for this :py:class:`QDataInfoBox`.
-        """
+        LOG.info(f"QDataInfoBox.setMode(%s)", processed)
         if processed != self._processed:
-            print("QDataInfoBox.setMode(): "
-                  f"processed {self._processed} -> {processed}")
             self._processed = processed
-            self._updateInfo()
-            print(f"QDataInfoBox.setMode(): processed={self._processed}")
+            self._updateStatistics()
+            self.update()
 
-    def _showInfo(self, data: Data = None, label=None,
-                  description: str = ''):
-        """Show info for the given (image) data.
+    def statistics(self) -> bool:
+        """A flag indicating if statistics are to be shown in this
+        :py:class:`QDataInfoBox`.
         """
-        self._metaText = f'<b>Input image ({type(data).__name__}):</b><br>\n'
-        self._metaText += f'Description: {description}<br>\n'
-        if label is not None:
-            self._metaText += f'Label: {label}<br>\n'
+        return self._statistics
 
-        self._dataText = ('<b>Preprocessed input:</b><br>\n'
-                          if self._processed else
-                          '<b>Raw input:</b><br>\n')
-        if data is not None:
-            array = data.array
-            self._dataText += (f'Input shape: {array.shape}, '
-                               f'dtype={array.dtype}<br>\n')
-            self._dataText += ('min = {}, max={}, mean={:5.2f}, '
-                               'std={:5.2f}\n'.
-                               format(array.min(), array.max(),
-                                      array.mean(), array.std()))
-        self.update()
+    @pyqtSlot(bool)
+    # FIXME[bug]: with @protect, setMode is called instead of setStatistics,
+    # when setStatistics is connected to a button.
+    # @protect
+    def setStatistics(self, show: bool) -> None:
+        """A the flag indicating that statistics are to be shown in this
+        :py:class:`QDataInfoBox`.
+        """
+        LOG.info(f"QDataInfoBox.setStatistics(%s)", show)
+        if self._statistics != show:
+            self._statistics = show
+            self.statisticsChanged.emit(show)
+            self._updateStatistics()
+            self.update()
+
+    #
+    # Output
+    #
 
     @staticmethod
     def _attributeValue(data: Data, attribute: str) -> Any:
@@ -277,9 +253,69 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         elif isinstance(value, list):
             value = (f"list[{len(value)}]: "
                      f"{type(value[0]) if value else 'empty'}")
+        elif isinstance(value, (bool, np.bool_)):
+            color = 'green' if value else 'red'
+            value = f'<font color="{color}">{value}</font>'
         elif isinstance(value, np.ndarray):
             value = f"array[{value.dtype}]: {value.shape}"
+        else:
+            value = f"{value} [{type(value).__name__}]"
         return value
+
+    def _updateMeta(self, index: int = None) -> None:
+        """Update the `_metaText` attribute based on the current data.
+        """
+        data = self._data
+        self._metaText = f"<b>Input Data ({type(data).__name__}):</b><br>\n"
+        if not data:
+            self._metaText += "No data!<br>\n"
+            return
+
+        for attribute in data.attributes(batch=False):
+            value = self._attributeValue(data, attribute)
+            self._metaText += f"{attribute}: {value}<br>\n"
+        if data.is_batch:
+            if index is not None:
+                self._metaText += \
+                    f"<b>Batch Data ({index}/{len(data)}):</b><br>\n"
+                data = data[index]
+            else:
+                self._metaText += \
+                    f"<b>Batch Data ({len(data)}):</b><br>\n"
+        for attribute in data.attributes(batch=True):
+            value = ('*' if data.is_batch else
+                     self._attributeValue(data, attribute))
+            self._metaText += f"{attribute}[batch]: {value}<br>\n"
+
+    def _updateStatistics(self):
+        if not self._statistics:
+            return  # statistics are deactivated
+
+        if self._data is None:
+            data = None
+        elif True:  # FIXME[todo/old/hack]: we need a better processing concept
+            data = self._data
+        elif self._processed:
+            data = self._data.input_data
+        else:
+            data = self._data.raw_input_data
+
+        # self._metaText = f'<b>Input image ({type(data).__name__}):</b><br>\n'
+        # self._metaText += f'Description: {description}<br>\n'
+        # if label is not None:
+        #     self._metaText += f'Label: {label}<br>\n'
+        
+        self._dataText = ('<b>Preprocessed input:</b><br>\n'
+                          if self._processed else
+                          '<b>Raw input:</b><br>\n')
+        if data is not None:
+            array = data.array
+            self._dataText += (f'Input shape: {array.shape}, '
+                               f'dtype={array.dtype}<br>\n')
+            self._dataText += ('min = {}, max={}, mean={:5.2f}, '
+                               'std={:5.2f}\n'.
+                               format(array.min(), array.max(),
+                                      array.mean(), array.std()))
 
     def update(self):
         """Update the information displayed by this :py:class:`QDataInfoBox`.
@@ -287,8 +323,23 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self._metaLabel.setText(self._metaText +
                                 f"Toolbox: {self._toolbox is not None}, "
                                 f"Datfetcher: {self._datafetcher is not None}")
-        self._dataLabel.setText(
-            self._dataText if self._button.isChecked() else '')
+        self._dataLabel.setText(self._dataText if self._statistics else '')
+
+    #
+    # Events
+    #
+
+    @protect
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """
+        """
+        key = event.key()
+        if key == Qt.Key_S:  # toggle statistics flag
+            self.setStatistics(not self.statistics())
+        elif key == Qt.Key_M:  # toggle mode flag
+            self.setMode(not self.mode())
+        else:
+            super().keyPressEvent(event)
 
 
 class QDataView(QWidget, QObserver, qobservables={
@@ -296,8 +347,10 @@ class QDataView(QWidget, QObserver, qobservables={
     """A Display for :py:class:`Data` objects.
 
     The actual components and layout of this display depend on type of
-    data to be displayed. In case of an :py:class:`Image` the display
-    is split into (at least) two parts:
+    data to be displayed.
+
+    In case of an :py:class:`Image` the display is split into (at least)
+    two parts:
     * _imageView: a :py:class:`QImageView` for displaying image data.
     * _inputInfo: a :py:class:`QDataInfoBox` for displaying the
         :py:class:`Data` object.
@@ -307,7 +360,81 @@ class QDataView(QWidget, QObserver, qobservables={
     In case the :py:class:`Data` object represents a batch of data,
     a :py:class:`QBatchNavigator` will be included to allow navigating
     through the batch.
+
+    * _statisticsButton: a checkable :py:class:`QPushButton` labeled
+        `'Statistics'`. If the button is checked, additional statistical
+        information will be displayed in the _dataLabel
+        (otherwise it will be empty)
     """
+
+    class QOrientedScrollArea(QScrollArea):
+        """An auxiliary class derived from `QScrollArea` to handle cases,
+        where scrolling is only supposed to happen into one direction.
+        The content widget may change its size in both directions, and
+        if it resizes into the direction without scrollbar, then this
+        :py:class:`QOrientedScrollArea` should change its size accordingly,
+        to adapt to that new size.
+        """
+        def __init__(self, orientation: Qt.Orientation = Qt.Horizontal,
+                     **kwargs) -> None:
+            super().__init__(**kwargs)
+            self._orientation = orientation
+            if orientation == Qt.Horizontal:
+                self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+                self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+                self.setSizePolicy(QSizePolicy.MinimumExpanding,
+                                   QSizePolicy.Fixed)
+            else:  # orientation == Qt.Vertical:
+                self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+                self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+                self.setSizePolicy(QSizePolicy.Fixed,
+                                   QSizePolicy.MinimumExpanding)
+
+        def orientation(self) -> Qt.Orientation:
+            """Get the orientation of this
+            :py:class:`QOrientedScrollArea`.
+            """
+            return self._orientation
+
+        def setOrientation(self, orientation: Qt.Orientation) -> None:
+            """Set the orientation of this
+            :py:class:`QOrientedScrollArea`.
+            """
+            if orientation != self._orientation:
+                self._orientation = orientation
+                self.update()
+
+        def eventFilter(self, obj: QObject, event: QEvent):
+            """Filter events in order to get informed when the content
+            widget resizes.
+            """
+            if obj == self.widget() and event.type() == QEvent.Resize:
+                self.updateGeometry()
+            return super().eventFilter(obj, event)
+
+        def sizeHint(self) -> QSize:
+            """The size hint determines the exact size along the axis orthogonal
+            to the orientation of this
+            :py:class:`QOrientedScrollArea`.
+            """
+            widget = self.widget()
+            if self.widget is None:
+                return super().sizeHint()
+            widgetSize = widget.size()
+
+            margins = self.contentsMargins()
+            marginsWidth = margins.left() + margins.right()
+            marginsHeight = margins.top() + margins.bottom()
+
+            if self._orientation == Qt.Horizontal:
+                size = QSize(widgetSize.width() + marginsWidth,
+                             widgetSize.height() + marginsHeight +
+                             self.horizontalScrollBar().sizeHint().height())
+            else:  # self._orientation == Qt.Vertical:
+                size = QSize(widgetSize.width() + marginsWidth +
+                             self.verticalScrollBar().sizeHint().width(),
+                             widgetSize.height() + marginsHeight)
+            return size
 
     def __init__(self, orientation: Qt.Orientation = Qt.Vertical,
                  **kwargs) -> None:
@@ -326,11 +453,14 @@ class QDataView(QWidget, QObserver, qobservables={
         self.addAttributePropagation(Toolbox, self._imageView)
 
         # QMultiImageView for displaying multiple regions of interest
+        # (this is useful for detection tasks)
         orientation = (Qt.Vertical if self._orientation == Qt.Horizontal else
                        Qt.Horizontal)
         self._multiImageView = QMultiImageView(orientation=orientation)
-        self._multiImageScroller = QScrollArea()
+        self._multiImageScroller = \
+            self.QOrientedScrollArea(orientation=orientation)
         self._multiImageScroller.setWidget(self._multiImageView)
+        self._multiImageScroller.setWidgetResizable(True)
 
         self._multiImageView.currentImageChanged.\
             connect(self._imageView.setCurrentRegion)
@@ -345,37 +475,49 @@ class QDataView(QWidget, QObserver, qobservables={
 
         # FIXME[old]: this does not no longer work but it should be easy
         # to repair with the new data concept
-        # self._imageView.modeChanged.connect(self._dataInfo.onModeChanged)
+        # self._imageView.modeChanged.connect(self._dataInfo.setMode)
 
         self._batchNavigator = QBatchNavigator()
         self._batchNavigator.indexChanged.connect(self.onIndexChanged)
 
+        self._statisticsButton = QPushButton('Statistics')
+        self._statisticsButton.setCheckable(True)
+        self._statisticsButton.toggled.\
+            connect(self._dataInfo.setStatistics)
+        self._dataInfo.statisticsChanged.\
+            connect(self._statisticsButton.setChecked)
+
     def _layoutUI(self) -> None:
+        # The layout consists of two main parts
+        # (1) textual display of data (QDataInfoBox)
+        # (2) graphical display of data (depends of data type)
 
+        # (1) dataInfo: a vertical layout containt
+        # - the QDataInfoBox object (in a QScrollarea)
+        # - a QBatchNavigator (only visible if data is batch)
         dataInfo = QVBoxLayout()
-        dataInfo.addWidget(self._dataInfo)
-        dataInfo.addWidget(self._batchNavigator)
+
+        # add QDataInfoBox (self._dataInfo) embedded into an QScrollArea
+        scrollarea = QScrollArea()
+        scrollarea.setWidget(self._dataInfo)
+        scrollarea.setWidgetResizable(True)
+        dataInfo.addWidget(scrollarea)
+
+        row = QHBoxLayout()
+        self._statisticsButton.setSizePolicy(QSizePolicy.Fixed,
+                                             QSizePolicy.Fixed)
+        row.addWidget(self._statisticsButton)
+
+        # add QBatchNavigator with reasonable size policy
+        sizePolicy = self._batchNavigator.sizePolicy()
+        sizePolicy.setVerticalPolicy(QSizePolicy.Fixed)
+        self._batchNavigator.setSizePolicy(sizePolicy)
         self._batchNavigator.hide()
+        row.addWidget(self._batchNavigator)
+        row.addStretch()
+        dataInfo.addLayout(row)
 
-        if self._orientation == Qt.Horizontal:
-            scrollbar = self._multiImageScroller.verticalScrollBar()
-            width = (self._multiImageView.width() +
-                     scrollbar.sizeHint().width())
-            self._multiImageScroller.setMinimumSize(width, 0)
-            self._multiImageScroller.\
-                setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-            self._multiImageScroller.\
-                setSizePolicy(QSizePolicy.Fixed, QSizePolicy.MinimumExpanding)
-        else:  # self._orientation == Qt.Vertical:
-            scrollbar = self._multiImageScroller.horizontalScrollBar()
-            height = (self._multiImageView.height() + 5 +  # FIXME[hack]: bug
-                      scrollbar.sizeHint().height())
-            self._multiImageScroller.setMinimumSize(0, height)
-            self._multiImageScroller.\
-                setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-            self._multiImageScroller.\
-                setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-
+        # (2) graphical display
         if self._orientation == Qt.Vertical:
             # vertical layout: image above info
             layout = QVBoxLayout()
@@ -398,11 +540,24 @@ class QDataView(QWidget, QObserver, qobservables={
 
     @pyqtSlot(int)
     def setCurrentRegion(self, index: int) -> None:
+        """In :py:class:`Image` data with multiple regions, set
+        the currently selected region.  It will be ensured that
+        the relevant part of the :py:class`QMultiImageView` is
+        visible.
+
+        Arguments
+        ---------
+        index:
+            The index of the region to become the current region.
+        """
         position = self._multiImageView.imagePosition(index)
         if position is not None:
-            margin = self._multiImageView.imageMargin()
+            imageSize = self._multiImageView.imageSize()
+            spacing = self._multiImageView.spacing()
+            xmargin = (imageSize.width() + spacing) // 2
+            ymargin = (imageSize.height() + spacing) // 2
             self._multiImageScroller.ensureVisible(position.x(), position.y(),
-                                                   margin.x(), margin.y())
+                                                   xmargin, ymargin)
 
     #
     # Toolbox.Observer
@@ -461,7 +616,7 @@ class QDataView(QWidget, QObserver, qobservables={
         """Set the :py:class:`Data` to be viewed by this
         :py:class:`QDataView`.
         """
-        LOG.debug("QDataView.setData: %s", data)
+        LOG.debug("QDataView.setData: %s", data is not None)
         if data is self._data:
             return  # nothing changed
 
@@ -470,7 +625,7 @@ class QDataView(QWidget, QObserver, qobservables={
         self._batchNavigator.setVisible(isBatch)
         if isBatch:
             self._batchNavigator.setData(data)
-        
+
         self.update()
 
     #
@@ -489,7 +644,7 @@ class QDataView(QWidget, QObserver, qobservables={
         if not self._data:
             self._imageView.setImage(None)
             self._imageView.setMetadata(None)
-            self._multiImageView.setRegions(None, [])
+            self._multiImageView.setImagesFromRegions(None, [])
             self._dataInfo.setData(None)
             return
 
@@ -512,18 +667,38 @@ class QDataView(QWidget, QObserver, qobservables={
             if isinstance(value, Region):
                 self._imageView.addRegion(value)
                 regions.append(value)
+            elif isinstance(value, Landmarks):
+                self._imageView.addLandmarks(value)
             elif isinstance(value, list):
                 for val in value:
                     if isinstance(val, Region):
                         self._imageView.addRegion(val)
                         regions.append(val)
-        self._multiImageView.setRegions(data, regions)
+        self._multiImageView.setImagesFromRegions(data, regions)
 
     @protect
     def onIndexChanged(self, _index: int) -> None:
         """A slot to react to changes of the batch index.
         """
         self.update()
+
+    #
+    # Events
+    #
+
+    @protect
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """
+        """
+        key = event.key()
+        if key == Qt.Key_B:  # toggle visibility of batch navigator
+            visible = self._batchNavigator.isVisible()
+            self._batchNavigator.setVisible(not visible)
+        elif key == Qt.Key_M:  # toggle visibility of multi image view
+            visible = self._multiImageScroller.isVisible()
+            self._multiImageScroller.setVisible(not visible)
+        else:
+            super().keyPressEvent(event)
 
 
 class QBatchNavigator(QIndexControls):
@@ -550,7 +725,9 @@ class QBatchNavigator(QIndexControls):
         self.update()
 
 
-# FIXME[old]
+# FIXME[old]: not used anymore
+# (hower, setMetadata is called in qtgui/panels/face.py and also
+# defined in qtgui/widgets/image.py -> clean up all of it ...
 class QMetadataView(QLabel):
     """A :py:class:`QWidget` to display :py:class:`Metadata` information.
     """
@@ -667,6 +844,10 @@ class QDataSelector(QWidget, QObserver, qattributes={
     def _updateUI(self) -> None:
         """Update the layout of the user interface.
         """
+        # Remove the 3 items (dataView, datasourceNavigator, and button)
+        # from the layout, and then create a new layout by calling
+        # _layoutUI().
+
         # QLayout::removeItem() just removes the item from layout, but
         # does not hide or delete it.
         layout = self.layout()

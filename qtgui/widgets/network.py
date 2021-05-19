@@ -8,8 +8,8 @@ QNetworkInternals: details of a network
 import logging
 
 # Qt imports
-from PyQt5.QtCore import QCoreApplication, QEvent, pyqtSignal
-from PyQt5.QtGui import QPaintEvent
+from PyQt5.QtCore import Qt, QCoreApplication, QEvent, pyqtSignal
+from PyQt5.QtGui import QPaintEvent, QPalette
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QPushButton, QLabel
 from PyQt5.QtWidgets import QVBoxLayout

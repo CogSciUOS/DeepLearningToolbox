@@ -52,7 +52,9 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         super().__init__(**kwargs)
         self._data = None
         self._next_data = None
-        self._tool = tool
+        self._tool = None
+
+        self.tool = tool
         LOG.info("New Worker created: %r (tool=%s)", self, tool)
 
     @property
@@ -81,7 +83,11 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
                 self.unobserve(self._tool)
             self._tool = tool
             if tool is not None:
-                self.observe(tool, Tool.Change('tool_changed'))
+                self.observe(tool, Tool.Change('tool_changed',
+                                               'state_changed'))
+                print("!!! tool.debug() BEGIN")
+                tool.debug()
+                print("!!! tool.debug() END")
             self.change('tool_changed')
             if self._data is not None:
                 self.work(self._data)  # rework the current data with new tool
@@ -186,13 +192,17 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         self.tool.apply(self, data, **kwargs)
 
     #
-    # Tool observer
+    # Tool.Observer
     #
 
     def tool_changed(self, _tool: Tool, _info: Tool.Change) -> None:
         """React to a change of the :py:class:`Tool` by reworking
         the current :py:class:`Data`.
         """
+
+        print(f"Tool changed: {_info}")
+        self.change('tool_changed')
+
         if self._data is None:
             return  # nothing to do ...
 

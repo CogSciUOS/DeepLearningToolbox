@@ -122,22 +122,18 @@ class Detector(Tool):
     #
 
     def _preprocess_data(self, data: Data, **kwargs) -> None:
-        """This method does the actual preprocessing.
-
-        This method may be overwritten by subclasses to add attributes
-        to the data object, without assigning values yet (this can be
-        done in :py:meth:`_process_data` or
-        :py:meth:`_process_batch`). This method may set the data
-        object and notify observers, allowing them to observe how the
-        data object gets filled during processing.
+        """This will add a detector specific `'detections'` attribute
+        to the  :py:class:`Data` object.  This attribute is intended
+        to hold the detections.  It is going to be filled by
+        :py:class:`process_data`.
         """
-        super()._preprocess_data(data)
+        super()._preprocess_data(data, **kwargs)
         self.add_data_attribute(data, 'detections')
 
     def _process_data(self, data: Data, **kwargs) -> None:
         """Process the given data. This will run the detector on
         the data and add the detection results as new attribute
-        'detections'.
+        `'detections'` to  `data`.
         """
         LOG.debug("Processing data %r with detector %s", data, self)
         # self.detect() includes preprocessing and postprocessing
@@ -166,42 +162,37 @@ class ImageDetector(Detector, ImageTool):
     #
 
     external_result: Tuple[str] = ('detections', )
-    internal_arguments: Tuple[str] = ('_data', )
     internal_result: Tuple[str] = ('_detections', )
 
-    def _preprocess(self, image: Imagelike, **kwargs) -> Data:
-        data = super()._preprocess(image, **kwargs)
-        data.add_attribute('_data', getattr(data, 'scaled', data.image))
-        return data
-
-    def _postprocess(self, data: Data, name: str) -> None:
+    def _postprocess(self, context: Data, name: str) -> None:
         # FIXME[todo]: batch processing
         if name == 'detections':
-            if hasattr(data, '_detections'):
-                detections = data._detections
-                if self._size is not None and hasattr(data, 'image'):
-                    size = data.image.shape
+            if hasattr(context, '_detections'):
+                detections = context._detections
+                if self._size is not None and hasattr(context, 'image'):
+                    size = context.image.shape
                     resize_ratio = max(self._size[0]/size[0],
                                        self._size[1]/size[1])
                     detections.scale(resize_ratio)
             else:
                 detections = None
-            data.add_attribute('detections', detections)
+            context.add_attribute('detections', detections)
 
         elif name == 'mark':
-            if not hasattr(data, 'detections'):
-                self._postprocess(data, 'detections')
-            data.add_attribute(name, self.mark_image(data.image,
-                                                     data.detections))
+            if not hasattr(context, 'detections'):
+                self._postprocess(context, 'detections')
+            context.add_attribute(name, self.mark_image(context.input_image,
+                                                        context.detections))
 
         elif name == 'extract':
-            if not hasattr(data, 'detections'):
-                self._postprocess(data, 'detections')
-            data.add_attribute(name, self.extract_from_image(data.image,
-                                                             data.detections))
+            if not hasattr(context, 'detections'):
+                self._postprocess(context, 'detections')
+            context.add_attribute(name,
+                                  self.extract_from_image(context.image,
+                                                          context.detections))
 
         else:
-            super()._postprocess(data, name)
+            super()._postprocess(context, name)
 
     #
     # FIXME[old]:
@@ -264,18 +255,36 @@ class ImageDetector(Detector, ImageTool):
 
     def detect_image(self, image: Imagelike, **kwargs) -> Detections:
         """Apply the detector to the given image.
-        """
-        return self.detect(Image.as_data(image))
 
-    def process_image(self, image: Imagelike, **kwargs) -> Data:
-        """Create an image data object and process it with this
-        :py:class:`ImageDetector`.
+        Arguments
+        ---------
+        image:
+            The image to be processed by this :py:class:`ImageDetector`.
 
         Result
         ------
-        The processed data object.
+        detectons:
+            The detections obtained from the detector.
         """
-        data = Image.as_data(image)
+        return self.detect(image)
+
+    def process_image(self, image: Imagelike, **kwargs) -> Image:
+        """Create an :py:class:`Image` data object and process it with this
+        :py:class:`ImageDetector`.
+
+        Arguments
+        ---------
+        image:
+            The image to be processed by this :py:class:`ImageDetector`.
+
+        Result
+        ------
+        image:
+            The processed image object. This object may have additional
+            properties depending on the optional arguments passed to
+            this function.
+        """
+        data = Image(image)
         self.apply(data, **kwargs)
         return data
 
@@ -303,9 +312,9 @@ class ImageDetector(Detector, ImageTool):
         marked_image: np.ndarray
             An image in which the given detections are visually marked.
         """
-        if detections is None:
-            detections = self._detect(image)
         array = Image.as_array(image, copy=copy)
+        if detections is None:
+            detections = self.detect(array)
         if detections:
             for index, region in enumerate(detections.regions):
                 region.mark_image(array)

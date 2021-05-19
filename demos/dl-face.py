@@ -14,13 +14,18 @@ import os
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
+from dltb.base.image import ImageDisplay
+from dltb.base.video import Webcam
 from dltb.datasource import ImageDirectory
 from dltb.tool import Tool
-from dltb.tool.detector import ImageDetector
+from dltb.tool.face import Detector as FaceDetector
 from dltb.util.image import imshow
+from dltb.thirdparty import implementations, import_class
+
+import logging
 
 
-def output_detections(detector: ImageDetector, data: Data,
+def output_detections(detector: FaceDetector, data: Data,
                       extract: bool = False) -> None:
     """Output detections in textual and graphical form.
     """
@@ -45,27 +50,68 @@ def output_detections(detector: ImageDetector, data: Data,
             imshow(extraction, wait_for_key=True, timeout=1)
 
 
+def display_detections(display, image, detector):
+    result = ('mark')
+    data = detector.process_image(image, result=result)
+    marked_image = detector.marked_image(data)
+    display.show(marked_image, blocking=False)
+
+
+def display_video(display, video, detector):
+    for frame in video:
+        if display.closed:
+            break
+        display_detections(display, frame, detector)
+
+
 def main():
     """Main program: parse command line options and start face tools.
     """
-
+    
     parser = ArgumentParser(description='Deep learning based face processing')
-    parser.add_argument('images', metavar='IMAGE', type=str, nargs='+',
+    parser.add_argument('images', metavar='IMAGE', type=str, nargs='*',
                         help='an image to use')
-    parser.add_argument('--detect', action='store_true', default=True,
-                        help='run face detection')
-    parser.add_argument('--loop', action='store_true', default=True,
-                        help='run in loop mode')
+    parser.add_argument('--webcam', action='store_true', default=True,
+                        help='run on webcam')
+    parser.add_argument('--show', action='store_true', default=True,
+                        help='show results in a window')
+
+    group_detector = parser.add_argument_group("Detector arguments")
+    group_detector.add_argument('--detect', action='store_true', default=False,
+                                help='run face detection')
+    group_detector.add_argument('--detector', type=str,
+                                help='the face detector to use')
+    group_detector.add_argument('--list-detectors', action='store_true',
+                                default=False, help='list available detectors')
+
     ToolboxArgparse.add_arguments(parser)
 
     args = parser.parse_args()
-    ToolboxArgparse.process_arguments(args)
+    ToolboxArgparse.process_arguments(parser, args)
 
-    if args.detect:
-        detector = Tool['haar']
+    if args.list_detectors:
+        print("FaceDetector implementations:")
+        for index, implementation in enumerate(implementations(FaceDetector)):
+            print(f"{index+1}) {implementation}")
+        return
+
+    if args.detector:
+        print(f"Detector class: {args.detector}")
+        Detector = import_class(args.detector)
+        detector = Detector()
+        # 'haar', 'ssd', 'hog',  'cnn', 'mtcnn'
+        # detector = Tool['haar']
+        # detector = Tool['ssd']
         print(f"Detector: {detector} [prepared={detector.prepared}]")
         detector.prepare()
         print(f"Detector: {detector} [prepared={detector.prepared}]")
+
+    if args.detect:
+
+        if args.webcam:
+            webcam = Webcam()
+            display = ImageDisplay(module='qt')
+            display.present(display_video, (webcam, detector))
 
         for url in args.images:
             if os.path.isdir(url):

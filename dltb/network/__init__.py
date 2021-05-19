@@ -1,6 +1,6 @@
 
 from .exception import NetworkParsingError
-from .network import Network
+from .network import Network, Classifier
 from .layer import Layer
 
 

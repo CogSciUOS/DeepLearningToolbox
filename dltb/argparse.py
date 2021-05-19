@@ -89,12 +89,12 @@ def process_arguments(parser: ArgumentParser, args: Namespace = None) -> None:
 
         if handler is None:
             handler = logging.StreamHandler(sys.stderr)
-            handler.setLevel(getattr(logging, what.upper()))
+            handler.setLevel(logging.DEBUG)
             handler.setFormatter(TerminalFormatter())
-        print(f"Toolbox: outputting {what} messages from '{modules}'.")
         for module in modules:
             logger = logging.getLogger(module)
             logger.addHandler(handler)
+            logger.setLevel(getattr(logging, what.upper()))
             log = getattr(logger, what)
             log("Outputting %s messages from module %s", what, module)
             if importlib.util.find_spec(module) is None:

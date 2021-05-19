@@ -88,7 +88,7 @@ class Video(Indexed, Imagesource, Livesource):
         data.add_attribute('time', batch=True)
         super()._get_meta(data, **kwargs)
 
-    def _get_frame_at(self, data: Data, time: float):
+    def _read_frame_at(self, data: Data, time: float):
         """Fetch a video frame at a given timepoint from this
         :py:class:`Video`.
 
@@ -98,7 +98,7 @@ class Video(Indexed, Imagesource, Livesource):
             The temporal position (point in time) of the frame
             to fetch in seconds (fractions may be given).
         """
-        data.array = self._backend.get_frame_at(time)
+        data.array = self._backend.read_frame(time=time)
         data.index = self._backend.frame
 
     def _get_data(self, data: Data, frame: int = None, time: float = None,

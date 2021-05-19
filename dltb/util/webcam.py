@@ -64,7 +64,8 @@ def loop(device: int = None, operator: ImageOperator = None,
             if display.closed:
                 break
 
+
 def snapshot(device: int = None):
     with Webcam(device=0) as webcam:  # FIXME[bug]: device should be optional
-        frame = webcam.get_frame()
+        frame = webcam.read_frame()
     return frame

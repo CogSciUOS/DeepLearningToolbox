@@ -1,0 +1,2 @@
+from .vgan import VGAN
+

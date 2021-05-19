@@ -7,10 +7,10 @@
 
 Invocation:
 
-dl-activation.py
+  dl-activation.py
 
 
-Iterate a Datasource, compute activation values and store them in an
+Iterate over a Datasource, compute activation values and store them in an
 archive:
 
   dl-activation.py --alexnet --imagenet-val --store
@@ -38,7 +38,7 @@ from qtgui.widgets.activationview import QActivationView
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
-from dltb.util.image import imread
+from dltb.util.image import imread, get_display
 from dltb.network import Network, Layer, argparse as NetworkArgparse
 from dltb.datasource import Datasource, Datafetcher
 from dltb.datasource import argparse as DatasourceArgparse
@@ -216,23 +216,36 @@ def demo_iterate_activations(network: Network, datasource: Datasource) -> None:
 
 
 def demo_store_activations(network: Network, datasource: Datasource) -> None:
+    """Store activation values observed in a :py:class:Network when
+    applied to a :py:class:`Datasource`.
+
+    This method uses the `ActivationsArchiveNumpy` class which stores
+    activation values using the numpy memmap mechanism.
+    """
     archive = ActivationsArchiveNumpy(network=network, datasource=datasource,
-                                      mode='w')
+                                      store=True)
     with archive:
         archive.info()
         try:
+            display = get_display()
+            display.blocking = None
             for index in tqdm(range(archive.valid, archive.total),
                               initial=archive.valid, total=archive.total):
-                archive += network.get_activations(datasource[index])
+                data = datasource[index]
+                display.show(data)
+                archive += network.get_activations(data)
         except KeyboardInterrupt:
             print("KeyboardInterrupt")
         finally:
             print(f"End: {archive.valid}/{archive.total}")
 
+
 def demo_store_top_activations(network: Network, datasource: Datasource,
                                top: int = 9) -> None:
+    """
+    """
     archive = TopActivations(network=network, datasource=datasource,
-                             top=top, mode='w')
+                             top=top, store=True)
     with archive:
         archive.info()
         try:
@@ -269,6 +282,8 @@ def main():
                         help='obtain top n activation values')
     parser.add_argument('--store', action='store_true',
                         help='store activation values')
+    parser.add_argument('--archive', action='store_true',
+                        help='use activation values from archive')
     parser.add_argument('--store-top', action='store_true',
                         help='store top activation values')
     parser.add_argument('image', metavar='IMAGE', nargs='*',
@@ -282,8 +297,6 @@ def main():
     ToolboxArgparse.process_arguments(parser)
 
     network, layers = NetworkArgparse.network(parser, args, layers=True)
-
-    print(f"layers={layers}")
     network.summary(layers=layers)
 
     datasource = DatasourceArgparse.datasource(parser, args)

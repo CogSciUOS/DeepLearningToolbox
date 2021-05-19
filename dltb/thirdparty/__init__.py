@@ -32,7 +32,7 @@ _BASE_CLASSES = {
     'VideoReader': _DLTB + '.base.video.VideoReader',
     'VideoWriter': _DLTB + '.base.video.VideoWriter',
     'Webcam': _DLTB + '.base.video.Webcam',
-    'FaceDetector': _DLTB + '.tool.face.FaceDetector',
+    'FaceDetector': _DLTB + '.tool.face.detector.Detector',
     'ImageGAN': _DLTB + '.tool.gan.ImageGAN',
 }
 
@@ -55,7 +55,8 @@ _MODULES = {
             'ImageDisplay': 'ImageDisplay',
             'ImageResizer': 'ImageUtils',
             'VideoReader': 'VideoFileReader',
-            'Webcam': 'Webcam'
+            'Webcam': 'Webcam',
+            'FaceDetector': ['face.DetectorHaar', 'face.DetectorSSD']
         }
     },
     'tensorflow': {
@@ -102,7 +103,7 @@ _MODULES = {
     'dlib': {
         'modules': ['dlib', 'imutils'],
         'classes': {
-            'FaceDetector': 'DetectorCNN'
+            'FaceDetector': ['DetectorCNN', 'DetectorHOG']
         }
     },
     'nvlabs': {
@@ -215,14 +216,21 @@ def implementations(base: Union[str, type],
     def result(module, implementation):
         return __name__ + '.' + module + '.' + implementation
 
-    base_name = base if isinstance(base, str) else base.__name__
+    if isinstance(base, str) and '.' not in base:
+        # full_base_name = _BASE_CLASSES[base]
+        short_base_name = base
+    else:
+        full_base_name = (base if isinstance(base, str) else
+                          base.__module__ + '.' + base.__name__)
+        short_base_name = next(short for short, full in _BASE_CLASSES.items()
+                               if full == full_base_name)
 
     for module, description in _MODULES.items():
         if check_available and not available(module):
             continue
         try:
             classes = description['classes']
-            implementations = classes[base_name]
+            implementations = classes[short_base_name]
             if isinstance(implementations, str):
                 yield result(module, implementations)
                 continue
@@ -415,6 +423,12 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
         'sklearn': ('.sklearn', __name__)
     }
 
+    def __init__(self) -> None:
+        for module_name in list(self._post_imports):
+            if module_name in sys.modules:
+                importlib.import_module(*self._post_imports[module_name])
+                self._post_imports.pop(module_name)
+
     def find_spec(self, fullname, path, target=None):
         """Implementation of the PathFinder API.
         """
@@ -476,7 +490,10 @@ class ImportInterceptor(importlib.abc.MetaPathFinder):
         args:
             Arguments describing the additional module to be imported.
         """
-        self._post_imports[fullname] = args
+        if fullname in sys.modules:
+            importlib.import_module(*args)
+        else:
+            self._post_imports[fullname] = args
 
     def pop_post_imports(self, fullname: str):
         """Remove a post import.

@@ -248,16 +248,6 @@ class ImageNet(DataDirectory, Imagesource, Sectioned,
     # Preparation
     #
 
-    def _preparable(self):
-        """Check if this Datasource is can be prepared.
-
-        Returns
-        -------
-        preparable: bool
-            True if the Datasource can (probably) be prepared, False otherwise.
-        """
-        return os.path.isdir(self.directory) and super()._preparable()
-
     def _prepare(self, **kwargs) -> None:
         # pylint: disable=arguments-differ
         """Prepare the ImageNet data.

@@ -396,7 +396,7 @@ class QActivationView(QWidget, QObserver, qobservables={
                 activations = None
             LOG.debug("QActivationView.worker_changed: type=%s",
                       type(activations))
-            self.setActivations(actviations)
+            self.setActivations(activations)
 
         LOG.debug("QActivationView.worker_changed: units=%s/%s, "
                   "isConvolution=%s, currentPosition=%s, size/display=%s/%s",

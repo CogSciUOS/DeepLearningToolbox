@@ -100,7 +100,7 @@ class Preparable(BusyObservable, method='preparable_changed',
         if hasattr(self, '_prepare_entered'):
             self.unprepare()
             delattr(self, '_prepare_entered')
-        
+
     @property
     def prepared(self) -> bool:
         """Report if this :py:class:`Preparable` is prepared for use.
@@ -188,8 +188,17 @@ class Preparable(BusyObservable, method='preparable_changed',
         if not self.prepared:
             return
 
+        self._pre_unprepare()
         self._unprepare()
         self.change('state_changed')
+
+    def _pre_unprepare(self) -> None:
+        """An additional action that shall be performed before
+        unpreparation. The default implementation does nothing, but
+        subclasses may overwrite this method to perform some
+        action before the resources are released. The method should
+        not release any resources itself.
+        """
 
     def _unprepare(self) -> None:
         """Implementation of the :py:meth:`unprepare` operation. This will

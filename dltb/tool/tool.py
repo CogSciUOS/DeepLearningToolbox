@@ -158,6 +158,16 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
                              internal_result, simplify=True)
         return self._do_postprocess(data)
 
+    def _preprocess_data(self, data: Data, **kwargs) -> None:
+        """Prepare a data object.  This method may be overwritten by
+        subclasses to add attributes to a data object, without
+        assigning values yet (this can be done in
+        :py:meth:`_process_data` or :py:meth:`_process_batch`). This
+        method may set the data object and notify observers, allowing
+        them to observe how the data object gets filled during
+        processing.
+        """
+
     def _process_data(self, data: Data, **kwargs) -> None:
         """Adapt the data.
         To be implemented by subclasses. Subclasses may augment
@@ -195,14 +205,42 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
                        batch: bool = False,
                        result: Union[str, Tuple[str]] = None,
                        **kwargs) -> Data:
-        """Perform preprocessing of arguments.
+        """Perform preprocessing of arguments provided when invoking the
+        tool.  The actual preprocessing steps depend on the specific
+        tool and the format of the data presented.
+
+        The main idea of this method is to create a new auxiliary(!)
+        :py:class:`Data` object, intended to hold internal and
+        external arguments and results as attributes. The idea is,
+        that these attributes are to be incrementally filled during
+        processing.  At the end of processing the relvant values are
+        extracted from that object and the object is then deleted.
+
+        The base implementation of this function will fill in the
+        internal arguments required for calling the underlying tool
+        implementation. If preprocessing is required (if the arguments
+        are not already given in an internal format), the method
+        :py:meth:`_preprocess` is invoked to perform the
+        preprocessing.  In addition, the attribute `result_` will be
+        added and hold the names (as a list of str) of the values to
+        return. If a `'duration'` is to be returned, also the start
+        time will be inserted in the attribute `'start_'`.
 
         Arguments
         ---------
-
+        *args:
+            The original arguments passed when invoking the tool.
         internal:
+            A flag indicating that the data are already provided in
+            the internal format. No additional preprocessing is required.
         batch:
+            A flag indicating if processing is to be done on an individual
+            datum or on a batch of data.
         result:
+            The names of the values to be returned by the tool.
+            If this argument is not provided, the default list,
+            defined by the property :py:prop:`external_result` is used.
+
         """
         if result is None and not internal:
             result = self.external_result
@@ -210,15 +248,16 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
             result = (result, )
 
         if internal:
-            data = Data(batch=batch)
-            self._add_attributes(data, self.internal_arguments, args)
+            context = Data(batch=batch)
+            for name, arg in zip(self.internal_arguments, args):
+                context.add_attribute(name, arg)
         else:
-            data = self._preprocess(*args, batch=batch, **kwargs)
-        data.add_attribute('result_', result)
+            context = self._preprocess(*args, batch=batch, **kwargs)
+        context.add_attribute('result_', result)
 
         if 'duration' in result:
-            data.add_attribute('start_', time.time())
-        return data
+            context.add_attribute('start_', time.time())
+        return context
 
     def _do_postprocess(self, data: Data) -> Any:
         """Perform postprocessing and provide return value(s).
@@ -283,10 +322,10 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
             obtained during application of the :py:class:`Tool`
             should also be stored in that object.
         """
-        data = Data(batch=batch)
+        context = Data(batch=batch)
         if self.timer:
-            self.add_data_attribute(data, 'start', time.time())
-        return data
+            context.add_attribute('start', time.time())
+        return context
 
     def _process(self, *args, **kwargs) -> Any:
         """Do the actual processing.

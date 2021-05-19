@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import QToolTip
 from dltb.base.data import Data
 from dltb.base.meta import Metadata
 from dltb.base.image import Image, Imagelike, ImageObservable
-from dltb.base.image import BoundingBox, PointsBasedLocation, Region
+from dltb.base.image import BoundingBox, PointsBasedLocation, Region, Landmarks
 from dltb.tool.image import ImageTool
 from dltb.util.image import imresize, imwrite, grayscaleNormalized
 from toolbox import Toolbox
@@ -355,7 +355,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
             # imageToolTransform: map tool coordinates to image coordinates
             self._imageToolTransform = QTransform()
-            print(size, imageSize, self._imageToolRect.size())
             self._imageToolTransform.translate(self._imageToolRect.x(),
                                                self._imageToolRect.y())
             self._imageToolTransform.scale(self._imageToolRect.width() /
@@ -487,10 +486,16 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._metadata2 = metadata2
         self.update()
 
-    def addRegion(self, region: Region):
+    def addRegion(self, region: Region) -> None:
         """Set metadata to be displayed in this View.
         """
         self._regions.append(region)
+        self.update()
+
+    def addLandmarks(self, landmarks: Landmarks) -> None:
+        """Add landmarks to be displayed on the current image.
+        """
+        self._regions.append(Region(landmarks))
         self.update()
 
     def transform(self) -> QTransform:
@@ -779,7 +784,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             if self._mouseStartPosition is not None:
                 self._offset += event.pos() - self._mouseStartPosition
                 self._mouseStartPosition = event.pos()
-                print("Moved: ", self._offset)
                 self.update()
             return
 
@@ -868,8 +872,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     #
 
     # FIXME[old]
-    def activation_changed(self, engine, #: ActivationEngine,
-                           info # : ActivationEngine.Change
+    def activation_changed(self, engine,  #: ActivationEngine,
+                           info  # : ActivationEngine.Change
                            ) -> None:
         """The :py:class:`QImageView` is interested in the
         input iamges, activations and units.
@@ -1038,29 +1042,57 @@ class QImageBatchView(QWidget):
 
 
 class QMultiImageView(QWidget):
-    """Display multiple images.
+    """Display multiple images. Generally, images are displayed in a grid,
+    in simple cases images are displayed either horizontally (in a
+    row) or vertically (in a column). The grid is devined by a
+    pair of integers (rows, columns), where one of these values can
+    be `None`, meaning the grid can dynamically grow into that direction.
+
+    The size at which the individual images are displayed can be
+    controlled by the property :py:prop:`imageSize`.
 
     The :py:class:`QMultiImageView` allows to select one image as
     current image.  When the current image is changed, the
     `currentImageChanged` signal is emitted with the index of the
     current image.  A value of `-1` means that no image is selected.
 
+
+    Properties
+    ----------
+    grid: Tuple[int, int]
+        The number of rows and columns displayed in this
+        :py:class:`QMultiImageView`.
+    orientation: Qt.Orientation
+        The orientation of this :py:class:`QMultiImageView`. If
+        `Qt.Horizontal`, the grid will grow horizontally, meaning
+         images will be displayed in one (or multiple) rows, if
+        `Qt.Vertical`, images will be displayed in columns.
+
     """
 
     currentImageChanged = pyqtSignal(int)
 
     _qimages: List[QImage] = None
-    _orientation: Qt.Orientation = None
 
     def __init__(self, orientation: Qt.Orientation = Qt.Horizontal,
+                 grid: Tuple[int, int] = None,
                  **kwargs) -> None:
         super().__init__(**kwargs)
-        self._orientation = orientation
+        if grid is not None:
+            self._grid = grid
+        else:
+            self._grid = \
+                (1, None) if orientation == Qt.Horizontal else (None, 1)
         self._imageSize = QSize(100, 100)
         self._spacing = 10
         self._qimages = []
         self._currentIndex = -1  # -1 means no image selected
         self._initLayout()
+
+        # By default, a QWidget does not accept the keyboard focus, so
+        # we need to enable it explicitly: Qt.StrongFocus means to
+        # get focus by 'Tab' key as well as by mouse click.
+        self.setFocusPolicy(Qt.StrongFocus)
 
     def _initLayout(self) -> None:
         # set the size policy
@@ -1070,7 +1102,7 @@ class QMultiImageView(QWidget):
         # should get as much space as possible.
         self.setMinimumSize(self._imageSize.width() + self._spacing,
                             self._imageSize.height() + self._spacing)
-        if self._orientation == Qt.Horizontal:
+        if self.orientation() == Qt.Horizontal:
             self.setSizePolicy(QSizePolicy.MinimumExpanding,
                                QSizePolicy.Fixed)
         else:
@@ -1078,25 +1110,139 @@ class QMultiImageView(QWidget):
                                QSizePolicy.MinimumExpanding)
 
     def count(self) -> int:
+        """The number of images currently displayed in this
+        :py:class:`QMultiImageView`.
+        """
         return len(self._qimages)
 
+    def rows(self) -> int:
+        """The number of rows used for display in this
+        :py:class:`QMultiImageView`.
+        """
+        if not self.count():
+            return 0
+        if self._grid[0] is not None:
+            return self._grid[0]
+        return -(-self.count() // self._grid[1])
+
+    def columns(self) -> int:
+        """The number of columns used for display in this
+        :py:class:`QMultiImageView`.
+        """
+        if not self.count():
+            return 0
+        if self._grid[1] is not None:
+            return self._grid[1]
+        return -(-self.count() // self._grid[0])
+
+    def grid(self) -> Tuple[int, int]:
+        """The grid in terms of rows and columns used to display
+        images in this :py:class:`QMultiImageView`.
+        """
+        return self._grid
+
+    def setGrid(self, grid: Tuple[int, int]) -> None:
+        """Set the grid in terms of rows and columns used to
+         display images in this :py:class:`QMultiImageView`.
+        Either rows or columns may be `None`, indicating that the
+        display may grow as needed along this axis.
+        """
+        if grid != self._grid:
+            self._grid = grid
+            self._gridChanged()
+
+    def orientation(self) -> Qt.Orientation:
+        """The orientation of this :py:class:`QMultiImageView`. If
+        `Qt.Horizontal`, images will be displayed in row, if
+        `Qt.Vertical`, images will be displayed in column.
+        """
+        return Qt.Horizontal if self._grid[1] is None else Qt.Vertical
+
+    def _gridPosition(self, index: int = None) -> Tuple[int, int]:
+        """Get the grid position as (row, column) for the image with
+        the given index.
+        """
+        if index is None:
+            index = self._currentIndex
+        if index is None:
+            return -1, -1
+        
+        if self._grid[0] is not None:
+            row, column = index % self._grid[0], index // self._grid[0]
+        else:
+            row, column = index // self._grid[1], index % self._grid[1]
+        return row, column
+
+    def _setGridPosition(self, row: int, column: int) -> None:
+        """Set the index of the currently selected image.
+        """
+        if row == -1 or column == -1:
+            index = -1
+        elif self._grid[0] is not None:
+            index = column * self._grid[0] + row
+        else:
+            index = row * self._grid[1] + column
+        if index > self.count():
+            index = self.count() - 1
+        self.setCurrentImage(-1 if index == self._currentIndex else index)
+
+    def _gridChanged(self) -> None:
+        """The grid has changed. This implies that the size of this
+        :py:class:`QMultiImageView` may have changed.
+        """
+        if self._grid[0] is not None:  # Qt.Horizontal
+            width = ((-(-self.count() // self._grid[0])) *
+                     (self._imageSize.width() + self._spacing))
+            height = self._grid[0] * (self._imageSize.height() + self._spacing)
+        else:  # Qt.Vertical
+            width = self._grid[1] * (self._imageSize.width() + self._spacing)
+            height = ((-(-self.count() // self._grid[1])) *
+                      (self._imageSize.height() + self._spacing))
+        self.setMinimumSize(width, height)
+        self.resize(width, height)
+        self.update()
+
+    def imageSize(self) -> QSize:
+        """The size at which individual images are to be displayed
+        in this :py:class:`QMultiImageView`.
+        """
+        return self._imageSize
+
+    def spacing(self) -> int:
+        """The spacing to be put between the images displayed
+        in this :py:class:`QMultiImageView`. At the outer boundary,
+        half of the spacing will be used. That is, each grid cell
+        occupies imageSize + spacing pixel, with the image centered
+        in that cell.
+        """
+        return self._spacing
+
     def setImages(self, images: Iterable[Imagelike]) -> None:
+        """Set the images to be displayed by this
+        :py:class:`QMultiImageView`.
+
+        Arguments
+        ---------
+        images:
+            The images to be added. These may be given in any image
+            format accepted by the toolbox, but will be converted
+            to :py:class:`QImage` internally.
+        """
         self._currentIndex = -1
         self._qimages = [imageToQImage(image) for image in images]
+        self._gridChanged()
 
-        if self._orientation == Qt.Horizontal:
-            width = self.count() * (self._imageSize.width() + self._spacing)
-            self.setMinimumWidth(width)
-            self.resize(width, self.height())
-        else:
-            height = self.count() * (self._imageSize.height() + self._spacing)
-            self.setMinimumHeight(height)
-            self.resize(self.width(), height)
-        # self.updateGeometry()
-        # self.resize(size)
-        # resize() seems to invoke update(), even if size does not change
+    def setImagesFromRegions(self, image: Imagelike,
+                             regions: Iterable[Region]) -> None:
+        """Set the images to be displayed from regions of a larger image.
 
-    def setRegions(self, image: Imagelike, regions: Iterable[Region]) -> None:
+        Arguments
+        ---------
+        image:
+            The large image from which regians are cut out.
+        regions:
+            The regions to extract from that image.
+        """
         if image is None:
             self._image = None
             self._regions = []
@@ -1105,18 +1251,21 @@ class QMultiImageView(QWidget):
             self._image = Image.as_array(image)
             self._regions = list(regions)
             self.setImages(region.extract_from_image(self._image)
-                           for region in self._regions)
+                           for region in self._regions
+                           if isinstance(region.location, BoundingBox))
         else:  # FIXME[todo]
             self._qimage = imageToQImage(image)
             self._regions = list(regions)
-            self._rects = [self._rect_for_image(index)
+            self._rects = [self._rects_for_image(index)
                            for index in range(len(self._regions))]
 
-    def _rect_for_image(self, index: int) -> Tuple[QRect, QRect]:
+    def _rects_for_image(self, index: int) -> Tuple[QRect, QRect]:
+        """
+        """
         bbox = self._rects[index]
         source = QRect(bbox.x, bbox.y, bbox.width, bbox.height)
         position = QPoint(self._spacing // 2, self._spacing // 2)
-        if self._orientation == Qt.Horizontal:
+        if self.orientation() == Qt.Horizontal:
             position.setX(position.x() +
                           index * (self._imageSize.width() + self._spacing))
         else:
@@ -1125,6 +1274,107 @@ class QMultiImageView(QWidget):
 
         target = QRect(position, self._imageSize)
         return source, target
+
+    def currentImage(self) -> int:
+        """The index of the currently selected image.
+        """
+        return self._currentIndex
+
+    @pyqtSlot(int)
+    def setCurrentImage(self, index: int) -> None:
+        """Set the index of the currently selected image.
+        """
+        if index > -1:
+            if not self.count():
+                index = -1
+            elif index >= self.count():
+                index = -1
+            elif index < 0:
+                index = -1
+        if index != self._currentIndex:
+            self._currentIndex = index
+            self.currentImageChanged.emit(index)
+            self.update()
+
+    def imagePosition(self, index: int = None) -> QPoint:
+        """Return the center point of the image with the given index.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the desired image. If no index is
+            provided, the currently selected image is used.
+
+        Result
+        ------
+        center:
+            The center point of the given image or `None` if no valid
+            image was specified.
+        """
+        if index is None:
+            index = self.currentImage()
+        if not 0 <= index < len(self._qimages):
+            return None
+
+        horizontal_skip = self._spacing + self._imageSize.width()
+        vertical_skip = self._spacing + self._imageSize.height()
+        row, column = self._gridPosition()
+
+        return QPoint(column * horizontal_skip + (horizontal_skip // 2),
+                      row * vertical_skip + (horizontal_skip // 2))
+
+    @protect
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """A mouse press selects the current image.
+        """
+        row = event.y() // (self._imageSize.width() + self._spacing)
+        column = event.x() // (self._imageSize.width() + self._spacing)
+        self._setGridPosition(row, column)
+
+    @protect
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Process `QKeyEvent`s. Use cursor keys to change the currently
+        selected image.
+
+        Arguments
+        ---------
+        event:
+            The key event to process.
+        """
+        key = event.key()
+
+        if key == Qt.Key_Space:
+            self.setCurrentImage(None)
+        elif key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_Right, Qt.Key_Down):
+            row, column = self._gridPosition()
+            if row < 0:
+                row, column = (0, 0) if self.count() else (-1, -1)
+            elif key == Qt.Key_Left:
+                column = max(column-1, 0)
+            elif key == Qt.Key_Right:
+                column = column+1 % self.columns()
+            elif key == Qt.Key_Up:
+                row = max(row-1, 0)
+            elif key == Qt.Key_Down:
+                row = row+1 % self.rows()
+            self._setGridPosition(row, column)
+        elif key in (Qt.Key_Plus, Qt.Key_Minus):
+            grid = list(self._grid)
+            if grid[0] is None:
+                if key == Qt.Key_Plus:
+                    grid[1] += 1
+                elif grid[1] > 1:
+                    grid[1] -= 1
+            elif grid[1] is None:
+                if key == Qt.Key_Plus:
+                    grid[0] += 1
+                elif grid[0] > 1:
+                    grid[0] -= 1
+            self.setGrid(tuple(grid))
+        elif key == Qt.Key_D:
+            self._debug()
+        else:
+            super().keyPressEvent(event)
 
     @protect
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -1144,9 +1394,15 @@ class QMultiImageView(QWidget):
         pen.setWidth(line_width)
         painter.setPen(pen)
 
+        horizontal_skip = self._spacing + self._imageSize.width()
+        vertical_skip = self._spacing + self._imageSize.height()
         half_spacing = self._spacing // 2
         position = QPoint(half_spacing, half_spacing)
         for index, qimage in enumerate(self._qimages):
+            # update position
+            row, column = self._gridPosition(index)
+            position = QPoint(column * horizontal_skip + half_spacing,
+                              row * vertical_skip + half_spacing)
             rect = QRect(position, self._imageSize)
             painter.drawImage(rect, qimage)
 
@@ -1155,76 +1411,10 @@ class QMultiImageView(QWidget):
                 painter.drawRect(rect.x()-2, rect.y()-2,
                                  rect.width()+4, rect.height()+4)
 
-            # update position
-            if self._orientation == Qt.Horizontal:
-                position.setX(position.x() + rect.width() + self._spacing)
-            else:
-                position.setY(position.y() + rect.height() + self._spacing)
-
         painter.end()
 
-    def currentImage(self) -> int:
-        """The index of the currently selected image.
+    def _debug(self) -> None:
+        """Output some debug information to standard output.
         """
-        return self._currentIndex
-
-    @pyqtSlot(int)
-    def setCurrentImage(self, index: int) -> None:
-        """Set the index of the currently selected image.
-        """
-        if index != self._currentIndex:
-            self._currentIndex = index
-            self.currentImageChanged.emit(index)
-            self.update()
-
-    @protect
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        """A mouse press selects the current image.
-        """
-        index = ((event.x() // (self._imageSize.width() + self._spacing))
-                 if self._orientation == Qt.Horizontal else
-                 (event.y() // (self._imageSize.width() + self._spacing)))
-        self.setCurrentImage(None if index == self._currentIndex else index)
-
-    def imagePosition(self, index: int = None) -> QPoint:
-        """Return the center point of an image.
-
-        Arguments
-        ---------
-        index:
-            An index identifying the desired image. If no index is
-            provided, the currently selected image is used.
-
-        Result
-        ------
-        center:
-            The center point of the given image or `None` if no valid
-            image was specified.
-        """
-        if index is None:
-            index = self.currentImage()
-        if not 0 <= index < len(self._qimages):
-            return None
-        position = QPoint((self._imageSize.width() + self._spacing) // 2,
-                          (self._imageSize.height() + self._spacing) // 2)
-        if self._orientation == Qt.Horizontal:
-            position.setX(position.x() + index *
-                          (self._imageSize.width() + self._spacing))
-        else:
-            position.setY(position.y() + index *
-                          (self._imageSize.height() + self._spacing))
-        return position
-
-    def imageMargin(self) -> QPoint:
-        """Determine the margin to ensure that the image is fully visible.
-        The method is intended to be used if this
-        :py:class:`QMultiImageView` is embedded into a
-        :py:class:`QScrollArea`.
-        """
-        margin = QPoint((self._imageSize.width() + self._spacing),
-                        (self._imageSize.height() + self._spacing))
-        if self._orientation == Qt.Horizontal:
-            margin.setY(margin.y() // 2)
-        else:
-            margin.setX(margin.x() // 2)
-        return margin
+        print(f"QMultiImageView: {self.count()} images, grid={self.grid()},"
+              f"size={self.size()}, sizeHint={self.sizeHint()}")

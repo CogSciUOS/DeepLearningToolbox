@@ -1,7 +1,7 @@
 """Configuration of the Deep Learning Toolbox (dltb).
 """
 import os
-
+from pathlib import Path
 
 # FIXME[hack]: develop some config mechanism
 class Config:
@@ -20,11 +20,11 @@ config.thirdparty_info = False
 #
 # Directories
 #
-config.base_directory = os.path.dirname(os.path.dirname(__file__))
+config.base_directory = Path(os.path.dirname(os.path.dirname(__file__)))
 
 # FIXME[hack]: put this into some configuration file
-config.github_directory = '/space/home/ulf/github'
-config.github_directory = '/work/krumnack/git/'
+config.github_directory = Path('/space/home/ulf/github')
+config.github_directory = Path('/work/krumnack/git/')
 
 
 # model_directory: str
@@ -32,10 +32,13 @@ config.github_directory = '/work/krumnack/git/'
 #    Mainly used for pretrained models, downloaded from some
 #    third-party repository.
 # FIXME[hack]: put this into some configuration file
-config.model_directory = '/space/home/ulf/models'
-config.model_directory = '/work/krumnack/models'
+config.model_directory = Path('/space/home/ulf/models')
+config.model_directory = Path('/work/krumnack/models')
 
-config.models_directory = os.path.join(config.base_directory, 'models')
+config.models_directory = config.base_directory / 'models'
+
+config.activations_directory = Path('/space/home/ulf/activations')
+
 
 #
 # Global Flags
