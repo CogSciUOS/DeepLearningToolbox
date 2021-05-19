@@ -21,7 +21,7 @@ Determine top n activation valus for a Network on a Datasource:
 """
 
 # standard imports
-from typing import List
+from typing import List, Union
 import logging
 import argparse
 import signal
@@ -89,6 +89,7 @@ def extract_activations1(network: Network,
     tool = ActivationTool(network)
     worker = ActivationWorker(tool=tool)
     worker.set_layers(layers)
+    # FIXME[bug]: error in ActivationWorker
     worker.extract_activations(datasource, batch_size=batch_size)
 
 
@@ -205,14 +206,31 @@ def demo_image_activations5(network, image) -> None:
                      "ActivationWorker(tool).work(data):")
 
 
-def demo_iterate_activations(network: Network, datasource: Datasource) -> None:
-    tool = ActivationTool(network)
-    worker = ActivationWorker(tool=tool)
-    worker._init_layer_top_activations()
+def demo_iterate_activations(network: Network, datasource: Datasource,
+                             action=None) -> None:
+    """Iterate over a :py:class:`Datasource` and compute network activations.
+
+    Arguments
+    ---------
+    network:
+        The network from which activation values are obtained.
+    datasource:
+        The :py:class:`Datasource` providing data.
+    action:
+        A function to execute for every iteration step. The function is
+        fed with two arguments: the numerical index of the datasource
+        and (a dictionary containing) the activation values.
+    """
+    def print_activations(index, activations) -> None:
+        print(f"Activations for index={idx}:",
+              ", ".join(f"{l}: {a.shape}" for l, a in activations.items()))
+        
+    if action is None:
+        action = print_activations
+
+    worker = ActivationWorker(network=network)
     for idx, activations in enumerate(worker.iterate_activations(datasource)):
-        print(f"({idx})")
-        #      (", ".join(f"{l}: {a.shape}" for l, a in activations.items())))
-        worker._update_layer_top_activations()
+        action(index, activations)
 
 
 def demo_store_activations(network: Network, datasource: Datasource) -> None:
@@ -239,10 +257,38 @@ def demo_store_activations(network: Network, datasource: Datasource) -> None:
         finally:
             print(f"End: {archive.valid}/{archive.total}")
 
+def demo_load_activations(network: Union[Network, str],
+                          datasource: Union[Datasource, str]) -> None:
+    """Iterate over activation values stored in an
+    :py:class:`ActivationsArchive`.
+
+    For using such an archive, neither the `Network`, nor the
+    `Datasource` has to be instantiated - it is sufficient to provide
+    their keys, from which archive name is derived (remark: it should
+    also be also possible to provide the path to the archive directly,
+    then even those keys are not required, but that is not implemented
+    yet).
+
+    """
+    with ActivationsArchiveNumpy(network=network,
+                                 datasource=datasource) as archive:
+        for activations in archive:
+            print(type(activations))
+
+    
+def demo_top_activations(network: Network, datasource: Datasource) -> None:
+    worker = ActivationWorker(network=network)
+    # FIXME[old]
+    # worker._init_layer_top_activations()
+    for idx, activations in enumerate(worker.iterate_activations(datasource)):
+        print(f"({idx})")
+        # worker._update_layer_top_activations()
 
 def demo_store_top_activations(network: Network, datasource: Datasource,
                                top: int = 9) -> None:
-    """
+    """Store top activation values in a :py:class:`TopActivations` archive.
+    Such an archive does not store all activation values but just
+    the `top` activations for 
     """
     archive = TopActivations(network=network, datasource=datasource,
                              top=top, store=True)
@@ -258,13 +304,6 @@ def demo_store_top_activations(network: Network, datasource: Datasource,
             print(f"End: {archive.valid}/{archive.total}")
 
 
-def demo_top_activations(network: Network, datasource: Datasource) -> None:
-    tool = ActivationTool(network)
-    worker = ActivationWorker(tool=tool)
-    worker._init_layer_top_activations()
-    for idx, activations in enumerate(worker.iterate_activations(datasource)):
-        print(f"({idx})")
-        worker._update_layer_top_activations()
 
 
 def main():
@@ -317,6 +356,8 @@ def main():
         demo_iterate_activations(network, datasource)
     elif args.store:
         demo_store_activations(network, datasource)
+    elif args.archive:
+        demo_load_activations(network, datasource)
     elif args.top:
         demo_top_activations(network, datasource)
     elif args.store_top:
@@ -326,12 +367,15 @@ def main():
         #
         # loop over the dataset
         #
+
+        # FIXME[bug]: error in ActivationWorker
         extract_activations1(network, datasource, layers=layers)
 
     else:
         # image_file = 'images/elephant.jpg'
         for image_file in args.image:
             image = imread(image_file)
+            # FIXME[bug]: error in ActivationWorker
             demo_image_activations1(network, image)
             demo_image_activations2(network, image)
             demo_image_activations3(network, image)

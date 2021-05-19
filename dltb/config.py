@@ -37,7 +37,10 @@ config.model_directory = Path('/work/krumnack/models')
 
 config.models_directory = config.base_directory / 'models'
 
-config.activations_directory = Path('/space/home/ulf/activations')
+#config.activations_directory = Path('/space/home/ulf/activations')
+config.activations_directory = \
+    Path(os.environ['HOME'], 'scratch', 'activations')
+
 
 
 #

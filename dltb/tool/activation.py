@@ -56,6 +56,13 @@ class Fillable(Storable, ABC, storables=['_valid', '_total']):
         """
         return self.valid
 
+    def _post_prepare(self) -> None:
+        super()._post_prepare()
+
+        if not self.full():
+            LOG.warning("Fillable is only partly filled (%d/%d)",
+                        self._valid, self._total)
+
     @property
     def total(self) -> int:
         """The total size of this :py:class:`Fillable`. May be more than the
@@ -72,9 +79,8 @@ class Fillable(Storable, ABC, storables=['_valid', '_total']):
         """
         return self._valid
 
-    @property
     def full(self) -> bool:
-        """A flag indicating if this :py:class:`ActinvationsArchive` archive
+        """A flag indicating if this :py:class:`ActivationsArchive` archive
         is completely filled, meaning all activation values for the
         :py:class:`Datasource` have been added to the archive.
         """
@@ -219,6 +225,8 @@ class NetworkTool(Preparable):
             :py:class:`Network`, not just the network key, has been provided
              upon initialization of this :py:class:`NetworkTool`).
         """
+        if self._layers is None:
+            return  # nothing to do
         if not what:
             what = ('name', )
         elif (('layer' in what or 'shape' in what) and
@@ -265,17 +273,27 @@ class NetworkTool(Preparable):
 
 
 class IteratorTool(Storable, storables=['_current_index']):
-    """An :py:class:`IteratorTool` can be do iterative processing.  It has
-    an internal index which can will be stored (and restored) if the
-    tool is intialized with the `store=True` parameter.
+    """The abstract :py:class:`IteratorTool` interface is intended to
+    support tools that do iterative processing.  It has an internal
+    index which will be stored (and restored) if the tool is
+    intialized with the `store=True` parameter.
+
     """
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._current_index = 0
 
+    @property
+    def current_index(self) -> int:
+        """The current index of this :py:class.`IteratorTool`.
+        All indices smaller the the `current_index` already have
+        been processed, all indices starting with `current_index`
+        still have to be processed.
+        """
+
     def current_range(self, end: int = None) -> Iterator[int]:
         """Iterate over the valid indices for this tool, starting from the
-        current index.
+        current index up to the end (the length of this tool).
         """
         if end is None:
             end = len(self)
@@ -307,8 +325,11 @@ class DatasourceActivations(DatasourceTool, NetworkTool, IteratorTool, ABC):
             Either a single activation map of `(layer, index)`, or
             a dictionary of activation maps for `index`.
         """
+        
+    def __iter__(self) -> Iterator:
+        return self.activations()
 
-    def __iter__(self, layer: str = None) -> Iterator:
+    def activations(self, layer: str = None) -> Iterator:
         """Iterate over the activation values.
         """
         for index in self.current_range():
@@ -355,6 +376,12 @@ class ActivationsArchive(DatasourceActivations, Fillable, Storable, ABC):
     points filled so far is stored in the metadata as property
     `valid` and can be accessed through the property :py:prop:`valid`.
 
+    If no explicit argument is provided, the
+    :py:class:`ActivationsArchiveNumpy` uses the value
+    `config.activations_directory` as well as the `ActivationTool` and
+    `Datasource` identifiers (as provided by the `key` property),
+    to construct a directory name.
+    
     Use cases
     ---------
 
@@ -630,19 +657,24 @@ class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
 
         layer, index = key if isinstance(key, tuple) else (None, key)
 
+        if self._layers is None:
+            raise ValueError(f"Cannot set item {layer} "
+                             "as no Layers have been initialized "
+                             "for this ActivationsArchiveNumpy.")
+
         if layer is None:
             if isinstance(values, dict):
                 for layer, layer_values in values.items():
                     self._update_values(layer, index, layer_values)
             elif isinstance(values, list):
                 if len(values) != len(self._layers):
-                    raise ValueError("Values should be a list of length"
+                    raise ValueError("Values should be a list of length "
                                      f"{len(self._layers)} not {len(values)}!")
                 for layer, layer_values in zip(self._layers, values):
                     self._update_values(layer, index, layer_values)
             else:
                 raise ValueError("Values should be a list (of "
-                                 f"length {len(self._layers)}) "
+                                 f"length {len(self._layers)} "
                                  f"or a dictionary, not {type(values)}")
         else:
             self._update_values(layer, index, values)
@@ -667,8 +699,9 @@ class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
             print(f" - {name+':':20s} {str(shape):20s} "
                   f"of type {str(dtype):10s} [{formating.format_size(size)}]")
             total_size += size
-        print(f"Total {len(self._layers)} layers and "
-              f"{formating.format_size(total_size)}")
+        print((f"No layers" if self._layers is None else
+               f"Total {len(self._layers)} layers") + 
+              f" and {formating.format_size(total_size)}")
 
 
 class TopActivations(HighscoreCollection, DatasourceTool, NetworkTool,
@@ -1035,17 +1068,17 @@ class ActivationTool(Tool, Network.Observer):
         # FIXME[todo]: inputs should probably be Datalike
         """Preprocess the arguments and construct a Data object.
         """
-        data = super()._preprocess(**kwargs)
+        context = super()._preprocess(**kwargs)
         array = inputs.array if isinstance(inputs, Data) else inputs
-        data.add_attribute('inputs', array)
+        context.add_attribute('inputs', array)
         unlist = False
         if layer_ids is None:
             layer_ids = list(self._network.layer_dict.keys())
         elif not isinstance(layer_ids, list):
             layer_ids, unlist = [layer_ids], True
-        data.add_attribute('layer_ids', layer_ids)
-        data.add_attribute('unlist', unlist)
-        return data
+        context.add_attribute('layer_ids', layer_ids)
+        context.add_attribute('unlist', unlist)
+        return context
 
     def _process(self, inputs: np.ndarray,
                  layers: List[Layer]) -> List[np.ndarray]:
@@ -1195,8 +1228,14 @@ class ActivationWorker(Worker):
             """
             return set()
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, network: Network = None, tool: ActivationTool = None,
+                 **kwargs) -> None:
+        if network is not None:
+            if tool is not None:
+                raise ValueError("Cannot use both 'tool' and 'network' "
+                                 "for initializing a ActivationWorker")
+            tool = ActivationTool(network)
+        super().__init__(tool=tool, **kwargs)
         self._layer_ids = []
         self._fixed_layers = []
         self._classification = False
@@ -1320,8 +1359,8 @@ class ActivationWorker(Worker):
             layer_ids |= {network.score_layer.id}
 
         # from set to list
-        layer_ids = [layer_id for layer_id in network.layer_ids
-                     if layer_id in layer_ids]
+        layer_ids = [layer.id for layer in network.layers()
+                     if layer.id in layer_ids]
 
         got_new_layers = layer_ids > self._layer_ids and self._data is not None
         self._layer_ids = layer_ids
