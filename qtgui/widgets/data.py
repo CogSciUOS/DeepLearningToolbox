@@ -9,6 +9,8 @@ This module provides widgets for viewing data and metadata.
 
 # standard imports
 from typing import Any
+import os
+import json
 import logging
 
 # third party imports
@@ -442,6 +444,9 @@ class QDataView(QWidget, QObserver, qobservables={
         self._orientation = orientation
         self._data = None
         self._attributes = []
+        self._regions = []
+        self._autosave = True  # automatically save when changing to new Data
+        self._annotationsChanged = False  # a flag indicationg if data changed
         self._initUI()
         self._layoutUI()
 
@@ -466,6 +471,8 @@ class QDataView(QWidget, QObserver, qobservables={
             connect(self._imageView.setCurrentRegion)
         self._multiImageView.annotationsChanged.\
             connect(self._imageView.updateRegion)
+        self._multiImageView.annotationsChanged.\
+            connect(self.annotationsChanged)
         self._imageView.currentRegionChanged.\
             connect(self._multiImageView.setCurrentImage)
         self._imageView.currentRegionChanged.\
@@ -497,13 +504,13 @@ class QDataView(QWidget, QObserver, qobservables={
         # (1) dataInfo: a vertical layout containt
         # - the QDataInfoBox object (in a QScrollarea)
         # - a QBatchNavigator (only visible if data is batch)
-        dataInfo = QVBoxLayout()
+        dataInfoLayout = QVBoxLayout()
 
         # add QDataInfoBox (self._dataInfo) embedded into an QScrollArea
         scrollarea = QScrollArea()
         scrollarea.setWidget(self._dataInfo)
         scrollarea.setWidgetResizable(True)
-        dataInfo.addWidget(scrollarea)
+        dataInfoLayout.addWidget(scrollarea)
 
         row = QHBoxLayout()
         self._statisticsButton.setSizePolicy(QSizePolicy.Fixed,
@@ -517,7 +524,7 @@ class QDataView(QWidget, QObserver, qobservables={
         self._batchNavigator.hide()
         row.addWidget(self._batchNavigator)
         row.addStretch()
-        dataInfo.addLayout(row)
+        dataInfoLayout.addLayout(row)
 
         # (2) graphical display
         if self._orientation == Qt.Vertical:
@@ -525,13 +532,13 @@ class QDataView(QWidget, QObserver, qobservables={
             layout = QVBoxLayout()
             layout.addWidget(self._imageView)
             layout.addWidget(self._multiImageScroller)
-            layout.addLayout(dataInfo)
+            layout.addLayout(dataInfoLayout)
         else:  # self._orientation == Qt.Horizontal
             # horizontal layout: image left of info
             layout = QHBoxLayout()
             layout.addWidget(self._imageView)
             layout.addWidget(self._multiImageScroller)
-            layout.addLayout(dataInfo)
+            layout.addLayout(dataInfoLayout)
 
         self.setLayout(layout)
 
@@ -539,6 +546,17 @@ class QDataView(QWidget, QObserver, qobservables={
         """Get the :py:class:`QImageView` of this :py:class:`QDataView`.
         """
         return self._imageView
+
+    def multiImageView(self) -> QImageView:
+        """Get the :py:class:`QMultiImageView` of this :py:class:`QDataView`.
+        """
+        return self._multiImageView
+
+    def setDataInfoVisible(self, visible: bool) -> None:
+        """Get the :py:class:`QMultiImageView` of this :py:class:`QDataView`.
+        """
+        self._dataInfo.parent().setVisible(visible)
+        self._statisticsButton.setVisible(visible)
 
     @pyqtSlot(int)
     def setCurrentRegion(self, index: int) -> None:
@@ -622,6 +640,10 @@ class QDataView(QWidget, QObserver, qobservables={
         if data is self._data:
             return  # nothing changed
 
+        if (self._data is not None and 
+                self._autosave and self._annotationsChanged):
+            self._saveAnnotations(overwrite=True)
+
         self._data = data
         isBatch = bool(data) and data.is_batch
         self._batchNavigator.setVisible(isBatch)
@@ -629,6 +651,8 @@ class QDataView(QWidget, QObserver, qobservables={
             self._batchNavigator.setData(data)
 
         self.update()
+        if self._data is not None:
+            self._loadAnnotations()
 
     #
     # Configuration
@@ -676,7 +700,14 @@ class QDataView(QWidget, QObserver, qobservables={
                     if isinstance(val, Region):
                         self._imageView.addRegion(val)
                         regions.append(val)
+        self._regions = regions
         self._multiImageView.setImagesFromRegions(data, regions)
+
+        if self._annotationsChanged:
+            self.setStyleSheet("border: 1px solid red");
+        else:
+            self.setStyleSheet("border: 1px solid green");
+
 
     @protect
     def onIndexChanged(self, _index: int) -> None:
@@ -699,8 +730,74 @@ class QDataView(QWidget, QObserver, qobservables={
         elif key == Qt.Key_M:  # toggle visibility of multi image view
             visible = self._multiImageScroller.isVisible()
             self._multiImageScroller.setVisible(not visible)
+        elif key == Qt.Key_Return:  # set the annotation changed flag
+            self._annotationsChanged = True
+            self.update()
+        elif key == Qt.Key_Z and event.modifiers() == Qt.ControlModifier:
+            # Ctrl+Z = undo
+            self._loadAnnotations()
+            self.update()
+        elif key == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
+            # Ctrl+S = save
+            self._saveAnnotations()
+            self.update()
         else:
             super().keyPressEvent(event)
+
+    #
+    # Saving changes
+    #
+
+    # FIXME[todo]: work in progress
+
+    @pyqtSlot(int)
+    def annotationsChanged(self, index: int) -> None:
+        self._annotationsChanged = True
+        self.update()
+
+    def _filenameForAnnotations(self) -> str:
+        """Filename to the file where additional anotations are stored.
+        """
+        if self._data is None:
+            return None
+        filename = getattr(self._data, 'filename', None)
+        if filename is None:
+            return None
+
+        basename = os.path.basename(filename).rsplit('.', 1)[0]
+        return 'annotations' + "-" + basename + '.json'
+
+    def _loadAnnotations(self) -> None:
+        filename = self._filenameForAnnotations()
+        have_annotations = os.path.isfile(filename)
+        self._data.add_attribute('have_annotations', have_annotations)
+        self._annotationsChanged = False
+        if not have_annotations:
+            print(f"No annotations file '{filename}' exists.")
+            for region in self._regions:
+                region.invalid = False
+            return
+        with open(filename) as infile:
+            annotations = json.load(infile)
+        if len(annotations) != len(self._regions):
+            LOG.warning("Mismatching number of regions in '%s' (%d vs. %d).",
+                        filename, len(annotations), len(self._regions))
+            return
+        for region, invalid in zip(self._regions, annotations):
+            region.invalid = bool(invalid)
+        print(f"Loaded annotations from '{filename}'")
+
+    def _saveAnnotations(self, overwrite: bool = False) -> None:
+        filename = self._filenameForAnnotations()
+        if os.path.isfile(filename) and not overwrite:
+            LOG.warning("Not overwriting existing annotations file '%s'",
+                        filename)
+            return
+        with open(filename, 'w') as outfile:
+            json.dump([int(getattr(region, 'invalid', False))
+                       for region in self._regions], outfile)
+        print(f"Saved annotations to '{filename}'")
+        self._annotationsChanged = False
 
 
 class QBatchNavigator(QIndexControls):
@@ -772,33 +869,37 @@ class QMetadataView(QLabel):
             self.setText(text)
 
 
-class QDataSelector(QWidget, QObserver, qattributes={
+class QDataInspector(QWidget, QObserver, qattributes={
         Toolbox: False, Datafetcher: False}):
     """A widget for selecting and viewing data items. This is essentially
     a combination of a :py:class:`QDataView` and a
     :py:class:`QDatasourceNavigator`.
 
-    A :py:class:`QDataSelector` can include a
+    A :py:class:`QDataInspector` can include a
     :py:class:`QDatasourceNavigator` that allows to select a
     :py:class:`Data` object from a :py:class:`Datasource`.
 
-    A :py:class:`QDataSelector` can be associated with a
+    A :py:class:`QDataInspector` can be associated with a
     :py:class:`Toolbox`. In this case, the datasource navigator
     (if any) will navigate the current datasource of the toolbox.
-
 
     Arguments
     ---------
     toolbox:
         If associated with a :py:class:`Toolbox`, the
-        :py:class:`QDataSelector` will select data from
+        :py:class:`QDataInspector` will select data from
         the current :py:class:`Datasource` of that :py:class:`Toolbox`.
 
     datafetcher:
         The :py:class:`Datafetcher` object to be used by this
-        :py:class:`QDataSelector` to fetch data from the underlying
+        :py:class:`QDataInspector` to fetch data from the underlying
         :py:class:`Datasource`. If none is provided, the
-        :py:class:`QDataSelector` will create its own instance.
+        :py:class:`QDataInspector` will create its own instance.
+        This datafetcher will be propagated to the :py:class:`QDataView`
+        and to the :py:class:`QDatasourceNavigator`, so that fetching
+        data (either initiated by some button from the
+        :py:class:`QDatasourceNavigator` or programmatically) will
+        automatically update these components.
     """
 
     def __init__(self, toolbox: Toolbox = None,
@@ -807,10 +908,13 @@ class QDataSelector(QWidget, QObserver, qattributes={
                  datasource_selector: bool = True,
                  **kwargs) -> None:
         super().__init__()
+        self._experimental = False  # FIXME[hack]
         self._orientation = orientation
         self._initUI(datasource_selector)
         self._layoutUI()
         self.setToolbox(toolbox)
+        if datafetcher is None:
+            datafetcher = Datafetcher()
         self.setDatafetcher(datafetcher)
 
     def _initUI(self, datasource_selector: bool) -> None:
@@ -823,24 +927,27 @@ class QDataSelector(QWidget, QObserver, qattributes={
         self.addAttributePropagation(Toolbox, self._datasourceNavigator)
         self.addAttributePropagation(Datafetcher, self._datasourceNavigator)
 
-        self._button = QPushButton("Change Layout")
-        self._button.clicked.connect(self._onButtonClicked)
+        if self._experimental:
+            self._button = QPushButton("Change Layout")
+            self._button.clicked.connect(self._onButtonClicked)
 
     def _layoutUI(self) -> None:
         """Layout the user interface. There are different ways in which
-        the components of a :py:class:`QDataSelector` can be arranged.
+        the components of a :py:class:`QDataInspector` can be arranged.
         """
         if self._orientation == Qt.Horizontal:
             row = QHBoxLayout()
             row.addWidget(self._dataView)
             row.addWidget(self._datasourceNavigator)
-            row.addWidget(self._button)
+            if self._experimental:
+                row.addWidget(self._button)
             self.setLayout(row)
         else:  # if self._orientation == Qt.Vertical:
             column = QVBoxLayout()
             column.addWidget(self._dataView)
             column.addWidget(self._datasourceNavigator)
-            column.addWidget(self._button)
+            if self._experimental:
+                column.addWidget(self._button)
             self.setLayout(column)
 
     def _updateUI(self) -> None:
@@ -853,9 +960,10 @@ class QDataSelector(QWidget, QObserver, qattributes={
         # QLayout::removeItem() just removes the item from layout, but
         # does not hide or delete it.
         layout = self.layout()
-        layout.removeItem(layout.itemAt(2))
-        layout.removeItem(layout.itemAt(1))
-        layout.removeItem(layout.itemAt(0))
+        if self._experimental:
+            layout.removeItem(layout.itemAt(2)) # self._button
+        layout.removeItem(layout.itemAt(1))  # self._datasourceNavigator
+        layout.removeItem(layout.itemAt(0))  # self._dataView
         # self.layout().removeWidget(self._dataView)
         # self.layout().removeWidget(self._datasourceNavigator)
         # self.layout().removeWidget(self._button)
@@ -865,6 +973,17 @@ class QDataSelector(QWidget, QObserver, qattributes={
         QWidget().setLayout(layout)
         self._layoutUI()
         self.update()
+
+    def dataView(self) -> QDataView:
+        """The :py:class:`QDataView` of this :py:class:`QDataInspector`.
+        """
+        return self._dataView
+
+    def datasourceNavigator(self) -> QDatasourceNavigator:
+        """The :py:class:`QDatasourceNavigator` of
+        this :py:class:`QDataInspector`.
+        """
+        return self._datasourceNavigator
 
     @protect
     def _onButtonClicked(self, _checked: bool) -> None:
@@ -876,19 +995,19 @@ class QDataSelector(QWidget, QObserver, qattributes={
 
     def imageView(self) -> QImageView:
         """The :py:class:`QDataView` used by this
-        :py:class:`QDataSelector`.
+        :py:class:`QDataInspector`.
         """
         return self._dataView.imageView()
 
     def dataView(self) -> QDataView:
         """The :py:class:`QDataView` used by this
-        :py:class:`QDataSelector`.
+        :py:class:`QDataInspector`.
         """
         return self._dataView
 
     def datasourceNavigator(self) -> QDatasourceNavigator:
         """The :py:class:`QDatasourceNavigator` used by this
-        :py:class:`QDataSelector`.
+        :py:class:`QDataInspector`.
         """
         return self._datasourceNavigator
 
@@ -904,7 +1023,7 @@ class QDataSelector(QWidget, QObserver, qattributes={
 
     def setDatasource(self, datasource: Datasource) -> None:
         """Set the datasource for the datasource navigator.
-        If this :py:class:`QDataSelector` is associated with
+        If this :py:class:`QDataInspector` is associated with
         a :py:class:`Toolbox`, it will set the current datasource
         for that tooblox.
 
@@ -915,3 +1034,4 @@ class QDataSelector(QWidget, QObserver, qattributes={
             navigator will be disabled.
         """
         self._datasourceNavigator.setDatasource(datasource)
+

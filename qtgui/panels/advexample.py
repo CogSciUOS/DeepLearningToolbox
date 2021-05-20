@@ -24,7 +24,7 @@ from .panel import Panel
 from ..utils import QObserver
 from ..widgets.matplotlib import QMatplotlib
 from ..widgets.training import QTrainingBox
-from ..widgets.data import QDataSelector
+from ..widgets.data import QDataInspector
 
 
 class AdversarialExamplePanel(Panel, QObserver, qobservables={
@@ -70,8 +70,8 @@ class AdversarialExamplePanel(Panel, QObserver, qobservables={
         #
         # Input data
         #
-        self._dataSelector = QDataSelector()
-        self._dataView = self._dataSelector.dataView()
+        self._dataInspector = QDataInspector()
+        self._dataView = self._dataInspector.dataView()
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
         self._dataView.addAttribute('directory')
@@ -105,7 +105,7 @@ class AdversarialExamplePanel(Panel, QObserver, qobservables={
         #
         #  +--------------------+----------------------------------------+
         #  |+------------------+|+------------------------------------+  |
-        #  ||dataSelector      ||| Result                             |  |
+        #  ||dataInspector     ||| Result                             |  |
         #  ||[view]            ||| (Adversarial Example)              |  |
         #  ||                  |||                                    |  |
         #  ||                  |||                                    |  |
@@ -117,7 +117,7 @@ class AdversarialExamplePanel(Panel, QObserver, qobservables={
         #  |+------------------+|+------------------------------------+  |
         #  +--------------------+----------------------------------------+
         plotBar = QHBoxLayout()
-        plotBar.addWidget(self._dataSelector)
+        plotBar.addWidget(self._dataInspector)
         plotBar.addWidget(self._trainingBox)
         plotBar.addWidget(self._pltOriginal)
         plotBar.addWidget(self._pltAdversarial)
@@ -157,7 +157,7 @@ class AdversarialExamplePanel(Panel, QObserver, qobservables={
         """Set a new Toolbox.
         We are only interested in changes of the input data.
         """
-        self._dataSelector.setToolbox(toolbox)
+        self._dataInspector.setToolbox(toolbox)
         # self._dataView.setToolbox(toolbox)
         self.setData(toolbox.input_data if toolbox is not None else None)
 

@@ -30,7 +30,7 @@ from dltb.tool.worker import Worker
 # GUI imports
 from ..utils import QObserver, QBusyWidget, QPrepareButton, protect
 from ..widgets.image import QImageView, QImageBatchView
-from ..widgets.data import QDataSelector
+from ..widgets.data import QDataInspector
 from ..widgets.tools import QToolComboBox
 from .panel import Panel
 
@@ -286,7 +286,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
 
     _inputCounter: QLabel = None
     _processCounter: QLabel = None
-    _dataSelector: QDataSelector = None
+    _dataInspector: QDataInspector = None
 
     """
 
@@ -326,8 +326,8 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         #
 
         # QImageView: a widget to display the input data
-        self._dataSelector = QDataSelector(orientation=Qt.Vertical)
-        self._dataView = self._dataSelector.dataView()
+        self._dataInspector = QDataInspector(orientation=Qt.Vertical)
+        self._dataView = self._dataInspector.dataView()
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
         self._dataView.addAttribute('directory')
@@ -350,7 +350,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         #
         #  +--------------------+----------------------------------------+
         #  |+------------------+|+---------------+ +---------------+ ... |
-        #  ||dataSelector      |||QDetectorWidget| |QDetectorWidget|     |
+        #  ||dataInspector     |||QDetectorWidget| |QDetectorWidget|     |
         #  ||[view]            ||| Result        | | Result        |     |
         #  ||                  |||               | |               |     |
         #  ||                  |||               | |               |     |
@@ -365,7 +365,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
         layout = QHBoxLayout()
 
         layout2 = QVBoxLayout()
-        layout2.addWidget(self._dataSelector)
+        layout2.addWidget(self._dataInspector)
         row = QHBoxLayout()
         row.addWidget(self._processCounter)
         row.addWidget(QLabel("/"))
@@ -432,7 +432,7 @@ class FacePanel(Panel, QObserver, qobservables={Toolbox: {'input_changed'}}):
                 if index < len(self._detectorViews):
                     self._detectorViews[index].setFaceDetector(detector)
 
-        self._dataSelector.setToolbox(toolbox)
+        self._dataInspector.setToolbox(toolbox)
         # self._dataView.setToolbox(toolbox)
         self.setData(toolbox.input_data if toolbox is not None else None)
 

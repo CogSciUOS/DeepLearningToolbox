@@ -27,7 +27,7 @@ from toolbox import Toolbox
 from .panel import Panel
 from ..utils import QObserver, QPrepareButton, protect
 from ..widgets.activationview import QActivationView
-from ..widgets.data import QDataSelector
+from ..widgets.data import QDataInspector
 from ..widgets.network import QLayerSelector, QNetworkComboBox
 from ..widgets.classesview import QClassesView
 
@@ -211,14 +211,14 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         #
 
         # QImageView: a widget to display the input data
-        self._dataSelector = QDataSelector()
-        self.addAttributePropagation(Toolbox, self._dataSelector)
+        self._dataInspector = QDataInspector()
+        self.addAttributePropagation(Toolbox, self._dataInspector)
 
-        self._imageView = self._dataSelector.imageView()
+        self._imageView = self._dataInspector.imageView()
         # self.addAttributePropagation(Toolbox, self._imageView)
 
         # QDataView: display data related to the current input data
-        self._dataView = self._dataSelector.dataView()
+        self._dataView = self._dataInspector.dataView()
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
         self._dataView.addAttribute('directory')
@@ -227,7 +227,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._dataView.addAttribute('image')
 
         # QDatasourceNavigator: navigate through the datasource
-        self._datasourceNavigator = self._dataSelector.datasourceNavigator()
+        self._datasourceNavigator = self._dataInspector.datasourceNavigator()
         self.addAttributePropagation(Toolbox, self._datasourceNavigator)
 
         # self.addAttributePropagation(Toolbox, self._datasourceNavigator)
@@ -285,7 +285,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # Input data (center column)
         #
         inputLayout = QVBoxLayout()
-        inputLayout.addWidget(self._dataSelector)
+        inputLayout.addWidget(self._dataInspector)
 
         inputBox = QGroupBox('Input')
         inputBox.setLayout(inputLayout)
