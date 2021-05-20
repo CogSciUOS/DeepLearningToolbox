@@ -498,6 +498,27 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._regions.append(Region(landmarks))
         self.update()
 
+    def invalidateRegion(self, index: int = None) -> None:
+        """Invalidate an image in this :py:class:`QMultiImageView`.
+        Invalid images will be displayed in a different way as
+        valid images.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the image to be invalidated. If no index is
+            provided, the currently selected image is used. If there is
+            no such index, the method will do nothing.
+        """
+        if index is None:
+            index = self._currentRegion
+        if not self._regions or not 0 <= index < len(self._regions):
+            return
+
+        region = self._regions[index]
+        region.invalid = not getattr(region, 'invalid', False)
+        self.update()
+
     def transform(self) -> QTransform:
         if self._image is None:
             return None
@@ -626,10 +647,13 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             greenPen.setWidth(line_width)
             redPen = QPen(Qt.red)
             redPen.setWidth(line_width)
+            bluePen = QPen(Qt.blue)
+            bluePen.setWidth(line_width)
 
             for index, region in enumerate(self._regions):
-                painter.setPen(redPen if index == self._currentRegion else
-                               greenPen)
+                painter.setPen(bluePen if index == self._currentRegion else
+                               (redPen if getattr(region, 'invalid') else
+                                greenPen))
                 self._drawRegion(painter, region)
 
             self._drawMetadataHelper(painter, self._metadata, color=Qt.green)
@@ -658,6 +682,14 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         if isinstance(location, BoundingBox):
             painter.drawRect(location.x, location.y,
                              location.width, location.height)
+            if getattr(region, 'invalid', False):
+                redPen = QPen(Qt.red)
+                redPen.setWidth(5)
+                painter.setPen(redPen)
+                painter.drawLine(location.x1, location.y1,
+                                 location.x2, location.y2)
+                painter.drawLine(location.x2, location.y1,
+                                 location.x1, location.y2)
         elif isinstance(location, PointsBasedLocation):
             for p in location.points:
                 painter.drawPoint(p[0], p[1])
@@ -685,6 +717,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self.showMetadata = not self.showMetadata
         elif key == Qt.Key_Space:
             self.setMode(not self._processed)
+        elif key == Qt.Key_Delete:
+            self.invalidateRegion()
         elif key == Qt.Key_I:
             LOG.info("image: %s, regions(%s): %s, "
                      "metadata: %s, metadata2: %s, "
@@ -736,10 +770,14 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
     @protect
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        self._zoom = 1.0
-        self._offset = QPointF(0, 0)
-        self._mouseStartPosition = None
-        self.update()
+        if self._currentRegion >= 0:
+            self.invalidateRegion()
+        else:
+            # Reset the image
+            self._zoom = 1.0
+            self._offset = QPointF(0, 0)
+            self._mouseStartPosition = None
+            self.update()
 
     def wheelEvent(self, event):
         """Process the wheel event. The mouse wheel can be used for
@@ -961,6 +999,18 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self.currentRegionChanged.emit(index)
             self.update()
 
+    @pyqtSlot(int)
+    def updateRegion(self, index: int) -> None:
+        """Set the index of the currently selected region.
+
+        Arguments
+        ---------
+        index:
+            The new index. A value of `-1` means that no region is
+            selected.
+        """
+        self.update()
+
 
 class QImageBatchView(QWidget):
     """A :py:class:`QWidget` to display a batch of images.
@@ -1068,9 +1118,20 @@ class QMultiImageView(QWidget):
          images will be displayed in one (or multiple) rows, if
         `Qt.Vertical`, images will be displayed in columns.
 
+    Readonly properties
+    -------------------
+    _qimages: List[QImage]
+        A list of `QImage`s holding the images to be displayed.
+    _qregions:
+        A list of :py:class:`Region`s describing regions in a larger
+        image from which the images displayed in this
+        :py:class:`QMultiImageView` are extracted.  The regions
+        may contain annotations which may influence how the corresponding
+        image is displayed.
     """
 
     currentImageChanged = pyqtSignal(int)
+    annotationsChanged = pyqtSignal(int)
 
     _qimages: List[QImage] = None
 
@@ -1239,9 +1300,11 @@ class QMultiImageView(QWidget):
         Arguments
         ---------
         image:
-            The large image from which regians are cut out.
+            The large image from which regions are cut out.
         regions:
-            The regions to extract from that image.
+            The regions to extract from that image. The regions
+            may contain further annotations which may be used to
+            influence the display.
         """
         if image is None:
             self._image = None
@@ -1296,6 +1359,47 @@ class QMultiImageView(QWidget):
             self.currentImageChanged.emit(index)
             self.update()
 
+    def invalid(self, index: int = None) -> bool:
+        """Check if an image in this :py:class:`QMultiImageView` is invalid.
+        Images can have a flag, marking them as valid or invalid.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the image to be checked. If no index is
+            provided, the currently selected image is used. If no index
+            can be determined, the method will return `False`.
+        """
+        if index is None:
+            index = self.currentImage()
+        if not 0 <= index < len(self._qimages) or not self._regions:
+            return False  # no index could be determined
+
+        region = self._regions[index]
+        return getattr(region, 'invalid', False)
+
+    def invalidate(self, index: int = None) -> None:
+        """Invalidate an image in this :py:class:`QMultiImageView`.
+        Invalid images will be displayed in a different way as
+        valid images.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the image to be invalidated. If no index is
+            provided, the currently selected image is used. If there is
+            no such index, the method will do nothing.
+        """
+        if index is None:
+            index = self.currentImage()
+        if not self._qimages or not 0 <= index < len(self._qimages):
+            return
+
+        region = self._regions[index]
+        region.invalid = not getattr(region, 'invalid', False)
+        self.annotationsChanged.emit(index)
+        self.update()
+
     def imagePosition(self, index: int = None) -> QPoint:
         """Return the center point of the image with the given index.
 
@@ -1330,6 +1434,12 @@ class QMultiImageView(QWidget):
         row = event.y() // (self._imageSize.width() + self._spacing)
         column = event.x() // (self._imageSize.width() + self._spacing)
         self._setGridPosition(row, column)
+
+    @protect
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        """A mouse double click invalidates the current image.
+        """
+        self.invalidate()
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -1371,6 +1481,8 @@ class QMultiImageView(QWidget):
                 elif grid[0] > 1:
                     grid[0] -= 1
             self.setGrid(tuple(grid))
+        elif key == Qt.Key_Delete:
+            self.invalidate()
         elif key == Qt.Key_D:
             self._debug()
         else:
@@ -1389,10 +1501,11 @@ class QMultiImageView(QWidget):
         painter.begin(self)
 
         line_width = 4
-        color = Qt.red
-        pen = QPen(color)
-        pen.setWidth(line_width)
-        painter.setPen(pen)
+        color = Qt.blue
+        bluePen = QPen(color)
+        bluePen.setWidth(line_width)
+        redPen = QPen(Qt.red)
+        redPen.setWidth(2 * line_width)
 
         horizontal_skip = self._spacing + self._imageSize.width()
         vertical_skip = self._spacing + self._imageSize.height()
@@ -1408,8 +1521,15 @@ class QMultiImageView(QWidget):
 
             # draw decoration around current image
             if index == self._currentIndex:
+                painter.setPen(bluePen)
                 painter.drawRect(rect.x()-2, rect.y()-2,
                                  rect.width()+4, rect.height()+4)
+
+            # draw specific decorations
+            if self.invalid(index):
+                painter.setPen(redPen)
+                painter.drawLine(rect.topLeft(), rect.bottomRight())
+                painter.drawLine(rect.topRight(), rect.bottomLeft())
 
         painter.end()
 

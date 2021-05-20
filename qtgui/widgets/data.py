@@ -464,6 +464,8 @@ class QDataView(QWidget, QObserver, qobservables={
 
         self._multiImageView.currentImageChanged.\
             connect(self._imageView.setCurrentRegion)
+        self._multiImageView.annotationsChanged.\
+            connect(self._imageView.updateRegion)
         self._imageView.currentRegionChanged.\
             connect(self._multiImageView.setCurrentImage)
         self._imageView.currentRegionChanged.\
