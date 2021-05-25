@@ -18,6 +18,9 @@ class SoundReader(SoundReaderBase):
     'mp3'.
     """
 
+    def __str__(self) -> str:
+        return "soundfile-based SoundReader"
+
     def read(self, filename: str) -> Sound:
 
         # FIXME[todo]: soundfile.read() can also read from file like
@@ -42,6 +45,9 @@ class SoundReader(SoundReaderBase):
 
 
 class SoundWriter(SoundWriterBase):
+
+    def __str__(self) -> str:
+        return "soundfile-based SoundWriter"
 
     def write(self, sound: Sound, filename: str) -> None:
         """

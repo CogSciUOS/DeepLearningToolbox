@@ -17,7 +17,6 @@ from dltb.base.data import Data
 from dltb.base.image import ImageDisplay
 from dltb.base.video import Webcam
 from dltb.datasource import ImageDirectory
-from dltb.tool import Tool
 from dltb.tool.face import Detector as FaceDetector
 from dltb.util.image import imshow
 from dltb.thirdparty import implementations, import_class
@@ -67,7 +66,7 @@ def display_video(display, video, detector):
 def main():
     """Main program: parse command line options and start face tools.
     """
-    
+
     parser = ArgumentParser(description='Deep learning based face processing')
     parser.add_argument('images', metavar='IMAGE', type=str, nargs='*',
                         help='an image to use')

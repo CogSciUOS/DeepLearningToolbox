@@ -7,6 +7,7 @@
 
 
 # standard imports
+from typing import Union, List
 import logging
 
 # third party imports
@@ -14,13 +15,15 @@ import numpy as np
 
 # toolbox imports
 from .observer import Observable
+from .data import Data
 from . import run
+from .. import thirdparty
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class Sound:
+class Sound(Data):
     """A :py:class:`Sound` sound represents a piece of sound.
     It has a duration (time in seconds) and a sampling rate
     (in Hertz).
@@ -53,8 +56,10 @@ class Sound:
     """
 
     def __init__(self, samplerate: int = 44100, channels: int = None,
-                 data: np.ndarray = None) -> None:
+                 data: np.ndarray = None, **kwargs) -> None:
 
+        super().__init__(*kwargs)
+        
         # if data is give, infer information from that data
         if data is not None:
             data_channels = 1 if data.ndim == 1 else min(data.shape)
@@ -292,12 +297,35 @@ class SoundReader:
     """A :py:class:`SoundReader` can be used to read :py:class:`Sound` objects.
     """
 
+    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundReader':
+        if cls is SoundReader:
+            new_cls = thirdparty.import_class('SoundReader', module=module)
+        else:
+            new_cls = cls
+        return super(SoundReader, new_cls).__new__(new_cls)
+
     def read(self, filename: str, channels: int = None,
              samplerate: float = None, endian: str = None) -> Sound:
-        """
+        """Read a sound file and return it as :py:class:`Sound` object.
+
+        Arguments
+        ---------
+        filename:
+            The name of the file containing the sound data.
+        channels:
+            The number of channels the sound object should posses.
+            If `None`, the channels of the sound file will be used.
+        samplerate:
+            The samplerate of the resulting :py:class:`Sound` object.
+            If `None`, the samplerate of the sound file will be used.
         endian: str
             Either 'LITTLE' or 'BIG'. If no value is provided,
             the platform default will be used.
+
+        Result
+        ------
+        sound:
+            The :py:class:`Sound` object that was read from `filename`.
         """
 
     class Async(Observable):
@@ -332,6 +360,12 @@ class SoundWriter:
     """A :py:class:`SoundWriter` can be used to write :py:class:`Sound`
     objects.
     """
+    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundWriter':
+        if cls is SoundWriter:
+            new_cls = thirdparty.import_class('SoundWriter', module=module)
+        else:
+            new_cls = cls
+        return super(SoundWriter, new_cls).__new__(new_cls)
 
     def write(self, sound: Sound, filename: str) -> None:
         """Write the given :py:class:`Sound` object to a file.
@@ -377,6 +411,13 @@ class SoundPlayer(Observable, method='player_changed', changes={
         The sound object to be played by this :py:class:`SoundPlayer`
         was exchanged.
     """
+
+    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundPlayer':
+        if cls is SoundPlayer:
+            new_cls = thirdparty.import_class('SoundPlayer', module=module)
+        else:
+            new_cls = cls
+        return super(SoundPlayer, new_cls).__new__(new_cls)
 
     def __init__(self, sound: Sound = None,
                  loop: bool = False, reverse: bool = False) -> None:
@@ -551,6 +592,13 @@ class SoundRecorder(Observable, changes={'state_changed', 'time_changed'},
     """A :py:class:`SoundRecorder` provides functions for sound
     recording.
     """
+
+    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundRecorder':
+        if cls is SoundRecorder:
+            new_cls = thirdparty.import_class('SoundRecorder', module=module)
+        else:
+            new_cls = cls
+        return super(SoundRecorder, new_cls).__new__(new_cls)
 
     def __init__(self, sound: Sound = None,
                  samplerate: int = 44100, channels: int = 2):

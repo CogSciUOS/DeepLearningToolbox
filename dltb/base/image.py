@@ -31,7 +31,6 @@ import time
 # third-party imports
 import numpy as np
 
-
 # toolbox imports
 from .observer import Observable
 from .data import Data, BatchDataItem

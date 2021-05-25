@@ -21,37 +21,49 @@ Thread. It may also fail if resources are not available.
 Classes that realize the idea of preparation should inherit from
 :py:class:`Preparable` and overwrite the relevant methods.
 """
-from typing import Any
+# standard imports
+import logging
 
+# toolbox imports
+from ..config import config
 from .busy import BusyObservable, busy
 
+# logging
+LOG = logging.getLogger(__name__)
 
-class Preparator:
-    """A class adding an aditional argument `prepare` to the class
-    instantiation process, indicating preparation on construction.
 
+class Postinitializable:
+    """A class supporting a post init hook :py:meth:`__post_init__`, that
+    is a method that is called immediately after the class was
+    initialized (by the :py:meth:`__init__`).
     """
-    # FIXME[todo]: does not work yet - this may be done by
-    # creating a meta class, but creating to many metaclasses
-    # also reduces plugability
 
-    def __init__(self, *args, prepare: bool = False, **kwargs) -> None:
+    def __init_subclass__(cls, *args, **kwargs):
+        super().__init_subclass__(*args, **kwargs)
+        if '__init__' in cls.__dict__:
+            cls._postinit_original_init = cls.__init__
+            cls.__init__ = Postinitializable.__init__
+
+    def __init__(self, *args, _cls: type = None, **kwargs):
+        cls = type(self) if _cls is None else _cls.__mro__[1]
+        for supercls in cls.__mro__:
+            if '_postinit_original_init' in supercls.__dict__:
+                supercls._postinit_original_init(self, *args, _cls=supercls,
+                                                 **kwargs)
+                break
+        if _cls is None:
+            self.__post_init__()
+
+    def _postinit_original_init(self, *args, _cls: type = None, **kwargs):
         super().__init__(*args, **kwargs)
-        if prepare:
-            self.prepare()
 
-    def __getattribute__(self, name: str) -> Any:
-        print(f"catched '{name}' for {type(self)}")
-        # FIXME[problem]: __init__ seems not to be looked up
-        # by __getattribute__().
-        if name == '__init__':
-            print(f"catched __init__ for {type(self)}")
-        return super().__getattribute__(name)
+    def __post_init__(self):
+        LOG.debug("Postinitializable.__post_init__")
 
 
 # FIXME[todo]: make this an abstract class
-class Preparable(BusyObservable, method='preparable_changed',
-                 changes={'state_changed'}):
+class Preparable(BusyObservable, Postinitializable,
+                 method='preparable_changed', changes={'state_changed'}):
     """The :py:class:`Preparable` implements this idea providing three public
     methods:
 
@@ -72,6 +84,15 @@ class Preparable(BusyObservable, method='preparable_changed',
     :py:meth:`_prepared`.
 
     """
+
+    def __init__(self, prepare: bool = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if prepare is not None:
+            self._prepare_on_init = prepare
+
+    def __post_init__(self) -> None:
+        if getattr(self, '_prepare_on_init', config.prepare_on_init):
+            self.prepare()
 
     def __del__(self) -> None:
         """Before deleting an object make sure it is unprepared.

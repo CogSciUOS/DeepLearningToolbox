@@ -31,6 +31,10 @@ _BASE_CLASSES = {
     'ImageResizer': _DLTB + '.base.image.ImageResizer',
     'VideoReader': _DLTB + '.base.video.VideoReader',
     'VideoWriter': _DLTB + '.base.video.VideoWriter',
+    'SoundReader': _DLTB + '.base.image.SoundReader',
+    'SoundWriter': _DLTB + '.base.image.SoundWriter',
+    'SoundPlayer': _DLTB + '.base.image.SoundPlayer',
+    'SoundRecorder': _DLTB + '.base.image.SoundRecorder',
     'Webcam': _DLTB + '.base.video.Webcam',
     'FaceDetector': _DLTB + '.tool.face.detector.Detector',
     'ImageGAN': _DLTB + '.tool.gan.ImageGAN',
@@ -122,6 +126,20 @@ _MODULES = {
         'modules': ['torch'],
         'classes': {
             'ImageGAN': 'VGAN'
+        }
+    },
+    'soundfile': {
+        'modules': ['soundfile'],
+        'classes': {
+            'SoundReader': 'SoundReader',
+            'SoundWriter': 'SoundWriter',
+        }
+    },
+    'sounddevice': {
+        'modules': ['soundfile'],
+        'classes': {
+            'SoundPlayer': 'SoundPlayer',
+            'SoundRecorder': 'SoundRecorder',
         }
     }
 }

@@ -49,3 +49,6 @@ config.activations_directory = \
 
 # use_cpu: Should we use CPU (even if GPU is available)?
 config.use_cpu = False
+
+# prepare_on_init: prepare Preparable objects upon initialization.
+config.prepare_on_init = True

@@ -4,6 +4,7 @@
 # standard imports
 from typing import Tuple
 import time
+import logging
 
 # Qt imports
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
@@ -19,6 +20,8 @@ from dltb.base.sound import (Sound, SoundPlayer, SoundRecorder,
 from dltb.util.time import time_str
 from ..utils import QObserver, protect, QThreadedUpdate, pyqtThreadedUpdate
 
+# logging
+LOG = logging.getLogger(__name__)
 
 
 class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
@@ -35,6 +38,8 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
 
     def __init__(self, sound: Sound = None, player: SoundPlayer = None,
                  **kwargs) -> None:
+        LOG.info("Initializing QSoundViewer(sound=%s, player=%s)",
+                 sound, player)
         super().__init__(**kwargs)
         print(self.__class__.__mro__)
         self._sound = sound
@@ -251,10 +256,11 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
             painter.drawPath(path)
 
     def set_sound(self, sound: Sound) -> None:
+        LOG.info("Setting Sound for QSoundViewer: %s", sound)
         self._sound = sound
         self.update()
 
-    # @protect
+    @protect
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """A mouse press toggles between raw and processed mode.
         """
@@ -274,7 +280,6 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
             self.update()  # initiate update of display (i.e., repaint)
             QApplication.processEvents()  # start the actual repainting
             time.sleep(0.0025)  # wait a bit
-
 
     def wheelEvent(self, event: QWheelEvent):
         """Process mouse wheel events. The mouse wheel can be used for
@@ -312,6 +317,8 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
     def player_changed(self, player: SoundPlayer,
                        info: SoundPlayer.Change) -> None:
         if info.position_changed:
+            LOG.debug("QSoundViewer: player position changed: %s",
+                      player.position)
             self._position = player.position
             currentTime = time.time()
             if (self._refresh is None or
@@ -384,6 +391,8 @@ class QSoundControl(QWidget, QObserver, qobservables={
                  player: SoundPlayer = None,
                  recorder: SoundRecorder = None,
                  **kwargs) -> None:
+        LOG.info("Initializing QSoundControl(sound=%s, player=%s, "
+                 "recorder=%s)", sound, player, recorder)
         super().__init__(**kwargs)
 
         self._sound = sound
@@ -473,12 +482,14 @@ class QSoundControl(QWidget, QObserver, qobservables={
     # @protect
     def _onButtonPlayClicked(self, checked: bool) -> None:
         if self._player is None:
-            print("QSoundControl: No player, sorry!")
+            LOG.warning("QSoundControl: No player, sorry!")
         elif checked:
-            print("QSoundControl: Playing sound")
+            LOG.info("QSoundControl: Playing sound %s on player %s",
+                     self._sound, self._player)
             self._player.play(self._sound)
         else:
-            print("QSoundControl: Stop playing sound")
+            LOG.info("QSoundControl: Stop playing sound on player %s",
+                     self._player)
             self._player.stop()
 
     @pyqtSlot(bool)

@@ -98,6 +98,7 @@ import numpy as np
 # toolbox imports
 from ..base.data import Data
 from ..base.image import Image
+from ..base.sound import Sound
 from ..base.register import RegisterClass
 from ..base.fail import FailableObservable
 from ..base import Preparable
@@ -433,7 +434,6 @@ class Imagesource(Datasource):
         """Set the image metdata for the :py:class:`data`.
         """
         super()._get_meta(data, **kwargs)
-        data.type = data.TYPE_IMAGE
         shape = kwargs.get('shape', self.shape)
         data.add_attribute('shape', shape, batch=shape is None)
 
@@ -445,6 +445,67 @@ class Imagesource(Datasource):
             data.shape = data.array.shape
 
 
+Soundsourcelike = Union['Soundsource', str]
+
+
+class Soundsource(Datasource):
+    # pylint: disable=abstract-method
+    """A datasource providing :py:class:`Sound` objects
+
+    """
+
+    _data_class: type = Sound
+
+    #
+    _loaders: Dict[str, Callable[[str], Any]] = {'array': staticmethod(imread)}
+    _loader: Callable[[str], Any] = staticmethod(imread)
+    _loader_kind: str = 'array'
+
+    # FIXME[todo]:
+    _samplerate: float = None
+
+    @classmethod
+    def as_soundsource(cls, source: Soundsourcelike) -> 'Soundsource':
+        """Get an :py:class:`Soundsource` from an
+        :py:class:`Soundsourcelike` object.
+        """
+        if isinstance(source, cls):  # cls is supposed to be Soundsource
+            return source
+        if isinstance(source, str):
+            return Datasource[source]
+        raise TypeError("Soundsourcelike object has unexpected type: "
+                        f"{type(source)}")
+
+    def __init__(self, samplerate: Union[int, float] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.samplerate = float(samplerate)
+
+    def _get_meta(self, data: Data, **kwargs) -> None:
+        """Set the sound metdata for the :py:class:`data`.
+        """
+        super()._get_meta(data, **kwargs)
+        # FIXME[todo]:
+        # samplerate = kwargs.get('samplerate', self.samplerate)
+        # data.add_attribute('samplerate', samplerate, batch=samplerate is None)
+
+    def _get_data(self, data: Data, **kwargs) -> None:
+        """Get data from this :py:class:`Datasource`.
+        """
+        super()._get_data(data, **kwargs)
+        # FIXME[todo]:
+        # if data and not self.samplerate:
+        #     data.shape = data.array.shape
+
+    # FIXME[todo]: change the interface from `load_datapoint_from_file`
+    # (which returns an array) to `load_data_from_file` (which)
+    # actively fills a data object from a filename, provided as attribute
+    # to he data object)
+    def load_data_from_file(self, data: Sound) -> np.ndarray:
+        """
+        """
+        
+        
+        
 class Sectioned(Datasource):
     # pylint: disable=too-few-public-methods,abstract-method
     """A :py:class:`Datasource` with multiple sections (like `train`, `val`,

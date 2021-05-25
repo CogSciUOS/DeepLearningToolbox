@@ -63,6 +63,7 @@ from dltb.base.busy import BusyObservable
 from dltb.base import run
 from dltb.tool import Tool
 from dltb.base.data import Data
+from dltb.base.image import Image
 from dltb.base.register import Register
 from dltb.util.error import handle_exception, print_exception
 from dltb.util.error import set_exception_handler
@@ -539,8 +540,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         """
         # FIXME[todo]: we should allow for other data than images
         image = imread(filename)
-        data = Data(data=image)
-        data.type = Data.TYPE_IMAGE
+        data = Image(data=image)
         data.add_attribute('shape', image.shape)
         data.add_attribute('filename', filename)
         data.add_attribute('description',

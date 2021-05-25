@@ -15,10 +15,11 @@ from PyQt5.QtWidgets import QVBoxLayout
 
 # toolbox imports
 from dltb.base.sound import Sound, SoundDisplay
+from dltb.base.sound import SoundReader, SoundPlayer, SoundRecorder
 from dltb.util.error import print_exception
-from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
-from dltb.thirdparty.sounddevice import (SoundPlayer as SoundDevicePlayer,
-                                         SoundRecorder as SoundDeviceRecorder)
+#from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
+#from dltb.thirdparty.sounddevice import (SoundPlayer as SoundDevicePlayer,
+#                                         SoundRecorder as SoundDeviceRecorder)
 from toolbox import Toolbox
 
 # GUI imports
@@ -56,7 +57,7 @@ class SoundPanel(Panel, QObserver, qobservables={
         print(str(sound))
 
         print("Reading sound2")
-        reader = SoundfileReader()
+        reader = SoundReader()
 
         soundfile = None
         for directory in (os.environ.get('HOME', False),
@@ -74,10 +75,10 @@ class SoundPanel(Panel, QObserver, qobservables={
         self._sound = reader.read(soundfile)
             
         print("Creating player")
-        self._player = SoundDevicePlayer()
+        self._player = SoundPlayer()
 
         print("Creating recorder")
-        self._recorder = SoundDeviceRecorder()
+        self._recorder = SoundRecorder()
 
         self._initUI()
         self._layoutUI()

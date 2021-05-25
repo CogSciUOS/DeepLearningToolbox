@@ -67,6 +67,10 @@ class SoundPlayer(SoundPlayerBase):
         self._stream = None
         self._check_stream(samplerate=samplerate, channels=channels)
 
+    def __str__(self) -> str:
+        return ("sounddevice-based SoundPlayer"
+                f"(samplerate={self.samplerate}, channels={self.channels})")
+
     def _check_stream(self, samplerate: float = None,
                       channels: int = None) -> None:
         """This function is a hack to fix a problem with an sounddevice
@@ -130,7 +134,7 @@ class SoundPlayer(SoundPlayerBase):
         # a blocking call (run=False), explicitly waiting for the
         # playback to finish.
         self._blocking = not get_default_run(run)
-        super().play(self, *args, run=False, **kwargs)
+        super().play(*args, run=False, **kwargs)
 
     def _play(self) -> None:
         """Start the actual playback in a background thread.
@@ -278,6 +282,10 @@ class SoundRecorder(SoundRecorderBase):
                                       samplerate=samplerate,
                                       callback=self._record_block,
                                       finished_callback=self._finished)
+
+    def __str__(self) -> str:
+        return ("sounddevice-based SoundRecorder"
+                f"(samplerate={self.samplerate}, channels={self.channels})")
 
     @property
     def samplerate(self) -> float:

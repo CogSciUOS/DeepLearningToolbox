@@ -73,7 +73,7 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     Attributes
     ----------
     _batch: int
-    
+
     FIXME[old]:
     Labels
     ------
@@ -82,8 +82,6 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     * single or multi:
 
     """
-    TYPE_IMAGE = 1
-    TYPE_FACE = 2 | TYPE_IMAGE
 
     def __init__(self, array: np.ndarray = None,
                  datasource=None, batch: int = None, **kwargs) -> None:
@@ -181,7 +179,7 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     def is_image(self) -> bool:
         """Check if this :py:class:`Data` represents an image.
         """
-        return getattr(self, 'type', 0) == self.TYPE_IMAGE
+        return isinstance(self, 'Image')
 
     def has_attribute(self, name: str) -> bool:
         """Check if this :py:class:`Data` has the given attribute.
