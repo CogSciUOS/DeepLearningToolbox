@@ -283,6 +283,9 @@ class ImageAdapter(ABC):
         "to be implemented by subclasses"
 
 
+Data.ImageType = Image
+
+
 class ImageExtension(ImageAdapter):
     """An :py:class:`ImageExtension` extends some base class to be able to
     process images. In that it makes use of the :py:class:`ImageAdapter`

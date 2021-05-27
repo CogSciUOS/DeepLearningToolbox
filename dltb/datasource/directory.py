@@ -4,7 +4,7 @@ directory.
 """
 
 # standard imports
-from typing import Union
+from typing import Union, Iterable
 import os
 import glob
 import random
@@ -39,10 +39,11 @@ class DataDirectory(DataFiles):
         indicates that no suitable files where found in the directory.
         None means that the list has not yet been prepared.
     suffix: str
-        The suffix of filenames of interest (default: '`*`').
+        The suffix or suffixes of filenames of interest (default: '`*`').
     """
 
-    def __init__(self, directory: str = None, suffix: str = '*',
+    def __init__(self, directory: str = None,
+                 suffix: Union[str, Iterable[str]] = '*',
                  description: str = None,
                  label_from_directory: Union[bool, str] = False,
                  scheme: ClassScheme = None, **kwargs) -> None:
@@ -108,10 +109,15 @@ class DataDirectory(DataFiles):
         Parameters
         ----------
         filenames_cache: str
-            Name of a cache file to store the list of filenames.
+            Name of a cache file to store the list of filenames. The
+            `filenames_cache` is interpreted relative to the global
+            cache directory, as determined by :py:func:`dltb.util.cache_path`.
         """
         LOG.debug("Preparing DataDirectory: %s", self.directory)
         super()._prepare(**kwargs)
+        if filenames_cache is None:
+            filenames_cache = \
+                type(self).__name__.lower() + '-' + self.key + '-filenames.p'
         self._filenames = filenames_cache and read_cache(filenames_cache)
         if self._filenames is None:
             LOG.info("DataDirectory: creating new cache file '%s' for "
@@ -146,8 +152,12 @@ class DataDirectory(DataFiles):
         # self._filenames = \
         #         [f for f in os.listdir(self._directory)
         #          if os.path.isfile(os.path.join(self._directory, f))]
-        pattern = os.path.join(self._directory, "**", f"*.{self.suffix}")
-        filenames = glob.glob(pattern, recursive=True)
+        suffixes = \
+            (self.suffix, ) if isinstance(self.suffix, str) else self.suffix
+        filenames = []
+        for suffix in suffixes:
+            pattern = os.path.join(self._directory, "**", f"*.{suffix}")
+            filenames.extend(glob.glob(pattern, recursive=True))
         # we need relative filenames!
         index = len(str(self._directory)) + 1
         self._filenames = [filename[index:] for filename in filenames]

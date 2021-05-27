@@ -82,13 +82,14 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     * single or multi:
 
     """
+    ImageType = type(None)
 
     def __init__(self, array: np.ndarray = None,
                  datasource=None, batch: int = None, **kwargs) -> None:
         """
         Arguments
         ---------
-        
+
         """
         super().__init__(**kwargs)
         super().__setattr__('_attributes', {})
@@ -179,7 +180,7 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     def is_image(self) -> bool:
         """Check if this :py:class:`Data` represents an image.
         """
-        return isinstance(self, 'Image')
+        return isinstance(self, self.ImageType)
 
     def has_attribute(self, name: str) -> bool:
         """Check if this :py:class:`Data` has the given attribute.

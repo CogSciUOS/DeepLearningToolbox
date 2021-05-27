@@ -44,17 +44,27 @@ class Postinitializable:
             cls._postinit_original_init = cls.__init__
             cls.__init__ = Postinitializable.__init__
 
-    def __init__(self, *args, _cls: type = None, **kwargs):
-        cls = type(self) if _cls is None else _cls.__mro__[1]
-        for supercls in cls.__mro__:
+    def __init__(self, *args, _cls: int = 0, **kwargs):
+        # As we use this method, i.e.,  Postinitializable.__init__,
+        # in multiple classes as __init__ method (via the assignment in
+        # __init_subclass__), super() will not work as expected (it will
+        # always refer to the superclass of Postinitializable, not to
+        # the superclass of the class to which the method was assigned).
+        # Hence we we have to do a manual lookup of the superclass.
+        # We do this by passing an additional argument _cls, referring
+        # to the last class in the MRO in which __init__ was involved and
+        # then explicitly progress in the MRO:
+        for idx, supercls in enumerate(type(self).__mro__[_cls:]):
+            # Check if supercls defined an __init__ method. If so, it
+            # has been stored as _postinit_original_init:
             if '_postinit_original_init' in supercls.__dict__:
-                supercls._postinit_original_init(self, *args, _cls=supercls,
+                supercls._postinit_original_init(self, *args, _cls=_cls+idx+1,
                                                  **kwargs)
                 break
-        if _cls is None:
+        if _cls == 0:
             self.__post_init__()
 
-    def _postinit_original_init(self, *args, _cls: type = None, **kwargs):
+    def _postinit_original_init(self, *args, _cls: int = None, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __post_init__(self):

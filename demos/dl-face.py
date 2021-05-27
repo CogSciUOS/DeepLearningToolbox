@@ -9,6 +9,7 @@
 
 # standard imports
 from argparse import ArgumentParser
+import logging
 import os
 
 # toolbox imports
@@ -21,7 +22,6 @@ from dltb.tool.face import Detector as FaceDetector
 from dltb.util.image import imshow
 from dltb.thirdparty import implementations, import_class
 
-import logging
 
 
 def output_detections(detector: FaceDetector, data: Data,

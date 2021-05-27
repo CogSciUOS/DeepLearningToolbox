@@ -1111,7 +1111,8 @@ class QMultiImageView(QWidget):
     ----------
     grid: Tuple[int, int]
         The number of rows and columns displayed in this
-        :py:class:`QMultiImageView`.
+        :py:class:`QMultiImageView`. One of the entries can be `None`,
+        meaning that the grid can grow along that axis as required.
     orientation: Qt.Orientation
         The orientation of this :py:class:`QMultiImageView`. If
         `Qt.Horizontal`, the grid will grow horizontally, meaning
@@ -1147,6 +1148,7 @@ class QMultiImageView(QWidget):
         self._imageSize = QSize(100, 100)
         self._spacing = 10
         self._qimages = []
+        self._regions = None
         self._currentIndex = -1  # -1 means no image selected
         self._initLayout()
 
@@ -1227,7 +1229,7 @@ class QMultiImageView(QWidget):
             index = self._currentIndex
         if index is None:
             return -1, -1
-        
+
         if self._grid[0] is not None:
             row, column = index % self._grid[0], index // self._grid[0]
         else:
@@ -1290,6 +1292,7 @@ class QMultiImageView(QWidget):
             to :py:class:`QImage` internally.
         """
         self._currentIndex = -1
+        self._regions = None
         self._qimages = [imageToQImage(image) for image in images]
         self._gridChanged()
 
@@ -1372,8 +1375,11 @@ class QMultiImageView(QWidget):
         """
         if index is None:
             index = self.currentImage()
-        if not 0 <= index < len(self._qimages) or not self._regions:
+        if not 0 <= index < len(self._qimages):
             return False  # no index could be determined
+
+        if self._regions is None:
+            return getattr(self._qimages[index], 'invalid', False)
 
         region = self._regions[index]
         return getattr(region, 'invalid', False)
