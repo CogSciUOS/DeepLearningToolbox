@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 import logging
 
 # third party imports
@@ -21,12 +21,17 @@ _display: ImageDisplay = None
 _resizer: ImageResizer = None
 
 
-def imread(filename: str, **kwargs) -> np.ndarray:
+def imread(filename: str, module: Union[str, List[str]] = None,
+           **kwargs) -> np.ndarray:
     """Read an image from a given file. FIXME[todo]: or URL
     """
     global _reader
+    if module is not None:
+        # FIXME[todo]: and _reader not from that module
+        # (to avoid unneccessary reinstantiations ...)
+        _reader = None
     if _reader is None:
-        _reader = ImageReader()
+        _reader = ImageReader(module=module)
     image = _reader.read(filename, **kwargs)
     LOG.debug("imread: read image of shape %s, dtype=%s from '%s' with %s.",
               image.shape, image.dtype, filename, _reader)
