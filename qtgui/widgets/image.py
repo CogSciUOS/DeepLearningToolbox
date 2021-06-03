@@ -1236,9 +1236,7 @@ class QMultiImageView(QWidget):
             row, column = index // self._grid[1], index % self._grid[1]
         return row, column
 
-    def _setGridPosition(self, row: int, column: int) -> None:
-        """Set the index of the currently selected image.
-        """
+    def _indexForPosition(self, row: int, column: int) -> int:
         if row == -1 or column == -1:
             index = -1
         elif self._grid[0] is not None:
@@ -1247,6 +1245,12 @@ class QMultiImageView(QWidget):
             index = row * self._grid[1] + column
         if index > self.count():
             index = self.count() - 1
+        return index
+
+    def _setGridPosition(self, row: int, column: int) -> None:
+        """Set the index of the currently selected image.
+        """
+        index = self._indexForPosition(row, column)
         self.setCurrentImage(-1 if index == self._currentIndex else index)
 
     def _gridChanged(self) -> None:
@@ -1350,7 +1354,7 @@ class QMultiImageView(QWidget):
     def setCurrentImage(self, index: int) -> None:
         """Set the index of the currently selected image.
         """
-        if index > -1:
+        if index is not None and index > -1:
             if not self.count():
                 index = -1
             elif index >= self.count():
@@ -1372,6 +1376,12 @@ class QMultiImageView(QWidget):
             An index identifying the image to be checked. If no index is
             provided, the currently selected image is used. If no index
             can be determined, the method will return `False`.
+
+        Result
+        ------
+        invalid:
+            `True`, if the image has been explicitly marked as invalid.
+            Otherwise `False`.
         """
         if index is None:
             index = self.currentImage()
@@ -1401,8 +1411,12 @@ class QMultiImageView(QWidget):
         if not self._qimages or not 0 <= index < len(self._qimages):
             return
 
-        region = self._regions[index]
-        region.invalid = not getattr(region, 'invalid', False)
+        if self._regions is None:
+            setattr(self._qimages[index], 'invalid',
+                    not getattr(self._qimages[index], 'invalid', False))
+        else:
+            region = self._regions[index]
+            region.invalid = not getattr(region, 'invalid', False)
         self.annotationsChanged.emit(index)
         self.update()
 
@@ -1441,6 +1455,9 @@ class QMultiImageView(QWidget):
         column = event.x() // (self._imageSize.width() + self._spacing)
         self._setGridPosition(row, column)
 
+        if event.button() == Qt.RightButton:
+            self.invalidate()
+
     @protect
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """A mouse double click invalidates the current image.
@@ -1461,18 +1478,38 @@ class QMultiImageView(QWidget):
 
         if key == Qt.Key_Space:
             self.setCurrentImage(None)
+        elif key == Qt.Key_Escape:
+            self._setGridPosition(-1, -1)
         elif key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_Right, Qt.Key_Down):
+            # FIXME[todo]: different modes of navigation
+            # wrap  <->
+            # incremental
+            # hard boundaries
             row, column = self._gridPosition()
+            mode = 1  # wrap
             if row < 0:
                 row, column = (0, 0) if self.count() else (-1, -1)
-            elif key == Qt.Key_Left:
-                column = max(column-1, 0)
-            elif key == Qt.Key_Right:
-                column = column+1 % self.columns()
-            elif key == Qt.Key_Up:
-                row = max(row-1, 0)
-            elif key == Qt.Key_Down:
-                row = row+1 % self.rows()
+            elif mode == 1:
+                if key == Qt.Key_Left:
+                    column -= 1
+                    if column < 0:
+                        column = self.columns() - 1
+                    if self._indexForPosition(row, column) >= self.count():
+                        column -= 1
+                elif key == Qt.Key_Right:
+                    column = (column+1) % self.columns()
+                    if self._indexForPosition(row, column) >= self.count():
+                        column = 0
+                elif key == Qt.Key_Up:
+                    row -= 1
+                    if row < 0:
+                        row = self.rows() - 1
+                    if self._indexForPosition(row, column) >= self.count():
+                        row -= 1
+                elif key == Qt.Key_Down:
+                    row = (row+1) % self.rows()
+                    if self._indexForPosition(row, column) >= self.count():
+                        row = 0
             self._setGridPosition(row, column)
         elif key in (Qt.Key_Plus, Qt.Key_Minus):
             grid = list(self._grid)
@@ -1508,10 +1545,10 @@ class QMultiImageView(QWidget):
 
         line_width = 4
         color = Qt.blue
-        bluePen = QPen(color)
-        bluePen.setWidth(line_width)
-        redPen = QPen(Qt.red)
-        redPen.setWidth(2 * line_width)
+        self._bluePen = QPen(color)
+        self._bluePen.setWidth(line_width)
+        self._redPen = QPen(Qt.red)
+        self._redPen.setWidth(2 * line_width)
 
         horizontal_skip = self._spacing + self._imageSize.width()
         vertical_skip = self._spacing + self._imageSize.height()
@@ -1523,21 +1560,25 @@ class QMultiImageView(QWidget):
             position = QPoint(column * horizontal_skip + half_spacing,
                               row * vertical_skip + half_spacing)
             rect = QRect(position, self._imageSize)
-            painter.drawImage(rect, qimage)
-
-            # draw decoration around current image
-            if index == self._currentIndex:
-                painter.setPen(bluePen)
-                painter.drawRect(rect.x()-2, rect.y()-2,
-                                 rect.width()+4, rect.height()+4)
-
-            # draw specific decorations
-            if self.invalid(index):
-                painter.setPen(redPen)
-                painter.drawLine(rect.topLeft(), rect.bottomRight())
-                painter.drawLine(rect.topRight(), rect.bottomLeft())
+            self._paintImage(painter, index, qimage, rect)
 
         painter.end()
+
+    def _paintImage(self, painter: QPainter, index: int,
+                    qimage: QImage, rect: QRect) -> None:
+        painter.drawImage(rect, qimage)
+
+        # draw decoration around current image
+        if index == self._currentIndex:
+            painter.setPen(self._bluePen)
+            painter.drawRect(rect.x()-2, rect.y()-2,
+                             rect.width()+4, rect.height()+4)
+
+        # draw specific decorations
+        if self.invalid(index):
+            painter.setPen(self._redPen)
+            painter.drawLine(rect.topLeft(), rect.bottomRight())
+            painter.drawLine(rect.topRight(), rect.bottomLeft())
 
     def _debug(self) -> None:
         """Output some debug information to standard output.
