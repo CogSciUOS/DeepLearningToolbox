@@ -1,56 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# python demos/face-labeler.py --directory='/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4/UnifiedFunneled2' --debug __main__
+
 # FIXME[todo]:
-# - remove old code in beginning of face-labeler.py
-# - move face-label out auf demos/
-# - Scrollarea for multiImageView does not work
-#   (e.g. 11, "AbigailBreslin")
-# - add an original image display
+# - move face-label out auf demos/ split in separate files ...
 # - read in original metadata (including age)
 # - nice display for metadata
+# - store new metadata
+# - non hardcoded filename handling
 
 
-# standard imports
-from argparse import ArgumentParser
-import sys
-
-# third-party imports
-from PyQt5.QtWidgets import QApplication
-
-# toolbox imports
-import dltb.argparse as ToolboxArgparse
-from dltb.datasource import Datasource
-from qtgui.widgets.data import QDataInspector
-
-def main():
-    """Start the program.
-    """
-
-    app = QApplication([])
-
-    data_inspector = QDataInspector(datasource_inspector=False)
-    rec = QApplication.desktop().screenGeometry()
-    data_inspector.setMaximumSize(rec.width()-100, rec.height()-100)
-    data_view = data_inspector.dataView()
-    data_view.multiImageView().setGrid((None, 10))
-    data_view.setDataInfoVisible(False)
-
-    datasource = Datasource['widerface']
-    datasource.prepare()
-    # data_view.setData(datasource[45])
-    data_inspector.setDatasource(datasource)
-
-    # This will also run the graphical interface
-    data_inspector.show()
-    rc = app.exec()
-
-    print(f"Main: exiting gracefully (rc={rc}).")
-    sys.exit(rc)
-
-#
-# ----------------------------------------------------------------------------
-#
 
 """The Labeled Children Faces in the Wild dataset.
 
@@ -75,9 +35,11 @@ from dltb.datasource import ImageDirectory
 # logging
 LOG = logging.getLogger(__name__)
 
+print(__name__)
+
 # FIXME[hack]
 DIRECTORY = '/space/home/ulf/data/children/clean4/UnifiedFunneled'
-
+DIRECTORY = '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4/UnifiedFunneled2'
 
 class ChildFaces(ImageDirectory):
     """The directory clean4 contains the 4th clean stage.
@@ -170,11 +132,12 @@ class ChildFaces(ImageDirectory):
             suffix = '2'
             meta = {
                 'image': data.filename,
-                'source': data.sourceimage,
+                'source': data.source,
                 'dataset': data.dataset,
                 'boundingbox': data.boundingbox,
                 'id': data.id,
-                'valid': data.valid
+                'valid': data.valid,
+                'age': data.age
             }
             filename = data.metafile + suffix
             LOG.debug("Writing new meta file '%s'", filename)
@@ -203,13 +166,15 @@ import sys
 
 # third-party imports
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSlot
-from PyQt5.QtGui import QKeyEvent, QImage, QPainter
+from PyQt5.QtGui import QKeyEvent, QImage, QPainter, QPen
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QSpinBox
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
+from dltb.base.image import Imagelike, BoundingBox, Region
 from dltb.datasource import Datasource
+from dltb.util.image import imread
 #from experiments.childface import ChildFaces
 from qtgui.widgets.data import QDataInfoBox
 from qtgui.widgets.image import QImageView, QMultiImageView
@@ -217,6 +182,26 @@ from qtgui.widgets.scroll import QOrientedScrollArea
 from qtgui.utils import protect
 
 class QMultiFaceView(QMultiImageView):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        line_width = 2
+        self._bluePen = QPen(Qt.blue)
+        self._bluePen.setWidth(line_width)
+        self._redPen = QPen(Qt.red)
+        self._redPen.setWidth(2 * line_width)
+        self._greenPen = QPen(Qt.green)
+        self._greenPen.setWidth(line_width)
+
+    def setImages(self, images: Iterable[Imagelike]) -> None:
+        # FIXME[hack]: we would need a better mechanism to incorporate
+        # metadata
+        images = list(images)
+        super().setImages(images)
+        for index, (qimage, image) in enumerate(zip(self._qimages, images)):
+            qimage.dataset = getattr(image, 'dataset', None)
+            if hasattr(image, 'age'):
+                self.setAge(index, image.age)
 
     def age(self, index: int = None) -> int:
         """The age label for an image in this :py:class:`QMultiFaceView`.
@@ -300,10 +285,17 @@ class QMultiFaceView(QMultiImageView):
         super()._paintImage(painter, index, qimage, rect)
 
         # add the age label
-        painter.setPen(self._bluePen)
         age = self.age(index)
         ageText = "None" if age is None else f"{age}"
+        pen = self._bluePen if age is None else self._greenPen
+        painter.setPen(pen)
         painter.drawText(rect, Qt.AlignHCenter | Qt.AlignBottom, ageText)
+
+        dataset = qimage.dataset
+        metaText = "No Meta" if dataset is None else dataset
+        pen = self._redPen if dataset is None else self._greenPen
+        painter.setPen(pen)
+        painter.drawText(rect, Qt.AlignHCenter | Qt.AlignTop, metaText)
 
 
 class QFaceLabeler(QWidget):
@@ -313,6 +305,7 @@ class QFaceLabeler(QWidget):
         self._datasource = datasource
         self._labels = list(datasource.labels())
         self._faces = []
+        self._index = None  # index of the currently selected image
 
         self.dataView = QDataInfoBox()
         self.imageView = QImageView()
@@ -323,6 +316,8 @@ class QFaceLabeler(QWidget):
             QOrientedScrollArea(orientation=Qt.Vertical)
         self.multiImageScroller.setWidget(self.multiImageView)
         self.multiImageScroller.setWidgetResizable(True)
+        self.multiImageScroller.setSizePolicy(QSizePolicy.Fixed,
+                                              QSizePolicy.Expanding)
         
         self.spinBox = QSpinBox()
         self.spinBox.setMinimum(1)
@@ -343,50 +338,72 @@ class QFaceLabeler(QWidget):
         row.addWidget(self.multiImageScroller)
         column = QVBoxLayout()
         column.addWidget(self.dataView)
+        column.addStretch()
         column.addWidget(self.imageView)
         row.addLayout(column)
         layout.addLayout(row)
-        layout.addStretch()
+        #layout.addStretch()
         self.setLayout(layout)
 
-    @protect
-    def onSpinboxChanged(self, value: int) -> None:
-        index = value - 1
+        self.showPerson()
+
+    def storeMetadata(self) -> None:
+        if self._index is not None and 0 <= self._index < len(self._faces):
+            data = self._faces[self._index]
+            age = self.multiImageView.age(self._index)
+            invalid = self.multiImageView.invalid(self._index)
+            data.add_attribute('age', age)
+            data.add_attribute('valid', not invalid)
+            self._datasource.write_metadata(data)
+
+    def showPerson(self, index: int = 0) -> None:
         label = self._labels[index]
+        if self._index is not None:
+            self.storeMetadata()
+
         self.label.setText(self._labels[index])
         self._faces = [self._datasource.get_data(filename=filename)
                        for filename in self._datasource.faces(label)]
         self.multiImageView.setImages(self._faces)
 
     @protect
+    def onSpinboxChanged(self, value: int) -> None:
+        self.showPerson(value - 1)
+
+    @protect
     def onImageChanged(self, index: int) -> None:
-        print(f"selected face {index}")
+        print(f"selected face {index} of {len(self._faces)}")
+        self.storeMetadata()
         if 0 <= index < len(self._faces):
-            self.dataView.setData(self._faces[index])
+            self._index = index
+            data = self._faces[index]
+            self.dataView.setData(data)
+            if hasattr(data, 'source'):
+                filename = data.source
+                filename = filename.replace('E:\\clean4', '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4')
+                filename = filename.replace('\\', '/')
+                image = Image(image=filename)
+                bbox = data.boundingbox
+                bbox = BoundingBox(x1=bbox[0], y1=bbox[1],
+                                   x2=bbox[2], y2=bbox[3])
+                self.imageView.setData(image)
+                self.imageView.addRegion(Region(bbox))
+            else:
+                self.imageView.setData(None)
+
+            position = self.multiImageView.imagePosition(index)
+            if position is not None:
+                imageSize = self.multiImageView.imageSize()
+                spacing = self.multiImageView.spacing()
+                xmargin = (imageSize.width() + spacing) // 2
+                ymargin = (imageSize.height() + spacing) // 2
+                self.multiImageScroller.ensureVisible(position.x(),
+                                                      position.y(),
+                                                      xmargin, ymargin)
         else:
+            self._index = None
             self.dataView.setData(None)
             self.imageView.setData(None)
-
-    @pyqtSlot(int)
-    def setCurrentRegion(self, index: int) -> None:
-        """In :py:class:`Image` data with multiple regions, set
-        the currently selected region.  It will be ensured that
-        the relevant part of the :py:class`QMultiImageView` is
-        visible.
-
-        Arguments
-        ---------
-        index:
-            The index of the region to become the current region.
-        """
-        position = self._multiImageView.imagePosition(index)
-        if position is not None:
-            imageSize = self._multiImageView.imageSize()
-            spacing = self._multiImageView.spacing()
-            xmargin = (imageSize.width() + spacing) // 2
-            ymargin = (imageSize.height() + spacing) // 2
-            self._multiImageScroller.ensureVisible(position.x(), position.y(),
-                                                   xmargin, ymargin)
 
 def main2():
     parser = ArgumentParser(description='Face labeling tool')
@@ -426,8 +443,8 @@ def main2():
     screensize = QApplication.desktop().screenGeometry()
 
     face_labeler = QFaceLabeler(datasource)
-    image_view = face_labeler.multiImageView
-    image_view.setImages(faces)
+    #image_view = face_labeler.multiImageView
+    #image_view.setImages(faces)
 
     # This will run the graphical interface
     gui = face_labeler

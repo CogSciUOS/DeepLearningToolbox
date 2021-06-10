@@ -556,7 +556,6 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         """
         # FIXME[bug?]: this methods seems to be invoked quite often
         # - check if this is so and why!
-
         painter = QPainter()
         painter.begin(self)
 
@@ -652,7 +651,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
             for index, region in enumerate(self._regions):
                 painter.setPen(bluePen if index == self._currentRegion else
-                               (redPen if getattr(region, 'invalid') else
+                               (redPen if getattr(region, 'invalid', False) else
                                 greenPen))
                 self._drawRegion(painter, region)
 
@@ -1540,6 +1539,8 @@ class QMultiImageView(QWidget):
         event:
             The :py:class:`QPaintEvent`paint eve
         """
+        super().paintEvent(event)
+        
         painter = QPainter()
         painter.begin(self)
 

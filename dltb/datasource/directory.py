@@ -13,7 +13,7 @@ import logging
 # toolbox imports
 from dltb.base.data import Data
 from dltb.tool.classifier import ClassScheme
-from dltb.util import read_cache, write_cache
+from dltb.util import read_cache, write_cache, cache_path
 from .files import DataFiles
 from .datasource import Imagesource
 
@@ -121,13 +121,14 @@ class DataDirectory(DataFiles):
         self._filenames = filenames_cache and read_cache(filenames_cache)
         if self._filenames is None:
             LOG.info("DataDirectory: creating new cache file '%s' for "
-                     "data directory '%s'", filenames_cache, self.directory)
+                     "data directory '%s'",
+                     cache_path(filenames_cache), self.directory)
             self._prepare_filenames()
             write_cache(filenames_cache, self._filenames)
         else:
             LOG.debug("DataDirectory: read %d filenames from cache '%s' for "
                       "data directory '%s'", len(self._filenames),
-                      filenames_cache, self.directory)
+                      cache_path(filenames_cache), self.directory)
         if self._scheme is None:
             directories = set()
             for name in self._filenames:

@@ -97,5 +97,7 @@ def process_arguments(parser: ArgumentParser, args: Namespace = None) -> None:
             logger.setLevel(getattr(logging, what.upper()))
             log = getattr(logger, what)
             log("Outputting %s messages from module %s", what, module)
-            if importlib.util.find_spec(module) is None:
-                logger.warning("Target module %s not found by importlib.")
+            if (module != '__main__' and
+                    importlib.util.find_spec(module) is None):
+                logger.warning("Target module %s not found by importlib.",
+                               module)
