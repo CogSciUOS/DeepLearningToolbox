@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import QScrollArea
 # toolbox imports
 from toolbox import Toolbox
 from dltb.base.data import Data
+from dltb.base.image import Image
 from dltb.base.meta import Metadata
 from dltb.base.image import Region, PointsBasedLocation, Landmarks
 from dltb.datasource import Datasource, Datafetcher
@@ -613,7 +614,7 @@ class QDataView(QWidget, QObserver, qobservables={
         else:
             self._dataInfo.setData(data)
 
-        if not data.is_image:
+        if not isinstance(data, Image):
             self._imageView.setData(None)
             return
 

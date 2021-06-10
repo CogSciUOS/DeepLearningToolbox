@@ -42,7 +42,7 @@ def main():
     from network.tensorflow import Network as TensorFlowNetwork
     checkpoint = os.path.join('models', 'example_tf_alexnet',
                               'bvlc_alexnet.ckpt')
-    network = TensorFlowNetwork(checkpoint=checkpoint, id='AlexNet')
+    network = TensorFlowNetwork(checkpoint=checkpoint, key='AlexNet')
     network._online()
 
     engine = Engine(config=Config())

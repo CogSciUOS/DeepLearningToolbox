@@ -447,7 +447,7 @@ class Network(BaseNetwork):
         """
         for index, (name, child) in enumerate(module.named_children()):
             # print(f"adding layer: ", index, name, type(child))
-            layer_dict[name] = Layer(module=child, network=self, id=name)
+            layer_dict[name] = Layer(module=child, network=self, key=name)
 
     def _layer_for_module(self, module: nn.Module) -> Layer:
         """Get the layer representing the given torch module.

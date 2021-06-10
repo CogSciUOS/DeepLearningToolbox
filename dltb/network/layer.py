@@ -7,11 +7,11 @@ import numpy as np
 from collections import OrderedDict
 
 # toolbox imports
-from base import Identifiable
+from ..base.register import RegisterEntry
 
 # ------------ Base layers ----------------------
 
-class Layer(Identifiable):
+class Layer(RegisterEntry):
     """A Layer encapsulates operations that transform a tensor.
 
     Attributes
@@ -28,8 +28,8 @@ class Layer(Identifiable):
         input layer.
     """
 
-    def __init__(self, network, id: str = None):
-        super().__init__(id)
+    def __init__(self, network, key: str = None):
+        super().__init__(key=key)
         self._network = network
         self._predecessor = None
         self._sucessor = None

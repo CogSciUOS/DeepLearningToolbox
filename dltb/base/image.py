@@ -33,7 +33,7 @@ import numpy as np
 
 # toolbox imports
 from .observer import Observable
-from .data import Data, BatchDataItem
+from .data import Data, DataDict, BatchDataItem
 from ..util.error import handle_exception
 from .. import thirdparty
 
@@ -112,7 +112,7 @@ class Format:
         return 1.0
 
 
-class Image(Data):
+class Image(DataDict):
     """A collection of image related functions.
     """
 
@@ -281,9 +281,6 @@ class ImageAdapter(ABC):
     @abstractmethod
     def internal_to_image(self, data: Any) -> Imagelike:
         "to be implemented by subclasses"
-
-
-Data.ImageType = Image
 
 
 class ImageExtension(ImageAdapter):

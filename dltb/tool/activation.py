@@ -1174,7 +1174,7 @@ class ActivationTool(Tool, Network.Observer):
                                               output_format=data_format),
                             activations))
         if isinstance(layer, Layer):
-            layer = layer.id
+            layer = layer.key
         activations = activations[layer]
 
         if data_format is not self.data_format:
@@ -1352,15 +1352,15 @@ class ActivationWorker(Worker):
         #   'QObserverHelper' object has no attribute 'layers_of_interest'
         # for observer in self._observers:
         #     layers |= observer.layers_of_interest(self)
-        layer_ids = set(map(lambda layer: layer.id, layers))
+        layer_ids = set(map(lambda layer: layer.key, layers))
 
-        layer_ids |= set(map(lambda layer: layer.id, self._fixed_layers))
+        layer_ids |= set(map(lambda layer: layer.key, self._fixed_layers))
         if self._classification and isinstance(network, Classifier):
-            layer_ids |= {network.score_layer.id}
+            layer_ids |= {network.score_layer.key}
 
         # from set to list
-        layer_ids = [layer.id for layer in network.layers()
-                     if layer.id in layer_ids]
+        layer_ids = [layer.key for layer in network.layers()
+                     if layer.key in layer_ids]
 
         got_new_layers = layer_ids > self._layer_ids and self._data is not None
         self._layer_ids = layer_ids

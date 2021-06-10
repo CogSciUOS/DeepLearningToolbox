@@ -370,7 +370,7 @@ class QLayerSelector(QWidget, QObserver, qobservables={
     def selectLayer(self, layer: Layer, selected: bool = True) -> None:
         """(De)select a layer in this :py:class:`QLayerSelector`.
         """
-        button = self._layerButtons[layer.id]
+        button = self._layerButtons[layer.key]
         self._markButton(button, selected)
 
     def layerSelected(self, layer: Layer) -> bool:
@@ -378,10 +378,10 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         """
         if layer is None:
             raise ValueError("None is not a valid layer.")
-        if layer.id not in self._layerButtons:
-            raise KeyError(f"'{layer.id}' is not a valid layer id:"
+        if layer.key not in self._layerButtons:
+            raise KeyError(f"'{layer.key}' is not a valid layer id:"
                            f"{list(self._layerButtons.keys())}")
-        button = self._layerButtons[layer.id]
+        button = self._layerButtons[layer.key]
         return self._buttonIsMarked(button)
 
     #
@@ -434,13 +434,13 @@ class QLayerSelector(QWidget, QObserver, qobservables={
             layout.addWidget(self.labelInput)
 
             # a column of buttons to select the network layer
-            # FIXME[hack]: layerId vs. layer.id
+            # FIXME[hack]: layerId vs. layer.key
             #for layerId in network.layer_dict.keys():
             for layer in network.layer_dict.values():
                 #button = QPushButton(layerId, self)
-                button = QPushButton(layer.id, self)
+                button = QPushButton(layer.key, self)
                 #self._layerButtons[layerId] = button
-                self._layerButtons[layer.id] = button
+                self._layerButtons[layer.key] = button
                 layout.addWidget(button)
                 button.resize(button.sizeHint())
                 button.clicked.connect(self.onLayerButtonClicked)
@@ -488,7 +488,7 @@ class QLayerSelector(QWidget, QObserver, qobservables={
             if select:
                 self._exclusive = layer
 
-        self.layerClicked.emit(layer.id, select)
+        self.layerClicked.emit(layer.key, select)
 
     def selectLayers(self, activation, info) -> None:
         # FIXME[old]:

@@ -259,7 +259,7 @@ class OldEngine(Worker, Toolbox.Observer, method='activation_changed',
                        unit: int = None, batch_index: int = 0) -> np.ndarray:
         """Get the activation map for the specified layer.
         """
-        layer_id = layer.id if isinstance(layer, Layer) else layer
+        layer_id = layer.key if isinstance(layer, Layer) else layer
         LOG.debug("Engine.get_activation(layer_id=%s, batch_index=%s)",
                   layer_id, batch_index)
 
@@ -323,7 +323,7 @@ class OldEngine(Worker, Toolbox.Observer, method='activation_changed',
         # Determining layers
         layer_ids = []
         for layer in self._layers:
-            layer_id = layer.id
+            layer_id = layer.key
             attribute = prefix + layer_id
             if not data.has_attribute(attribute):
                 layer_ids.append(layer_id)

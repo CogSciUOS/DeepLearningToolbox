@@ -3,6 +3,7 @@ a :py:class.`Tool`.
 """
 
 # standard imports
+from typing import Optional
 import logging
 
 # toolbox imports
@@ -47,12 +48,12 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         the results.
 
     """
+    _tool: Optional[Tool] = None
 
     def __init__(self, tool: Tool = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._data = None
         self._next_data = None
-        self._tool = None
 
         self.tool = tool
         LOG.info("New Worker created: %r (tool=%s)", self, tool)
@@ -67,12 +68,12 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         return self._data
 
     @property
-    def tool(self) -> Tool:
+    def tool(self) -> Optional[Tool]:
         """The :py:class:`Tool` applied by this :py:class:`Worker`."""
         return self._tool
 
     @tool.setter
-    def tool(self, tool: Tool) -> None:
+    def tool(self, tool: Optional[Tool]) -> None:
         """Change the :py:class:`Tool` to be applied by this
         :py:class:`Worker`.
         """
@@ -155,29 +156,31 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         detector. The results of the detector will be stored
         in detector data under the attribute `detections`.
         """
+        tool = self.tool
+        if tool is None:
+            return
         while self._next_data is not None:
 
             data = self._next_data
             LOG.info("Working on next data (%r) with Tool %s.",
-                     data, self._tool)
+                     data, tool)
             self._data = data
             self.change(data_changed=True)
             with self.failure_manager(catch=True):
-                result = self.tool.external_result + ('duration', )
+                result = tool.external_result + ('duration', )
                 LOG.debug("Worker %r applying tool %r on data %r "
-                          "with result %s.", self, self.tool, data, result)
+                          "with result %s.", self, tool, data, result)
                 if stepwise:
-                    for values in self.tool.steps(data, result=result,
-                                                  **kwargs):
-                        self.tool.add_data_attributes(data, result, values)
+                    for values in tool.steps(data, result=result, **kwargs):
+                        tool.add_data_attributes(data, result, values)
                         self.change(work_step=True)
                 else:
-                    self.tool.apply(data, result=result, **kwargs)
+                    tool.apply(data, result=result, **kwargs)
                 self.change(work_finished=True)
             if self._next_data is data:
                 self._next_data = None
             LOG.info("Working on data (%r/%r) with Tool %s finished.",
-                     data, self._data, self._tool)
+                     data, self._data, tool)
     # FIXME[bug]: In case of an error, we may also cause some Qt error here:
     #   QObject::connect: Cannot queue arguments of type 'QTextBlock'
     #   (Make sure 'QTextBlock' is registered using qRegisterMetaType().)
@@ -189,7 +192,9 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
     # seen it at other locations ...)
 
     def _apply_tool(self, data, **kwargs) -> None:
-        self.tool.apply(self, data, **kwargs)
+        tool = self.tool
+        if tool is not None:
+            tool.apply(self, data, **kwargs)
 
     #
     # Tool.Observer

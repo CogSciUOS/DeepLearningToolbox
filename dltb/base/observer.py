@@ -7,7 +7,7 @@ This module contains definitions for observer functionality
 """
 
 # standard imports
-from typing import Callable, Iterator, Tuple
+from typing import Callable, Iterator, Tuple, Type
 import threading
 import logging
 
@@ -331,8 +331,13 @@ class Observable(object):
         if changeables is not None:
             cls._changeables = {**cls._changeables, **changeables}
 
-    Change: type = BaseChange
-    Observer: type = BaseObserver
+    # FIXME[error]: type error (mypy)
+    # Variable "dltb.base.observer.Observable.Change" is not valid as a type
+    # Variable "dltb.base.observer.Observable.Observer" is not valid as a type
+    Change = BaseChange
+    Observer = BaseObserver
+    # Change: Type[BaseChange] = BaseChange
+    # Observer: Type[BaseObserver] = BaseObserver
     _change_method: str = 'observable_changed'
     _changeables: dict = {}
 

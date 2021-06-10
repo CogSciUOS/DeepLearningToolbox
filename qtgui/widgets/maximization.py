@@ -601,7 +601,7 @@ class QMaximizationConfig(QWidget, QObserver, qobservables={
             self._layerSelector.clear()
             if network is not None and self._config is not None:
                 self._layerSelector.addItems(network.layer_dict.keys())
-                self._config.NETWORK_KEY = network.get_id()
+                self._config.NETWORK_KEY = network.key
                 # Default strategy: select the last layer:
                 self._config.LAYER_KEY = network.output_layer_id()
 

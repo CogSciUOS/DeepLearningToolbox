@@ -22,6 +22,24 @@ Datalike = Union[np.ndarray, str]
 
 
 class Data(Observable, method='data_changed', changes={'data_changed'}):
+    """Abstract base class for :py:class:`Data` objects.
+    A :py:class:`Data` object represents a single data point or a
+    batch of such point, that can for example be obtained from
+    a :py:class:`Datasource`.
+    """
+
+    def __new__(cls, *args, **kwargs) -> 'Data':
+        new_cls = DataDict if cls is Data else cls
+        # error: Argument 2 for "super" not an instance of argument 1
+        # probably a bug in mypy? https://github.com/python/mypy/issues/7595
+        return super(Data, new_cls).__new__(new_cls)
+            # __new__(new_cls, *args, **kwargs)  # type: ignore[misc]
+
+    # def __getattr__(self, attr) -> Any:
+    # def __setattr__(self, attribute: str, value: Any) -> None:
+
+
+class DataDict(Data):
     # pylint: disable=no-member
     # _attributes, data
     """A :py:class:`Data` object describes piece of data, either single
@@ -82,7 +100,6 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     * single or multi:
 
     """
-    ImageType = type(None)
 
     def __init__(self, array: np.ndarray = None,
                  datasource=None, batch: int = None, **kwargs) -> None:
@@ -175,12 +192,6 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
         """Check if this :py:class:`Data` represents a batch of data.
         """
         return hasattr(self, '_batch')
-
-    @property
-    def is_image(self) -> bool:
-        """Check if this :py:class:`Data` represents an image.
-        """
-        return isinstance(self, self.ImageType)
 
     def has_attribute(self, name: str) -> bool:
         """Check if this :py:class:`Data` has the given attribute.
@@ -276,7 +287,7 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
             print(f" - {name}[{'batch' if is_batch else 'global'}]: {info}")
 
 
-class BatchDataItem:
+class BatchDataItem(Data):
     """A single data item in a batch of data.
     """
     is_batch: bool = False
@@ -343,7 +354,7 @@ class BatchDataItem:
                                  batch=True, initialize=True)
 
 
-class BatchWrapper:
+class BatchWrapper(Data):
     """A wrapper letting a single (non-batch) :py:class:`Data` object
     looking like a batch.
     """
@@ -358,7 +369,7 @@ class BatchWrapper:
             raise AttributeError(f"BatchWrapper has no attribute '{attr}'")
         if self._data.is_batch_attribute(attr):
             value = getattr(self._data, attr)
-            return (value[np.newaxsis] if isinstance(np.ndarray, value)
+            return (value[np.newaxis] if isinstance(np.ndarray, value)
                     else [value])
         return getattr(self._data, attr)
 

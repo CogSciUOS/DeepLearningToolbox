@@ -422,7 +422,7 @@ class Network(BaseNetwork):
                     # Instantiate the new Layer
                     layer_cls = self._LAYER_TYPES_TO_CLASSES[layer_type]
                     layer_dict[layer_name] = layer_cls(self, matching_ops,
-                                                       id=layer_name)
+                                                       key=layer_name)
 
                     LOG.debug(f"debug:   ** {layer_name}"
                                  f" => {type(layer_dict[layer_name])}")
@@ -650,7 +650,7 @@ class Network(BaseNetwork):
         """
         graph_def = self._graph.as_graph_def()
 
-        LOG.debug(f"Network: {self.get_id()} ({type(self)}):") 
+        LOG.debug(f"Network: {self.key} ({type(self)}):") 
         for i, tensor in enumerate(graph_def.node):
             LOG.debug(f"  {i}) {tensor.name}: {type(tensor)}")
         LOG.debug(f"debug: Layer dict:") 
@@ -793,7 +793,7 @@ class Alexnet(Classifier, ImageNetwork, Network):
         checkpoint = os.path.join('models', 'example_tf_alexnet',
                                   'bvlc_alexnet.ckpt')
         LOG.debug("alexnet: TensorFlowNetwork")
-        super().__init__(*args, checkpoint=checkpoint, id='AlexNet',
+        super().__init__(*args, checkpoint=checkpoint, key='AlexNet',
                          scheme='ImageNet', lookup='caffe', **kwargs)
 
         # FIXME[old]:

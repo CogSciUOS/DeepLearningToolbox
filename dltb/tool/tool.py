@@ -53,16 +53,16 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
 
     Class Attributes
     ----------------
-    external_result: Tuple[str]
+    external_result: Tuple[str, ...]
         A tuple naming the values to be returned by an application
         of the :py:class:`Tool`. These values will be constructed
         by calling :py:meth:`_postprocess` on the intermediate values.
-    internal_arguments: Tuple[str] = ()
+    internal_arguments: Tuple[str, ...] = ()
         A tuple naming the positional arguments for calling the internal
         processing function :py:meth:`_process`. Values for these
         names will be taken from the intermediate data structure,
         which should be filled by :py:class:`_preprocess`
-    internal_result: Tuple[str] = ()
+    internal_result: Tuple[str, ...] = ()
         A name tuple naming the results of the internal processing.
         Values will be stored under this name in the intermediate
         data structure.
@@ -92,25 +92,25 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     # Application API
     #
 
-    external_result: Tuple[str] = ()
-    internal_arguments: Tuple[str] = ()
-    internal_result: Tuple[str] = ()
+    external_result: Tuple[str, ...] = ()
+    internal_arguments: Tuple[str, ...] = ()
+    internal_result: Tuple[str, ...] = ()
 
     def __call__(self, *args, batch: bool = False, internal: bool = False,
-                 result: Union[str, Tuple[str]] = None,
+                 result: Union[str, Tuple[str, ...], None] = None,
                  **kwargs) -> Any:
         """Apply the tool to the given arguments.
 
         Arguments
         ---------
-        batch: bool
+        batch:
             A flag indicating that arguments are given a batch,
             do batch_processing.
-        internal: bool
+        internal:
             A flag indicating that arguments are given in internal format,
             no preprocessing of the given data is required and no
             postprocessing is applied.
-        result: Union[str, Tuple[str]]
+        result:
             A description of the result values to return. If None is
             given, the Tools default will be used (if the `internal` flag
             is set, the internal result will be returned without
@@ -203,7 +203,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
 
     def _do_preprocess(self, *args, internal: bool = False,
                        batch: bool = False,
-                       result: Union[str, Tuple[str]] = None,
+                       result: Union[str, Tuple[str, ...], None] = None,
                        **kwargs) -> Data:
         """Perform preprocessing of arguments provided when invoking the
         tool.  The actual preprocessing steps depend on the specific
@@ -255,7 +255,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
             context = self._preprocess(*args, batch=batch, **kwargs)
         context.add_attribute('result_', result)
 
-        if 'duration' in result:
+        if result is not None and 'duration' in result:
             context.add_attribute('start_', time.time())
         return context
 
@@ -275,7 +275,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         return self._get_attributes(data, result, simplify=True)
 
     @staticmethod
-    def _get_attributes(data: Data, what: Tuple[str],
+    def _get_attributes(data: Data, what: Tuple[str, ...],
                         simplify: bool = False) -> Any:
         if simplify:
             if len(what) == 0:
@@ -285,7 +285,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         return tuple(getattr(data, arg) for arg in what)
 
     @staticmethod
-    def _add_attributes(data: Data, what: Tuple[str], args,
+    def _add_attributes(data: Data, what: Tuple[str, ...], args,
                         simplify: bool = False) -> None:
         if simplify and len(what) == 0:
             pass
@@ -373,7 +373,8 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     # data processing
     #
 
-    def apply(self, data: Data, *args, result: Union[str, Tuple[str]] = None,
+    def apply(self, data: Data, *args,
+              result: Union[str, Tuple[str, ...], None] = None,
               **kwargs) -> None:
         """Apply the tool to the given data object. Results are stored
         as data attributes.
@@ -429,7 +430,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
                         self.key + '_' + name, None)
         return default if value is None else value
 
-    def add_data_attributes(self, data: Data, names: Tuple[str],
+    def add_data_attributes(self, data: Data, names: Tuple[str, ...],
                             values: Any) -> None:
         """Add a tool specific attribute to a data object.
         """
@@ -451,7 +452,7 @@ class BatchTool(Tool):
 
     def _do_preprocess(self, *args, internal: bool = False,
                        batch: bool = False,
-                       result: Union[str, Tuple[str]] = None,
+                       result: Union[str, Tuple[str, ...]] = None,
                        **kwargs) -> Data:
         data = self._do_preprocess(*args, internal, batch, result, **kwargs)
         return data
@@ -527,7 +528,7 @@ class IterativeTool(Tool):
                 if steps < 0:
                     break
             if stop is not None:
-                if stop.isSet():
+                if stop.is_set():
                     break
             if self._stop_all:
                 break
@@ -541,7 +542,8 @@ class IterativeTool(Tool):
     # data processing
     #
 
-    def apply(self, data: Data, *args, result: Union[str, Tuple[str]] = None,
+    def apply(self, data: Data, *args,
+              result: Union[str, Tuple[str, ...], None] = None,
               stepwise: bool = False, **kwargs) -> None:
         # pylint: disable=arguments-differ
         """Perform iterative processing on the data object.
@@ -565,4 +567,4 @@ class IterativeTool(Tool):
                 for name, value in zip(result, values):
                     self.add_data_attribute(data, name, value)
         else:
-            super().apply(self, data, *args, result=result, **kwargs)
+            super().apply(data, *args, result=result, **kwargs)

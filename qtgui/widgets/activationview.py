@@ -666,7 +666,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         painter : QPainter
         """
         painter.drawText(self.rect(), Qt.AlignCenter, "No data,\n"
-                         f"layer='{self._layer.id if self._layer else None}',"
+                         f"layer='{self._layer.key if self._layer else None}',"
                          f"\nworker={self._activationWorker is not None}!")
 
     def paintEvent(self, _: QPaintEvent) -> None:

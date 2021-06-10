@@ -89,7 +89,6 @@ Examples:
 
 """
 
-from dltb.base.types import Identifiable
 from .config import Config
 from .runner import Runner, AsyncRunner
 from .controller import Controller, View, run

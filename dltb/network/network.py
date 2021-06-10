@@ -14,7 +14,7 @@ import numpy as np
 
 # toolbox imports
 from ..base import Extendable
-from ..base.register import RegisterClass
+from ..base.register import RegisterClass, Registrable
 from ..base.prepare import Preparable
 from ..base.data import Data, Datalike
 from ..base.image import Imagelike, ImageExtension
@@ -24,7 +24,6 @@ from ..tool.classifier import SoftClassifier
 from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
 from ..util.image import imresize
 from ..util.terminal import Terminal, DEFAULT_TERMINAL
-from base import Identifiable
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -45,8 +44,8 @@ LOG.setLevel(logging.DEBUG)
 #  * provide some information on the layer
 #
 
-
-class Network(Identifiable, Extendable, Preparable, method='network_changed',
+# Identifiable
+class Network(Extendable, Preparable, method='network_changed',
               changes={'state_changed', 'weights_changed'},
               metaclass=RegisterClass):
     """Abstract Network interface for all frameworks.
@@ -126,7 +125,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     """
 
     # FIXME[problem]:
-    # There seems to be a mismatch between layer.id and the layer_id that
+    # There seems to be a mismatch between layer.key and the layer_id that
     # is used as key in the layer_dict.
     # (1) the name 'id' is alread used by the python buildin function id()
     #     that provides a unique number for each object.
@@ -142,10 +141,9 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     #        ./network/network.py
     #        ./network/layers/layers.py
     # -> replace
-    #       layer.id -> layer.key
+    #       layer.key -> layer.key
     #       layer_id -> layer_key
     #       layer.name -> layer_key
-    #       network.id -> network_key
 
     @classmethod
     def import_framework(cls):
@@ -190,7 +188,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
     # FIXME[todo]: channel ordering is relevant when processing
     # actiations
 
-    def __init__(self, id=None, data_format: str = None,
+    def __init__(self, key: str = None, data_format: str = None,
                  **kwargs) -> None:
         """
 
@@ -205,7 +203,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         if self.__class__ == Network:  # FIXME[todo]: use python ABC mechanism
             raise NotImplementedError('Abstract base class Network '
                                       'cannot be used directly.')
-        super().__init__(id, **kwargs)
+        super().__init__(key=key, **kwargs)
 
         # Every loaded_network should know which data format it is using.
         # Default is channels_last.
@@ -240,8 +238,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
         """
         if isinstance(key, str):
             return key in self.layer_dict
-        elif isinstance(key, Identifiable):
-            return key.get_id() in self.layer_dict
+        elif isinstance(key, Registrable):
+            return key.key in self.layer_dict
         return False
 
     def __getitem__(self, key: Any) -> 'Layer':
@@ -251,8 +249,8 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
             return self.layer_dict[key]
         elif isinstance[key, int]:
             return list(self.layer_dict.items())[key]
-        elif isinstance(key, Identifiable):
-            return self.layer_dict[key.get_id()]
+        elif isinstance(key, Registrable):
+            return self.layer_dict[key.key]
         raise KeyError(f"No layer for key '{key}' in network.")
 
     #
@@ -1075,7 +1073,7 @@ class Network(Identifiable, Extendable, Preparable, method='network_changed',
                         f"with {len(self)} layers:")
         layers = list(self.layers(layers=layers))
         for index, layer in enumerate(self):
-            line = (f"{layer.get_id():20}: "
+            line = (f"{layer.key:20}: "
                     f"{layer.input_shape} -> {layer.output_shape}")
             if layer in layers:
                 line = terminal.markup(line, 'emphasize')

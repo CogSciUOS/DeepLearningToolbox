@@ -148,7 +148,7 @@ class Engine(Observable, method='maximization_changed',
         self._network = network
         self._helper = None
         if self._config is not None:
-            self._config.NETWORK_KEY = network.get_id()
+            self._config.NETWORK_KEY = network.key
 
     @change
     def _prepare(self):

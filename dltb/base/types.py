@@ -1,5 +1,9 @@
-from typing import Union, Tuple
-  
+"""General types used in the deep learning toolbox.
+"""
+
+from typing import Union, Tuple, Optional
+
+
 class Extendable:
     """A class whose instances can be dynamically extended by additional
     superclasses.
@@ -26,14 +30,14 @@ class Extendable:
     """
 
     @staticmethod
-    def _extend_class(cls: type, *superclasses) -> type:
+    def _extend_class(parent: type, *superclasses) -> type:
         """Create an ad hoc class as a subclass of the main class and
         the given classes. Only those classes will be added that
         are not already a superclass of the given class.
 
         Parameters
         ----------
-        cls:
+        parent:
             A class that should be extended.
         superclasses:
             Classes that should be added as superclasses.
@@ -43,14 +47,20 @@ class Extendable:
             The new ad hoc class formed from the original class extended
             by the superclass(es).
         """
-        superclasses = tuple(c for c in superclasses if not issubclass(cls, c))
-        if superclasses:
-            clsname = cls.__name__ + 'Extended'
-            cls = cls.__class__(clsname, (cls, ) + superclasses, {})
-        return cls
-        
-    def __new__(cls, *args, extend: Union[type, Tuple[type]]=None,
-                **kwargs) -> object:
+        # filter out superclasses that are already superclasses of parent
+        superclasses = \
+            tuple(c for c in superclasses if not issubclass(parent, c))
+
+        if not superclasses:  # all superclasses are already covered by parent
+            return parent  # we do not need a new class
+
+        # create a new class
+        clsname = parent.__name__ + 'Extended'
+        return parent.__class__(clsname, (parent, ) + superclasses, {})
+
+    def __new__(cls, *args, extend: Union[type, Tuple[type]] = None,
+                **kwargs) -> 'Extendable':
+        # pylint: disable=unused-argument
         """Construct a new instance of the given class, extended by
         the additional classes provied in the `extend` parameter given
         to the constructor.
@@ -63,14 +73,16 @@ class Extendable:
         """
         if extend:
             superclasses = (extend,) if isinstance(extend, type) else extend
+            # pylint: disable=self-cls-assignment
             cls = Extendable._extend_class(cls, *superclasses)
         return super().__new__(cls)
 
     def __init__(self, *args, extend=None, **kwargs) -> None:
+        # pylint: disable=unused-argument
         """An initialization, processing the extend parameter.
         """
-        super().__init__(*args, **kwargs)
-        
+        super().__init__(*args, **kwargs)  # type: ignore
+
     def extend(self, superclass: type) -> None:
         """Extend this :py:class:`Extendable` by adding a superclass.
         After calling this method, the :py:class:`Extendable` will
@@ -99,8 +111,16 @@ class Extendable:
         self.__class__ = Extendable._extend_class(self.__class__, superclass)
 
 
+# FIXME[old]: this is to be replaced by the new `Registrable` class
+# currently only used by
+#  ./dltb/network/network.py
+#  ./dltb/network/layer.py
 class Identifiable:
-    _id: str = None
+    # pylint: disable=redefined-builtin
+    """:py:class:`Identifiable` objects have properties
+    (:py:prop:`key` and :py:prop:`id`) to identify themself.
+    """
+    _id: Optional[str] = None
     _counter: int = 0
 
     def __init__(self, id=None, **kwargs):
@@ -110,7 +130,7 @@ class Identifiable:
         else:
             self._id = id
 
-    def _ensure_id(self):
+    def _ensure_id(self) -> str:
         if self._id is None:
             Identifiable._counter += 1
             self._id = self.__class__.__name__ + str(Identifiable._counter)
@@ -118,13 +138,19 @@ class Identifiable:
 
     @property
     def key(self) -> str:
+        """A value that uniquely identifies this :py:class:`Identifiable`.
+        """
         return self.get_id()
 
     @property
-    def id(self) -> str:
+    def id(self) -> str:  # pylint: disable=invalid-name
+        """A value that uniquely identifies this :py:class:`Identifiable`.
+        """
         return self.get_id()
-    
+
     def get_id(self):
+        """A value that uniquely identifies this :py:class:`Identifiable`.
+        """
         return self._ensure_id()
 
     def __hash__(self):
