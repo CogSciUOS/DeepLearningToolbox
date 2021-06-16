@@ -254,7 +254,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     @staticmethod
     def hasHeightForWidth() -> bool:
         return True
-
+    
     @protect
     def onContextMenu(self, point: QPoint):
         """React to the display of a context menu.
@@ -1120,7 +1120,7 @@ class QMultiImageView(QWidget):
 
     Readonly properties
     -------------------
-    _qimages: List[QImage]
+    _images: List[Image]
         A list of `QImage`s holding the images to be displayed.
     _qregions:
         A list of :py:class:`Region`s describing regions in a larger
@@ -1129,11 +1129,14 @@ class QMultiImageView(QWidget):
         may contain annotations which may influence how the corresponding
         image is displayed.
     """
+    NavigationContinue: int = 1
+    NavigationCircular: int = 2
+    NavigationBlock: int = 3
 
     currentImageChanged = pyqtSignal(int)
     annotationsChanged = pyqtSignal(int)
 
-    _qimages: List[QImage] = None
+    _images: List[Image] = None
 
     def __init__(self, orientation: Qt.Orientation = Qt.Horizontal,
                  grid: Tuple[int, int] = None,
@@ -1146,10 +1149,11 @@ class QMultiImageView(QWidget):
                 (1, None) if orientation == Qt.Horizontal else (None, 1)
         self._imageSize = QSize(100, 100)
         self._spacing = 10
-        self._qimages = []
+        self._images = []
         self._regions = None
         self._currentIndex = -1  # -1 means no image selected
         self._initLayout()
+        self._navigation = self.NavigationContinue
 
         # By default, a QWidget does not accept the keyboard focus, so
         # we need to enable it explicitly: Qt.StrongFocus means to
@@ -1175,7 +1179,13 @@ class QMultiImageView(QWidget):
         """The number of images currently displayed in this
         :py:class:`QMultiImageView`.
         """
-        return len(self._qimages)
+        return len(self._images)
+
+    def navigation(self) -> int:
+        return self._navigation
+
+    def setNavigation(self, navigation: int) -> None:
+        self._navigation = navigation
 
     def rows(self) -> int:
         """The number of rows used for display in this
@@ -1242,14 +1252,14 @@ class QMultiImageView(QWidget):
             index = column * self._grid[0] + row
         else:
             index = row * self._grid[1] + column
-        if index > self.count():
-            index = self.count() - 1
         return index
 
     def _setGridPosition(self, row: int, column: int) -> None:
         """Set the index of the currently selected image.
         """
         index = self._indexForPosition(row, column)
+        if index >= self.count():
+            index = -1
         self.setCurrentImage(-1 if index == self._currentIndex else index)
 
     def _gridChanged(self) -> None:
@@ -1296,7 +1306,14 @@ class QMultiImageView(QWidget):
         """
         self._currentIndex = -1
         self._regions = None
-        self._qimages = [imageToQImage(image) for image in images]
+
+        self._images = []
+        for image in images:
+            image = Image.as_data(image)
+            image.add_attribute('qimage', imageToQImage(image))
+            self._images.append(image)
+        self._images = [Image.as_data(image) for image in images]
+
         self._gridChanged()
 
     def setImagesFromRegions(self, image: Imagelike,
@@ -1365,60 +1382,6 @@ class QMultiImageView(QWidget):
             self.currentImageChanged.emit(index)
             self.update()
 
-    def invalid(self, index: int = None) -> bool:
-        """Check if an image in this :py:class:`QMultiImageView` is invalid.
-        Images can have a flag, marking them as valid or invalid.
-
-        Arguments
-        ---------
-        index:
-            An index identifying the image to be checked. If no index is
-            provided, the currently selected image is used. If no index
-            can be determined, the method will return `False`.
-
-        Result
-        ------
-        invalid:
-            `True`, if the image has been explicitly marked as invalid.
-            Otherwise `False`.
-        """
-        if index is None:
-            index = self.currentImage()
-        if not 0 <= index < len(self._qimages):
-            return False  # no index could be determined
-
-        if self._regions is None:
-            return getattr(self._qimages[index], 'invalid', False)
-
-        region = self._regions[index]
-        return getattr(region, 'invalid', False)
-
-    def invalidate(self, index: int = None) -> None:
-        """Invalidate an image in this :py:class:`QMultiImageView`.
-        Invalid images will be displayed in a different way as
-        valid images.
-
-        Arguments
-        ---------
-        index:
-            An index identifying the image to be invalidated. If no index is
-            provided, the currently selected image is used. If there is
-            no such index, the method will do nothing.
-        """
-        if index is None:
-            index = self.currentImage()
-        if not self._qimages or not 0 <= index < len(self._qimages):
-            return
-
-        if self._regions is None:
-            setattr(self._qimages[index], 'invalid',
-                    not getattr(self._qimages[index], 'invalid', False))
-        else:
-            region = self._regions[index]
-            region.invalid = not getattr(region, 'invalid', False)
-        self.annotationsChanged.emit(index)
-        self.update()
-
     def imagePosition(self, index: int = None) -> QPoint:
         """Return the center point of the image with the given index.
 
@@ -1436,7 +1399,7 @@ class QMultiImageView(QWidget):
         """
         if index is None:
             index = self.currentImage()
-        if not 0 <= index < len(self._qimages):
+        if not 0 <= index < len(self._images):
             return None
 
         horizontal_skip = self._spacing + self._imageSize.width()
@@ -1453,15 +1416,6 @@ class QMultiImageView(QWidget):
         row = event.y() // (self._imageSize.width() + self._spacing)
         column = event.x() // (self._imageSize.width() + self._spacing)
         self._setGridPosition(row, column)
-
-        if event.button() == Qt.RightButton:
-            self.invalidate()
-
-    @protect
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        """A mouse double click invalidates the current image.
-        """
-        self.invalidate()
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -1488,7 +1442,7 @@ class QMultiImageView(QWidget):
             mode = 1  # wrap
             if row < 0:
                 row, column = (0, 0) if self.count() else (-1, -1)
-            elif mode == 1:
+            elif self._navigation == self.NavigationCircular:
                 if key == Qt.Key_Left:
                     column -= 1
                     if column < 0:
@@ -1509,6 +1463,54 @@ class QMultiImageView(QWidget):
                     row = (row+1) % self.rows()
                     if self._indexForPosition(row, column) >= self.count():
                         row = 0
+            elif self._navigation == self.NavigationContinue:
+                if key == Qt.Key_Left:
+                    column -= 1
+                    if column < 0:
+                        column = self.columns() - 1
+                        if row > 0:
+                            row -= 1
+                        else:
+                            row = self.rows() - 1
+                    if self._indexForPosition(row, column) >= self.count():
+                        if row > 1:
+                            row -= 1
+                        else:
+                            column = self.count() - 1
+                elif key == Qt.Key_Right:
+                    column = (column+1) % self.columns()
+                    if column == 0:
+                        row += 1
+                    if self._indexForPosition(row, column) >= self.count():
+                        row, column = 0, 0
+                elif key == Qt.Key_Up:
+                    row -= 1
+                    if row < 0:
+                        row = self.rows() - 1
+                        if column > 0:
+                            column -= 1
+                        else:
+                            column = self.columns() - 1
+                    if self._indexForPosition(row, column) >= self.count():
+                        row -= 1
+                elif key == Qt.Key_Down:
+                    row += 1
+                    if self._indexForPosition(row, column) >= self.count():
+                        row = 0
+                        column = (column+1) % self.columns()
+            elif self._navigation == self.NavigationBorder:
+                if key == Qt.Key_Left:
+                    if column > 0:
+                        column -= 1
+                elif key == Qt.Key_Right:
+                    if self._indexForPosition(row, column+1) < self.count():
+                        column += 1
+                elif key == Qt.Key_Up:
+                    if row > 0:
+                        row -= 1
+                elif key == Qt.Key_Down:
+                    if self._indexForPosition(row+1, column) < self.count():
+                        row += 1                
             self._setGridPosition(row, column)
         elif key in (Qt.Key_Plus, Qt.Key_Minus):
             grid = list(self._grid)
@@ -1523,8 +1525,6 @@ class QMultiImageView(QWidget):
                 elif grid[0] > 1:
                     grid[0] -= 1
             self.setGrid(tuple(grid))
-        elif key == Qt.Key_Delete:
-            self.invalidate()
         elif key == Qt.Key_D:
             self._debug()
         else:
@@ -1555,31 +1555,25 @@ class QMultiImageView(QWidget):
         vertical_skip = self._spacing + self._imageSize.height()
         half_spacing = self._spacing // 2
         position = QPoint(half_spacing, half_spacing)
-        for index, qimage in enumerate(self._qimages):
+        for index, image in enumerate(self._images):
             # update position
             row, column = self._gridPosition(index)
             position = QPoint(column * horizontal_skip + half_spacing,
                               row * vertical_skip + half_spacing)
             rect = QRect(position, self._imageSize)
-            self._paintImage(painter, index, qimage, rect)
+            self._paintImage(painter, index, image, rect)
 
         painter.end()
 
     def _paintImage(self, painter: QPainter, index: int,
-                    qimage: QImage, rect: QRect) -> None:
-        painter.drawImage(rect, qimage)
+                    image: Image, rect: QRect) -> None:
+        painter.drawImage(rect, image.qimage)
 
         # draw decoration around current image
         if index == self._currentIndex:
             painter.setPen(self._bluePen)
             painter.drawRect(rect.x()-2, rect.y()-2,
                              rect.width()+4, rect.height()+4)
-
-        # draw specific decorations
-        if self.invalid(index):
-            painter.setPen(self._redPen)
-            painter.drawLine(rect.topLeft(), rect.bottomRight())
-            painter.drawLine(rect.topRight(), rect.bottomLeft())
 
     def _debug(self) -> None:
         """Output some debug information to standard output.

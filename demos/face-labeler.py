@@ -7,9 +7,18 @@
 # - move face-label out auf demos/ split in separate files ...
 # - read in original metadata (including age)
 # - nice display for metadata
-# - store new metadata
+# - make sure to clear data/image if no image is selected
 # - non hardcoded filename handling
 
+# FIXME[hack]: DIRECTORY: a directory holding the different stages of the
+# dataset (clean0, clean2 and clean4)
+DIRECTORY = '/space/home/ulf/data/children/'
+DIRECTORY = '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/'
+
+DIRECTORY_CLEAN0 = None  # defaults to DIRECTORY/clean0
+DIRECTORY_CLEAN1 = None  # defaults to DIRECTORY/clean1
+DIRECTORY_CLEAN2 = None  # defaults to DIRECTORY/clean2
+DIRECTORY_CLEAN4 = None  # defaults to DIRECTORY/clean4
 
 
 """The Labeled Children Faces in the Wild dataset.
@@ -33,13 +42,7 @@ from dltb.base.image import Image
 from dltb.datasource import ImageDirectory
 
 # logging
-LOG = logging.getLogger(__name__)
-
-print(__name__)
-
-# FIXME[hack]
-DIRECTORY = '/space/home/ulf/data/children/clean4/UnifiedFunneled'
-DIRECTORY = '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4/UnifiedFunneled2'
+LOG = logging.getLogger(__name__)  # __name__ is usually '__main__'
 
 class ChildFaces(ImageDirectory):
     """The directory clean4 contains the 4th clean stage.
@@ -87,6 +90,12 @@ class ChildFaces(ImageDirectory):
                          description=description,
                          label_from_directory='name',
                          **kwargs)
+        self._clean4 = os.path.dirname(self.directory)
+        self._basedir = os.path.dirname(self._clean4)
+        self._clean2 = os.path.join(self._basedir, 'clean2')
+        self._clean0 = os.path.join(self._basedir, 'clean0')
+        print("basedir", self._basedir)
+        print("clean4", self._clean4)
 
     def __str__(self) -> str:
         return (super().__str__() +
@@ -127,12 +136,10 @@ class ChildFaces(ImageDirectory):
         """
         """
         filename_meta = data.filename.rsplit('.', maxsplit=1)[0] + '.json'
-        suffix = '2' if os.path.isfile(filename_meta + '2') else ''
-
-        filename = filename_meta + suffix
-        if os.path.isfile(filename):
-            LOG.debug("Loading meta file '%s'", filename)
-            with open(filename) as infile:
+        filename_meta += '2' if os.path.isfile(filename_meta + '2') else ''
+        if os.path.isfile(filename_meta):
+            LOG.debug("Loading meta file '%s'", filename_meta)
+            with open(filename_meta) as infile:
                 meta = json.load(infile)
                 # image:        path to the image file
                 # source:       path to the source file
@@ -140,28 +147,71 @@ class ChildFaces(ImageDirectory):
                 # boundingbox:  bounding bos of the face in the original image
                 # id:           the class label
                 data.add_attribute('image', meta['image'])
-                data.add_attribute('source', meta['source'])
+
+                source_filename = meta['source']
+                source_filename = source_filename.replace('\\', '/')
+                source_filename = source_filename.replace('E:', self._basedir)
+                data.add_attribute('source', source_filename)
                 data.add_attribute('dataset', meta['dataset'])
-                data.add_attribute('boundingbox', meta['boundingbox'])
-                data.add_attribute('id', meta['id'])
+                if 'boundingbox' in meta:
+                    data.add_attribute('boundingbox', meta['boundingbox'])
+                if 'id' in meta:
+                    data.add_attribute('id', meta['id'])
+                data.add_attribute('age', meta.get('age', None))
+                data.add_attribute('valid', meta.get('valid', True))
             data.add_attribute('metafile', filename_meta)
         else:
-            LOG.debug("No meta file for data (tried '%s')", filename)
+            LOG.debug("No meta file for data (tried '%s')", filename_meta)
+            if data.filename.startswith(self.directory):
+                filename = data.filename[len(self.directory)+1:]
+                parts = filename.split('/')
+                label, imagename = parts[0], parts[-1]
+                if imagename.startswith('imdb_wiki'):
+                    data.add_attribute('dataset', 'imdb_wiki')
+                    source_filename = os.path.join(self._clean4, 'Unified',
+                                                   filename)
+                    if os.path.isfile(source_filename):
+                        data.add_attribute('source', source_filename)
+                elif len(parts) > 2 and parts[1] == 'New':
+                    LOG.warning("New image without meta data: '%s'", filename)
+                    data.add_attribute('dataset')
+                elif os.path.isfile(os.path.join(self._clean2, 'Patricia',
+                                                 filename)):
+                    data.add_attribute('dataset', 'Patricia')
+                    data.add_attribute('source',
+                                       os.path.join(self._clean2, 'Patricia',
+                                                    filename))
+                else:
+                    LOG.warning("Unknown source dataset for '%s'", filename)
+                    data.add_attribute('dataset')
+            else:
+                LOG.warning("Bad filename: '%s' (not in directory '%s')",
+                            data.filename, self.directory)
+                data.add_attribute('dataset')
+            if not filename_meta.endswith('json2'):
+                filename_meta += '2'
+            data.add_attribute('metafile', filename_meta)
+            if not data.has_attribute('age'):
+                data.add_attribute('age')
+            if not data.has_attribute('valid'):
+                data.add_attribute('valid', True)
 
     def write_metadata(self, data: Image) -> None:
         """
         """
         if hasattr(data, 'metafile') and hasattr(data, 'valid'):
-            suffix = '2'
+            suffix = '' if data.metafile.endswith('json2') else '2'
             meta = {
                 'image': data.filename,
                 'source': data.source,
                 'dataset': data.dataset,
-                'boundingbox': data.boundingbox,
-                'id': data.id,
                 'valid': data.valid,
                 'age': data.age
             }
+            if data.has_attribute('boundingbox'):
+                meta['boundingbox'] = data.boundingbox
+            if data.has_attribute('id'):
+                meta['id'] = data.id
             filename = data.metafile + suffix
             LOG.debug("Writing new meta file '%s'", filename)
             with open(filename, 'w') as outfile:
@@ -181,7 +231,7 @@ class ChildFaces(ImageDirectory):
 #  export PYTHONPATH=${PWD}/DeepLearningToolbox:${PYTHONPATH}
 #
 # Running:
-#   python demos/face-labeler.py --directory=/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4/UnifiedFunneled
+#   python demos/face-labeler.py --directory=/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4/UnifiedFunneled2
 
 # standard imports
 from argparse import ArgumentParser
@@ -189,7 +239,7 @@ import sys
 
 # third-party imports
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSlot
-from PyQt5.QtGui import QKeyEvent, QImage, QPainter, QPen
+from PyQt5.QtGui import QKeyEvent, QMouseEvent, QImage, QPainter, QPen
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QSpinBox
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 
@@ -206,6 +256,14 @@ from qtgui.utils import protect
 
 class QMultiFaceView(QMultiImageView):
 
+    AGES = {
+        '1': (0,4),
+        '2': (3,7),
+        '3': (6,12),
+        '4': (10,20),
+        '5': (18,100)
+    }
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         line_width = 2
@@ -216,15 +274,59 @@ class QMultiFaceView(QMultiImageView):
         self._greenPen = QPen(Qt.green)
         self._greenPen.setWidth(line_width)
 
-    def setImages(self, images: Iterable[Imagelike]) -> None:
-        # FIXME[hack]: we would need a better mechanism to incorporate
-        # metadata
-        images = list(images)
-        super().setImages(images)
-        for index, (qimage, image) in enumerate(zip(self._qimages, images)):
-            qimage.dataset = getattr(image, 'dataset', None)
-            if hasattr(image, 'age'):
-                self.setAge(index, image.age)
+    def invalid(self, index: int = None) -> bool:
+        """Check if an image in this :py:class:`QMultiImageView` is invalid.
+        Images can have a flag, marking them as valid or invalid.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the image to be checked. If no index is
+            provided, the currently selected image is used. If no index
+            can be determined, the method will return `False`.
+
+        Result
+        ------
+        invalid:
+            `True`, if the image has been explicitly marked as invalid.
+            Otherwise `False`.
+        """
+        if index is None:
+            index = self.currentImage()
+        if not 0 <= index < len(self._images):
+            return False  # no index could be determined
+
+        if self._regions is None:
+            return not getattr(self._images[index], 'valid', True)
+
+        region = self._regions[index]
+        return not getattr(region, 'valid', True)
+
+    def invalidate(self, index: int = None) -> None:
+        """Invalidate an image in this :py:class:`QMultiImageView`.
+        Invalid images will be displayed in a different way as
+        valid images.
+
+        Arguments
+        ---------
+        index:
+            An index identifying the image to be invalidated. If no index is
+            provided, the currently selected image is used. If there is
+            no such index, the method will do nothing.
+        """
+        if index is None:
+            index = self.currentImage()
+        if not self._images or not 0 <= index < len(self._images):
+            return
+
+        if self._regions is None:
+            setattr(self._images[index], 'valid',
+                    not getattr(self._images[index], 'valid', False))
+        else:
+            region = self._regions[index]
+            region.valid = not getattr(region, 'valid', False)
+        self.annotationsChanged.emit(index)
+        self.update()
 
     def age(self, index: int = None) -> int:
         """The age label for an image in this :py:class:`QMultiFaceView`.
@@ -244,11 +346,11 @@ class QMultiFaceView(QMultiImageView):
         """
         if index is None:
             index = self.currentImage()
-        if not 0 <= index < len(self._qimages):
+        if not 0 <= index < len(self._images):
             return False  # no index could be determined
 
         if self._regions is None:
-            return getattr(self._qimages[index], 'age', None)
+            return getattr(self._images[index], 'age', None)
 
         region = self._regions[index]
         return getattr(region, 'age', None)
@@ -265,11 +367,11 @@ class QMultiFaceView(QMultiImageView):
         """
         if index is None:
             index = self.currentImage()
-        if not self._qimages or not 0 <= index < len(self._qimages):
+        if not self._images or not 0 <= index < len(self._images):
             return
 
         if self._regions is None:
-            setattr(self._qimages[index], 'age', age)
+            setattr(self._images[index], 'age', age)
         else:
             region = self._regions[index]
             region.age = age
@@ -300,12 +402,35 @@ class QMultiFaceView(QMultiImageView):
             self.setAge((18,100))
         elif key == Qt.Key_Backspace:
             self.setAge(None)
+        elif key == Qt.Key_Delete:
+            self.invalidate()
         else:
             super().keyPressEvent(event)
             
+    @protect
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """Right button press invalidates an image.
+        """
+        super().mousePressEvent(event)  # selects the current image
+
+        if event.button() == Qt.RightButton:
+            self.invalidate()
+
+    @protect
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        """A mouse double click invalidates the current image.
+        """
+        self.invalidate()
+
     def _paintImage(self, painter: QPainter, index: int,
-                    qimage: QImage, rect: QRect) -> None:
-        super()._paintImage(painter, index, qimage, rect)
+                    image: Image, rect: QRect) -> None:
+        super()._paintImage(painter, index, image, rect)
+
+        # draw specific decorations
+        if self.invalid(index):
+            painter.setPen(self._redPen)
+            painter.drawLine(rect.topLeft(), rect.bottomRight())
+            painter.drawLine(rect.topRight(), rect.bottomLeft())
 
         # add the age label
         age = self.age(index)
@@ -314,7 +439,7 @@ class QMultiFaceView(QMultiImageView):
         painter.setPen(pen)
         painter.drawText(rect, Qt.AlignHCenter | Qt.AlignBottom, ageText)
 
-        dataset = qimage.dataset
+        dataset = image.dataset
         metaText = "No Meta" if dataset is None else dataset
         pen = self._redPen if dataset is None else self._greenPen
         painter.setPen(pen)
@@ -348,7 +473,10 @@ class QFaceLabeler(QWidget):
         self.spinBox.valueChanged.connect(self.onSpinboxChanged)
         self.label = QLabel()
 
-        self.help = QLabel("Help: A=All are valid; N=none is valid")
+        self.help = QLabel("Help: " +
+                           "; ".join(f"{key}={age}" for key, age in
+                                     QMultiFaceView.AGES.items()) + 
+                           "; A=All are valid; N=none is valid")
         self.help.setWordWrap(True)
 
         layout = QVBoxLayout()
@@ -366,6 +494,7 @@ class QFaceLabeler(QWidget):
         row.addLayout(column)
         layout.addLayout(row)
         #layout.addStretch()
+        layout.addWidget(self.help)
         self.setLayout(layout)
 
         self.showPerson()
@@ -395,22 +524,20 @@ class QFaceLabeler(QWidget):
 
     @protect
     def onImageChanged(self, index: int) -> None:
-        print(f"selected face {index} of {len(self._faces)}")
         self.storeMetadata()
         if 0 <= index < len(self._faces):
             self._index = index
             data = self._faces[index]
             self.dataView.setData(data)
             if hasattr(data, 'source'):
-                filename = data.source
-                filename = filename.replace('E:\\clean4', '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4')
-                filename = filename.replace('\\', '/')
-                image = Image(image=filename)
-                bbox = data.boundingbox
-                bbox = BoundingBox(x1=bbox[0], y1=bbox[1],
-                                   x2=bbox[2], y2=bbox[3])
+                image = Image(image=data.source)
                 self.imageView.setData(image)
-                self.imageView.addRegion(Region(bbox))
+
+                if data.has_attribute('boundingbox'):
+                    bbox = data.boundingbox
+                    bbox = BoundingBox(x1=bbox[0], y1=bbox[1],
+                                       x2=bbox[2], y2=bbox[3])
+                    self.imageView.addRegion(Region(bbox))
             else:
                 self.imageView.setData(None)
 
@@ -428,36 +555,85 @@ class QFaceLabeler(QWidget):
             self.dataView.setData(None)
             self.imageView.setData(None)
 
-def main2():
+def main():
     parser = ArgumentParser(description='Face labeling tool')
-    parser.add_argument('--directory', type=str,
-                        help="path to the data directory "
-                        "(including 'UnifiedFunneled')")
+    parser.add_argument('--directory', type=str, default=DIRECTORY,
+                        help="path to the base directory "
+                        "(containing clean* subdirectories)")
+    parser.add_argument('--clean0', type=str,
+                        help="path to the clean0 directory (optional)")
+    parser.add_argument('--clean2', type=str,
+                        help="path to the clean2 directory (optional)")
+    parser.add_argument('--clean4', type=str,
+                        help="path to the clean4 directory "
+                        "(including 'UnifiedFunneled2')")
 
     ToolboxArgparse.add_arguments(parser)
 
     args = parser.parse_args()
     ToolboxArgparse.process_arguments(parser, args)
 
+    if args.clean0:
+        directory_clean0 = args.clean0
+    elif DIRECTORY_CLEAN0 is None:
+        directory_clean0 = os.path.join(args.directory, 'clean0')
+    else:
+        directory_clean0 = DIRECTORY_CLEAN0
+
+    if args.clean2:
+        directory_clean2 = args.clean2
+    elif DIRECTORY_CLEAN2 is None:
+        directory_clean2 = os.path.join(args.directory, 'clean2')
+    else:
+        directory_clean2 = DIRECTORY_CLEAN2
+
+    if args.clean4:
+        directory_clean4 = args.clean4
+    elif DIRECTORY_CLEAN4 is None:
+        directory_clean4 = os.path.join(args.directory, 'clean4')
+    else:
+        directory_clean4 = DIRECTORY_CLEAN4
+    directory_funneled = os.path.join(directory_clean4, 'UnifiedFunneled2')
+
+        
+    #
+    # Some chanity checks
+    #
+    if not os.path.isdir(directory_clean4):
+        logging.warning("Clean4 directory '%s' does not exist "
+                        "- no data to label.",
+                        directory_clean4)
+        sys.exit(1)
+
+    if not os.path.isdir(directory_clean0):
+        logging.warning("Clean0 directory '%s' does not exist "
+                        "- some images may not be available.",
+                        directory_clean0)
+
     try:
         # RIFF (little-endian) data, Web/P image, VP8 encoding, 230x230
-        problematic_image = args.directory + '/AaronWolff/New/1091847.jpg'
+        problematic_image = os.path.join(directory_clean4, 'UnifiedFunneled',
+                                         'AaronWolff', 'New', '1091847.jpg')
         import imageio
         from dltb.util.image import imread
         image = imread(problematic_image, module='imageio')
     except ValueError as ex:
         # imageio: ValueError: Could not find a format to read the
         # specified file in single-image mode
-        print(f"Problematic image file: {problematic_image}"
-              f" (imageio version {imageio.__version__})",
-              file=sys.stderr)
+        logging.error("Problematic image file: '%s' (imageio version %s)",
+                      problematic_image, imageio.__version__)
         # error: imageio 2.9.0 [conda: pyhd3eb1b0_0 default] (Ubuntu 20.04)
         # error: imageio 2.9.0 [conda: py_0 conda-forge] (Ubuntu 20.04)
-        print(ex, file=sys.stderr)
-        sys.exit(1)
+        # ok:    imageio 2.6.1 [conda: py36_0 default] (Ubuntu 16.04)
+        # print(ex, file=sys.stderr)
+        #sys.exit(1)
+
+    #
+    # open the data set
+    #
 
     try:
-        datasource = ChildFaces(directory=args.directory, prepare=True)
+        datasource = ChildFaces(directory=directory_funneled, prepare=True)
     except Exception as ex:
         print(ex, file=sys.stderr)
         sys.exit(1)
@@ -468,6 +644,7 @@ def main2():
 
     datasource.load_metadata(data)
 
+    # FIXME[test]
     data.add_attribute('valid', True)
     datasource.write_metadata(data)
 
@@ -479,7 +656,7 @@ def main2():
     print(faces)
 
     #
-    # Run the graphical user interface
+    # run the graphical user interface
     #
     app = QApplication([])
     screensize = QApplication.desktop().screenGeometry()
@@ -495,9 +672,9 @@ def main2():
     gui.show()
     rc = app.exec()
 
-    print(f"Main: exiting gracefully (rc={rc}).")
+    logging.info(f"Main: exiting gracefully (rc=%d).", rc)
     sys.exit(rc)
 
 
 if __name__ == "__main__":
-    main2()
+    main()
