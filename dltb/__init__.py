@@ -27,3 +27,9 @@ directories = {
 local_config_file = os.path.join(os.path.dirname(__file__), 'local.py')
 if os.path.isfile(local_config_file):
     importlib.import_module('.local', package=__name__)
+
+if __name__ == '__main__':
+    # The file is run as a script. This should usually not be possible,
+    # as we are using relative imports.
+    print("To run the Deep Learning Toolbox (dltb), call 'python -m dltb' ")
+    print("or use the scrip `dl-toolbox.py`.")

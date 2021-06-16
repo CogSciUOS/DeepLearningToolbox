@@ -23,6 +23,7 @@ Classes that realize the idea of preparation should inherit from
 """
 # standard imports
 import logging
+import inspect
 
 # toolbox imports
 from ..config import config
@@ -44,7 +45,7 @@ class Postinitializable:
             cls._postinit_original_init = cls.__init__
             cls.__init__ = Postinitializable.__init__
 
-    def __init__(self, *args, _cls: int = 0, **kwargs):
+    def __init__(self, *args, _cls: type = None, **kwargs):
         # As we use this method, i.e.,  Postinitializable.__init__,
         # in multiple classes as __init__ method (via the assignment in
         # __init_subclass__), super() will not work as expected (it will
@@ -54,14 +55,18 @@ class Postinitializable:
         # We do this by passing an additional argument _cls, referring
         # to the last class in the MRO in which __init__ was involved and
         # then explicitly progress in the MRO:
-        for idx, supercls in enumerate(type(self).__mro__[_cls:]):
-            # Check if supercls defined an __init__ method. If so, it
-            # has been stored as _postinit_original_init:
-            if '_postinit_original_init' in supercls.__dict__:
-                supercls._postinit_original_init(self, *args, _cls=_cls+idx+1,
-                                                 **kwargs)
-                break
-        if _cls == 0:
+
+        # obtain the original __init__ method ...
+        meth = (self._postinit_original_init if _cls is None else
+                super(_cls, self)._postinit_original_init)
+        # ... get the class in which that method was defined ...
+        meth_cls = getattr(inspect.getmodule(meth),
+                           meth.__qualname__.rsplit('.', 1)[0])
+        # ... and call it!
+        meth(*args, _cls=meth_cls, **kwargs)
+
+        # in the outermost __init__ method, we call __post_init__
+        if _cls is None:
             self.__post_init__()
 
     def _postinit_original_init(self, *args, _cls: int = None, **kwargs):

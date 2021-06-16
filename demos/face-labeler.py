@@ -48,6 +48,23 @@ class ChildFaces(ImageDirectory):
 
     UnifiedFunneled/NAME/new-img-ID-faceN.jpg
     UnifiedFunneled/NAME/new-img-ID-faceN.json
+
+    There are stages of the dataset:
+
+    clean1/clean0:
+        images from AgeDB, FGNET, LargeAgeGap, and IMDB, with
+        json files.
+    clean2/
+        newly collected images
+        ExtracedCleaned
+        ExtracedCleaned2
+        ExtractedFaces
+        Leila
+        Mats
+        Mats_New_Images.zip
+        Mats.rar
+        Patricia
+    clean4/
     """
     def __init__(self, key: str = None, directory: str = None,
                  **kwargs) -> None:
@@ -65,13 +82,19 @@ class ChildFaces(ImageDirectory):
             directory = DIRECTORY
         suffix = ('gif', 'jpeg', 'jpg', 'png', 'webp')
         description = "Children Faces in the Wild"
+        self._labels = None
         super().__init__(key=key, directory=directory, suffix=suffix,
                          description=description,
                          label_from_directory='name',
                          **kwargs)
 
     def __str__(self) -> str:
-        return super().__str__() + f" with {len(self._labels)} labels"
+        return (super().__str__() +
+                (f" with {len(self._labels)} labels"
+                 if self.prepared else " (unprepard)"))
+
+    def _prepared(self) -> bool:
+        return (self._labels is not None) and super()._prepared()
 
     def _prepare(self) -> None:
         super()._prepare()
@@ -416,10 +439,29 @@ def main2():
     args = parser.parse_args()
     ToolboxArgparse.process_arguments(parser, args)
 
-    datasource = ChildFaces(directory=args.directory, prepare=True)
+    try:
+        # RIFF (little-endian) data, Web/P image, VP8 encoding, 230x230
+        problematic_image = args.directory + '/AaronWolff/New/1091847.jpg'
+        import imageio
+        from dltb.util.image import imread
+        image = imread(problematic_image, module='imageio')
+    except ValueError as ex:
+        # imageio: ValueError: Could not find a format to read the
+        # specified file in single-image mode
+        print(f"Problematic image file: {problematic_image}"
+              f" (imageio version {imageio.__version__})",
+              file=sys.stderr)
+        # error: imageio 2.9.0 [conda: pyhd3eb1b0_0 default] (Ubuntu 20.04)
+        # error: imageio 2.9.0 [conda: py_0 conda-forge] (Ubuntu 20.04)
+        print(ex, file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        datasource = ChildFaces(directory=args.directory, prepare=True)
+    except Exception as ex:
+        print(ex, file=sys.stderr)
+        sys.exit(1)
     print(datasource)
-    from dltb.util.image import imread
-    image = imread('/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/clean4/UnifiedFunneled/AaronWolff/New/1091847.jpg', module='imageio')
 
     data = datasource[0]
     print(data)
