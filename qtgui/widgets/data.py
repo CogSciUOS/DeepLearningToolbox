@@ -5,10 +5,10 @@
 
 This module provides widgets for viewing data and metadata.
 """
-# pylint --method-naming-style=camelCase --attr-naming-style=camelCase --variable-naming-style=camelCase qtgui.widgets.data
+# pylint --method-naming-style=camelCase --attr-rgx="_[a-z]+[A-Za-z0-9]+" --attr-naming-style=camelCase --variable-naming-style=camelCase --extension-pkg-whitelist=PyQt5 qtgui.widgets.data
 
 # standard imports
-from typing import Any
+from typing import Any, Optional, Sequence, Mapping
 import os
 import json
 import logging
@@ -17,7 +17,7 @@ import logging
 import numpy as np
 
 # Qt imports
-from PyQt5.QtCore import Qt, QSize, QObject, QEvent, pyqtSlot, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
@@ -46,10 +46,38 @@ LOG = logging.getLogger(__name__)
 class QDataInfoBox(QWidget, QObserver, qobservables={
         Datafetcher: {'data_changed'},
         Toolbox: {'input_changed'}}):
-    # FIXME[concept]: should we forbid simultanous observation of
-    # datafetcher and toolbox?
+    # FIXME[old]: modes / statistics
     """A :py:class:`QDataInfoBox` displays information on a piece of
     :py:class:`Data`.
+
+    Displaying data
+    ---------------
+
+    A :py:class:`Data` object encapsulates the actual data (as some
+    form of array) as well as optional metadata. The :py:class:`QDataInfoBox`
+    aims at a concise textual presentation of that information.
+    As the actual form of data as well as the available metadata can
+    vary greatly, there is no single best mode of presentation.  Instead,
+    the :py:class:`QDataInfoBox` offers different modes and configuration
+    options allowing to adjust the display to specific needs.
+    
+    With respect to the actual data (the array), the :py:class:`QDataInfoBox`
+    can display simple metadata (like shape and data type). It also
+    supports displaying different statistics (like mean, standard deviation,
+    etc.). Note that computing statistics can be computationally expensive
+    and hence should be done in a background thread.
+
+    When it comes to metadata, the situation is more involved, as amount
+    and types of metadata can greatly vary. Here the :py:class:`QDataInfoBox`
+    provides some base functionality for different common classes as
+    well as extension mechanisms.
+
+    The display of the :py:class:`QDataInfoBox` can be adapted in
+    several directions:
+    * a whitelist/blacklist approach allows to selectively enable or
+      disable the presentation of specific metadata
+    * formaters can be provided to alter the display of specific
+      metadata
 
     The :py:class:`QDataInfoBox` displays three graphical elements:
     * _metaLabel: a multiline label showing metadata on the current
@@ -57,11 +85,25 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     * _dataLabel: a multiline :py:class:`QLabel` showing statistical
         information on the current :py:class:`Data`.
 
+    Setting Data
+    ------------
+
     Data can be provided in different ways:
-    (1) By calling the method :py:meth:`setData`.
-    (2) From a :py:class:`Toolbox`, using the input data
-    (3) From a :py:class:`Datafetcher`, using the current data
+    (1) Directly by calling the method :py:meth:`setData`.
+    (2) Indirectly by setting a :py:class:`Toolbox`. The
+        :py:class:`QDataInfoBox` will then observe this for
+        `'input_changed'` notifications and update its current data
+        to be the input data or the toolbox, whenever receiving
+        that notification.
+    (3) From a :py:class:`Datafetcher`. The :py:class:`QDataInfoBox`
+        will observer the `Datafetcher` for `'data_changed'` notifications
+        and update its current data whenever new data was fetched, to
+        display information on that data.
+
     Setting a Toolbox will invalidate the Datafetcher and vice versa.
+    The ratio behind this behavior is that often a `Datafetcher` will
+    set the input data for a `Toolbox` and hence will result in double
+    updates.
 
 
     Properties
@@ -77,7 +119,12 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
 
     _toolbox: Toolbox = None
     _datafetcher: Datafetcher = None
-    """
+
+    """    
+    _whitelist: Optional[Sequence] = None  # also provides an order
+    _blacklist: Optional[AbstractSet] = None  # no order
+    _formatter: Optional[Mapping] = None  # map name or type to formatter
+
     _processed: bool = False
 
     statisticsChanged = pyqtSignal(bool)
@@ -91,6 +138,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         """
         super().__init__(**kwargs)
         self._metaText = ""
+        self._dataText = ""
         self._data = None
         self._statistics = False
         self._initUI()
@@ -205,7 +253,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         processed: bool
             The new display mode (False=raw, True=processed).
         """
-        LOG.info(f"QDataInfoBox.setMode(%s)", processed)
+        LOG.info("QDataInfoBox.setMode(%s)", processed)
         if processed != self._processed:
             self._processed = processed
             self._updateStatistics()
@@ -225,7 +273,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         """A the flag indicating that statistics are to be shown in this
         :py:class:`QDataInfoBox`.
         """
-        LOG.info(f"QDataInfoBox.setStatistics(%s)", show)
+        LOG.info("QDataInfoBox.setStatistics(%s)", show)
         if self._statistics != show:
             self._statistics = show
             self.statisticsChanged.emit(show)
@@ -251,9 +299,8 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             points = (len(value.location)
                       if isinstance(value.location, PointsBasedLocation)
                       else 'no')
-            attributes = len(value._attributes)  # FIXME[hack]: private property
             value = (f"Region[{type(value.location).__name__}]: "
-                     f"{points} points, {attributes} attributes")
+                     f"{points} points, {len(value)} attributes")
         elif isinstance(value, list):
             value = (f"list[{len(value)}]: "
                      f"{type(value[0]) if value else 'empty'}")
@@ -292,6 +339,8 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             self._metaText += f"{attribute}[batch]: {value}<br>\n"
 
     def _updateStatistics(self):
+        """Update the statistic information from the current data object.
+        """
         if not self._statistics:
             return  # statistics are deactivated
 
@@ -308,7 +357,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         # self._metaText += f'Description: {description}<br>\n'
         # if label is not None:
         #     self._metaText += f'Label: {label}<br>\n'
-        
+
         self._dataText = ('<b>Preprocessed input:</b><br>\n'
                           if self._processed else
                           '<b>Raw input:</b><br>\n')
@@ -335,7 +384,10 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """
+        """Process :py:class:`QKeyEvent`s for this :py:class:`QDataInfoBox`.
+
+        S: toggle the statics flag
+        M: toggle the mode flag
         """
         key = event.key()
         if key == Qt.Key_S:  # toggle statistics flag
@@ -348,6 +400,8 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
 
 class QDataView(QWidget, QObserver, qobservables={
         Datafetcher: {'data_changed'}, Toolbox: {'input_changed'}}):
+    # pylint: disable=too-many-instance-attributes
+    # The QDataView consists of multiple graphical components
     """A Display for :py:class:`Data` objects.
 
     The actual components and layout of this display depend on type of
@@ -573,7 +627,7 @@ class QDataView(QWidget, QObserver, qobservables={
         if data is self._data:
             return  # nothing changed
 
-        if (self._data is not None and 
+        if (self._data is not None and
                 self._autosave and self._annotationsChanged):
             self._saveAnnotations(overwrite=True)
 
@@ -637,9 +691,9 @@ class QDataView(QWidget, QObserver, qobservables={
         self._multiImageView.setImagesFromRegions(data, regions)
 
         if self._annotationsChanged:
-            self.setStyleSheet("border: 1px solid red");
+            self.setStyleSheet("border: 1px solid red")
         else:
-            self.setStyleSheet("border: 1px solid green");
+            self.setStyleSheet("border: 1px solid green")
 
 
     @protect
@@ -654,7 +708,14 @@ class QDataView(QWidget, QObserver, qobservables={
 
     @protect
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """
+        """Process key events for this :py:class:`QDataView`.
+        The following keys are recognized:
+
+        B: toggle visibility of the batch navigator
+        M: toggle visibility of multi image view
+        Return: set the annotation changed flag
+        Ctrl+Z: undo
+        Ctrl+S: save
         """
         key = event.key()
         if key == Qt.Key_B:  # toggle visibility of batch navigator
@@ -685,6 +746,10 @@ class QDataView(QWidget, QObserver, qobservables={
 
     @pyqtSlot(int)
     def annotationsChanged(self, index: int) -> None:
+        """Indicate whether the annotations for the given index has
+        changed.
+        """
+        LOG.debug("Annotations for index %d changed", index)
         self._annotationsChanged = True
         self.update()
 
@@ -702,10 +767,10 @@ class QDataView(QWidget, QObserver, qobservables={
 
     def _loadAnnotations(self) -> None:
         filename = self._filenameForAnnotations()
-        have_annotations = os.path.isfile(filename)
-        self._data.add_attribute('have_annotations', have_annotations)
+        haveAnnotations = os.path.isfile(filename)
+        self._data.add_attribute('have_annotations', haveAnnotations)
         self._annotationsChanged = False
-        if not have_annotations:
+        if not haveAnnotations:
             print(f"No annotations file '{filename}' exists.")
             for region in self._regions:
                 region.invalid = False
@@ -840,7 +905,7 @@ class QDataInspector(QWidget, QObserver, qattributes={
                  orientation: Qt.Orientation = Qt.Vertical,
                  datasource_selector: bool = True,
                  **kwargs) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
         self._experimental = False  # FIXME[hack]
         self._orientation = orientation
         self._initUI(datasource_selector)
@@ -908,7 +973,8 @@ class QDataInspector(QWidget, QObserver, qattributes={
         self.update()
 
     def dataView(self) -> QDataView:
-        """The :py:class:`QDataView` of this :py:class:`QDataInspector`.
+        """The :py:class:`QDataView` used by this
+        :py:class:`QDataInspector`.
         """
         return self._dataView
 
@@ -931,18 +997,6 @@ class QDataInspector(QWidget, QObserver, qattributes={
         :py:class:`QDataInspector`.
         """
         return self._dataView.imageView()
-
-    def dataView(self) -> QDataView:
-        """The :py:class:`QDataView` used by this
-        :py:class:`QDataInspector`.
-        """
-        return self._dataView
-
-    def datasourceNavigator(self) -> QDatasourceNavigator:
-        """The :py:class:`QDatasourceNavigator` used by this
-        :py:class:`QDataInspector`.
-        """
-        return self._datasourceNavigator
 
     def showNavigator(self) -> None:
         """Show the :py:class:`QDatasourceNavigator`.
@@ -967,4 +1021,3 @@ class QDataInspector(QWidget, QObserver, qattributes={
             navigator will be disabled.
         """
         self._datasourceNavigator.setDatasource(datasource)
-

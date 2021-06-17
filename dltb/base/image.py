@@ -1416,6 +1416,9 @@ class Region:
         raise AttributeError(f"Region has no attribute '{name}'. Valid "
                              f"attributes are: {self._attributes.keys()}")
 
+    def __len__(self) -> str:
+        return len(self._attributes)
+
     @property
     def location(self):
         """The :py:class:`Location` describing this :py:class:`Region`.
