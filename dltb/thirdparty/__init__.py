@@ -15,6 +15,7 @@ from typing import Union, List, Iterator, Any
 import sys
 import logging
 import importlib
+import importlib.abc  # explicit import required for python >= 3.8
 
 # toolbox imports
 from ..config import config
