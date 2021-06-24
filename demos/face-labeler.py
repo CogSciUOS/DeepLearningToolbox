@@ -13,7 +13,7 @@
 # FIXME[hack]: DIRECTORY: a directory holding the different stages of the
 # dataset (clean0, clean2 and clean4)
 DIRECTORY = '/space/home/ulf/data/children/'
-DIRECTORY = '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/'
+#DIRECTORY = '/net/projects/scratch/summer/valid_until_31_January_2022/krumnack/childface/'
 
 DIRECTORY_CLEAN0 = None  # defaults to DIRECTORY/clean0
 DIRECTORY_CLEAN1 = None  # defaults to DIRECTORY/clean1
@@ -147,12 +147,13 @@ class ChildFaces(ImageDirectory):
                 # boundingbox:  bounding bos of the face in the original image
                 # id:           the class label
                 data.add_attribute('image', meta['image'])
-
-                source_filename = meta['source']
-                source_filename = source_filename.replace('\\', '/')
-                source_filename = source_filename.replace('E:', self._basedir)
-                data.add_attribute('source', source_filename)
                 data.add_attribute('dataset', meta['dataset'])
+                if 'source' in meta:
+                    source_filename = meta['source']
+                    source_filename = source_filename.replace('\\', '/')
+                    source_filename = \
+                        source_filename.replace('E:', self._basedir)
+                    data.add_attribute('source', source_filename)
                 if 'boundingbox' in meta:
                     data.add_attribute('boundingbox', meta['boundingbox'])
                 if 'id' in meta:
@@ -203,11 +204,12 @@ class ChildFaces(ImageDirectory):
             suffix = '' if data.metafile.endswith('json2') else '2'
             meta = {
                 'image': data.filename,
-                'source': data.source,
                 'dataset': data.dataset,
                 'valid': data.valid,
                 'age': data.age
             }
+            if data.has_attribute('source'):
+                meta['source'] = data.source
             if data.has_attribute('boundingbox'):
                 meta['boundingbox'] = data.boundingbox
             if data.has_attribute('id'):
@@ -391,22 +393,22 @@ class QMultiFaceView(QMultiImageView):
         key = event.key()
 
         if key in (Qt.Key_A, Qt.Key_1):
-            self.setAge((0,4))
+            self.setAge(self.AGES['1'])
         elif key in (Qt.Key_B, Qt.Key_2):
-            self.setAge((3,7))
+            self.setAge(self.AGES['2'])
         elif key in (Qt.Key_C, Qt.Key_3):
-            self.setAge((6,12))
+            self.setAge(self.AGES['3'])
         elif key in (Qt.Key_D, Qt.Key_4):
-            self.setAge((10,20))
+            self.setAge(self.AGES['4'])
         elif key in (Qt.Key_E, Qt.Key_5):
-            self.setAge((18,100))
+            self.setAge(self.AGES['5'])
         elif key == Qt.Key_Backspace:
             self.setAge(None)
         elif key == Qt.Key_Delete:
             self.invalidate()
         else:
             super().keyPressEvent(event)
-            
+
     @protect
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Right button press invalidates an image.
@@ -437,6 +439,7 @@ class QMultiFaceView(QMultiImageView):
         ageText = "None" if age is None else f"{age}"
         pen = self._bluePen if age is None else self._greenPen
         painter.setPen(pen)
+        # print(Qt.AlignHCenter | Qt.AlignBottom, type(Qt.AlignHCenter | Qt.AlignBottom), ageText, type(ageText))
         painter.drawText(rect, Qt.AlignHCenter | Qt.AlignBottom, ageText)
 
         dataset = image.dataset
@@ -456,6 +459,10 @@ class QFaceLabeler(QWidget):
         self._index = None  # index of the currently selected image
 
         self.dataView = QDataInfoBox()
+        self.dataView.addToBlacklist('array')
+        self.dataView.addToBlacklist('type')
+        self.dataView.addToBlacklist('datasource_argument')
+        self.dataView.addToBlacklist('datasource_value')
         self.imageView = QImageView()
         self.multiImageView = QMultiFaceView(grid=(None, 5))
         self.multiImageView.currentImageChanged.connect(self.onImageChanged)

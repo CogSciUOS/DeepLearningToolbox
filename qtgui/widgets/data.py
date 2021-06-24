@@ -8,7 +8,8 @@ This module provides widgets for viewing data and metadata.
 # pylint --method-naming-style=camelCase --attr-rgx="_[a-z]+[A-Za-z0-9]+" --attr-naming-style=camelCase --variable-naming-style=camelCase --extension-pkg-whitelist=PyQt5 qtgui.widgets.data
 
 # standard imports
-from typing import Any, Optional, Sequence, Mapping
+from typing import Any, Union, Optional, Sequence, Mapping
+from typing import AbstractSet, Callable
 import os
 import json
 import logging
@@ -42,11 +43,15 @@ from .scroll import QOrientedScrollArea
 # logging
 LOG = logging.getLogger(__name__)
 
+Formatter = Callable[[Any], str]
+
 
 class QDataInfoBox(QWidget, QObserver, qobservables={
+        Data: {'data_changed'},
         Datafetcher: {'data_changed'},
         Toolbox: {'input_changed'}}):
-    # FIXME[old]: modes / statistics
+    # pylint: disable=too-many-instance-attributes
+    # The QDataInfoBox holds many formating hints
     """A :py:class:`QDataInfoBox` displays information on a piece of
     :py:class:`Data`.
 
@@ -60,7 +65,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     vary greatly, there is no single best mode of presentation.  Instead,
     the :py:class:`QDataInfoBox` offers different modes and configuration
     options allowing to adjust the display to specific needs.
-    
+
     With respect to the actual data (the array), the :py:class:`QDataInfoBox`
     can display simple metadata (like shape and data type). It also
     supports displaying different statistics (like mean, standard deviation,
@@ -105,7 +110,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     set the input data for a `Toolbox` and hence will result in double
     updates.
 
-
     Properties
     ----------
 
@@ -120,21 +124,52 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     _toolbox: Toolbox = None
     _datafetcher: Datafetcher = None
 
-    """    
-    _whitelist: Optional[Sequence] = None  # also provides an order
-    _blacklist: Optional[AbstractSet] = None  # no order
-    _formatter: Optional[Mapping] = None  # map name or type to formatter
-
+    """
+    _whitelist: Sequence = []  # also provides an order
+    _blacklist: AbstractSet = set()  # no order
+    _formatters: Mapping = {  # map name or type to formatter
+        Region: lambda region: (
+            f"Region[{type(region.location).__name__}]: " +
+            (str(len(region.location))
+             if isinstance(region.location, PointsBasedLocation) else 'no') +
+            f" points, {len(region)} attributes"
+        ),
+        ClassIdentifier: lambda identifier: (
+            f"{identifier['text']} ({identifier})"
+            if identifier.has_label('text') else str(identifier)
+        ),
+        list: lambda value: (
+            f"list[{len(value)}]: {type(value[0]) if value else 'empty'}"
+        ),
+        bool: lambda value: (  # np.bool_
+            '<font color="{}">{}</font>'.format('green' if value else 'red',
+                                                value)
+        ),
+        np.ndarray: lambda value: (
+            f"array[{value.dtype}]: {value.shape}"
+        ),
+        None: lambda value: f"{value} [{type(value).__name__}]"
+    }
+    _computers: Mapping = {
+        'data': lambda data: f"{data.array.shape}"
+    }
     _processed: bool = False
 
     statisticsChanged = pyqtSignal(bool)
 
-    def __init__(self, toolbox: Toolbox = None,
-                 datafetcher: Datafetcher = None, **kwargs) -> None:
+    def __init__(self, toolbox: Optional[Toolbox] = None,
+                 datafetcher: Optional[Datafetcher] = None, **kwargs) -> None:
         """Initialize a new QDataInfoBox.
 
-        parent: QWidget
-            Parent widget
+        Arguments
+        ---------
+        toolbox:
+            If not `None`, the :py:class:`QDataInfoBox` will observe the
+            :py:class:`Toolbox` and react to changes of the input data.
+        datafetcher:
+            If not `None`, the :py:class:`QDataInfoBox` will observe the
+            :py:class:`Datafetcher` and display infos on newly fetched
+            data.
         """
         super().__init__(**kwargs)
         self._metaText = ""
@@ -164,6 +199,43 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         layout.addWidget(self._dataLabel)
         layout.addStretch()
         self.setLayout(layout)
+
+    def addToWhitelist(self, name: Optional[str] = None,
+                       mtype: Optional[type] = None,
+                       formatter: Optional[Formatter] = None) -> None:
+        """Add an entry to the whitelist of this :py:class:`QDataInfoBox`.
+
+        Arguments
+        ---------
+        name:
+            The name of an attribute to whitelist.
+        """
+        if self._whitelist is type(self)._whitelist:
+            self._whitelist = []
+        if name is not None:
+            what = name
+        elif mtype is not None:
+            what = mtype
+        else:
+            raise ValueError("You have to provide either a name or a mtype "
+                             "for extending the whitelist")
+        self._whitelist.append(what)
+        if formatter is not None:
+            self.addFormatter(what, formatter)
+
+    def addToBlacklist(self, *args) -> None:
+        """Add name(s) or type(s) of attributes that should not be displayed.
+        """
+        if self._blacklist is type(self)._blacklist:
+            self._blacklist = set()
+        for entry in args:
+            self._blacklist.add(entry)
+
+    def addFormatter(self, what: Union[str, type],
+                     formatter: Formatter) -> None:
+        if self._formatters is type(self)._formatters:
+            self._formatters = {}
+        self._formatters[what] = formatter
 
     #
     # Toolbox.Observer
@@ -237,81 +309,53 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self._updateStatistics()
         self.update()
 
-    def mode(self) -> bool:
-        """A flag indicating wether data is presented preprocessed (`True`)
-        or in raw format (`False`)
+    @protect
+    def data_changed(self, data: Data, change: Data.Change,
+                     attribute: Optional[str] = None) -> None:
+        # pylint: disable=invalid-name
+        """React to newly fetched data item in the :py:class:`Datafetcher`.
         """
-        return self._processed
-
-    @pyqtSlot(bool)
-    # @protect
-    def setMode(self, processed: bool) -> None:
-        """Set the display mode for this :py:class:`QDataInfoBox`.
-
-        Arguments
-        ---------
-        processed: bool
-            The new display mode (False=raw, True=processed).
-        """
-        LOG.info("QDataInfoBox.setMode(%s)", processed)
-        if processed != self._processed:
-            self._processed = processed
-            self._updateStatistics()
-            self.update()
-
-    def statistics(self) -> bool:
-        """A flag indicating if statistics are to be shown in this
-        :py:class:`QDataInfoBox`.
-        """
-        return self._statistics
-
-    @pyqtSlot(bool)
-    # FIXME[bug]: with @protect, setMode is called instead of setStatistics,
-    # when setStatistics is connected to a button.
-    # @protect
-    def setStatistics(self, show: bool) -> None:
-        """A the flag indicating that statistics are to be shown in this
-        :py:class:`QDataInfoBox`.
-        """
-        LOG.info("QDataInfoBox.setStatistics(%s)", show)
-        if self._statistics != show:
-            self._statistics = show
-            self.statisticsChanged.emit(show)
-            self._updateStatistics()
-            self.update()
+        LOG.debug("QDataInfoBox.data_changed(%s, %s, %s)",
+                  data, change, attribute)
+        self._updateMeta(index=None)
+        self._updateStatistics()
+        self.update()
 
     #
     # Output
     #
 
-    @staticmethod
-    def _attributeValue(data: Data, attribute: str) -> Any:
-        """Return the attribute of the current data object in
+    def _attributeValue(self, data: Data, attribute: str) -> Any:
+        """Return an attribute of the current data object in
         a form suitable to be displayed in this :py:class:`QDataInfoBox`.
+
+        Arguments
+        ---------
+        data:
+            The data object.
+        attribute:
+            The attribute name. Used to select formatter based on name.
         """
-        if attribute == 'data':
-            return data.array.shape
+        if attribute in self._computers:
+            return self._computers[attribute](data)
+
         value = getattr(data, attribute)
-        if isinstance(value, ClassIdentifier):
-            if value.has_label('text'):
-                value = f"{value['text']} ({value})"
-        elif isinstance(value, Region):
-            points = (len(value.location)
-                      if isinstance(value.location, PointsBasedLocation)
-                      else 'no')
-            value = (f"Region[{type(value.location).__name__}]: "
-                     f"{points} points, {len(value)} attributes")
-        elif isinstance(value, list):
-            value = (f"list[{len(value)}]: "
-                     f"{type(value[0]) if value else 'empty'}")
-        elif isinstance(value, (bool, np.bool_)):
-            color = 'green' if value else 'red'
-            value = f'<font color="{color}">{value}</font>'
-        elif isinstance(value, np.ndarray):
-            value = f"array[{value.dtype}]: {value.shape}"
+        mtype = type(value)
+        if attribute in self._formatters:
+            formatter = self._formatters[attribute]
+        elif mtype in self._formatters:
+            formatter = self._formatters[mtype]
+        elif self._formatters is not type(self)._formatters:
+            formatters = type(self)._formatters
+            if attribute in formatters:
+                formatter = formatters[attribute]
+            elif mtype in formatters:
+                formatter = formatters[mtype]
+            else:
+                formatter = formatters[None]
         else:
-            value = f"{value} [{type(value).__name__}]"
-        return value
+            formatter = str
+        return formatter(value)
 
     def _updateMeta(self, index: int = None) -> None:
         """Update the `_metaText` attribute based on the current data.
@@ -322,21 +366,30 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             self._metaText += "No data!<br>\n"
             return
 
-        for attribute in data.attributes(batch=False):
-            value = self._attributeValue(data, attribute)
-            self._metaText += f"{attribute}: {value}<br>\n"
-        if data.is_batch:
-            if index is not None:
-                self._metaText += \
-                    f"<b>Batch Data ({index}/{len(data)}):</b><br>\n"
-                data = data[index]
-            else:
-                self._metaText += \
-                    f"<b>Batch Data ({len(data)}):</b><br>\n"
-        for attribute in data.attributes(batch=True):
-            value = ('*' if data.is_batch else
-                     self._attributeValue(data, attribute))
-            self._metaText += f"{attribute}[batch]: {value}<br>\n"
+        if self._whitelist:
+            for attribute in self._whitelist:
+                if hasattr(data, attribute):
+                    value = self._attributeValue(data, attribute)
+                    self._metaText += f"{attribute}: {value}<br>\n"
+        else:
+            for attribute in data.attributes(batch=False):
+                if (attribute not in self._blacklist and
+                        type(attribute) not in self._blacklist):
+                    value = self._attributeValue(data, attribute)
+                    self._metaText += f"{attribute}: {value}<br>\n"
+            if data.is_batch:
+                if index is not None:
+                    self._metaText += \
+                        f"<b>Batch Data ({index}/{len(data)}):</b><br>\n"
+                    data = data[index]
+                else:
+                    self._metaText += \
+                        f"<b>Batch Data ({len(data)}):</b><br>\n"
+            for attribute in data.attributes(batch=True):
+                if attribute not in self._blacklist:
+                    value = ('*' if data.is_batch else
+                             self._attributeValue(data, attribute))
+                    self._metaText += f"{attribute}[batch]: {value}<br>\n"
 
     def _updateStatistics(self):
         """Update the statistic information from the current data object.
@@ -396,6 +449,68 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             self.setMode(not self.mode())
         else:
             super().keyPressEvent(event)
+
+    # FIXME[old]: the mode and the statistics concept is not really
+    # developed. The original idea was that the mode indicates what
+    # kind of data should be displayed: either the raw data, or the
+    # preprocessed data (as fed to a Network). The same idea can
+    # still be found in qtgui.widgets.image.
+    # The original idea of statistics was to provide a flag that
+    # indicates whether statistic information should be computed
+    # and displayed (this is only used in qtgui.widgets.data).
+    # Both ideas can be generalized with the formatters/computers concept:
+    # In general, it would be good to have different display modes between
+    # which the user could switch -> make setMode() to accept a 'mode'
+    # argument, a mode would then correspond to specific
+    # whitelist/blacklist/formatters/computers.
+    # The statistics could be realized by computers that are able
+    # to compute the desired value -> probably the computed value
+    # should be stored as attribute to the data object, so that it
+    # only has to be computed once.  Also computation may be done
+    # in some background thread.
+
+    def mode(self) -> bool:
+        """A flag indicating whether data is presented preprocessed (`True`)
+        or in raw format (`False`)
+        """
+        return self._processed
+
+    @pyqtSlot(bool)
+    # @protect
+    def setMode(self, processed: bool) -> None:
+        """Set the display mode for this :py:class:`QDataInfoBox`.
+
+        Arguments
+        ---------
+        processed: bool
+            The new display mode (False=raw, True=processed).
+        """
+        LOG.info("QDataInfoBox.setMode(%s)", processed)
+        if processed != self._processed:
+            self._processed = processed
+            self._updateStatistics()
+            self.update()
+
+    def statistics(self) -> bool:
+        """A flag indicating if statistics are to be shown in this
+        :py:class:`QDataInfoBox`.
+        """
+        return self._statistics
+
+    @pyqtSlot(bool)
+    # FIXME[bug]: with @protect, setMode is called instead of setStatistics,
+    # when setStatistics is connected to a button.
+    # @protect
+    def setStatistics(self, show: bool) -> None:
+        """A the flag indicating that statistics are to be shown in this
+        :py:class:`QDataInfoBox`.
+        """
+        LOG.info("QDataInfoBox.setStatistics(%s)", show)
+        if self._statistics != show:
+            self._statistics = show
+            self.statisticsChanged.emit(show)
+            self._updateStatistics()
+            self.update()
 
 
 class QDataView(QWidget, QObserver, qobservables={
