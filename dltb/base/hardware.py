@@ -2,11 +2,14 @@
 """
 
 # standard imports
+from typing import Iterable, Literal, Union, overload
+from pathlib import Path
 import os
 import re
 import platform
 import resource
 import subprocess
+import itertools
 
 # third-party imports
 try:
@@ -125,7 +128,7 @@ def update(initialize: bool = False):
             if re.match('GPU ', line):
                 gpu += 1
                 continue
-            elif gpu < 0:
+            if gpu < 0:
                 continue
 
             match = re.match(' *GPU Current Temp *: ([^ ]*) C', line)
@@ -155,4 +158,142 @@ def update(initialize: bool = False):
                         gpus[gpu].mem_total = int(match.group(1))
                         continue
 
+
 update(True)
+
+
+#
+# GPU/CUDA support
+#
+
+
+@overload
+def get_nvidia_devices(pci: Literal[False] = ...) -> Iterable[int]:
+    ...
+
+
+@overload
+def get_nvidia_devices(pci: Literal[True]) -> Iterable[str]:
+    ...
+
+
+def get_nvidia_devices(pci: bool):
+    """Iterate over the detected NVIDIA devices.
+
+    Arguments
+    ---------
+    pci:
+        A flag indicating if devices should be listed by a
+        numerical identifier (`False`) of their PCI identifier
+        (`True`).
+    """
+    if pci:
+        return os.listdir('/proc/driver/nvidia/gpus/')
+
+    # FIXME[hack]
+    return range(len(os.listdir('/proc/driver/nvidia/gpus/')))
+
+
+def _linux_nvidia_numa_node_file(gpu: Union[int, str]) -> Path:
+    pci_device = linux_nvidia_pci_device(gpu)
+    numa_node_file = Path(f'/sys/bus/pci/devices/{pci_device}/numa_node')
+    if not numa_node_file.is_file():
+        raise ValueError(f"No NUMA node information for gpu {gpu}.")
+    return numa_node_file
+
+def linux_nvidia_pci_device(gpu: Union[int, str]) -> str:
+    """Get the Linux PCI identifier for the given NVIDIA GPU.
+
+    Arguments
+    ---------
+    gpu:
+        A value identifying the GPU.  Either an integer identifier
+        or a string, which (currently) can only be the PCI identifier.
+
+    Result
+    ------
+    pci:
+        The PCI identifier.
+    """
+    if isinstance(gpu, str):
+        return gpu
+    return next(itertools.islice(get_nvidia_devices(True), gpu, None))
+
+
+def linux_get_gpu_numa_node(gpu: Union[int, str]) -> int:
+    """Get the NUMA node (CPU-memory cluster) to which a GPU is associated.
+
+    A NUMA node is a cluster of CPU(s) and memory.  In most desktop
+    computers there is only one CPU and hence only one NUMA node,
+    but in servers there may be multiple NUMA nodes.  A GPU is usually
+    associated to one such NUMA node.
+
+    The NUMA node value is read from the special `numa_node` file in
+    the device directory of the GPU device (in the SysFS filesystem).
+
+    Arguments
+    ---------
+    gpu:
+        The number of the GPU (0 for first GPU, 1 for second GPU, etc.).
+
+    Result
+    ------
+    numa:
+        The NUMA node to which the GPU is associated.  A value of `-1` means
+        that there is no NUMA node information available for that device.
+    """
+    numa_node_file = _linux_nvidia_numa_node_file(gpu)
+    return int(numa_node_file.read_text())
+
+
+def linux_set_gpu_numa_node(gpu: Union[int, str], numa: int) -> None:
+    """Set the NUMA node value to which a GPU is associated.
+    This is done by writing that value into the respective SysFS
+    device file.
+
+    Usually setting this value should not be necessary, as it is
+    initialized from the firmware settings during system boot.
+    However, with buggy firmware, this value may be incorrect
+    (reporting `-1`).  Software like TensorFlow will detect this
+    mismatch and issue a message ("successful NUMA node read from
+    SysFS had negative value (-1), but there must be at least one NUMA
+    node, so returning NUMA node zero").  Setting the NUMA node to the
+    correct value, will silence such messages.
+
+    Remark: Setting this value requires superuser privileges, as it
+    affects the system configuration (not just for the current user).
+
+    Remark 2: Setting this value should be considerd a hack required to
+    fix a bug in the firmware of the syste. In a sane system, the firmware
+    should provide the correct value.  If the SysFS `numa_node` file
+    contains the wrong NUMA node number, update your firmware, and if
+    that doesn't help inform your mainboard manufactor on this bug.
+
+    Arguments
+    ---------
+    gpu:
+        The GPU device to check.
+    numa:
+        The number of the NUMA node to which the GPU is associated.
+        A value of `-1` means that the GPU is not associated to a
+        NUMA node (which usually makes no sense).
+    """
+    numa_node_file = _linux_nvidia_numa_node_file(gpu)
+    try:
+        numa_node_file.write_text(str(numa))
+    except PermissionError:
+        raise RuntimeError("Setting the NUMA node for a GPU requires "
+                           "superuser priveleges. To do it manually, "
+                           "run the following command: "
+                           f"echo {numa} | sudo tee -a {numa_node_file}")
+
+
+def check_nvidia_device(gpu: Union[int, str]) -> bool:
+    """Check if an NVIDIA device (GPU) is configured correctly.
+
+    Arguments
+    ---------
+    gpu:
+        The GPU device to check.
+    """
+    return linux_get_gpu_numa_node(gpu) != -1

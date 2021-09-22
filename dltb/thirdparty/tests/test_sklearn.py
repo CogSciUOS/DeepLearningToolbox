@@ -1,11 +1,18 @@
+"""Unit tests for deep learning toolbox API to the scikit-learn module.
+"""
+
+# standard imports
 from unittest import TestCase, skipIf
 import importlib
 
+# toolbox imports
 from ...datasource import Datasource
 
 
 @skipIf(not importlib.util.find_spec('sklearn'), "sklearn not installed")
 class TestSklearn(TestCase):
+    """Unit tests for deep learning toolbox API to the scikit-learn module.
+    """
 
     def setUp(self):
         # importing sklearn should implicitly import ..sklearn
@@ -13,6 +20,10 @@ class TestSklearn(TestCase):
         importlib.import_module('sklearn')
 
     def test_lfw1(self):
+        """Test the scikit-learn function to access the Labeled Faces in the
+        Wild (LFW) dataset.
+
+        """
         lfw = Datasource['lfw-sklearn']
         lfw._min_faces_per_person = 70  # FIXME[hack]
         lfw.prepare()
@@ -22,4 +33,3 @@ class TestSklearn(TestCase):
         self.assertEqual(data.shape, (62, 47, 3))
         self.assertEqual(data.label, 6)
         self.assertEqual(data.label['text'], 'Tony Blair')
-

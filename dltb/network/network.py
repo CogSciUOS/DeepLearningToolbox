@@ -1277,7 +1277,7 @@ class Classifier(SoftClassifier, Network):
             :py:class:`Classifier`.
         """
         # obtain activation values for the score_layer
-        activations = self._get_activations(data, self.score_layer)
+        activations = self.get_activations(data, self.score_layer)
 
         # convert scores from internal format into numpy array
         return self.to_class_scheme(activations)

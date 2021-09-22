@@ -15,13 +15,14 @@ from ...base.data import Data
 from ...base.meta import Metadata
 from ...base.image import BoundingBox
 from ...base.install import Installable
+from ...tool.detector import BoundingBoxDetector
 from ...tool.face.detector import Detector
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class DetectorHaar(Detector, Installable):
+class DetectorHaar(Detector, BoundingBoxDetector, Installable):
     # pylint: disable=too-many-ancestors
     """The OpenCV Haar cascade face detector.
 
@@ -61,10 +62,18 @@ class DetectorHaar(Detector, Installable):
     In addition ther is the following parameter:
 
     minNeighbors: int = 3
-    
+
     Notice that there are different versions of this function, that
     differ in the information they return. `detectMultiScale3` will
     return additional information `rejectLevels` and `levelWeights`.
+
+    Model files
+    -----------
+    Pretrained haarcascade files are provided with modern OpenCV
+    installations (in a conda installation they are located under
+    `site-packages/cv2/data/`). If these are not installed,
+    they can be downloaded from the OpenCV GitHub repository [1].
+
 
     Arguments
     ---------
@@ -74,9 +83,13 @@ class DetectorHaar(Detector, Installable):
     _detector: cv2.CascadeClassifier
         The OpenCV CascadeClassifier
 
+
+    References
+    ----------
+    [1] https://github.com/opencv/opencv/tree/master/data/haarcascades
     """
 
-    def __init__(self, *args,
+    def __init__(self,
                  model_file='haarcascade_frontalface_default.xml',
                  **kwargs) -> None:
         """The OpenCV Haar cascade face detector.
@@ -86,7 +99,7 @@ class DetectorHaar(Detector, Installable):
         model_file: str
             The path to the pretrained model file.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self._detector = None
         self._model_file = None
         self.set_model_file(model_file)
@@ -98,20 +111,29 @@ class DetectorHaar(Detector, Installable):
         """Get the default directory in which the files for the
         cascade classifiers are located."""
         cascade_path = cv2.__file__
-        for _ in range(4):
+
+        # check for the conda installationx
+        cascade_path, _ = os.path.split(cascade_path)
+        if os.path.isdir(os.path.join(cascade_path, 'data', 'haarcascades')):
+            return os.path.join(cascade_path, 'data', 'haarcascades')
+        if os.path.isdir(os.path.join(cascade_path, 'data')):
+            return os.path.join(cascade_path, 'data')
+
+        # check for a regular OpenCV installation
+        for _ in range(3):
             cascade_path, _ = os.path.split(cascade_path)
         if os.path.basename(cascade_path) == 'lib':
             cascade_path, _ = os.path.split(cascade_path)
 
         if os.path.isdir(os.path.join(cascade_path, 'share', 'OpenCV',
                                       'haarcascades')):
-            cascade_path = os.path.join(cascade_path, 'share', 'OpenCV',
-                                        'haarcascades')
+            return os.path.join(cascade_path, 'share', 'OpenCV',
+                                'haarcascades')
         elif os.path.isdir(os.path.join(cascade_path, 'share', 'opencv4',
                                         'haarcascades')):
-            cascade_path = os.path.join(cascade_path, 'share', 'opencv4',
-                                        'haarcascades')
-        return cascade_path
+            return os.path.join(cascade_path, 'share', 'opencv4',
+                                'haarcascades')
+        return "."  # try to find haarcascades in current directory
 
     def set_model_file(self, model_file) -> None:
         """Set the model file to be used with this :py:class:`DetectorHaar`.
@@ -134,7 +156,8 @@ class DetectorHaar(Detector, Installable):
 
         if self._detector.empty():
             self._detector = None
-            raise RuntimeError("Haar detector is empty")
+            raise RuntimeError("Haar detector is empty "
+                               f"(model file='{self._model_file}')")
 
     def _unprepare(self) -> None:
         """Free resources occupied by this :py:class:`DetectorHaar`.

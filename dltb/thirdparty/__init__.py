@@ -9,9 +9,16 @@ interfaces that allow to access common functionionality (like images,
 sound, video) using different libraries.
 
 """
+# FIXME[old]: Some of the code below has been superseeded by the new
+# module 'dltb.base.implementation'. Sort out, what could is still
+# usefull and what can be removed.
+#
+# thirdparty.import_class(cls.__name__, module=module)
+
 
 # standard imports
 from typing import Union, List, Iterator, Any
+import os
 import sys
 import logging
 import importlib
@@ -19,26 +26,98 @@ import importlib.abc  # explicit import required for python >= 3.8
 
 # toolbox imports
 from ..config import config
+from ..base.implementation import Implementable
+from ..util.importer2 import import_interceptor
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-_DLTB = 'dltb'
+_DLTB = 'dltb.'
+_THIRDPARTY = 'dltb.thirdparty.'
+
+Implementable.register_module_alias(_THIRDPARTY + 'imageio', 'imageio')
+Implementable.register_implementation(_DLTB + 'base.image.ImageReader',
+                                      _THIRDPARTY + 'imageio.ImageIO')
+Implementable.register_implementation(_DLTB + 'base.image.ImageWriter',
+                                      _THIRDPARTY + 'imageio.ImageIO')
+Implementable.register_implementation(_DLTB + 'base.video.VideoReader',
+                                      _THIRDPARTY + 'imageio.VideoReader')
+Implementable.register_implementation(_DLTB + 'base.video.VideoWriter',
+                                      _THIRDPARTY + 'imageio.VideoWriter')
+Implementable.register_implementation(_DLTB + 'base.video.Webcam',
+                                      _THIRDPARTY + 'imageio.Webcam')
+
+Implementable.register_module_alias(_THIRDPARTY + 'opencv', 'cv2')
+Implementable.register_module_alias(_THIRDPARTY + 'opencv', 'opencv')
+Implementable.register_implementation(_DLTB + 'base.image.ImageReader',
+                                      _THIRDPARTY + 'opencv.ImageIO')
+Implementable.register_implementation(_DLTB + 'base.image.ImageWriter',
+                                      _THIRDPARTY + 'opencv.ImageIO')
+Implementable.register_implementation(_DLTB + 'base.image.ImageDisplay',
+                                      _THIRDPARTY + 'opencv.ImageDisplay')
+Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
+                                      _THIRDPARTY + 'opencv.ImageUtils')
+Implementable.register_implementation(_DLTB + 'tool.align.PointAligner',
+                                      _THIRDPARTY + 'opencv.ImageUtil')
+Implementable.register_implementation(_DLTB + 'base.video.VideoReader',
+                                      _THIRDPARTY + 'opencv.VideoReader')
+Implementable.register_implementation(_DLTB + 'base.video.VideoWriter',
+                                      _THIRDPARTY + 'opencv.VideoWriter')
+Implementable.register_implementation(_DLTB + 'base.video.Webcam',
+                                      _THIRDPARTY + 'opencv.Webcam')
+Implementable.register_implementation(_DLTB + 'tool.face.detector.Detector',
+                                      _THIRDPARTY + 'opencv.face.DetectorHaar')
+Implementable.register_implementation(_DLTB + 'tool.face.detector.Detector',
+                                      _THIRDPARTY + 'opencv.face.DetectorSSD')
+
+Implementable.register_module_alias(_THIRDPARTY + 'matplotlib', 'plt')
+Implementable.register_module_alias(_THIRDPARTY + 'matplotlib', 'matplotlib')
+Implementable.register_implementation(_DLTB + 'base.image.ImageReader',
+                                      _THIRDPARTY + 'matplotlib.ImageIO')
+Implementable.register_implementation(_DLTB + 'base.image.ImageWriter',
+                                      _THIRDPARTY + 'matplotlib.ImageIO')
+Implementable.register_implementation(_DLTB + 'base.image.Display',
+                                      _THIRDPARTY + 'matplotlib.ImageDisplay')
+
+Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'skimage')
+Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'scikit-image')
+Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
+                                      _THIRDPARTY + 'skimage.ImageUtil')
+Implementable.register_implementation(_DLTB + 'tool.align.PointAligner',
+                                      _THIRDPARTY + 'skimage.ImageUtil')
+
+Implementable.register_module_alias(_THIRDPARTY + 'qt', 'qt')
+Implementable.register_implementation(_DLTB + 'base.image.ImageDisplay',
+                                      _THIRDPARTY + 'qt.ImageDisplay')
+
+
+Implementable.register_module_alias(_THIRDPARTY + 'arcface', 'arcface')
+Implementable.register_implementation(_DLTB + 'tool.face.recognize.ArcFace',
+                                      _THIRDPARTY + 'arcface.ArcFace')
+
+
+Implementable.register_module_alias(_THIRDPARTY + 'mtcnn', 'mtcnn')
+Implementable.register_module_alias(_THIRDPARTY + 'mtcnn2', 'mtcnn2')
+Implementable.register_implementation(_DLTB + 'tool.face.mtcnn.Detector',
+                                      _THIRDPARTY + 'mtcnn.Detector')
+Implementable.register_implementation(_DLTB + 'tool.face.mtcnn.Detector',
+                                      _THIRDPARTY + 'mtcnn2.Detector')
+
 
 _BASE_CLASSES = {
-    'ImageReader': _DLTB + '.base.image.ImageReader',
-    'ImageWriter': _DLTB + '.base.image.ImageWriter',
-    'ImageResizer': _DLTB + '.base.image.ImageResizer',
-    'VideoReader': _DLTB + '.base.video.VideoReader',
-    'VideoWriter': _DLTB + '.base.video.VideoWriter',
-    'SoundReader': _DLTB + '.base.image.SoundReader',
-    'SoundWriter': _DLTB + '.base.image.SoundWriter',
-    'SoundPlayer': _DLTB + '.base.image.SoundPlayer',
-    'SoundRecorder': _DLTB + '.base.image.SoundRecorder',
-    'Webcam': _DLTB + '.base.video.Webcam',
-    'FaceDetector': _DLTB + '.tool.face.detector.Detector',
-    'ImageGAN': _DLTB + '.tool.gan.ImageGAN',
+    'ImageReader': _DLTB + 'base.image.ImageReader',
+    'ImageWriter': _DLTB + 'base.image.ImageWriter',
+    'ImageResizer': _DLTB + 'base.image.ImageResizer',
+    'VideoReader': _DLTB + 'base.video.VideoReader',
+    'VideoWriter': _DLTB + 'base.video.VideoWriter',
+    'SoundReader': _DLTB + 'base.image.SoundReader',
+    'SoundWriter': _DLTB + 'base.image.SoundWriter',
+    'SoundPlayer': _DLTB + 'base.image.SoundPlayer',
+    'SoundRecorder': _DLTB + 'base.image.SoundRecorder',
+    'Webcam': _DLTB + 'base.video.Webcam',
+    'FaceDetector': _DLTB + 'tool.face.detector.Detector',
+    'ImageGAN': _DLTB + 'tool.gan.ImageGAN',
 }
 
 _MODULES = {
@@ -103,6 +182,12 @@ _MODULES = {
         'modules': ['mtcnn', 'tensorflow'],
         'classes': {
             'FaceDetector': 'DetectorMTCNN'
+        }
+    },
+    'mtcnn2': {
+        'modules': ['torch'],
+        'classes': {
+            'FaceDetector': 'Detector'
         }
     },
     'dlib': {
@@ -219,7 +304,7 @@ def modules_with_class(cls: Union[type, str]) -> Iterator[str]:
 
 def implementations(base: Union[str, type],
                     check_available: bool = False) -> Iterator[str]:
-    """Iterate all implementations of a given deep learning toolbox
+    """Iterate all implementations of a given Deep Learning Toolbox
     base class.
 
     Arguments
@@ -241,8 +326,12 @@ def implementations(base: Union[str, type],
     else:
         full_base_name = (base if isinstance(base, str) else
                           base.__module__ + '.' + base.__name__)
-        short_base_name = next(short for short, full in _BASE_CLASSES.items()
-                               if full == full_base_name)
+        try:
+            short_base_name = \
+                next(short for short, full in _BASE_CLASSES.items()
+                     if full == full_base_name)
+        except StopIteration:
+            raise ValueError(f"No short name for '{full_base_name}'.")
 
     for module, description in _MODULES.items():
         if check_available and not available(module):
@@ -423,177 +512,65 @@ def module_configuration(module: str, attribute: str) -> Any:
     return _MODULES[module]['config'][attribute]
 
 
-class ImportInterceptor(importlib.abc.MetaPathFinder):
-    """The purpose of the :py:class:`ImportInterceptor` is to adapt
-    the import machinery. We want to have some influence on
-    choosing what to import (e.g. tensorflow.keras instead of keras.io,
-    or tensorflow.compat.v1 as tensorflow).
+# Should tensorflow.keras be preferred, even if Keras.IO is available?
+prefer_tensorflow_keras = True
 
-    In order to work, an instance of this class should be put
-    into `sys.meta_path` before those modules are imported.
+
+def patch_keras_import(fullname, path, target=None):
+    """Patch the keras import process to use the TensorFlow implementation
+    of Keras (`tensorflow.keras`) instead of the standard Keras.IO
+    implementation (`keras`).
+
     """
+    if (not prefer_tensorflow_keras and
+            (importlib.util.find_spec('keras') is not None)):
+        # The only way to configure the keras backend appears to be
+        # via environment variable. We thus inject one for this
+        # process. Keras must be loaded after this is done
+        # os.environ['KERAS_BACKEND'] = 'theano'
+        os.environ['KERAS_BACKEND'] = 'tensorflow'
 
-    patch_keras: bool = True
+        # Importing keras unconditionally outputs a message
+        # "Using [...] backend." to sys.stderr (in keras/__init__.py).
+        # There seems to be no sane way to avoid this.
 
-    _post_imports = {
-        'PIL': ('.pil', __name__),
-        'torchvision': ('.pil', __name__),
-        'torch': ('.torch', __name__),
-        'sklearn': ('.sklearn', __name__)
-    }
+        return  # nothing else to do ...
 
-    def __init__(self) -> None:
-        for module_name in list(self._post_imports):
-            if module_name in sys.modules:
-                importlib.import_module(*self._post_imports[module_name])
-                self._post_imports.pop(module_name)
+    keras = None
+    if 'tensorflow.keras' in sys.modules:
+        keras = sys.modules['tensorflow.keras']
+    elif 'tensorflow' in sys.modules:
+        keras = sys.modules['tensorflow'].keras
+    else:
+        module_spec = importlib.util.find_spec('tensorflow.keras')
+        if module_spec is not None:
+            # Load the module from module_spec.
+            # Remark: This actually seems not be necessary,
+            # as for some reason find_spec() already puts
+            # the module in sys.modules.
+            keras = importlib.util.module_from_spec(module_spec)
+            module_spec.loader.exec_module(keras)
 
-    def find_spec(self, fullname, path, target=None):
-        """Implementation of the PathFinder API.
-        """
-        # keras: we want to use 'tensorflow.keras' instead of keras,
-        # when available.
-        if fullname == 'keras' and self.patch_keras:
-            LOG.debug("ImportInterceptor['%s']: path=%s, target=%s",
-                      fullname, path, target)
-
-            keras = None
-            if 'tensorflow.keras' in sys.modules:
-                keras = sys.modules['tensorflow.keras']
-            elif 'tensorflow' in sys.modules:
-                keras = sys.modules['tensorflow'].keras
-            else:
-                module_spec = importlib.util.find_spec('tensorflow.keras')
-                if module_spec is not None:
-                    # Load the module from module_spec.
-                    # Remark: This actually seems not be necessary,
-                    # as for some reason find_spec() already puts
-                    # the module in sys.modules.
-                    keras = importlib.util.module_from_spec(module_spec)
-                    module_spec.loader.exec_module(keras)
-
-            if keras is not None:
-                LOG.info("Mapping 'keras' -> 'tensorflow.keras'")
-                sys.modules['keras'] = keras
-            else:
-                LOG.info("Not mapping 'keras' -> 'tensorflow.keras'")
-
-        if fullname in self._post_imports:
-            args = self._post_imports.pop(fullname)
-            LOG.info("Preparing post import for module '%s': %s",
-                     fullname, args)
-            # use default path finder to get module loader (note that it
-            # is important that we temporarily remove the fullname from
-            # _post_imports to avoid infinite recursion)
-            module_spec = importlib.util.find_spec(fullname)
-            # now add the fullname again, as find_spec may be called
-            # multiple times before the module actually gets loaded.
-            self._post_imports[fullname] = args
-
-            # Adapt the Loader of the module_spec
-            module_spec.loader = \
-                ImportInterceptor.LoaderWrapper(module_spec.loader, self)
-            return module_spec
-
-        # Proceed with the standard procedure ...
-        return None
-
-    def add_post_imports(self, fullname: str, args) -> None:
-        """Add post import modules for a module.
-
-        Arguments
-        ---------
-        fullname:
-            The full name of the module for which a post import shall
-            be performed.
-        args:
-            Arguments describing the additional module to be imported.
-        """
-        if fullname in sys.modules:
-            importlib.import_module(*args)
-        else:
-            self._post_imports[fullname] = args
-
-    def pop_post_imports(self, fullname: str):
-        """Remove a post import.
-
-        Argments
-        --------
-        fullname:
-            Full name of the module for which post imports are registered.
-        """
-        return self._post_imports.pop(fullname)
-
-    class LoaderWrapper(importlib.abc.Loader):
-        """A wrapper around a :py:class:`importlib.abc.Loader`,
-        perfoming additional imports after a module has been loaded.
-        """
-        def __init__(self, loader: importlib.abc.Loader, interceptor):
-            LOG.debug("Creating post import LoaderWrapper")
-            self._loader = loader
-            self._interceptor = interceptor
-
-        def create_module(self, spec):
-            """A method that returns the module object to use when importing a
-            module. This method may return None, indicating that
-            default module creation semantics should take place.
-
-            """
-            LOG.debug("Performing create_module for module for spec: %s", spec)
-            return self._loader.create_module(spec)
-
-        def exec_module(self, module):
-            """An abstract method that executes the module in its own namespace
-            when a module is imported or reloaded. The module should
-            already be initialized when exec_module() is called.
-
-            """
-            module_name = module.__name__
-            LOG.debug("Performing exec_module for module '%s'", module_name)
-            self._loader.exec_module(module)
-
-            args = self._interceptor.pop_post_imports(module_name)
-            LOG.debug("Performing post import for module '%s': %s",
-                      module_name, args)
-            importlib.import_module(*args)
-
-#
-# Post import hooks
-#
-
-# FIXME[hack]: check if there is a better way of doing this ...
-# import builtins
-# _builtin_import = builtins.__import__
-
-# def _import_adapter(name, globals=None, locals=None, fromlist=(), level=0):
-#    already_imported = name in sys.modules
-#
-#    module = _builtin_import(name, globals=globals, locals=locals,
-#                             fromlist=fromlist, level=level)
-#
-#    if not already_imported:
-#        # if name == 'PIL.Image' or name == 'torchvision':
-#        #     importlib.import_module('.pil', __name__)
-#        if name == 'torch':
-#            importlib.import_module('.torch', __name__)
-#    return module
-#
-# builtins.__import__ = _import_adapter
+    if keras is not None:
+        LOG.info("Mapping 'keras' -> 'tensorflow.keras'")
+        sys.modules['keras'] = keras
+    else:
+        LOG.info("Not mapping 'keras' -> 'tensorflow.keras'")
 
 
-# Is the application started from source or is it frozen (bundled)?
-# The PyInstaller bootloader adds the name 'frozen' to the sys module:
-# FIXME[question]: explain what frozen modules are and implications
-# they have for us!
-if hasattr(sys, 'frozen'):
-    LOG.info("sys is frozen")
-else:
-    LOG.info("sys is not frozen")
-    sys.meta_path = [ImportInterceptor()] + sys.meta_path
+# FIXME[bug]: the current implementation of the preimport hokk imports
+# 'tensorflow.keras' (as 'keras') at the first invocation of
+# importlib.util.find_spec('keras').  It would be more appropriate to
+# do the import only on loading the module, so that find_spec('keras')
+# could be used to check if 'keras' is available.  Repairing this
+# would probably need some adaptation of the ImportInterceptor class.
+import_interceptor.add_preimport_hook('keras', patch_keras_import)
 
-    if 'keras' in sys.modules:
-        LOG.warning("Module 'keras' was already import, hence "
-                    "patching the import machinery will have no effect")
+import_interceptor.add_postimport_depency('PIL', ('.pil', __name__))
+import_interceptor.add_postimport_depency('torchvision', ('.pil', __name__))
+import_interceptor.add_postimport_depency('torch', ('.torch', __name__))
+import_interceptor.add_postimport_depency('sklearn', ('.sklearn', __name__))
+
 
 #
 # Check for some optional packages

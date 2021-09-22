@@ -664,6 +664,9 @@ class RegisterClass(ABCMeta):
         LOG.debug("RegisterClass: {cls.__name}.__call__({args}, {kwargs})")
         new_entry = super().__call__(*args, **kwargs)
 
+        # Some old code invents its own keys, even if an explict key
+        # argument is present.  This may lead to unexpected behaviour and
+        # hence we issue a warning in this case
         if 'key' in kwargs and new_entry.key != kwargs['key']:
             LOG.warning("Key mismatch for new register entry: "
                         "should be '%s' but is '%s'",

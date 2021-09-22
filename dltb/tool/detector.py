@@ -1,7 +1,39 @@
 """Abstract base class for detectors.
+
+FIXME[todo]: the detector interface seems to be somewhat inconsistent.
+Clean it!
+
+Example:
+
+from dltb.thirdparty.opencv.face import DetectorHaar
+detector = DetectorHaar()
+
+filename = '/space/data/lfw/lfw/Arnold_Schwarzenegger/Arnold_Schwarzenegger_0002.jpg'
+
+
+The following currently works:
+
+from dltb.base.image import Image
+image = Image(filename)
+detections = detector.detect(image) # Metadata
+
+# and 
+
+data = detector.process_image(filename)
+detections = detector.detections(data)  # Metadata
+
+
+
+The following does not work:
+
+d = detector.detect(filename)
+# AttributeError: 'str' object has no attribute 'is_batch'
+
+boxes = list(detector.detect_boxes(image))
+# boxes=[]
 """
 # standard imports
-from typing import Union, Tuple, List, Any
+from typing import Union, Tuple, List, Any, Iterable
 import logging
 
 # third party imports
@@ -10,7 +42,7 @@ import numpy as np
 # toolbox imports
 from ..base.data import Data
 from ..base.meta import Metadata
-from ..base.image import Image, Imagelike
+from ..base.image import Image, Imagelike, Region, BoundingBox
 from .tool import Tool
 from .image import ImageTool
 
@@ -49,7 +81,7 @@ class Detector(Tool):
     def detect(self, data: Data, **kwargs) -> Detections:
         """Preprocess the given data and apply the detector.
 
-        This method is intended for synchronous use - it dose neither
+        This method is intended for synchronous use - it does neither
         alter the `data` object, nor the detector itself. Depending
         on the detector, it may be possible to run the method multiple
         times in parallel.
@@ -82,8 +114,12 @@ class Detector(Tool):
             return None
 
         # obtain the preprocessed input data
-        preprocessed_data = self.preprocess(data)
-        print("detect:", type(data), type(preprocessed_data))
+        # FIXME[old]: preprocessed_data = self.preprocess(data)
+        preprocessed_data = self._preprocess_data(data)
+        if preprocessed_data is None:
+            preprocessed_data = data.array
+        print("Detector.detect: data =", type(data),
+              "; preprocessed_data =", type(preprocessed_data))
 
         # do the actual processing
         detections = self._detect(preprocessed_data, **kwargs)
@@ -151,6 +187,19 @@ class Detector(Tool):
 class ImageDetector(Detector, ImageTool):
     # pylint: disable=too-many-ancestors
     """A detector to be applied to image data.
+
+    In case of an :py:class:`ImageDetector` the :py:class:`Metadata`
+    essentially is a set of :py:class:`Region`s, that is a
+    :py:class:`Location`, optionally annotated with additional
+    information like confidence values, or a class lable.
+    The :py:class:`Location` is typically a :py:class:`BoundingBox`,
+    but it may also be a more sophisticated contour are a bit mask.
+
+    Notice that the resulting :py:class:`Metadata` can contain
+    multiple regions (in case that the detector found multiple
+    patterns in the input image), and also no region at all (in case
+    that no pattern has been detected).
+
     """
 
     def __init__(self, size: Tuple[int, int] = None, **kwargs) -> None:
@@ -161,8 +210,8 @@ class ImageDetector(Detector, ImageTool):
     # Implementation of the private API
     #
 
-    external_result: Tuple[str] = ('detections', )
-    internal_result: Tuple[str] = ('_detections', )
+    external_result: Tuple[str] = ('detections', )   # Metadata
+    internal_result: Tuple[str] = ('_detections', )  # internal
 
     def _postprocess(self, context: Data, name: str) -> None:
         # FIXME[todo]: batch processing
@@ -193,6 +242,107 @@ class ImageDetector(Detector, ImageTool):
 
         else:
             super()._postprocess(context, name)
+
+    @staticmethod
+    def intersection_over_union(box1: BoundingBox, box2: BoundingBox) -> float:
+        """Calculate the intersection over union of two boxes (rectangles).
+        The intersection of union is computed as the ratio of the overlap
+        of the two boxes and their union.
+        """
+        intersection_area = (box1 * box2).area()
+        union_area = box1.area() + box2.area() - intersection_area
+        return intersection_area/union_area
+
+    # @staticmethod
+    def evaluate_single_image(self, gt_boxes, pred_boxes, iou_thr):
+        """Calculates number of true_pos, false_pos, false_neg
+        from single batch of boxes.
+
+        Arguments
+        ---------
+        gt_boxes (list of list of floats):
+            list of locations of ground truth objects as
+            [xmin, ymin, xmax, ymax]
+        pred_boxes (dict):
+            dict of dicts of 'boxes' (formatted like `gt_boxes`)
+            and 'scores'
+        iou_thr (float):
+            value of IoU to consider as threshold for a true prediction.
+        Returns:
+            dict: true positives (int), false positives (int),
+            false negatives (int)
+        """
+        # FIXME[todo]:
+        # This implementation has been adapted from [x] and is probably
+        # not the best approach (and maybe even not correct)
+        # [x] https://towardsdatascience.com/
+        #     evaluating-performance-of-an-object-detection-model-137a349c517b
+        detections = []  # list of detections
+        gt_idx_thr = []  # indices of ground truth objects that were detected
+        pred_idx_thr = []  # indices of correct predictions (detections)
+        ious = []  # the ious values for each detection.
+
+        # find detections by comparing each ground truth object with
+        # each prediction (cartesian product)
+        for ipb, pred_box in enumerate(pred_boxes):
+            for igb, gt_box in enumerate(gt_boxes):
+                iou = self.intersection_over_union(gt_box, pred_box)
+
+                if iou > iou_thr:
+                    detections.append((igb, ipb, iou))
+                    gt_idx_thr.append(igb)
+                    pred_idx_thr.append(ipb)
+                    ious.append(iou)
+
+        if len(detections) == 0:
+            # true_positive, false_positive, false_negative
+            return (0, len(pred_boxes), len(gt_boxes))
+
+        # Now clean the detections by removing double detections
+        gt_match_idx = []
+        pred_match_idx = []
+        iou_sort = np.argsort(ious)[::1]
+        for idx in iou_sort:
+            gt_idx, pr_idx, _iou = detections[idx]
+
+            # If the ground truth and predictions are both unmatched,
+            # mark them (this ensures 1:1 mapping, but it may not be
+            # the optimal mapping, isn't it?)
+            if (gt_idx not in gt_match_idx) and (pr_idx not in pred_match_idx):
+                # ground truth object has not been marked as detected yet and
+                # the detection has not yet been marked -> mark both of them
+                gt_match_idx.append(gt_idx)
+                pred_match_idx.append(pr_idx)
+
+        tp = len(gt_match_idx)
+        fp = len(pred_boxes) - len(pred_match_idx)
+        fn = len(gt_boxes) - len(gt_match_idx)
+        return tp, fp, fn  # true_positive, false_positive, false_negative
+
+    def calc_precision_recall(image_results):
+        """Calculates precision and recall from the set of images
+
+        Arguments
+        ---------
+        img_results (dict):
+            Iterable[Tuple[image_id,
+                           true_pos: int, false_pos: int, false_neg: int]]
+        Result
+        -------
+        tuple: of floats of (precision, recall)
+        """
+        true_positive = 0
+        false_positive = 0
+        false_negative = 0
+        for _img_id, tp, fp, fn in image_results.items():
+            true_positive += tp
+            false_positive += fp
+            false_negative += fn
+
+        precision, recall = ((0.0, 0.0) if not true_positive else
+                             (true_positive/(true_positive + false_positive),
+                              true_positive/(true_positive + false_negative)))
+        return (precision, recall)
 
     #
     # FIXME[old]:
@@ -228,7 +378,7 @@ class ImageDetector(Detector, ImageTool):
         return detections
 
     def _postprocess_data(self, data: Data, mark: bool = False,
-                          extract: bool = False, **kwargs) -> None:
+                          extract: bool = False, **_kwargs) -> None:
         """Apply different forms of postprocessing to the data object,
         extending it by additional tool specific attributes.
 
@@ -249,11 +399,19 @@ class ImageDetector(Detector, ImageTool):
         if extract:
             self.extract_data(data)
 
+    def detect_regions(self, image: Imagelike) -> Iterable[Region]:
+        """Iterate the :py:class:`Region`s detected by applying this
+        :py:class:`ImageDetector` to an `image`.
+        """
+        metadata = self.detect(image)
+        for region in metadata.regions:
+            yield region
+
     #
     # Image specific methods
     #
 
-    def detect_image(self, image: Imagelike, **kwargs) -> Detections:
+    def detect_image(self, image: Imagelike, **_kwargs) -> Detections:
         """Apply the detector to the given image.
 
         Arguments
@@ -266,7 +424,7 @@ class ImageDetector(Detector, ImageTool):
         detectons:
             The detections obtained from the detector.
         """
-        return self.detect(image)
+        return self.detect(Image(image))
 
     def process_image(self, image: Imagelike, **kwargs) -> Image:
         """Create an :py:class:`Image` data object and process it with this
@@ -313,10 +471,12 @@ class ImageDetector(Detector, ImageTool):
             An image in which the given detections are visually marked.
         """
         array = Image.as_array(image, copy=copy)
+        # array.setflags(write=True)
+        array = array.copy()  # FIXME[why]: was alread copied above
         if detections is None:
-            detections = self.detect(array)
+            detections = self.detect(Image(array))
         if detections:
-            for index, region in enumerate(detections.regions):
+            for region in detections.regions:
                 region.mark_image(array)
         return array
 
@@ -392,8 +552,8 @@ class ImageDetector(Detector, ImageTool):
         called `extractions`, holding a list of extracted image
         patches based on the detections done by this
         :py:class:`ImageDetector`. This function assumes that the
-        detector has already be applied to the given data object and the
-        detections are stored in a tool specific attribute called
+        detector has already be applied to the given data object and
+        the detections are stored in a tool specific attribute called
         `detections`.
 
         Arguments
@@ -420,3 +580,18 @@ class ImageDetector(Detector, ImageTool):
         the argument `extract=True` when calling :py:meth:`process`.
         """
         return self.get_data_attribute(data, 'extract')
+
+
+class BoundingBoxDetector:
+    """Convenience methods for Detectors that report their detections
+    as :py:class:`BoundingBox`.
+    """
+
+    def detect_boxes(self, image: Imagelike) -> Iterable[BoundingBox]:
+        """Detect :py:class:`BoundingBox`s in an image.
+        """
+        metadata = self.detect(image)
+        for region in metadata.regions:
+            location = region.location
+            if isinstance(location, BoundingBox):
+                yield location

@@ -23,7 +23,7 @@ class ImageIO(ImageReader, ImageWriter, ImageDisplay):
         # Note: Matplotlib can only read PNGs natively. Further image
         # formats are supported via the optional dependency on
         # Pillow. Note, URL strings are not compatible with Pillow.
-        return plt.imread(filename)#.astype(np.uint8)
+        return plt.imread(filename)  # .astype(np.uint8)
 
     def write(self, image: Imagelike, filename: str, **kwargs) -> None:
         # vmin, vmax: scalar

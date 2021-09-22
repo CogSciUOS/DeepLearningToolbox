@@ -103,7 +103,9 @@ class Metadata:
         return self.__dict__[name]
 
     def __str__(self):
-        description = "Metadata:"
+        description = ("Metadata " +
+                       ("with" if self.has_regions() else "without") +
+                       " regions. Attributes:")
         for name, value in self.__dict__.items():
             description += os.linesep + "  " + name + ": "
             if isinstance(value, np.ndarray):

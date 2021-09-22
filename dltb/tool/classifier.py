@@ -7,7 +7,7 @@
 #   class labels, even if not applied to ImageNet data
 
 # standard imports
-from typing import Union, Tuple, Iterable, Iterator, Any
+from typing import Union, Tuple, Iterable, Iterator, Any, Sequence
 from abc import abstractmethod, ABC
 import logging
 
@@ -19,7 +19,6 @@ from ..base.prepare import Preparable
 from ..base.register import RegisterClass
 from ..base.data import Datalike
 from ..base.image import Imagelike, ImageExtension
-
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -163,18 +162,43 @@ class ClassScheme(metaclass=RegisterClass):
 
         self._labels[name] = values
         if lookup:
-            if isinstance(values, np.ndarray) and values.max() < 2*len(self):
-                self._lookup[name] = np.zeros(values.max()+1, dtype=np.int)
-                self._lookup[name][values] = np.arange(0, values.size)
-            else:
-                self._lookup[name] = \
-                    {val: idx for idx, val in enumerate(values)}
+            self.create_lookup_table(name)
 
-    def labels(self) -> Iterator[str]:
-        """Enumerate the label names that are currently registered with
-        this :py:class:`ClassScheme`.
+    def create_lookup_table(self, name: str) -> None:
+        """Add a (reverse) lookup table for label set.  This method
+        can be called after a label set has been added to this
+        :py:class:`ClassScheme`.  It is essentially equivalent to
+        passing the `lookup=True` flag when adding the label set with
+        :py:meth:`add_labels`.
+
+        Arguments
+        ---------
+        name: str
+            The name of the label set. This name has to be used when
+            looking up labels in this label set.
         """
-        return self._labels.keys()
+        values = self._labels[name]  # may raise KeyError
+        if name in self._lookup:
+            return  # lookup table already exists -> nothing to do
+        if isinstance(values, np.ndarray) and values.max() < 2*len(self):
+            self._lookup[name] = np.zeros(values.max()+1, dtype=np.int)
+            self._lookup[name][values] = np.arange(0, values.size)
+        else:
+            self._lookup[name] = \
+                {val: idx for idx, val in enumerate(values)}
+
+    def labels(self, lookup: bool = None) -> Iterable[str]:
+        """Iterate over the names of the label sets that are currently
+        registered with this :py:class:`ClassScheme`.
+
+        """
+        for label in self._labels:
+            if lookup is None:
+                yield label
+            elif lookup and label in self._lookup:
+                yield label
+            elif not lookup and label not in self._lookup:
+                yield label
 
     def reindex(self, values: np.ndarray, axis: int = None,
                 source: str = None, target: str = None) -> np.ndarray:
@@ -378,9 +402,12 @@ class Classifier(ABC, Preparable):
 
 
 class ImageClassifier(ImageExtension, base=Classifier):
-    """
+    """An :py:class:`ImageClassifier` is can classify images.
     """
 
+    # FIXME[old]: not used (and probably not needed anymore), as
+    # classes new classes should now how to convert arguments into
+    # an internal format ...
     def classify_image(self, image: Imagelike) -> ClassIdentifier:
         """Classify the given image.
         """
@@ -540,3 +567,182 @@ class SoftClassifier(Classifier):
         top_indices, top_scores = self.top_classes(scores, top=top)
         for i, (index, score) in enumerate(zip(top_indices, top_scores)):
             print(f"  {i}: {index} ({score})")
+
+
+class BinaryClassifier(Classifier):
+    """A binary classifier assigns input points to one of two classes.
+    This is a very common form of classification with many applications.
+
+    """
+
+    def evaluate(self, datasource: Sequence):
+        confusion_matrix = ConfusionMatrix(classes=2)
+        for data in datasource:
+            prediction = self(data)
+            confusion_matrix[data.label, prediction] += 1
+
+
+class ConfusionMatrix:
+    def __init__(self, classes: int = 2, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._matrix = np.zeros(2, 2, dtype=np.int)
+
+    def __getitem__(self, pos: Tuple[int, int]) -> int:
+        correct, predicted = pos
+        return self._matrix[correct, predicted]
+
+    def __setitem__(self, pos: Tuple[int, int], value: int) -> None:
+        correct, predicted = pos
+        self._matrix[correct, predicted] = value
+
+    def accuracy(self) -> float:
+        tp, fp, tn, fn = 0, 0, 0, 0
+        for idx, row in enumerate(self._matrix):
+            correct = row[idx]
+            error = row.sum() - correct
+
+
+class PairClassifier(BinaryClassifier):
+    """A pair classifier obtains a pair of input points and should
+    determine if these are same or different (e.g. two images of the
+    same cat).
+
+    """
+
+    def process_pair(data) -> bool:
+        return data[0] == data[1]  # FIXME[todo]
+
+
+    def evaluate_pairs(pairs) -> float:
+        # taken from evaluate arcface
+
+        
+        
+        print("Start evaluating on age group: "+current_age_group)
+
+        for img1, img2, same in pairs:
+            img1 = short_preprocessing(img1)
+            img2 = short_preprocessing(img2)
+
+            out_1 = l2_norm(arcface_model(img1))
+            out_1 = out_1[0].numpy()
+
+            out_2 = l2_norm(arcface_model(img2))
+            out_2 = out_2[0].numpy()
+
+            embeddings_array[idx, 0] = out_1
+            embeddings_array[idx, 1] = out_2
+
+            gt_array[idx] = int(gt_same_person)
+
+        tpr, fpr, accuracy, best_thresholds = \
+            calculate_roc(thresholds,
+                          embeddings_array[:,0], embeddings_array[:,1],
+                          gt_array, nrof_folds=10)
+
+        print("Accuracies for age group "+current_age_group+":")
+        print(accuracy)
+        mean = accuracy.mean()
+        print("Mean Accuracy for age group "+current_age_group+" is: "+
+              str(mean))
+
+
+class MetricPairVerifier:
+    """A pair verifier that decides for a pair if both components are the
+    same based on their distance: if the distance is below a given
+    threshold, the components are judged as same, otherwise they are
+    judged as different.
+
+    A :py:class:`MetricPairVerifier` has to implement a
+    :py:meth:`distance` method that allows to compute the distance for
+    a pair of points
+
+    """
+
+    def threshold(self) -> float:
+        """The threshold for the distance between the two components
+        of a pair to be considered the same.
+        """
+        return self._threshold
+
+    def is_same(self, data1, data2, threshold: float = None) -> bool:
+        """Check for two data points (or batch of data), if they
+        are to be considered the same (their distance is below the
+        threshold) or different (their distance is above the threshold).
+        """
+        threshold = threshold or self.threshold
+        distance = self.distance(data1, data2)
+        is_same = distance < threshold
+        return is_same
+
+    def calculate_accuracy(self, threshold, dist, actual_issame):
+        """Calculate accuracy and other metrics.
+
+        based on arcface-tf2 code
+        """
+        threshold = threshold or self.threshold
+        predict_issame = np.less(dist, threshold)
+        # pylint: disable=invalid-name
+        tp = np.sum(np.logical_and(predict_issame, actual_issame))
+        fp = np.sum(np.logical_and(predict_issame,
+                                   np.logical_not(actual_issame)))
+        tn = np.sum(np.logical_and(np.logical_not(predict_issame),
+                                   np.logical_not(actual_issame)))
+        fn = np.sum(np.logical_and(np.logical_not(predict_issame),
+                                   actual_issame))
+
+        tpr = 0 if (tp + fn == 0) else float(tp) / float(tp + fn)
+        fpr = 0 if (fp + tn == 0) else float(fp) / float(fp + tn)
+        acc = float(tp + tn) / dist.size
+        return tpr, fpr, acc
+
+    def calculate_roc(self, thresholds, embeddings1, embeddings2,
+                      actual_issame, nrof_folds=10):
+        """Comput a ROC curve
+
+        based on arcface-tf2 code
+        """
+        assert embeddings1.shape[0] == embeddings2.shape[0]
+        assert embeddings1.shape[1] == embeddings2.shape[1]
+        nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
+        nrof_thresholds = len(thresholds)
+        k_fold = KFold(n_splits=nrof_folds, shuffle=False)
+
+        tprs = np.zeros((nrof_folds, nrof_thresholds))
+        fprs = np.zeros((nrof_folds, nrof_thresholds))
+        accuracy = np.zeros((nrof_folds))
+        best_thresholds = np.zeros((nrof_folds))
+        indices = np.arange(nrof_pairs)
+
+        diff = np.subtract(embeddings1, embeddings2)
+        dist = np.sum(np.square(diff), 1)
+
+        for idx, (train_set, test_set) \
+                in enumerate(k_fold.split(indices)):
+            # Find the best threshold for the fold
+            acc_train = np.zeros((nrof_thresholds))
+            for threshold_idx, threshold in enumerate(thresholds):
+                _, _, acc_train[threshold_idx] = \
+                    self.calculate_accuracy(threshold, dist[train_set],
+                                            actual_issame[train_set])
+                best_threshold_index = np.argmax(acc_train)
+
+            best_thresholds[idx] = thresholds[best_threshold_index]
+            for threshold_idx, threshold in enumerate(thresholds):
+                tprs[idx, threshold_idx], fprs[idx, threshold_idx], _ = \
+                    self.calculate_accuracy(threshold, dist[test_set],
+                                            actual_issame[test_set])
+            _, _, accuracy[idx] = \
+                self.calculate_accuracy(thresholds[best_threshold_index],
+                                        dist[test_set],
+                                        actual_issame[test_set])
+
+        tpr = np.mean(tprs, 0)
+        fpr = np.mean(fprs, 0)
+        return tpr, fpr, accuracy, best_thresholds
+
+    #
+    # to be implemented by sublasses
+    #
+
+    _threshold: float = 1.

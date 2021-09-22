@@ -32,8 +32,10 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
         new_cls = DataDict if cls is Data else cls
         # error: Argument 2 for "super" not an instance of argument 1
         # probably a bug in mypy? https://github.com/python/mypy/issues/7595
-        return super(Data, new_cls).__new__(new_cls)
-            # __new__(new_cls, *args, **kwargs)  # type: ignore[misc]
+        # type: ignore[misc]
+        __new__ = super(Data, new_cls).__new__
+        return (__new__(new_cls) if __new__ is object.__new__ else
+                __new__(new_cls, *args, **kwargs))
 
     # def __getattr__(self, attr) -> Any:
     # def __setattr__(self, attribute: str, value: Any) -> None:

@@ -15,8 +15,8 @@ import argparse
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
-from dltb.tool.classifier import Classifier, ImageClassifier
-from dltb.network import argparse as NetworkArgparse
+from dltb.tool.classifier import Classifier, SoftClassifier, ImageClassifier
+from dltb.network import argparse as NetworkArgparse, Network
 from dltb.datasource import Datasource
 from dltb.util.terminal import Terminal
 from dltb.thirdparty.datasource.imagenet import ImageNet
@@ -127,6 +127,15 @@ class Evaluator:
                 break
 
 
+# FIXME[hack]: move this class to some other module
+class NegateAction(argparse.Action):
+    """An `argparse.Action` allowing to negate an option by prefixing
+    it with `'no'`.
+    """
+    def __call__(self, parser, ns, values, option):
+        setattr(ns, self.dest, option[2:4] != 'no')
+
+
 def main():
     """The main program.
     """
@@ -137,6 +146,12 @@ def main():
                         help='evaluate the classifier on the given datasource')
     parser.add_argument('--top', type=int, default=None,
                         help='evaluate top-n accuracy of classifier')
+    parser.add_argument('--scores', '--no-scores', dest='scores',
+                        action=NegateAction, nargs=0, default=None,
+                        help='output classification scores '
+                        '(in case of soft classifier)')
+    parser.add_argument('--network-info', action='store_true', default=False,
+                        help='output additional information on the network')
     ToolboxArgparse.add_arguments(parser)
     NetworkArgparse.prepare(parser)
     parser.add_argument('image', metavar='IMAGE', nargs='*',
@@ -149,7 +164,19 @@ def main():
         print("No network was specified.")
         return
 
+    if args.network_info:
+        print(f"{type(network).__name__} is an ImageClassifier:",
+              isinstance(network, ImageClassifier))
+        print(f"{type(network).__name__} is a SoftClassifier:",
+              isinstance(network, SoftClassifier))
+        print(f"{type(network).__name__} is a Network:",
+              isinstance(network, Network))
+
     if args.evaluate:
+        #
+        # Evaluate classifier on a (labeled) dataset
+        #
+
         evaluator = Evaluator(network)
         terminal = Terminal()
         imagenet = ImageNet()
@@ -157,34 +184,48 @@ def main():
         evaluator.evaluate(imagenet, top=args.top, terminal=terminal)
 
     else:
-        # filenames = ['images/elephant.jpg', 'dog.jpg']
-        # "laska.png", "poodle.png"
-        #filename = 'images/elephant.jpg'
-        #label = network.classify_image(filename)
-        #print(filename, label['text'])
-        print(f"{type(network).__name__} is subclass of ImageClassifier:",
-              isinstance(network, ImageClassifier))
+        #
+        # Classify data given as command line arguments
+        #
+
+        if args.scores is None:
+            args.scores = isinstance(network, SoftClassifier)
+        elif args.scores and not isinstance(network, SoftClassifier):
+            args.scores = False
+            LOG.warning("Not reporting scores as %s is not a soft classifier",
+                        network)
+
+        if args.top is not None and not isinstance(network, SoftClassifier):
+            args.top = None
+            LOG.warning("Not listing top classes as %s is not a "
+                        "soft classifier", network)
 
         for filename in args.image:
-            label = network.classify(filename)
-            print(f"classify('{filename}'): {label['text']}")
 
-            label, score = network.classify(filename, confidence=True)
-            print(f"classify('{filename}', confidence=True): "
-                  f"{label['text'], score}")
+            if args.top is None:
+                if args.scores:
+                    label, score = network.classify(filename, confidence=True)
+                    print(f"classify('{filename}', confidence=True): "
+                          f"{label['text'], score}")
+                else:
+                    label = network.classify(filename)
+                    print(f"classify('{filename}'): {label['text']}")
+            else:
+                if args.scores:
+                    labels, scores = network.classify(filename, top=args.top,
+                                                      confidence=True)
+                    print(f"classify('{filename}', top={args.top}, "
+                          f"scores={args.scores}): ")
+                    for i, (label, score) in enumerate(zip(labels, scores)):
+                        print(f"({i+1}) {label['text']} ({score*100:.2f}%)")
+                else:
+                    labels = network.classify(filename, top=args.top)
+                    print(f"classify('{filename}', top=args.top): "
+                          f"{[label['text'] for label in labels]}")
 
-            labels = network.classify(filename, top=5)
-            print(f"classify('{filename}', top=5): "
-                  f"{[label['text'] for label in labels]}")
-
-            labels, scores = network.classify(filename, top=5,
-                                              confidence=True)
-            print(f"classify('{filename}', top=5, confidence=True): ")
-            for i, (label, score) in enumerate(zip(labels, scores)):
-                print(f"({i+1}) {label['text']} ({score*100:.2f}%)")
-
-            scores = network.class_scores(filename)
-            print(f"class_scores('{filename}': {scores.shape}")
+    # else:
+    # scores = network.class_scores(filename)
+    #    print(f"class_scores('{filename}': {scores.shape}")
 
 
 if __name__ == "__main__":

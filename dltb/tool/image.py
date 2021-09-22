@@ -172,7 +172,6 @@ class ImageTool(Tool):
 
         return image
 
-
     # FIXME[todo] names:
     #   image_region  <- region_of_image  [BoundingBox]
     #   image_size <- size_of_image       [Size]

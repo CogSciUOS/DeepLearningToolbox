@@ -35,7 +35,7 @@ Installation process is just installing packages listed in the requirements.txt
 
 - python virtualenv:
 
-  1) Install your virtualenv following [The Hitchhiker’s Guide to Python](http://docs.python-guide.org/en/latest/dev/virtualenvs/ "Virtual Environments"), check that python version >=3.6 is set as primary interpreter
+  1) Install your virtualenv following [The Hitchhiker’s Guide to Python](http://docs.python-guide.org/en/latest/dev/virtualenvs/ "Virtual Environments"), check that python version >=3.8 is set as primary interpreter
 
   2) After activating the enviroment, run the command to install necessary libraries:
 

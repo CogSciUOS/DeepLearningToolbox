@@ -59,7 +59,7 @@ class Sound(Data):
                  data: np.ndarray = None, **kwargs) -> None:
 
         super().__init__(*kwargs)
-        
+
         # if data is give, infer information from that data
         if data is not None:
             data_channels = 1 if data.ndim == 1 else min(data.shape)

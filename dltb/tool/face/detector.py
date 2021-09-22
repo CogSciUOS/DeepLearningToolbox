@@ -7,10 +7,11 @@
 import numpy as np
 
 # toolbox imports
+from ...base.implementation import Implementable
 from ..detector import ImageDetector
 
 
-class Detector(ImageDetector):
+class Detector(Implementable, ImageDetector):
     # pylint: disable=too-many-ancestors
     """Base class for face detectors.
     """

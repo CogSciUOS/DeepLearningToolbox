@@ -2,7 +2,7 @@
 
 # Requirements
 
-* Python version >= 3.6
+* Python version >= 3.8
 * module `packaging`
 * module `imageio` or some other module that provides `imread`
 * module `frozendict`: for network

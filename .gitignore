@@ -32,9 +32,12 @@ core
 *.swp
 doc/build/
 
- # nfs files
+# nfs files
 .fuse_hidden*
 .ipynb_checkpoints
 
 .DS_Store
 .pytest_cache/
+
+# local configuration
+dltb/local.py

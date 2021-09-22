@@ -32,12 +32,16 @@ use cases.  Hence the `Tool` class provides three different interfaces.
 
 ### Functional API
 
+This is the standard API of the tool.  It takes arguments in any of
+the supported Deep Learning Toolbox types and returns the result also
+in one of these formats.
+
 ```python
-tool(datalike, arguments, result=(...))
+tool(datalike, arguments, result=(...)) -> Result
 ```
 
-Preprocess `datalike` to obtain suitable internal data and attributes
-(by calling `_do_preprocess`).
+Preprocess `datalike` to obtain suitable internal representation of the
+data and attributes (by calling `_do_preprocess`).
 
 Then process the data in its internal representation (by calling `_process`).
 
@@ -52,22 +56,31 @@ The flag `internal` signals, that `value` and `arguments` are given
 in an internal (preprocessed) format, ready to be passed to the internal
 implemenation of the tool.
 ```python
-tool(value, arguments, internal=True)
+tool(value, arguments, internal=True) -> internal_result
 ```
+The internal interface is intended to directly interact with the
+underlying implementation (which is usually only accessible via
+a private API).
 
 
 ### Data API
+
+The Data API allows to apply the `Tool` to a `Data` object.  Results are
+stored as attributes of that data object.  The Data API is intended for
+asynchronous processing.
 
 ```python
 tool.apply(data, arguments, result=(...))
 ```
 
-The `Data` API is for example used by the `Worker`. An example
-can be found at the "Face Panel".
-
 The function `apply` basically does the following steps:
 * obtain some values by calling `self.__call__(data, result, ...)`
 * store these values as data attributes (according to `result`)
+
+
+The `Data` API is for example used by the `Worker`. An example
+can be found at the "Face Panel".
+
 
 
 
@@ -164,10 +177,16 @@ methods:
   may be used for processing and postprocessing.
 * `_process`: apply the tool to the preprocessed data.
 * `_postprocess`: maps the result from the internal format to the
-  output format. This method fills gets the same `Data` object,
+  output format. This method gets the same `Data` object,
   to which the desired values should be added. The object also
   provides additional information that can be used for doing
   the postprocessing.
+
+Remark: the `Data` object can be seen as a fresh namespace, allowing
+to store values. It is not the `Data` object that is provided when
+invoking the tool, but a temporary object, that is just created for
+passing data betwen functions. (could we replace it by a simple dict?)
+
 
 
 ```python

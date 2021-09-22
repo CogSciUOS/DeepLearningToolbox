@@ -10,13 +10,18 @@ from threading import Event
 # third party imports
 
 # toolbox imports
-from ..base.data import Datalike
+from ..base.data import Data, Datalike, BatchWrapper, BatchDataItem
 from ..base.register import RegisterClass
 from ..base.prepare import Preparable
-from ..base.data import Data, BatchWrapper, BatchDataItem
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+class Context(Data):
+    """A context serves as a local namespace holding intermediate values
+    obtained during preprocessing, processing and postprocessing.
+    """
 
 
 # FIXME[todo]: specify the observable interface: there should be
@@ -31,10 +36,18 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     A Tool can be applied to process data. This abstract base class
     does not define any specific method for processing data,
     this should be done by subclasses (e.g., a Detector provides a
-    detect method).
+    `detect` method).
+
+    The :py:class:`Tool` is essentially a convenience layer to help
+    translating between the different data formats supported by the
+    Deep Learning Toolbox and the internal format expected by the
+    specific implementation of a tool.  It aims at doing most of the
+    annoying conversions silently behind the scenes.  However, it
+    also offers options to influence this process if desired.  The
+    conversion may also include preprocessing steps.
 
     In addition, :py:class:`Tool` provides some support for processing
-    data with a Processor.
+    data with a :py:class:`Worker`.
 
     This is an abstract base class and subclasses can (or have to)
     implement at least some of the following methods:
@@ -72,6 +85,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     timer: bool
         A flag indicating if timing information should be added
         to the :py:class:`Data` object during processing.
+
     """
 
     def __init__(self, timer: bool = False, **kwargs):
@@ -81,12 +95,6 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
 
     def __str__(self) -> str:
         return f"{type(self).__name__}[{self.key}]"
-
-    def _prepare(self, **kwargs):
-        # pylint: disable=arguments-differ
-        """Prepare this tool.
-        """
-        super()._prepare(**kwargs)
 
     #
     # Application API
@@ -136,15 +144,15 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         # deal with this
 
         # preprocessing
-        data = self._do_preprocess(*args, internal=internal, batch=batch,
-                                   result=result, **kwargs)
+        context = self._do_preprocess(*args, internal=internal, batch=batch,
+                                      result=result, **kwargs)
         internal_arguments = \
-            self._get_attributes(data, self.internal_arguments)
+            self._get_attributes(context, self.internal_arguments)
 
-        result = data.result_
+        result = context.result_
 
         # processing
-        if data.is_batch:
+        if context.is_batch:
             internal_result = self._process(*internal_arguments)
             # self._process_batch(data, **kwargs)
         else:
@@ -154,9 +162,13 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         # postprocessing
         if internal and result is None:
             return internal_result
-        self._add_attributes(data, self.internal_result,
+        self._add_attributes(context, self.internal_result,
                              internal_result, simplify=True)
-        return self._do_postprocess(data)
+        return self._do_postprocess(context)
+
+    def _setup_context(self, data: Any, *args, **kwargs) -> Context:
+        context = Context(batch=data.batch)
+        return context
 
     def _preprocess_data(self, data: Data, **kwargs) -> None:
         """Prepare a data object.  This method may be overwritten by
@@ -287,6 +299,8 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
     @staticmethod
     def _add_attributes(data: Data, what: Tuple[str, ...], args,
                         simplify: bool = False) -> None:
+        """
+        """
         if simplify and len(what) == 0:
             pass
         elif simplify and len(what) == 1:
@@ -454,10 +468,12 @@ class BatchTool(Tool):
                        batch: bool = False,
                        result: Union[str, Tuple[str, ...]] = None,
                        **kwargs) -> Data:
+        # FIXME[bug?]: infinite recursion?
         data = self._do_preprocess(*args, internal, batch, result, **kwargs)
         return data
 
     def _do_postprocess(self, data: Data) -> Any:
+        # FIXME[bug?]: useless super delegation
         return super()._do_postprocess(data)
 
 

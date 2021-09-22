@@ -20,10 +20,11 @@ Relation to other `image` modules in the Deep Learning ToolBox:
 """
 
 # standard imports
-from typing import Union, List, Tuple, Dict, Any
+from typing import Union, List, Tuple, Dict, Any, Optional
 from abc import abstractmethod, ABC
 from collections import namedtuple
 from enum import Enum
+from pathlib import Path
 import threading
 import logging
 import time
@@ -34,8 +35,8 @@ import numpy as np
 # toolbox imports
 from .observer import Observable
 from .data import Data, DataDict, BatchDataItem
+from .implementation import Implementable
 from ..util.error import handle_exception
-from .. import thirdparty
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ LOG = logging.getLogger(__name__)
 #    The raw image data
 # str:
 #    A URL.
-Imagelike = Union[np.ndarray, str]
+Imagelike = Union[np.ndarray, str, Path]
 
 Size = namedtuple('Size', ['width', 'height'])
 
@@ -89,7 +90,7 @@ class Format:
     _min_value = None
     _max_value = None
 
-    size: Size = None
+    size: Optional[Size] = None
 
     @property
     def min_value(self) -> Union[int, float]:
@@ -151,7 +152,7 @@ class Image(DataDict):
 
     @classmethod
     def as_array(cls, image: Imagelike, copy: bool = False,
-                 dtype=None,  # FIXME[todo]: not implemented yet
+                 dtype: Optional[type] = None,
                  colorspace: Colorspace = None) -> np.ndarray:
         """Get image-like object as numpy array. This may
         act as the identity function in case `image` is already
@@ -180,6 +181,8 @@ class Image(DataDict):
                 image, copy = converter(image, copy)
                 break
         else:
+            if isinstance(image, Path):
+                image = str(image)
             if isinstance(image, str):
                 # FIXME[hack]: local imports to avoid circular module
                 # dependencies ...
@@ -283,7 +286,8 @@ class ImageAdapter(ABC):
         "to be implemented by subclasses"
 
 
-class ImageExtension(ImageAdapter):
+class ImageExtension(ImageAdapter, ABC):
+    # pylint: disable=abstract-method
     """An :py:class:`ImageExtension` extends some base class to be able to
     process images. In that it makes use of the :py:class:`ImageAdapter`
     interface.
@@ -332,17 +336,10 @@ class ImageIO:
     """
 
 
-class ImageReader(ImageIO):
+class ImageReader(ImageIO, Implementable):
     """An :py:class:`ImageReader` can read images from file or URL.
     The :py:meth:`read` method is the central method of this class.
     """
-
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'ImageReader':
-        if cls is ImageReader:
-            new_cls = thirdparty.import_class('ImageReader', module=module)
-        else:
-            new_cls = cls
-        return super(ImageReader, new_cls).__new__(new_cls)
 
     def __str__(self) -> str:
         return type(self).__module__ + '.' + type(self).__name__
@@ -355,19 +352,12 @@ class ImageReader(ImageIO):
                                   "the read method.")
 
 
-class ImageWriter(ImageIO):
+class ImageWriter(ImageIO, Implementable):
     """An :py:class:`ImageWriter` can write iamges to files or upload them
     to a given URL.  The :py:meth:`write` method is the central method
     of this class.
 
     """
-
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'ImageWriter':
-        if cls is ImageWriter:
-            new_cls = thirdparty.import_class('ImageWriter', module=module)
-        else:
-            new_cls = cls
-        return super(ImageWriter, new_cls).__new__(new_cls)
 
     def write(self, filename: str, image: Imagelike, **kwargs) -> None:
         """Write an `image` to a file with the given `filename`.
@@ -377,7 +367,7 @@ class ImageWriter(ImageIO):
                                   "the write method.")
 
 
-class ImageResizer:
+class ImageResizer(Implementable):
     """FIXME[todo]: there is also the network.resize module, which may be
     incorporated!
 
@@ -540,13 +530,6 @@ class ImageResizer:
 
     """
 
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'ImageWriter':
-        if cls is ImageResizer:
-            new_cls = thirdparty.import_class('ImageResizer', module=module)
-        else:
-            new_cls = cls
-        return super(ImageResizer, new_cls).__new__(new_cls)
-
     def resize(self, image: np.ndarray,
                size: Size, **_kwargs) -> np.ndarray:
         """Resize an image to the given size.
@@ -589,7 +572,8 @@ class ImageResizer:
             scale = (scale, scale)
 
         image_size = image.shape[:2]
-        size = (int(image_size[0] * scale[0]), int(image_size[1] * scale[1]))
+        size = Size(int(image_size[0] * scale[0]),
+                    int(image_size[1] * scale[1]))
         return self.resize(image, size=size, **kwargs)
 
     @staticmethod
@@ -635,7 +619,7 @@ class ImageOperator:
         image.add_attribute(target, value=self(image.get_attribute(source)))
 
 
-class ImageDisplay(ImageIO, ImageGenerator.Observer):
+class ImageDisplay(ImageIO, Implementable, ImageGenerator.Observer):
     """An :py:class:`ImageDisplay` can display images.  Typically, it will
     use some graphical user interface to open a window in which the
     image is displayed. It may also provide some additional controls
@@ -745,14 +729,7 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
     >>> display.present(presenter, (video,))
 
     """
-
-    def __new__(cls, module: Union[str, List[str]] = None,
-                **_kwargs) -> 'ImageDisplay':
-        if cls is ImageDisplay:
-            new_cls = thirdparty.import_class('ImageDisplay', module=module)
-        else:
-            new_cls = cls
-        return super(ImageDisplay, new_cls).__new__(new_cls)
+    _event_loop: Optional[threading.Thread]
 
     def __init__(self, module: Union[str, List[str]] = None,
                  blocking: bool = True, **kwargs) -> None:
@@ -777,7 +754,7 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
 
         # _presentation: a Thread object running a presentation, initiated
         # by the method `present`
-        self._presentation: threading.Thread = None
+        self._presentation: Optional[threading.Thread] = None
 
     @property
     def blocking(self) -> bool:
@@ -936,6 +913,8 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
             self._run_blocking_event_loop()
 
     def open(self) -> None:
+        """Open this :py:class:`ImageDisplay`.
+        """
         if not self._opened and self._presentation is None:
             self._open()
             self._opened = True
@@ -1048,7 +1027,7 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
             self.close()
 
     def _run_blocking_event_loop(self, timeout: float = None) -> None:
-        self._event_loop = threading.current_thread
+        self._event_loop = threading.current_thread()
         self._dummy_event_loop(timeout)
 
     def _run_nonblocking_event_loop(self) -> None:
@@ -1112,7 +1091,6 @@ class ImageDisplay(ImageIO, ImageGenerator.Observer):
         return True  # FIXME[hack]
 
 
-
 class Location:
     """A :py:class:`Location` identifies an area in a two-dimensional
     space.  A typical location is a bounding box (realized by the
@@ -1123,6 +1101,12 @@ class Location:
 
     def __init__(self, points) -> None:
         pass
+
+    def __contains__(self, point) -> bool:
+        """Checks if the given point lies in this :py:class:`Location`.
+
+        To be implemented by subclasses.
+        """
 
     def mark_image(self, image: Imagelike, color=(1, 0, 0)):
         """Mark this :py:class:`Location` in some given image.
@@ -1141,12 +1125,17 @@ class Location:
         Arguments
         ---------
         image:
+            The image from which the location is to be extracted.
         """
         raise NotImplementedError(f"Location {self.__class__.__name__} "
                                   f"does not provide a method for extraction "
                                   f"from an image.")
 
-    def scale(self, factor):
+    def scale(self, factor: Union[float, Tuple[float, float]],
+              reference: str = 'origin') -> None:
+        """Scale this :py:class:`location` by the given factor.
+        All coordinates  will be multiplied by this value.
+        """
         raise NotImplementedError(f"Location {self.__class__.__name__} "
                                   f"does not provide a method for scaling.")
 
@@ -1198,7 +1187,8 @@ class PointsBasedLocation:
             min(width, int(point2_x)), min(height, int(point2_y))
         return image[point1_y:point2_y, point1_x:point2_x]
 
-    def scale(self, factor) -> None:
+    def scale(self, factor: Union[float, Tuple[float, float]],
+              reference: str = 'origin') -> None:
         """Scale the :py:class:`Location`.
 
         Arguments
@@ -1209,10 +1199,21 @@ class PointsBasedLocation:
             scaling factor and the second numger is the vertical (y)
             scaling factor.
         """
-        self._points *= factor
+        if reference == 'origin':
+            reference = np.ndarray((0, 0))
+        elif reference == 'center':
+            reference = self._points.mean(axis=0)
+        else:
+            reference = np.asarray(reference)
+
+        self._points = (self._points - reference) * factor + reference
 
     @property
-    def points(self):
+    def points(self) -> np.ndarray:
+        """The points specifying this :py:class:`PointsBasedLocation`.
+        This is an array of shape (n, 2), providing n points in form of (x, y)
+        coordinates.
+        """
         return self._points
 
     def __len__(self):
@@ -1225,6 +1226,9 @@ class Landmarks(PointsBasedLocation):
 
     def __len__(self) -> int:
         return 0 if self._points is None else len(self._points)
+
+    def __str__(self) -> str:
+        return f"Landmarks with {len(self)} points."
 
 
 class BoundingBox(PointsBasedLocation):
@@ -1257,6 +1261,10 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def x1(self):
+        """The horizontal position of the left border of this
+        :py:class:`BoundingBox`.
+
+        """
         return self._points[0, 0]
 
     @x1.setter
@@ -1265,6 +1273,10 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def y1(self):
+        """The vertical position of the upper border of this
+        :py:class:`BoundingBox`.
+
+        """
         return self._points[0, 1]
 
     @y1.setter
@@ -1273,22 +1285,34 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def x2(self):
+        """The horizontal position of the right border of this
+        :py:class:`BoundingBox`.
+
+        """
         return self._points[1, 0]
 
     @x2.setter
     def x2(self, x2):
-        self._points[1, 0] = x2
+        self._points[1, 0] = max(x2, self.x1)  # Avoid negative width
 
     @property
     def y2(self):
+        """The vertical position of the lower border of this
+        :py:class:`BoundingBox`.
+
+        """
         return self._points[1, 1]
 
     @y2.setter
     def y2(self, y2):
-        self._points[1, 1] = y2
+        self._points[1, 1] = max(y2, self.y1)  # Avoid negative height
 
     @property
     def x(self):
+        """The horizontal position of the left border of this
+        :py:class:`BoundingBox`.
+
+        """
         return self.x1
 
     @x.setter
@@ -1297,6 +1321,10 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def y(self):
+        """The vertical position of the upper border of this
+        :py:class:`BoundingBox`.
+
+        """
         return self.y1
 
     @y.setter
@@ -1305,6 +1333,8 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def width(self):
+        """The width of the :py:class:`BoundingBox`.
+        """
         return self.x2 - self.x1
 
     @width.setter
@@ -1313,6 +1343,8 @@ class BoundingBox(PointsBasedLocation):
 
     @property
     def height(self):
+        """The height of the :py:class:`BoundingBox`.
+        """
         return self.y2 - self.y1
 
     @height.setter
@@ -1336,8 +1368,8 @@ class BoundingBox(PointsBasedLocation):
             image[(y1+offset, y2+offset), x1:x2] = color
             image[y1:y2, (x1+offset, x2+offset)] = color
 
-    def extract(self, image: Imagelike, padding: bool = True,
-                copy: bool = None) -> np.ndarray:
+    def extract_from_image(self, image: Imagelike, padding: bool = True,
+                           copy: bool = None) -> np.ndarray:
         """Extract the region described by the bounding box from an image.
         """
         image = Image.as_array(image)
@@ -1374,11 +1406,42 @@ class BoundingBox(PointsBasedLocation):
         return box
 
     def __str__(self) -> str:
+        """String representation of this :py:class:`BoundingBox`.
+        """
+        # return f"({self.x1},{self.y1})-({self.x2},{self.y2})"
         # return (f"BoundingBox at ({self.x}, {self.y})"
         #         f" of size {self.width} x {self.height}")
         return (f"BoundingBox from ({self.x1}, {self.y1})"
                 f" to ({self.x2}, {self.y2})")
 
+    def __add__(self, other: 'BoundingBox') -> 'BoundingBox':
+        """Adding two bounding boxes means to create a new bounding box
+        that bounds both of them.
+        """
+        return BoundingBox(x1=min(self.x1, other.x1),
+                           y1=min(self.y1, other.y1),
+                           x2=max(self.x2, other.x2),
+                           y2=max(self.y2, other.y2))
+
+    def __mul__(self, other: 'BoundingBox') -> 'BoundingBox':
+        """Multiplying two bounding boxes means to form the intersection.
+
+        """
+        return BoundingBox(x1=max(self.x1, other.x1),
+                           y1=max(self.y1, other.y1),
+                           x2=min(self.x2, other.x2),
+                           y2=min(self.y2, other.y2))
+
+    def area(self):
+        """Compute the area of this :py:class:`BoundingBox`.
+        """
+        return self.width * self.height
+
+    @property
+    def center(self) -> Tuple[float, float]:
+        """The center of this bounding box as an (x,y) pair.
+        """
+        return ((self.x1 + self.x2)/2, (self.y1 + self.y2)/2)
 
 class Region:
     """A region in an image, optionally annotated with attributes.
@@ -1394,13 +1457,13 @@ class Region:
         e.g., a label.
     """
 
-    _location = None
+    _location: Location
     _atributes = None
 
-    color_min_confidence = np.asarray((255., 0., 0.))  # red
-    color_max_confidence = np.asarray((0., 255., 0.))  # green
+    color_min_confidence: np.ndarray = np.asarray((255., 0., 0.))  # red
+    color_max_confidence: np.ndarray = np.asarray((0., 255., 0.))  # green
 
-    def __init__(self, location, **attributes):
+    def __init__(self, location: Location, **attributes):
         self._location = location
         self._attributes = attributes
 
@@ -1410,13 +1473,13 @@ class Region:
     def __contains__(self, point) -> bool:
         return point in self._location
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         if name in self._attributes:
             return self._attributes[name]
         raise AttributeError(f"Region has no attribute '{name}'. Valid "
                              f"attributes are: {self._attributes.keys()}")
 
-    def __len__(self) -> str:
+    def __len__(self) -> int:
         return len(self._attributes)
 
     @property
@@ -1440,12 +1503,13 @@ class Region:
         # return the marked image?
         if color is None and 'confidence' in self._attributes:
             confidence = max(0, min(1.0, self._attributes['confidence']))
-            color = ((1-confidence) * self.color_min_confidence +
-                     confidence * self.color_max_confidence)
-            color = tuple(color.astype(np.uint8))
+            mark_color = ((1-confidence) * self.color_min_confidence +
+                          confidence * self.color_max_confidence)
+            color = tuple(mark_color.astype(np.uint8))
+        image = Image.as_array(image)
         self._location.mark_image(image, color=color)
 
-    def extract_from_image(self, image: Imagelike) -> np.ndarray:
+    def extract_from_image(self, image: Imagelike, **kwargs) -> np.ndarray:
         """Extract this :py:class:`Region` from a given image.
 
         Arguments
@@ -1459,9 +1523,10 @@ class Region:
             A numpy array (`dtype=np.uint8`) containing the extracted
             region.
         """
-        return self._location.extract_from_image(image)
+        return self._location.extract_from_image(image, **kwargs)
 
-    def scale(self, factor) -> None:
+    def scale(self, factor: Union[float, Tuple[float, float]],
+              reference: str = 'origin') -> None:
         """Scale this region by a given factor.
 
         Arguments
@@ -1471,6 +1536,13 @@ class Region:
             of floats in which case the first number is the horizontal (x)
             scaling factor and the second numger is the vertical (y)
             scaling factor.
+
+        reference:
+            The reference point.  The default is `'origin'`, meaning
+            all coordinates are scaled with respect to the origin.
+            Another special value is `'center'`, meaning that
+            the center of the region should be taken as reference
+            point.
         """
         if self._location is not None:
             self._location.scale(factor)

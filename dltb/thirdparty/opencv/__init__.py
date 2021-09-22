@@ -13,6 +13,8 @@ import numpy as np
 
 # toolbox imports
 from ...base import image, video
+from ...base.image import Imagelike, Image
+from ...tool.align import LandmarkAligner
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -145,13 +147,48 @@ class ImageDisplay(image.ImageDisplay):
         LOG.debug("blocking opencv event loop ended")
 
 
-
-class ImageUtils(image.ImageResizer):
+class ImageUtils(image.ImageResizer, LandmarkAligner):
 
     def resize(self, image: np.ndarray, size=(640, 360)) -> np.ndarray:
         """Resize the frame to a smaller resolution to save computation cost.
         """
         return cv2.resize(image, size, interpolation=cv2.INTER_LINEAR)
+
+    def align_points(self, image: Imagelike, points, size) -> np.ndarray:
+        """Align an image by applying an (affine) transformation that maps
+        source points to target points.
+
+        Arguments
+        ---------
+        image:
+            The image to align.
+        points:
+            A list of points to be mapped onto the reference points,
+            given as (x,y) coordinates
+        size:
+            The size of the resulting image.
+
+        Result
+        ------
+        aligned:
+            The aligned image.
+        """
+        image = Image.as_array(image)
+
+        src = points.reshape(1,-1,2)
+        dst = self._reference_points.reshape(1,-1,2)
+
+        #  fullAffine=False
+        matrix, _ = cv2.estimateAffinePartial2D(dst, src)
+
+        # fullAffine=True
+        # M, _ = cv2.estimateAffine2D(dst, src)
+
+        # before OpenCV 4:
+        # M = cv2.estimateRigidTransform(dst, src, fullAffine=False)
+
+        aligned = cv2.warpAffine(image, matrix, size, borderValue=0.0)
+        return aligned
 
 
 class VideoReader(video.Reader):

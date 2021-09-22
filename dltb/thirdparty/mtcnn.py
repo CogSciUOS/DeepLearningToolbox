@@ -20,33 +20,16 @@ import numpy as np
 import mtcnn
 
 # toolbox imports
-from ..base.meta import Metadata
-from ..base.image import BoundingBox
-from ..tool.face.detector import Detector as FaceDetector
-from ..tool.face.landmarks import (Detector as LandmarkDetector,
-                                   FacialLandmarks)
+from dltb.tool.face.mtcnn import Detector as BaseDetector, Landmarks
+from dltb.base.meta import Metadata
+from dltb.base.image import BoundingBox
 from .tensorflow.keras import KerasTensorflowModel
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class FacialLandmarksMTCNN(FacialLandmarks):
-    """Landmarks annotation scheme used by the MTCNN detector.
-    """
-
-    keypoint_names = ('nose', 'mouth_right', 'right_eye', 'left_eye',
-                      'mouth_left')
-
-    def __init__(self, keypoints=None, points=None, **kwargs):
-        if keypoints is not None:
-            points = np.ndarray((len(self.keypoint_names), 2))
-            for i, name in enumerate(self.keypoint_names):
-                points[i] = keypoints[name]
-        super().__init__(points, **kwargs)
-
-
-class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
+class Detector(BaseDetector, KerasTensorflowModel):
     # pylint: disable=too-many-ancestors
     """The Multi-task Cascaded Convolutional Network (MTCNN) face and
     facial landmark detector.
@@ -76,7 +59,8 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
 
     [1] https://pypi.org/project/mtcnn/
     [2] https://github.com/ipazc/mtcnn
-    [3] https://towardsdatascience.com/how-does-a-face-detection-program-work-using-neural-networks-17896df8e6ff
+    [3] https://towardsdatascience.com/
+      how-does-a-face-detection-program-work-using-neural-networks-17896df8e6ff
     [4] https://blog.victormeunier.com/posts/keras_multithread/
 
     Attributes
@@ -177,7 +161,7 @@ class DetectorMTCNN(FaceDetector, LandmarkDetector, KerasTensorflowModel):
                                       confidence=confidence, id=face_id)
 
             if self.detect_landmarks:
-                detections.add_region(FacialLandmarksMTCNN(face['keypoints']),
+                detections.add_region(Landmarks(face['keypoints']),
                                       confidence=confidence, id=face_id)
 
         return detections

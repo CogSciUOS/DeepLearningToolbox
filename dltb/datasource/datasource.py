@@ -503,9 +503,8 @@ class Soundsource(Datasource):
     def load_data_from_file(self, data: Sound) -> np.ndarray:
         """
         """
-        
-        
-        
+
+
 class Sectioned(Datasource):
     # pylint: disable=too-few-public-methods,abstract-method
     """A :py:class:`Datasource` with multiple sections (like `train`, `val`,

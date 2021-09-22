@@ -15,7 +15,7 @@ import tensorflow as tf
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton
 
 # toolbox imports
-import dltb
+from dltb import config
 from dltb.util.image import imread
 from models.styletransfer import StyletransferTool
 
@@ -53,12 +53,11 @@ class StyletransferData:
          '1920px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg')
 
     def __init__(self) -> None:
-        self._styletransfer_dir = \
-            os.path.join(dltb.directories['data'], 'styletransfer')
+        self._styletransfer_dir = config.work_directory / 'styletransfer'
         self._content = {}
-        self._content_dir = os.path.join(self._styletransfer_dir, 'content')
+        self._content_dir = self._styletransfer_dir / 'content'
         self._styles = {}
-        self._style_dir = os.path.join(self._styletransfer_dir, 'style')
+        self._style_dir = self._styletransfer_dir / 'style'
 
     def add_content_image(self, name: str, url) -> None:
         suffix = os.path.splitext(url)[1]

@@ -714,15 +714,24 @@ class Network(BaseNetwork):
 
     def _get_activations(self, inputs: tf.Tensor,
                          layer_ids: list) -> List[tf.Tensor]:
-        """
+        """Implementation of the `get_activations` method for Tensorflow
+        networks.  The input data are expected to be given in internal
+        format, that is as `tensorflow.Tensor` and the resulting
+        activation values will also be of that type.
+
         Parameters
         ----------
-        layer_ids
-        input_samples
+        inputs:
+            A batch of input data, given as a `tensorflow.Tensor`.
+        layer_ids:
+            A list of layers for which activation values are to be
+            computed.
 
         Returns
         -------
-
+        activations:
+            A list of activation Tensors, one for each layer, listed
+            in the same order as in `layer_ids`.
         """
         LOG.debug("TensorflowNetwork[%s]._get_activations: "
                   "inputs[%s]: %s (%s, %s), layers=%s", self.key,
@@ -739,7 +748,8 @@ class Network(BaseNetwork):
     def _compute_net_input(self, layer_ids: list, input_samples: np.ndarray):
         net_input_tensors = []
         for layer_id in layer_ids:
-            net_input_tensors.append(self.layer_dict[layer_id].net_input_tensor)
+            net_input_tensors.append(self.layer_dict[layer_id].
+                                     net_input_tensor)
 
         return self._feed_input(net_input_tensors, input_samples)
 
@@ -788,13 +798,15 @@ class Alexnet(Classifier, ImageNetwork, Network):
     AlexNet trained on ImageNet data (TensorFlow).
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, key: str = 'AlexNet',
+                 scheme: str = 'ImageNet', lookup: str = 'caffe',
+                 **kwargs) -> None:
         LOG.debug("alexnet: import tensorflow")
         checkpoint = os.path.join('models', 'example_tf_alexnet',
                                   'bvlc_alexnet.ckpt')
         LOG.debug("alexnet: TensorFlowNetwork")
-        super().__init__(*args, checkpoint=checkpoint, key='AlexNet',
-                         scheme='ImageNet', lookup='caffe', **kwargs)
+        super().__init__(*args, checkpoint=checkpoint, key=key,
+                         scheme=scheme, lookup=lookup, **kwargs)
 
         # FIXME[old]:
         # if 'ALEXNET_MODEL' in os.environ:

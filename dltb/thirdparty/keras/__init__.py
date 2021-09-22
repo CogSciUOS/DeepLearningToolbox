@@ -1,5 +1,10 @@
 """Providing keras functionality.
 
+Importing this module: This module is usually automatically imported
+after the `keras` module have been imported (as post-import dependency).
+It is not possible to import this module directly.
+
+
 Two different keras implementations are available:
 * keras.io
 * tensorflow.keras
@@ -7,47 +12,48 @@ Two different keras implementations are available:
 Also keras my use different backends
 * `theano`
 * `tensorflow`
+
 """
 
 # standard imports
 import os
 import sys
-import importlib
 import logging
 
+if 'keras' not in sys.modules:
+    raise ImportError("The module '{__name__}' must not be imported directly. "
+                      "It is automatically imported following 'import keras'")
+
+# thirdparty imports
+import keras
+# we are assuming that nowadays TensorFlow is the only backend
+import tensorflow as tf
+
 # toolbox imports
+from ... import thirdparty
+from ...config import config
 from ...datasource import Datasource
 
 # logging
 LOG = logging.getLogger(__name__)
 
-HAVE_KERAS_IO = \
-    importlib.util.find_spec("keras") is not None
-HAVE_TENSORFLOW_KERAS = \
-    importlib.util.find_spec("tensorflow.keras") is not None
+HAVE_KERAS_IO = sys.modules['keras'].__name__ == 'keras'
+HAVE_TENSORFLOW_KERAS = sys.modules['keras'].__name__ == 'tensorflow.keras'
 
 if HAVE_TENSORFLOW_KERAS:
-    from . import tensorflow
+    # from . import tensorflow
     # import tensorflow.keras as keras
-    import tensorflow.compat.v1.keras as keras
-    sys.modules['keras'] = keras
-    #from tensorflow.compat.v1.keras import backend
-    #sys.modules['keras.backend'] = backend
-elif HAVE_KERAS_IO:
-    # The only way to configure the keras backend appears to be
-    # via environment variable. We thus inject one for this
-    # process. Keras must be loaded after this is done
-    #os.environ['KERAS_BACKEND'] = 'theano'
-    os.environ['KERAS_BACKEND'] = 'tensorflow'
+    # import tensorflow.compat.v1.keras as keras
+    # from tensorflow.compat.v1.keras import backend
+    # sys.modules['keras.backend'] = backend
+    pass
 
-    # Importing keras unconditionally outputs a message "Using [...] backend."
-    # to sys.stderr (in keras/__init__.py). There seems to be
-    # no sane way to avoid this.
-    import keras
+if HAVE_KERAS_IO:
+
     LOG.info(f"Backend: {keras.backend.backend()}")
     assert keras.backend.backend() == "tensorflow", \
-           ("Keras should use the tensorflow backend, "
-            f"not {keras.backend.backend()}")
+        ("Keras should use the tensorflow backend, "
+         f"not {keras.backend.backend()}")
 
     # some sanity checks
     # (C1) keras should not be (much) newer than tensorflow.
@@ -83,8 +89,16 @@ elif HAVE_KERAS_IO:
                           f"at least tensorflow {tf_min_version}, "
                           f"but you have tensorflow {tf.__version__}.")
 
-if False: # FIXME[concept]: we nee some genral concept what to do here ...
-    if cpu:
+
+if False:  # FIXME[concept]: we nee some genral concept what to do here ...
+    # image_dim_ordering:
+    #   'tf' - "tensorflow":
+    #   'th' - "theano":
+    keras.backend.set_image_dim_ordering('tf')
+    LOG.info(f"image_dim_ordering: {keras.backend.image_dim_ordering()}")
+    LOG.info(f"image_data_format: {keras.backend.image_data_format()}")
+
+    if config.use_cpu:
         # unless we do this, TF still checks and finds gpus (not
         # sure if it actually uses them)
         #
@@ -94,7 +108,7 @@ if False: # FIXME[concept]: we nee some genral concept what to do here ...
 
         # FIXME[todo]: the following setting causes a TensorFlow
         # error: failed call to cuInit: CUDA_ERROR_NO_DEVICE
-        #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
         LOG.info("Running in CPU-only mode.")
         from multiprocessing import cpu_count
         num_cpus = cpu_count()
@@ -103,15 +117,6 @@ if False: # FIXME[concept]: we nee some genral concept what to do here ...
                                 allow_soft_placement=True,
                                 device_count={'CPU': num_cpus, 'GPU': 0})
         session = tf.Session(config=config)
-
-    # image_dim_ordering:
-    #   'tf' - "tensorflow":
-    #   'th' - "theano":
-    keras.backend.set_image_dim_ordering('tf')
-    LOG.info(f"image_dim_ordering: {keras.backend.image_dim_ordering()}")
-    LOG.info(f"image_data_format: {keras.backend.image_data_format()}")
-
-    if cpu:
         keras.backend.set_session(session)
 
 

@@ -9,19 +9,17 @@
 
 # standard imports
 from argparse import ArgumentParser
-import logging
 import os
 
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
-from dltb.base.image import ImageDisplay
-from dltb.base.video import Webcam
+from dltb.base.image import ImageDisplay, Imagelike
+from dltb.base.video import Webcam, Reader as VideoReader
 from dltb.datasource import ImageDirectory
 from dltb.tool.face import Detector as FaceDetector
 from dltb.util.image import imshow
 from dltb.thirdparty import implementations, import_class
-
 
 
 def output_detections(detector: FaceDetector, data: Data,
@@ -36,6 +34,7 @@ def output_detections(detector: FaceDetector, data: Data,
         print(f"{detections.description}: {len(detections)}")
         for index, region in enumerate(detections.regions):
             print(f"({index+1}) {region.location}")
+
     else:
         print(f"{detections.description}: no detections")
 
@@ -49,14 +48,38 @@ def output_detections(detector: FaceDetector, data: Data,
             imshow(extraction, wait_for_key=True, timeout=1)
 
 
-def display_detections(display, image, detector):
-    result = ('mark')
+def display_detections(display: ImageDisplay, image: Imagelike,
+                       detector: FaceDetector) -> None:
+    """Process an image with a detector and display the results.
+
+    Arguments
+    ---------
+    display:
+        The display used for showing the marked image.
+    image:
+        The image to which the detector shall be applied.
+    detector:
+        The detector to be used for detection.
+    """
+    result = ('mark', )
     data = detector.process_image(image, result=result)
     marked_image = detector.marked_image(data)
     display.show(marked_image, blocking=False)
 
 
-def display_video(display, video, detector):
+def display_video(display: ImageDisplay, video: VideoReader,
+                  detector: FaceDetector) -> None:
+    """Process a video frame-by-frame a detector and display the results.
+
+    Arguments
+    ---------
+    display:
+        The display used for showing the marked images.
+    video:
+        The video from which to obtain images.
+    detector:
+        The detector to be used for detection.
+    """
     for frame in video:
         if display.closed:
             break
@@ -70,7 +93,7 @@ def main():
     parser = ArgumentParser(description='Deep learning based face processing')
     parser.add_argument('images', metavar='IMAGE', type=str, nargs='*',
                         help='an image to use')
-    parser.add_argument('--webcam', action='store_true', default=True,
+    parser.add_argument('--webcam', action='store_true', default=False,
                         help='run on webcam')
     parser.add_argument('--show', action='store_true', default=True,
                         help='show results in a window')
@@ -95,6 +118,8 @@ def main():
         return
 
     if args.detector:
+        detector = FaceDetector(implementation=args.detector)
+    elif args.detector:  # FIXME[old]
         print(f"Detector class: {args.detector}")
         Detector = import_class(args.detector)
         detector = Detector()
@@ -123,10 +148,10 @@ def main():
             else:
                 print(f"Applying detector to {url}")
                 # print(detector(url))
-                result = ('detections', 'mark', 'extract')
+                result = ('detections', 'mark')  # , 'extract')
                 data = detector.process_image(url, result=result) #mark=True, extract=True
                 data.debug()
-                output_detections(detector, data, extract=True)
+                output_detections(detector, data) # , extract=True
 
     else:
         print("No operation specified.")
