@@ -18,3 +18,18 @@ Contra:
 (Preliminary) conclusion:
 * Create a wraper `Tool` that can apply a network to do some task.
 
+
+
+# Pretrained networks
+
+# Third-party models
+
+Most deep learning libraries provide predefined models as well
+pretrained weights for this models.
+
+
+## Torch: Torch.hub
+
+* Torch: [torch.hub](https://pytorch.org/docs/stable/hub.html)
+
+

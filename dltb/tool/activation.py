@@ -10,6 +10,12 @@ comprises:
 * The :py:class:`ActivationArchive` allows to store activation values
   for later processing.
 
+The actual tools for working with activations are:
+
+* `ActivationComparison`: Compare activation values collected from
+  two layers (same or different size), which can be from same or
+  different networks, different epochs in training, etc.
+
 """
 
 # standard imports
@@ -1702,3 +1708,43 @@ class OldTopActivations(TopActivations):
             target_owners[:, :, coordinate] = \
                 np.take_along_axis(indices[:, :, coordinate],
                                    top_indices, axis=1)
+
+
+Activationslike = np.ndarray
+
+            
+class ActivationComparison:
+    """Compare activation values collected from two layers (same or
+    different size), which can be from same or different networks,
+    different epochs in training, etc.
+
+    """
+
+class ActivationProbe:
+    """Probe the performance achievable from given activation activation
+    values in a supervised learning task
+    """
+    
+    def train(self, activations: Activationslike, labels, **kwargs) -> None:
+        """Train the activation probe on a given supervised
+        learning problem.
+
+        Arguments
+        ---------
+        activations:
+            The activation values used as input values for training.
+        labels:
+            Corresponding labels for the activation values.
+        """
+
+    def accuracy(self, activations: Activationslike, labels,
+                 **kwargs) -> float:
+        """Apply the probe to an evaluation set to obtain the probe accuracy.
+
+        Arguments
+        ---------
+        activations:
+            The activation values used as input values the evaluation.
+        labels:
+            Corresponding labels for the activation values.
+        """

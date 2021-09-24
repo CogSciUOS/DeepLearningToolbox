@@ -120,6 +120,33 @@ if False:  # FIXME[concept]: we nee some genral concept what to do here ...
         keras.backend.set_session(session)
 
 
+if False:
+    ...
+    # Experimental code, not tested yet!
+    
+    # FIXME[todo]: configure the keras download directory
+    #
+    # According to the documentation (https://keras.io/getting-started/faq/)
+    # the default download location for all Keras files is $HOME/.keras/
+    #
+    # In fact this seems be hardcoded (or at least was, check
+    # keras/utils/data_utils.py)
+    #
+    # Setting the KERAS_HOME environment variable should allow to change
+    # the location the keras directory from $HOME/.keras/ to something else.
+    # However, it seems not possible to change individual subdirectories
+    # like `datasets` or `models`.
+    #
+    # URLs for model weights can be found in the source code for the respective
+    # models, e.g., keras/applications/resnet50.py shows
+    # WEIGHTS_PATH = 'https://github.com/fchollet/deep-learning-models/' \
+    #    'releases/download/v0.2/resnet50_weights_tf_dim_ordering_tf_kernels.h5'
+    # WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/'\
+    #    'deep-learning-models/releases/download/v0.2/' \
+    #    'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5'
+    # These can be downloaded to any location and then loaded from there (how?)
+
+
 def available() -> bool:
     """Check if the underlying framework is available (installed
     on this machine).
@@ -133,6 +160,7 @@ def info() -> None:
     print(f"Keras version: {keras.__version__}")
 
 
+    
 Datasource.register_instance('mnist-train', __name__ + '.datasource.keras',
                              'KerasDatasource', name='mnist',
                              section='train')
