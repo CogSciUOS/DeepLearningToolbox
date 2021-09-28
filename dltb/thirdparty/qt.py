@@ -206,9 +206,19 @@ class ImageDisplay(BaseImageDisplay):
         if timeout is not None:
             timer.stop()
             timer.timeout.disconnect(self._view.onTimer)
+        self._event_loop = None
 
         LOG.info("Qt Main Event Loop finished (event loop=%s, closed=%s).",
                  self.event_loop_is_running(), self.closed)
+
+    def _run_nonblocking_event_loop(self) -> None:
+        # FIXME[hack]: calling _process_events from a background task
+        # seems to have no effect for Qt. It seems that it really has
+        # to be called from the main thread!
+        # Hence we do not start a background thread here but instead
+        # call process_events once. This will not result in a smooth
+        # interface, but at least it will show the images.
+        self._process_events()
 
     def _process_events(self) -> None:
         """Process events for the graphical user interface of

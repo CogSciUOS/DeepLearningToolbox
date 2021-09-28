@@ -28,6 +28,7 @@ from pathlib import Path
 import threading
 import logging
 import time
+import math
 
 # third-party imports
 import numpy as np
@@ -68,7 +69,42 @@ LOG = logging.getLogger(__name__)
 #    A URL.
 Imagelike = Union[np.ndarray, str, Path]
 
-Size = namedtuple('Size', ['width', 'height'])
+
+Sizelike = Union[Tuple[int, int], List[int], str]
+
+
+class Size(namedtuple('Size', ['width', 'height'])):
+
+    def __new__(cls, size, *args):
+        """Allow to instantiate size from any `Sizeable` objects and
+        also from a pair of arguments.
+        """
+        if isinstance(size, Size):
+            return size
+
+        if args:
+            return super().__new__(cls, size, *args)
+
+        if isinstance(size, str):
+            separator = next((sep for sep in size if sep in ",x"), None)
+            size = ((int(number) for number in size.split(separator))
+                    if separator else int(size))
+        elif isinstance(size, float):
+            size = int(size)
+
+        if isinstance(size, int):
+            return super().__new__(cls, size, size)
+
+        return super().__new__(cls, *size)
+
+    def __eq__(self, size: Sizelike) -> bool:
+        """Allow to compare `Size` to any `Sizeable` objects.
+        """
+        print(f"__eq__ (size) was called")
+        return super().__eq__(Size(size))
+
+
+Sizelike = Union[Sizelike, Size]
 
 
 class Colorspace(Enum):
@@ -235,6 +271,32 @@ class Image(DataDict):
         if image is not None:
             array = self.as_array(image, copy=copy)
         super().__init__(array=array, **kwargs)
+
+    def visualize(self, size=None) -> np.ndarray:
+        """Provide a visualization of this image. The may by simply
+        the image (in case of a single image)
+        In case of a batch, it can be an image galery.
+        """
+        if not self.is_batch:
+            return self.array
+
+        # self is a batch of images: create a matrix showing all images.
+        rows = int(math.sqrt(len(self)))
+        columns = math.ceil(len(self) / rows)
+        from ..util.image import imresize
+        if size is None:
+            size = (self[0].shape[1], self[0].shape[0])
+        matrix = np.zeros((size[1]*rows, size[0]*columns, 3),
+                          dtype=self[0].array.dtype)
+        for idx, image in enumerate(self):
+            column = idx % columns
+            row = idx // columns
+            image = imresize(image.array, size)
+            if image.ndim == 2:
+                image = np.expand_dims(image, axis=2).repeat(3, axis=2)
+            matrix[row*size[1]:(row+1)*size[1],
+                   column*size[0]:(column+1)*size[0]] = image
+        return matrix
 
 
 class ImageAdapter(ABC):
@@ -580,7 +642,7 @@ class ImageResizer(Implementable):
     def crop(image: Imagelike, size: Size, **_kwargs) -> np.ndarray:
         """Crop an :py:class:`Image` to a given size.
 
-        If now position is provided, a center crop will be performed.
+        If no position is provided, a center crop will be performed.
         """
         # FIXME[todo]: deal with sizes extending the original size
         # FIXME[todo]: allow center/random/position crop
@@ -852,10 +914,10 @@ class ImageDisplay(ImageIO, Implementable, ImageGenerator.Observer):
 
         # show the image
         array = Image.as_array(image, dtype=np.uint8)
-        LOG.debug("Showing image of shape %s, close=%s, timout=%s, "
-                  "event loop=%s, presentation=%s",
-                  array.shape, close, timeout, self.event_loop_is_running(),
-                  self._presentation is not None)
+        LOG.debug("Showing image of shape %s, blocking=%s, close=%s, "
+                  "timout=%s, event loop=%s, presentation=%s",
+                  array.shape, blocking, close, timeout,
+                  self.event_loop_is_running(), self._presentation is not None)
         self._show(array, **kwargs)
 
         # run the event loop
@@ -1346,10 +1408,16 @@ class BoundingBox(PointsBasedLocation):
         """The height of the :py:class:`BoundingBox`.
         """
         return self.y2 - self.y1
-
+    
     @height.setter
     def height(self, height):
         self.y2 = self.y1 + height
+
+    @property
+    def size(self) -> Size:
+        """The :py:class:`Size` of this :py:class:`BoundingBox`.
+        """
+        return Size(self.width, self.height)
 
     def mark_image(self, image: np.ndarray, color=None) -> None:
         color = color or (0, 255, 0)
@@ -1367,6 +1435,36 @@ class BoundingBox(PointsBasedLocation):
         for offset in range(-t2, t1):
             image[(y1+offset, y2+offset), x1:x2] = color
             image[y1:y2, (x1+offset, x2+offset)] = color
+
+    def crop(self, image: Imagelike, size: Optional[Size] = None) -> Imagelike:
+        """Crop the bounding box from an image.
+
+        Arguments
+        ---------
+        size:
+            The size of the resulting crop. If different from the size
+            of this :py:class:`BoundingBox`, the
+        """
+        image = Image.as_array(image)
+        if size is None:
+            size = self.size
+
+        img_width, img_height, img_channels = image.shape
+        result = np.ndarray((size.height, size.width, img_channels),
+                            image.dtype)
+        x1_source, x1_target = max(0, self.x1), max(-self.x1, 0)
+        y1_source, y1_target = max(0, self.y1), max(-self.y1, 0)
+        x2_source, x2_target = min(img_width, self.x2), \
+            min(size.width - (self.x2 - img_width), size.width)
+        y2_source, y2_target = min(img_height, self.y2), \
+            min(size.height - (self.y2 - img_height), size.height)
+        result[y1_target: y2_target, x1_target:x2_target] = \
+            image[y1_source: y2_source, x1_source:x2_source]
+
+        if size != self.size:
+            pass  # FIXME[todo]
+
+        return result
 
     def extract_from_image(self, image: Imagelike, padding: bool = True,
                            copy: bool = None) -> np.ndarray:

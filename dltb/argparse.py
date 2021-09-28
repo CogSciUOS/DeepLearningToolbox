@@ -67,7 +67,7 @@ def process_arguments(parser: ArgumentParser, args: Namespace = None) -> None:
     Parameters
     ----------
     parser: ArgumentParser
-        The argument parser (used for error proecessing).
+        The argument parser (used for error processing).
     args: Namespace
         An `Namespace` from parsing the command line
         arguments with `parser.parse_args()`.

@@ -143,6 +143,8 @@ class LabeledFacesInTheWild(DataDirectory, Imagesource):
                          **kwargs)
         self.meta_directory = Path(meta_directory) if meta_directory \
             else Path(self.directory).parent
+        self._pairs_txt = self.meta_directory / 'pairs.txt'
+        self._pair_coding = 'lfw'  # or 'custom'
         self.sklearn = None
         self._number_of_pairs = None
 
@@ -176,18 +178,15 @@ class LabeledFacesInTheWild(DataDirectory, Imagesource):
         # pairs.  The default choice will be to use the pairs listed
         # in the file 'pairs.txt'.
         if pair_mode:
-            self._pairs_txt = self.meta_directory / 'pairs.txt'
             with open(self._pairs_txt, encoding='utf-8') as pairs_file:
                 line = pairs_file.readline().strip()
             self._number_of_splits, self._split_size = \
                 self._parse_pairs_header(line)
             self._number_of_pairs = \
                 self._number_of_splits * self._split_size * 2
-            self._pair_coding = 'lfw'  # or 'custom'
         else:
             self._pairs_txt = None
             self._number_of_pairs = None
-            self._pair_coding = None
 
     def __len__(self) -> int:
         if self.pair_mode:
@@ -253,12 +252,14 @@ class LabeledFacesInTheWild(DataDirectory, Imagesource):
         same person (`True`) or different persons (`False`).
 
         """
-        if not self.pair_mode:
-            raise RuntimeError("Operation is not available - "
-                               "LFW object is not in pair mode!")
+
+        filename = Path(filename) if filename else self._pairs_txt
 
         if filename is None:
-            filename = self._pairs_txt
+            raise ValueError("No pairs file provided.")
+
+        if not filename.is_file():
+            raise FileNotFoundError(f"Pairs file '{filename}' does not exist!")
 
         # Create a generator to enumerate the pairs listed in the
         # file. The labeled pairs provided by this iterator will only

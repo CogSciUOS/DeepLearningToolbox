@@ -296,8 +296,12 @@ class Implementable:
             # Class is not implementable -> resume with standard constructor
             new_cls = cls
             __new__ = super().__new__
-        return (__new__(new_cls) if __new__ is object.__new__ else
-                __new__(new_cls, **kwargs))
+        try:
+            return (__new__(new_cls) if __new__ is object.__new__ else
+                    __new__(new_cls, **kwargs))
+        except TypeError:
+            LOG.error("Error instatiating %s as %s", new_cls, cls)
+            raise
 
     def __init__(self, implementation: Optional[Implementationlike] = None,
                  module: Optional[Moduleslike] = None, **kwargs) -> None:

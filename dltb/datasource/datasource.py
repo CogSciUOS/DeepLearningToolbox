@@ -260,7 +260,7 @@ class Datasource(Preparable, FailableObservable, # ABC,
                   type(self), kwargs, data)
 
     def _get_batch(self, data: Data, **kwargs) -> None:
-        """Get data from this :py:class:`Datasource`.
+        """Get a batch of data from this :py:class:`Datasource`.
         """
         if not data:
             # initialize all batch attributes
@@ -280,11 +280,33 @@ class Datasource(Preparable, FailableObservable, # ABC,
     # Batches
     #
 
-    def batches(self, size: int, **kwargs) -> Iterator[Data]:
+    def batches(self, size: int, loop: bool = False,
+                **kwargs) -> Iterator[Data]:
         """Batchwise iterate the data of this :py:class:`Datasoruce`.
+
+        Arguments
+        ---------
+        size:
+            The batch size, that is the (maximal) number of datapoints
+            per batch (the last batch may have a smaller batch size).
+        loop:
+            A flag indicating if an (infinite) loop providing
+            (random) datapoints should be run.
         """
-        while True:
-            self.get_data(batch=size, **kwargs)
+
+        if loop:
+            # run an (infinite) loop, getting randomly selected data
+            # from this datasource (with repetition)
+            while True:
+                yield self.get_data(batch=size, **kwargs)
+        else:
+            # enumerate (batchwise) the data of this Datasource
+            # (without repetition)
+            for index in range(0, len(self), size):
+                # there may not be enough data to fill the last batch:
+                # hence we will reduce the last batch size 
+                batch_size = min(size, len(self) - index)
+                yield self.get_data(batch=batch_size, index=index, **kwargs)
 
     #
     # Description
@@ -822,6 +844,8 @@ class Indexed(Random, collections.abc.Sequence):
             The index of the element in this
             :py:class:`Indexed` datasource.
         """
+        if data.index is not None:
+            index = data.index
         if index is not None and data.datasource_argument == 'index':
             LOG.debug("Datasource[%r]._get_index(%s, %s): %s",
                       type(self), index, kwargs, data)

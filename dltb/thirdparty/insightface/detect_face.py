@@ -1,75 +1,3 @@
-"""InsightFace code.
-
-
-Old alignment code (MTCNN-Tensorflow)
--------------------------------------
-
-The old alignment code be accessed in the insightface repository by typing:
-
-```sh
-git checkout 07f6547
-cd src/align/
-```
-
-(to return to the master branch, just type `git checkout master`).
-
-The actual alignment is done using MTCNN. A tensorflow implementation
-is provided in the file 'src/align/detect_face.py', the pretrained
-weights are stored in det1.npy, det2.npy and det3.npy.
-
-* The [old version of the alignment code](https://github.com/deepinsight/insightface/tree/3866cd77a6896c934b51ed39e9651b791d78bb57/src/align):
-  [detect_face.py](https://raw.githubusercontent.com/deepinsight/insightface/3866cd77a6896c934b51ed39e9651b791d78bb57/src/align/detect_face.py) and
-  [det1.npy](https://github.com/deepinsight/insightface/raw/3866cd77a6896c934b51ed39e9651b791d78bb57/src/align/det1.npy),
-  [det2.npy](https://github.com/deepinsight/insightface/raw/3866cd77a6896c934b51ed39e9651b791d78bb57/src/align/det2.npy),
-  [det3.npy](https://github.com/deepinsight/insightface/raw/3866cd77a6896c934b51ed39e9651b791d78bb57/src/align/det3.npy).
-
-```python
-
-```
-
-The alignment is provided by `src/common/face_preprocess.py`:
-
-```python
-
-```
-"""
-
-from argparse import ArgumentParser
-from pathlib import Path
-import os
-import sys
-
-# FIXME[bug]: when running in script mode, the directory of this
-# file is added to sys.path.  For some reason this will make importing
-# opencv (cv2) fail!  However, when we remove this directory from
-# sys.path, everything works well.
-
-# FIXME[bug]: importing the dltb module here (which performs
-# essentially the same cleanup, does not work!
-# import dltb
-
-# __file__ may be a relative filename (e.g., 'dltb/thirdparty/arcface.py')
-print(f"__file__: '{__file__}'")
-# then also Path(__file__) is a relative Path, however,
-# Path(__file__).resolve() is guaranteed to be an absolute path.
-print(f"Path(__file__): {Path(__file__)}")
-print(f"Path(__file__).resolve(): {Path(__file__).resolve()}")
-
-# Obtain root directory and the dltb directory
-ROOT_DIRECTORY = Path(__file__).resolve().parents[2]
-DLTB_DIRECTORY = ROOT_DIRECTORY / 'dltb'
-print(ROOT_DIRECTORY)
-print(DLTB_DIRECTORY)
-
-print(sys.path)
-sys.path = [directory for directory in sys.path
-            if not directory.startswith(str(ROOT_DIRECTORY / 'dltb'))]
-if str(DLTB_DIRECTORY) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIRECTORY))
-print(sys.path)
-
-
-
 # -----------------------------------------------------------------------------
 # File: detect_face.py
 
@@ -111,8 +39,9 @@ import tensorflow as tf
 import cv2
 import os
 
+
 def layer(op):
-    '''Decorator for composable network layers.'''
+    """Decorator for composable network layers""".
 
     def layer_decorated(self, *args, **kwargs):
         # Automatically set a name if not provided.
@@ -135,7 +64,7 @@ def layer(op):
 
     return layer_decorated
 
-class Network(object):
+class Network:
 
     def __init__(self, inputs, trainable=True):
         # The input nodes for this network
@@ -600,7 +529,9 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
 
     images_obj_per_resolution = {}
 
-    # TODO: use some type of rounding to number module 8 to increase probability that pyramid images will have the same resolution across input images
+    # TODO: use some type of rounding to number module 8 to increase
+    # probability that pyramid images will have the same resolution
+    # across input images
 
     for index, scales in enumerate(all_scales):
         h = images[index].shape[0]
@@ -615,11 +546,15 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
 
             im_data = imresample(images[index], (hs, ws))
             im_data = (im_data - 127.5) * 0.0078125
-            img_y = np.transpose(im_data, (1, 0, 2))  # caffe uses different dimensions ordering
-            images_obj_per_resolution[(ws, hs)].append({'scale': scale, 'image': img_y, 'index': index})
+            # caffe uses different dimensions ordering
+            img_y = np.transpose(im_data, (1, 0, 2)) 
+            images_obj_per_resolution[(ws, hs)].append({'scale': scale,
+                                                        'image': img_y,
+                                                        'index': index})
 
     for resolution in images_obj_per_resolution:
-        images_per_resolution = [i['image'] for i in images_obj_per_resolution[resolution]]
+        images_per_resolution = \
+            [i['image'] for i in images_obj_per_resolution[resolution]]
         outs = pnet(images_per_resolution)
 
         for index in range(len(outs[0])):
@@ -628,15 +563,17 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
             out0 = np.transpose(outs[0][index], (1, 0, 2))
             out1 = np.transpose(outs[1][index], (1, 0, 2))
 
-            boxes, _ = generateBoundingBox(out1[:, :, 1].copy(), out0[:, :, :].copy(), scale, threshold[0])
+            boxes, _ = generateBoundingBox(out1[:, :, 1].copy(),
+                                           out0[:, :, :].copy(),
+                                           scale, threshold[0])
 
             # inter-scale nms
             pick = nms(boxes.copy(), 0.5, 'Union')
             if boxes.size > 0 and pick.size > 0:
                 boxes = boxes[pick, :]
-                images_with_boxes[image_index]['total_boxes'] = np.append(images_with_boxes[image_index]['total_boxes'],
-                                                                          boxes,
-                                                                          axis=0)
+                images_with_boxes[image_index]['total_boxes'] = \
+                    np.append(images_with_boxes[image_index]['total_boxes'],
+                              boxes, axis=0)
 
     for index, image_obj in enumerate(images_with_boxes):
         numbox = image_obj['total_boxes'].shape[0]
@@ -645,16 +582,26 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
             w = images[index].shape[1]
             pick = nms(image_obj['total_boxes'].copy(), 0.7, 'Union')
             image_obj['total_boxes'] = image_obj['total_boxes'][pick, :]
-            regw = image_obj['total_boxes'][:, 2] - image_obj['total_boxes'][:, 0]
-            regh = image_obj['total_boxes'][:, 3] - image_obj['total_boxes'][:, 1]
-            qq1 = image_obj['total_boxes'][:, 0] + image_obj['total_boxes'][:, 5] * regw
-            qq2 = image_obj['total_boxes'][:, 1] + image_obj['total_boxes'][:, 6] * regh
-            qq3 = image_obj['total_boxes'][:, 2] + image_obj['total_boxes'][:, 7] * regw
-            qq4 = image_obj['total_boxes'][:, 3] + image_obj['total_boxes'][:, 8] * regh
-            image_obj['total_boxes'] = np.transpose(np.vstack([qq1, qq2, qq3, qq4, image_obj['total_boxes'][:, 4]]))
+            regw = image_obj['total_boxes'][:, 2] \
+                - image_obj['total_boxes'][:, 0]
+            regh = image_obj['total_boxes'][:, 3] \
+                - image_obj['total_boxes'][:, 1]
+            qq1 = image_obj['total_boxes'][:, 0] \
+                + image_obj['total_boxes'][:, 5] * regw
+            qq2 = image_obj['total_boxes'][:, 1] \
+                + image_obj['total_boxes'][:, 6] * regh
+            qq3 = image_obj['total_boxes'][:, 2] \
+                + image_obj['total_boxes'][:, 7] * regw
+            qq4 = image_obj['total_boxes'][:, 3] \
+                + image_obj['total_boxes'][:, 8] * regh
+            image_obj['total_boxes'] = \
+                np.transpose(np.vstack([qq1, qq2, qq3, qq4,
+                                        image_obj['total_boxes'][:, 4]]))
             image_obj['total_boxes'] = rerec(image_obj['total_boxes'].copy())
-            image_obj['total_boxes'][:, 0:4] = np.fix(image_obj['total_boxes'][:, 0:4]).astype(np.int32)
-            dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph = pad(image_obj['total_boxes'].copy(), w, h)
+            image_obj['total_boxes'][:, 0:4] = \
+                np.fix(image_obj['total_boxes'][:, 0:4]).astype(np.int32)
+            dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph = \
+                pad(image_obj['total_boxes'].copy(), w, h)
 
             numbox = image_obj['total_boxes'].shape[0]
             tempimg = np.zeros((24, 24, 3, numbox))
@@ -662,8 +609,10 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
             if numbox > 0:
                 for k in range(0, numbox):
                     tmp = np.zeros((int(tmph[k]), int(tmpw[k]), 3))
-                    tmp[dy[k] - 1:edy[k], dx[k] - 1:edx[k], :] = images[index][y[k] - 1:ey[k], x[k] - 1:ex[k], :]
-                    if tmp.shape[0] > 0 and tmp.shape[1] > 0 or tmp.shape[0] == 0 and tmp.shape[1] == 0:
+                    tmp[dy[k] - 1:edy[k], dx[k] - 1:edx[k], :] = \
+                        images[index][y[k] - 1:ey[k], x[k] - 1:ex[k], :]
+                    if (tmp.shape[0] > 0 and tmp.shape[1] > 0 or
+                            tmp.shape[0] == 0 and tmp.shape[1] == 0):
                         tempimg[:, :, :, k] = imresample(tmp, (24, 24))
                     else:
                         return np.empty()
@@ -678,7 +627,8 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
     bulk_rnet_input = np.empty((0, 24, 24, 3))
     for index, image_obj in enumerate(images_with_boxes):
         if 'rnet_input' in image_obj:
-            bulk_rnet_input = np.append(bulk_rnet_input, image_obj['rnet_input'], axis=0)
+            bulk_rnet_input = \
+                np.append(bulk_rnet_input, image_obj['rnet_input'], axis=0)
 
     out = rnet(bulk_rnet_input)
     out0 = np.transpose(out[0])
@@ -695,8 +645,9 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
         out0_per_image = out0[:, i:i + rnet_input_count]
 
         ipass = np.where(score_per_image > threshold[1])
-        image_obj['total_boxes'] = np.hstack([image_obj['total_boxes'][ipass[0], 0:4].copy(),
-                                              np.expand_dims(score_per_image[ipass].copy(), 1)])
+        image_obj['total_boxes'] = \
+            np.hstack([image_obj['total_boxes'][ipass[0], 0:4].copy(),
+                       np.expand_dims(score_per_image[ipass].copy(), 1)])
 
         mv = out0_per_image[:, ipass[0]]
 
@@ -705,15 +656,18 @@ def bulk_detect_face(images, detection_window_size_ratio, pnet, rnet, onet, thre
             w = images[index].shape[1]
             pick = nms(image_obj['total_boxes'], 0.7, 'Union')
             image_obj['total_boxes'] = image_obj['total_boxes'][pick, :]
-            image_obj['total_boxes'] = bbreg(image_obj['total_boxes'].copy(), np.transpose(mv[:, pick]))
+            image_obj['total_boxes'] = bbreg(image_obj['total_boxes'].copy(),
+                                             np.transpose(mv[:, pick]))
             image_obj['total_boxes'] = rerec(image_obj['total_boxes'].copy())
 
             numbox = image_obj['total_boxes'].shape[0]
 
             if numbox > 0:
                 tempimg = np.zeros((48, 48, 3, numbox))
-                image_obj['total_boxes'] = np.fix(image_obj['total_boxes']).astype(np.int32)
-                dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph = pad(image_obj['total_boxes'].copy(), w, h)
+                image_obj['total_boxes'] = \
+                    np.fix(image_obj['total_boxes']).astype(np.int32)
+                dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph = \
+                    pad(image_obj['total_boxes'].copy(), w, h)
 
                 for k in range(0, numbox):
                     tmp = np.zeros((int(tmph[k]), int(tmpw[k]), 3))
@@ -860,6 +814,7 @@ def nms(boxes, threshold, method):
     pick = pick[0:counter]
     return pick
 
+
 # function [dy edy dx edx y ey x ex tmpw tmph] = pad(total_boxes,w,h)
 def pad(total_boxes, w, h):
     # compute the padding coordinates (pad the bounding boxes to square)
@@ -895,8 +850,15 @@ def pad(total_boxes, w, h):
     
     return dy, edy, dx, edx, y, ey, x, ex, tmpw, tmph
 
+
 # function [bboxA] = rerec(bboxA)
 def rerec(bboxA):
+    """
+    Arguments
+    ---------
+    bboxA:
+        The bounding box (x1, y1, x2, y2).
+    """
     # convert bboxA to square
     h = bboxA[:,3]-bboxA[:,1]
     w = bboxA[:,2]-bboxA[:,0]
@@ -906,238 +868,23 @@ def rerec(bboxA):
     bboxA[:,2:4] = bboxA[:,0:2] + np.transpose(np.tile(l,(2,1)))
     return bboxA
 
+
 def imresample(img, sz):
-    im_data = cv2.resize(img, (sz[1], sz[0]), interpolation=cv2.INTER_AREA) #@UndefinedVariable
+    """Resize a given image.
+    """
+    im_data = cv2.resize(img, (sz[1], sz[0]), interpolation=cv2.INTER_AREA)
+    # @UndefinedVariable
     return im_data
 
     # This method is kept for debugging purpose
-#     h=img.shape[0]
-#     w=img.shape[1]
-#     hs, ws = sz
-#     dx = float(w) / ws
-#     dy = float(h) / hs
-#     im_data = np.zeros((hs,ws,3))
-#     for a1 in range(0,hs):
-#         for a2 in range(0,ws):
-#             for a3 in range(0,3):
-#                 im_data[a1,a2,a3] = img[int(floor(a1*dy)),int(floor(a2*dx)),a3]
-#     return im_data
-
-# -----------------------------------------------------------------------------
-# File: face_preprocess.py
-
-"""This code is take from
-
-
-git checkout 07f6547
-src/common/face_preprocess.py
-
-I have added comments to this code (which are completely missing in
-the original).
-
-"""
-
-
-import cv2
-from skimage import transform as trans
-import numpy as np
-
-# toolbox imports
-from dltb.base.image import Imagelike, Image
-
-
-class FaceAligner:
-
-    @staticmethod
-    def parse_lst_line(line):
-        """Parse alignment information from a text line (tabulator separated
-        values). The line should contain either 3, 7 or 17 values.
-        The first 3 values specify (aligned, image_path, label),
-        the (numeriic) aligned flag, the path to the image file
-        and a numerical label.  This can be followed in fields 3 to 6 by
-        four integer coordinates for the bouding boxes, and then in
-        fields 7-16 by ten coordinates for the facial landmarks. 
-
-        Arguments
-        ---------
-        line:
-        
-        Result
-        ------
-        image_path: str
-        label: int
-        bbox: np.ndarray of shape (4,), dtype np.int32
-        landmark: np.ndarray of shape (2, 5), dtype np.float32
-        aligned: int
-        """
-        vec = line.strip().split("\t")
-        assert len(vec) >= 3
-        aligned = int(vec[0])
-        image_path = vec[1]
-        label = int(vec[2])
-        bbox = None
-        landmark = None
-        # print(vec)
-        if len(vec) > 3:
-            bbox = np.zeros( (4,), dtype=np.int32)
-            for i in xrange(3, 7):
-                bbox[i-3] = int(vec[i])
-            landmark = None
-
-        # optional: coordinates for 5 landmarks
-        if len(vec) > 7:
-            coordinates = []
-            for i in xrange(7, 17):
-                coordinates.append(float(vec[i]))
-            landmark = np.array(coordinates).reshape((2, 5)).T
-        return image_path, label, bbox, landmark, aligned
-
-    @staticmethod
-    def read_image(img_path, **kwargs):
-        """Read an image from a file
-        """
-        mode = kwargs.get('mode', 'rgb')
-        layout = kwargs.get('layout', 'HWC')
-        if mode == 'gray':
-            img = cv2.imread(img_path, cv2.CV_LOAD_IMAGE_GRAYSCALE)
-        else:
-            img = cv2.imread(img_path, cv2.CV_LOAD_IMAGE_COLOR)
-            if mode == 'rgb':
-                # print('to rgb')
-                img = img[..., ::-1]  # BGR -> RGB
-            if layout == 'CHW':
-                img = np.transpose(img, (2, 0, 1))
-        return img
-
-    def preprocess(self, img: Imagelike, bbox=None, landmark=None,
-                   image_size='', margin: int = 44, **kwargs):
-        """Preprocess the image. Preprocessing consists of multiple steps:
-        1. read the image
-        2. obtain the target image size
-        3. align the image
-        
-        """
-        #
-        # 1. read the image
-        #
-        img = Image.as_array(img)
-
-        #
-        # 2. obtain the target image size
-        #
-        str_image_size = image_size
-        image_size = []  # image_size as two-element list [width, height]
-        if str_image_size:
-            image_size = [int(x) for x in str_image_size.split(',')]
-            if len(image_size)==1:
-                image_size = [image_size[0], image_size[0]]
-            assert len(image_size)==2
-            assert image_size[0]==112
-            assert image_size[0]==112 or image_size[1]==96
-        else:
-            image_size = [112, 112]
-
-        #
-        # 3. align the image
-        #
-
-        # obtain a transformation matrix
-        transformation = landmark and self._transformation_matrix(landmark)
-
-        # if no transformation was obtained, just resize
-        if transformation is None:
-            return self._resize_image(img, margin=margin)
-
-        # otherweise apply the transformation
-        return self._transform_image(img, trans_matrix, image_size)
-
-    @staticmethod
-    def _transformation_matrix(landmarks, size):
-        """
-
-        size:
-            The size of the target image.  Only two sizes are supported:
-            (112, 1112) or (112, 96).
-        """
-        src = np.array([
-            [30.2946, 51.6963],
-            [65.5318, 51.5014],
-            [48.0252, 71.7366],
-            [33.5493, 92.3655],
-            [62.7299, 92.2041] ], dtype=np.float32)
-        if image_size[1]==112:
-            src[:,0] += 8.0
-        dst = landmark.astype(np.float32)
-
-        # src = src[0:3,:]
-        # dst = dst[0:3,:]
-        
-        tform = trans.SimilarityTransform()
-        tform.estimate(dst, src)
-        trans_matrix = tform.params[0:2,:]
-        # trans_matrix = \
-        #     cv2.estimateRigidTransform(dst.reshape(1,5,2),
-        #                                src.reshape(1,5,2), False)
-
-        # print(src.shape, dst.shape)
-        # print(src)
-        # print(dst)
-        # print(trans_matrix)
-
-        return trans_matrix
-
-    @staticmethod
-    def _resize_image(image: np.ndarray, margin: int = 44):
-        # no transformation: use bounding box for resizing
-        if bbox is None:  # use center crop
-            det = np.zeros(4, dtype=np.int32)
-            det[0] = int(image.shape[1]*0.0625)
-            det[1] = int(image.shape[0]*0.0625)
-            det[2] = image.shape[1] - det[0]
-            det[3] = image.shape[0] - det[1]
-        else:
-            det = bbox
-        bbox = np.zeros(4, dtype=np.int32)
-        bbox[0] = np.maximum(det[0]-margin/2, 0)
-        bbox[1] = np.maximum(det[1]-margin/2, 0)
-        bbox[2] = np.minimum(det[2]+margin/2, image.shape[1])
-        bbox[3] = np.minimum(det[3]+margin/2, image.shape[0])
-        ret = image[bbox[1]:bbox[3], bbox[0]:bbox[2], :]
-        if len(image_size) > 0:
-            ret = cv2.resize(ret, (image_size[1], image_size[0]))
-        return ret
-
-    @staticmethod
-    def _transform_image(image: np.ndarray, transformation, size):
-        warped = cv2.warpAffine(image, transformation,
-                                (size[1], size[0]),
-                                borderValue = 0.0)
-        # tform3 = trans.ProjectiveTransform()
-        # tform3.estimate(src, dst)
-        # warped = trans.warp(image, tform3, output_shape=_shape)
-        return warped
-
-# -----------------------------------------------------------------------------
-
-def main():
-    parser = ArgumentParser(description="InsightFace script.")
-    group1 = parser.add_argument_group("Commands")
-    group1.add_argument('--align', action='store_true', default=False,
-                        help="align the given input file(s)")
-
-    parser.add_argument('images', metavar='IMAGE', type=str, nargs='+',
-                        help="images to process")
-    args = parser.parse_args()
-
-    if args.align:
-        for image in args.images:
-            name, suffix = image.rsplit('.', maxsplit=1)
-            output_name = f"{name}-aligned.{suffix}"
-            print(f"Aligning '{image}' to '{output_name}'.")
-
-
-if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("Program interrupted. Good bye!")
+    #     h=img.shape[0]
+    #     w=img.shape[1]
+    #     hs, ws = sz
+    #     dx = float(w) / ws
+    #     dy = float(h) / hs
+    #     im_data = np.zeros((hs,ws,3))
+    #     for a1 in range(0,hs):
+    #         for a2 in range(0,ws):
+    #             for a3 in range(0,3):
+    #                 im_data[a1,a2,a3] = img[int(floor(a1*dy)),int(floor(a2*dx)),a3]
+    #     return im_data
