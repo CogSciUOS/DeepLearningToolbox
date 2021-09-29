@@ -106,6 +106,10 @@ def main():
     group_detector.add_argument('--list-detectors', action='store_true',
                                 default=False, help='list available detectors')
 
+    group_aligner = parser.add_argument_group("Alignment arguments")
+    group_aligner.add_argument('--align', action='store_true', default=False,
+                               help='run face alignment')
+
     ToolboxArgparse.add_arguments(parser)
 
     args = parser.parse_args()
@@ -152,6 +156,16 @@ def main():
                 data = detector.process_image(url, result=result) #mark=True, extract=True
                 data.debug()
                 output_detections(detector, data) # , extract=True
+
+    elif args.detect:
+        #
+        # perform face alignment
+        #
+
+        # FIXME[hack]
+        import 
+        for image in datasource:
+            
 
     else:
         print("No operation specified.")

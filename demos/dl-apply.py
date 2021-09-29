@@ -14,6 +14,8 @@
 # standard imports
 from typing import Optional, Iterable
 from argparse import ArgumentParser
+import os
+import sys
 import logging
 
 # thirdparty imports
@@ -22,13 +24,13 @@ import tqdm
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
-from dltb.base.image import ImageDisplay
+from dltb.base.image import Image, Imagelike, ImageDisplay
 from dltb.base.image import BoundingBox
 from dltb.base.video import Webcam
 from dltb.datasource import ImageDirectory
 from dltb.datasource import argparse as DatasourceArgparse
 from dltb.tool.face import Detector as FaceDetector
-from dltb.util.image import imshow, imwrite
+from dltb.util.image import imshow, imwrite, get_display
 from dltb.thirdparty import implementations, import_class
 
 # logging
@@ -43,37 +45,82 @@ def do_nothing(data: Data):
 from dltb.tool.face.mtcnn import Detector
 MTCNN = Detector()
 
+# /space/data/lfw/lfw/Marissa_Jaret_Winokur/Marissa_Jaret_Winokur_0001.jpg
+# /space/data/lfw/lfw/John_Allen_Muhammad/John_Allen_Muhammad_0010.jpg
+# /space/data/lfw/lfw/John_Allen_Muhammad/John_Allen_Muhammad_0011.jpg
+# /space/data/lfw/lfw/Chita_Rivera/Chita_Rivera_0001.jpg
 
-def landmark_face(data: Data):
-    detections = MTCNN(data)
-    faces = (len(detections.regions)//2 if detections.has_regions else 0)
-    if not faces:
-        print(f"No faces in {data.filename}.")
-        LOG.warning("No faces detected in '%s'.", data.filename)
-        return None, None
-
-    if faces == 1:
-        best = 0
-    else:
-        LOG.warning("%d faces detected in '%s'.", faces, data.filename)
-        center = (data.shape[0]/2, data.shape[1]/2)
-        best = -1
-        distance = float('inf')
-        for index, region in enumerate(detections.regions):
-            if isinstance(region.location, BoundingBox):
-                loc_center = region.location.center
-                dist2 = ((loc_center[0]-center[0]) ** 2 +
-                         (loc_center[1]-center[1]) ** 2)
-                if dist2 < distance:
-                    best = index
-                    distance = dist2
-    box = detections.regions[best].location
-    landmarks = detections.regions[best+1].location
-
-    return box, landmarks
+# wrong face:
+# /space/data/lfw/lfw/Gordon_Brown/Gordon_Brown_0006.jpg
 
 
-def apply(data: Data, input_directory=None, output_directory=None) -> None:
+def detect_faces(image: Imagelike):
+    detections = MTCNN(image)
+    return detections
+
+
+def select_face(bounding_boxes, shape) -> int:
+    """
+    """
+    if not bounding_boxes:
+        raise ValueError("No face detected")
+
+    if len(bounding_boxes) == 1:
+        return 0  # there is only one detection -> assume that is correct
+
+    center = (shape[1]/2, shape[0]/2)
+    best, distance = -1, float('inf')
+    for index, bounding_box in enumerate(bounding_boxes):
+        loc_center = bounding_box.center
+        dist2 = ((loc_center[0]-center[0]) ** 2 +
+                 (loc_center[1]-center[1]) ** 2)
+        if dist2 < distance:
+            best, distance = index, dist2
+
+    return best
+
+
+def landmark_face(image: Imagelike):
+    """
+    """
+    # image = Image(image)
+    detections = detect_faces(image)
+
+    if not detections.has_regions:
+        print(f"No faces in {image.filename}.")
+        LOG.warning("No faces detected in '%s'.", image.filename)
+        return
+
+    for idx, region in enumerate(detections.regions):
+        print(idx, region)
+    bounding_boxes = [region.location for region in detections.regions
+                      if isinstance(region.location, BoundingBox)]
+
+    faces = len(bounding_boxes)
+    if faces != 1:
+        LOG.warning("%d faces detected in '%s'.", faces, image.filename)
+
+    best = select_face(bounding_boxes, image.shape)
+
+    # for idx, region in enumerate(detections.regions):
+    #     color = (0, 255, 0) if idx // 2 == best else (255, 0, 0)
+    #     region.location.mark_image(image.array, color=color)
+    for idx, region in enumerate(detections.regions):
+        if idx // 2 == best:
+            continue
+        region.location.mark_image(image.array, color=(255, 0, 0))
+
+    box = detections.regions[2*best].location
+    landmarks = detections.regions[2*best+1].location
+
+    box.mark_image(image.array, color=(0, 255, 0))
+    landmarks.mark_image(image.array, color=(0, 255, 0))
+
+    return box, landmarks, faces == 1
+
+
+def apply(data: Data, input_directory=None, output_directory=None,
+          display: Optional[ImageDisplay] = None) -> None:
     """Apply a transformation to a data objects.
 
     State: immature - hard-wired transformation
@@ -93,15 +140,22 @@ def apply(data: Data, input_directory=None, output_directory=None) -> None:
 
     # save = imwrite
     save = print
-    # transformation = do_nothing
-    transformation = landmark_face
 
-    result = transformation(data)
-    output_tuple = (data.filename,
-                    result[0].x1, result[0].y1, result[0].x2, result[0].y2
-                    )  # FIXME[todo]:  result[1]. ...
+    # assume data is Image
+    image = data
 
-    print(data.filename, result[0], result[1], output_tuple)
+    result = landmark_face(image)
+
+    print(data.filename, result[0], result[1], result[2])
+    #output_tuple = (image.filename,
+    #                result[0].x1, result[0].y1, result[0].x2, result[0].y2
+    #                )  # FIXME[todo]:  result[1]. ...
+    # result[0].mark_image(image.array)
+    # result[1].mark_image(image.array)
+    if display is not None:
+        display.show(image, blocking=not result[2], wait_for_key=not result[2])
+        if display.closed:
+            raise StopIteration("Display closed")
 
     if input_directory and output_directory:
         # Write result into a file in the output directory.
@@ -120,7 +174,8 @@ def apply(data: Data, input_directory=None, output_directory=None) -> None:
 
 
 def apply_multi(datasource: Iterable[Data],
-                progress: Optional[Iterable]) -> None:
+                display: Optional[ImageDisplay] = None,
+                progress: Optional[Iterable] = None) -> None:
     """Apply a transformation to multiple data objects.
 
     State: immature - hard-wired transformation
@@ -134,7 +189,7 @@ def apply_multi(datasource: Iterable[Data],
     try:
         for data in datasource:
             output(f"{data.filename} [{data.shape}]")
-            apply(data)
+            apply(data, display=display)
     except KeyboardInterrupt:
         LOG.error("Keyboard interrupt: stopping operation.")
 
@@ -164,9 +219,20 @@ def main():
 
     args = parser.parse_args()
     ToolboxArgparse.process_arguments(parser, args)
-   
+
     datasource = DatasourceArgparse.datasource(parser, args)
-    apply_multi(datasource, tqdm.tqdm)
+    if not datasource:
+        display = get_display()
+        for image in args.images:
+            apply(Image(image), display=display)
+        LOG.error("No datasource. "
+                  "Specify a datasource (e.g. --datasource lfw).")
+        return os.EX_USAGE
+
+    display = get_display()
+    apply_multi(datasource, progress=tqdm.tqdm, display=display)
+    return os.EX_OK
+
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

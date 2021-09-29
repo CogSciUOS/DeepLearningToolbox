@@ -271,6 +271,9 @@ class Image(DataDict):
         if image is not None:
             array = self.as_array(image, copy=copy)
         super().__init__(array=array, **kwargs)
+        if isinstance(image, str):
+            self.add_attribute('filename', image)
+            self.add_attribute('shape', array.shape)
 
     def visualize(self, size=None) -> np.ndarray:
         """Provide a visualization of this image. The may by simply
