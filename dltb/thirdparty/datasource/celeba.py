@@ -10,6 +10,7 @@ import logging
 import numpy as np
 
 # toolbox imports
+from dltb import config
 from dltb.base.data import Data
 from dltb.base.image import BoundingBox, Region
 from dltb.tool.face.landmarks import FacialLandmarks
@@ -61,7 +62,7 @@ class CelebA(ImageDirectory):
         # FIXME[hack]:
         # directory = ffhq_data or os.getenv('CELEBA_DATA', '.')
         description = 'CelebA dataset'
-        directory = Path('/space/data/celeba/')
+        directory = config.data_directory / 'celeba'
         image_suffix = 'jpg'
         anno = directory / 'Anno'
 

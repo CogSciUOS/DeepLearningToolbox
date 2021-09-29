@@ -2,8 +2,10 @@
 """
 
 # standard imports
-from typing import Generator, Protocol, Iterable
+from typing import Generator, Iterable
 
+# toolbox imports
+from ..typing import Protocol
 
 class SizedIterable(Protocol):
     """An :py:class:`Iterable` with a known length.

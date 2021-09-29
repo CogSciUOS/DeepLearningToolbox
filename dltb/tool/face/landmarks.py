@@ -6,7 +6,9 @@ the face.
 """
 
 # standard imports
-from typing import TypeVar, Protocol, Generic, Tuple, Iterable
+# typing.Protocol is only introduced in Python 3.8. In prior versions,
+# it is available from thirdparty package 'typing_extensions'.
+from typing import TypeVar, Generic, Tuple, Iterable, Optional
 
 # thirdparty imports
 import numpy as np
@@ -14,13 +16,16 @@ import numpy as np
 # toolbox imports
 from .detector import Detector as FaceDetector
 from ..detector import ImageDetector
+from ...typing import Protocol
 from ...base.busy import busy
 from ...base.meta import Metadata
-from ...base.image import Landmarks, Imagelike
+from ...base.image import Landmarks, Imagelike, Sizelike, Size
 from ...base.implementation import Implementable
 
 
 class FacialLandmarks(Protocol):
+    """Interface for facial landmarks.
+    """
 
     def eyes(self) -> np.ndarray:
         """Points describing the eyes.
@@ -28,12 +33,6 @@ class FacialLandmarks(Protocol):
 
     def mouth(self) -> np.ndarray:
         """Points describing the mouth.
-        """
-
-    @staticmethod
-    def reference(size: Tuple[int, int]) -> 'FacialLandmarks':
-        """Reference position for the landmarks in a standardized
-        face.
         """
 
 LandmarksType = TypeVar('LandmarksType', bound=FacialLandmarks)
@@ -105,6 +104,11 @@ class DetectorBase(Implementable, ImageDetector):  # , Generic[LandmarksType]
     class, which adds some further functionality.
     """
     _face_detector: FaceDetector = None
+
+    # FIXME[hack]: should be deducible from type hints
+    _LandmarksType: type = None   # the landmarks type
+    _reference_landmarks = None   # :LandmarksType - the reference landmarks
+    _reference_size: Size = None  # design size for the reference landmarks
 
     @staticmethod
     def create(name: str, prepare: bool = True):
@@ -188,3 +192,38 @@ class DetectorBase(Implementable, ImageDetector):  # , Generic[LandmarksType]
 
             self._detections = self.detect_all(self._data)
             self.change(detection_finished=True)
+
+    def reference(self, size: Optional[Sizelike] = None,
+                  keep_aspect_ratio: bool = True) -> 'FacialLandmarks':
+        """Reference position for the landmarks in a standardized
+        face.
+        """
+        size = self._reference_size if size is None else Size(size) 
+
+        if size == self._reference_size:
+            return self._reference_landmarks
+
+        # scale the landmarks to the target size
+        scale_x = size.width / self._reference_size.width
+        scale_y = size.height / self._reference_size.height
+
+        if keep_aspect_ratio:
+            if scale_x > scale_y:
+                scale_x = scale_y
+                delta_x = (size.width - self._reference_size.width) / 2
+                delta_y = 0
+            elif scale_y > scale_x:
+                scale_y = scale_x
+                delta_y = (size.height - self._reference_size.height) / 2
+                delta_x = 0
+            else:
+                delta_x = delta_y = 0
+        else:
+            # don't keep the aspect ratio, scale both axes differently
+            delta_x = delta_y = 0
+        points = np.zeros_like(self._reference_landmarks)
+        for idx, point in enumerate(self._reference_landmarks):
+            points[idx] = (point[0] * scale_x + delta_x,
+                           point[1] * scale_y + delta_y)
+        return self._LandmarksType(points=points)
+

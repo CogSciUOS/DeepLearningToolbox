@@ -260,13 +260,38 @@ class ImageUtils(image.ImageResizer):
 
 class OpenCVLandmarkAligner(LandmarkAligner):
 
-    def apply_transformation():
+    def compute_transformation(self, landmarks: LandmarksType,
+                               reference: LandmarksType) -> np.ndarray:
         """
         """
+        # Obtain point and reference coordinates in a format suitable
+        # for OpenCV, that can be numpy arrays of shape (N, 2), with
+        # N being the number of points, and each point is described
+        # by 2-dimensional cartesian coordinates (x, y).
+        src = landmarks.points
+        dst = reference.points
 
-    def compute_transformation():
+        if src.shape != dst.shape:
+            raise ValueError("Incompatible shapes: "
+                             f"points {src.shape} vs. reference {dst.shape}")
+
+        # fullAffine=False
+        transformation, _ = cv2.estimateAffinePartial2D(dst, src)
+
+        # There is also cv2.getAffineTransform in case there
+        # are only three points, which allows to calculate an exact
+        # solution. 
+        return transformation
+
+    def apply_transformation(self, image: Imagelike,
+                             transformation: np.ndarray,
+                             size: Sizelike) -> np.ndarray:
         """
         """
+        size = Size(size)
+        array = Image.as_array(image)
+        aligned = cv2.warpAffine(array, transformation, size, borderValue=0.0)
+        return aligned
 
 
 class VideoReader(video.Reader):

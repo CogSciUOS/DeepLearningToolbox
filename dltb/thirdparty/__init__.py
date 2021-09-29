@@ -98,11 +98,13 @@ Implementable.register_implementation(_DLTB + 'tool.face.recognize.ArcFace',
 
 
 Implementable.register_module_alias(_THIRDPARTY + 'mtcnn', 'mtcnn')
-Implementable.register_module_alias(_THIRDPARTY + 'mtcnn2', 'mtcnn2')
+Implementable.register_module_alias(_THIRDPARTY + 'face_evolve.mtcnn',
+                                    'mtcnn2')
 Implementable.register_implementation(_DLTB + 'tool.face.mtcnn.Detector',
                                       _THIRDPARTY + 'mtcnn.Detector')
 Implementable.register_implementation(_DLTB + 'tool.face.mtcnn.Detector',
-                                      _THIRDPARTY + 'mtcnn2.Detector')
+                                      _THIRDPARTY +
+                                      'face_evolve.mtcnn.Detector')
 
 
 _BASE_CLASSES = {

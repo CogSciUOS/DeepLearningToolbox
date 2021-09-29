@@ -48,7 +48,7 @@ from dltb.config import config
 from dltb.util.importer import Importer
 from dltb.base.meta import Metadata
 from dltb.base.data import Data
-from dltb.base.image import Imagelike, BoundingBox
+from dltb.base.image import Imagelike, BoundingBox, Size
 from dltb.tool.face.mtcnn import Landmarks, Detector as DetectorBase
 
 # logging
@@ -63,6 +63,24 @@ class Detector(DetectorBase):
     """
     internal_arguments: Tuple[str, ...] = ('pil', )
 
+    # default reference facial points for crop_size = ;
+    # should adjust REFERENCE_FACIAL_POINTS accordingly for other crop_size
+    # reference landmark positions. This is taken from
+    # applications/align/align_trans.py in the face_evoLVe repository.
+    # According to the comments in that file, these landmarks are for a
+    # "facial points crop_size = (112, 112)", however, the crop size
+    # is then specified as (96, 112), and this actually seems to be more
+    # appropriate.
+    _reference_landmarks = Landmarks(points=np.asarray([
+        [30.29459953,  51.69630051], 
+        [65.53179932,  51.50139999],
+        [48.02519989,  71.73660278],
+        [33.54930115,  92.3655014],
+        [62.72990036,  92.20410156]
+    ]))
+
+    _reference_size = Size(96, 112)
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._face_evolve_repository = \
@@ -118,6 +136,8 @@ class Detector(DetectorBase):
         # (1) Run the MTCNN detector
         #
         try:
+            # FIXME[question]: what is going on here? can this be done
+            # in prepare?
             align_code_directory = \
                 self._face_evolve_directory / 'applications' / 'align'
             prev_cwd = os.getcwd()
@@ -128,6 +148,7 @@ class Detector(DetectorBase):
             LOG.info("MTCNN: ... found %d faces.", len(bounding_boxes))
         finally:
             os.chdir(prev_cwd)
+
         #
         # (2) Create Metadata
         #

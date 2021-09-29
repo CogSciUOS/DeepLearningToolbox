@@ -9,6 +9,7 @@ import logging
 import numpy as np
 
 # toolbox imports
+from dltb import config
 from dltb.base.data import Data
 from dltb.datasource import ImageDirectory
 
@@ -39,9 +40,9 @@ class FFHQ(ImageDirectory):
         """
         # FIXME[hack]:
         # directory = ffhq_data or os.getenv('FFHQ_DATA', '.')
-        directory = '/space/data/FFHQ/images1024x1024'
+        directory = config.data_directory / 'FFHQ' / 'images1024x1024'
         self._meta_filename = \
-            ffhq_meta or '/space/data/FFHQ/ffhq-dataset-v2.json'
+            ffhq_meta or config.data_directory / 'FFHQ' / 'ffhq-dataset-v2.json'
         description = 'FFHQ dataset'
         super().__init__(key=key or "ffhq",
                          directory=directory, suffix='png',

@@ -100,7 +100,6 @@ class Size(namedtuple('Size', ['width', 'height'])):
     def __eq__(self, size: Sizelike) -> bool:
         """Allow to compare `Size` to any `Sizeable` objects.
         """
-        print(f"__eq__ (size) was called")
         return super().__eq__(Size(size))
 
 
@@ -1226,6 +1225,9 @@ class PointsBasedLocation:
                  self._points[:, 0].max()) and
                 (self._points[:, 1].min() <= point[1] <=
                  self._points[:, 1].max()))
+
+    def __getitem__(self, idx):
+        return self._points[idx]
 
     def mark_image(self, image: np.ndarray, color=(1, 0, 0)):
         """Mark this :py:class:`PointsBasedLocation` in an image.

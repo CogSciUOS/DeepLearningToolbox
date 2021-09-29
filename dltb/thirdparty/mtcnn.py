@@ -69,16 +69,13 @@ class Detector(BaseDetector, KerasTensorflowModel):
         The actual detector, an instance of the class mtcnn.MTCNN.
     """
 
-    def __init__(self, detect_boxes: bool = True,
-                 detect_landmarks: bool = False, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         """Initialize the :py:class:`DetectorMTCNN` object.  This is a slim
-        constructor that allows for quick execution is guaranteed to
+        constructor that allows for quick execution and is guaranteed to
         raise no exception. The actual initialization of the detector
         is postpoined to the :py:meth:`prepare` method.
         """
         super().__init__(**kwargs)
-        self.detect_boxes = detect_boxes
-        self.detect_landmarks = detect_landmarks
         self._detector = None
 
     def _prepare(self, **kwargs) -> None:

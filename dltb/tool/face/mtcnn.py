@@ -20,6 +20,13 @@ from .detector import Detector as FaceDetector
 class Landmarks(FacialLandmarksBase):
     """Landmarks annotation scheme used by the MTCNN detector.
     The MTCNN landmarking scheme consists of 5 points.
+
+    Arguments
+    ---------
+    keypoints:
+        A dictionary mapping keypoints to coordinates
+
+    points:
     """
 
     keypoint_names = ('nose', 'mouth_right', 'right_eye', 'left_eye',
@@ -42,8 +49,10 @@ class Detector(FaceDetector, LandmarksDetector, Implementable):
     with a :py:class:`LandmarkDetector`.
 
     """
+    # FIXME[hack]: should be deducible from type hints
+    _LandmarksType = Landmarks
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, boxes=True, landmarks=True, **kwargs) -> None:
         super().__init__(**kwargs)
         self.detect_boxes = True
         self.detect_landmarks = True
