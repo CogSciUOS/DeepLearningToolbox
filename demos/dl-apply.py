@@ -12,8 +12,9 @@
 # Currently the is a focus on face processing
 
 # standard imports
-from typing import Optional, Iterable, Sequence
+from typing import Optional, Iterable, Tuple
 from argparse import ArgumentParser
+from pathlib import Path
 import os
 import sys
 import logging
@@ -25,35 +26,19 @@ import numpy as np
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
-from dltb.base.image import Image, Imagelike, ImageDisplay
+from dltb.base.image import Image, ImageDisplay, ImageWarper
 from dltb.base.image import BoundingBox
-from dltb.base.video import Webcam
-from dltb.datasource import ImageDirectory
 from dltb.datasource import argparse as DatasourceArgparse
+from dltb.tool.face.mtcnn import Detector
 from dltb.tool.face import Detector as FaceDetector
-from dltb.tool.align import LandmarkAligner
-from dltb.util.image import imshow, imwrite, get_display
+from dltb.tool.align import LandmarkAligner, Landmarks
+from dltb.util.image import get_display
 from dltb.util.keyboard import SelectKeyboardObserver
-from dltb.thirdparty import implementations, import_class
+from dltb.util.canvas import canvas_create, canvas_add_image
+from dltb.thirdparty import implementations
 
 # logging
 LOG = logging.getLogger(__name__)
-
-
-# transformation = lambda x : x
-def do_nothing(data: Data):
-    return data
-
-
-from dltb.tool.face.mtcnn import Detector
-#MTCNN = Detector()
-MTCNN = Detector(implementation='dltb.thirdparty.face_evolve.mtcnn.Detector')
-
-from dltb.base.image import ImageWarper
-warper = ImageWarper(implementation='dltb.thirdparty.skimage.ImageUtil')
-#warper = ImageWarper(implementation='dltb.thirdparty.opencv.ImageUtils')
-
-aligner = LandmarkAligner(detector=MTCNN, size=(112, 112), warper=warper)
 
 
 # /space/data/lfw/lfw/Marissa_Jaret_Winokur/Marissa_Jaret_Winokur_0001.jpg
@@ -65,98 +50,68 @@ aligner = LandmarkAligner(detector=MTCNN, size=(112, 112), warper=warper)
 # /space/data/lfw/lfw/Gordon_Brown/Gordon_Brown_0006.jpg
 
 
-def detect_faces(image: Imagelike):
-    detections = MTCNN(image)
-    return detections
-
-
-def select_face(bounding_boxes: Sequence[BoundingBox],
-                image: Imagelike) -> int:
-    """Select the main face from a set of alternative detections.
-
-    The criteria for selecting the main face may vary depending on the
-    data.  For example, if data is known to have face as central
-    prosition and/or with a specific size, these information can be
-    used to select the best candidate.  Also the confidence score
-    provided by the detector may be used.
+def landmark_face(image: Image,
+                  detector) -> Tuple[BoundingBox, Landmarks, bool]:
+    """Obtain (best) bounding box and landmarks for a given image using
+    a combined bounding box and landmark detector.
 
     Arguments
     ---------
-    bounding_boxes:
-        The bouding boxes returned by the detector.
-    image:
-        The image to which the bounding boxes refer.
-    """
-    if not bounding_boxes:
-        raise ValueError("No face detected")
 
-    if len(bounding_boxes) == 1:
-        return 0  # there is only one detection -> assume that is correct
+    Result
+    ------
+    bounding_box:
+        The bounding box for the (best) detection.
+    landmarks:
+        The facial landmarks for the (best) detection.
+    unique:
+        A flag indication if the detector returned a singe detection (`True`)
+        or if the best of multiple detection was choosen using some
+        heuristics (`False`)
 
-    # select bounding box with center closest to the image center
-    #shape = Image.as_shape(image)
-    shape = image.shape
-    center = (shape[1]/2, shape[0]/2)
-    best, distance = -1, float('inf')
-    for index, bounding_box in enumerate(bounding_boxes):
-        loc_center = bounding_box.center
-        dist2 = ((loc_center[0]-center[0]) ** 2 +
-                 (loc_center[1]-center[1]) ** 2)
-        if dist2 < distance:
-            best, distance = index, dist2
-
-    return best
-
-
-def landmark_face(image: Imagelike):
-    """
+    Raises
+    ------
+    ValueError
+        No (best) detection could be identified.  Either there was no
+        detection or the heuristics could not decided of a best detection.
     """
     # image = Image(image)
-    detections = detect_faces(image)
+    # detections = detector(image)
+    detections = detector.detections(image)
 
     if not detections.has_regions:
-        LOG.warning("No regions returned by detector for image '%s'.",
-                    image.filename)
-        return None, None, False
+        raise ValueError("No regions returned by detector for "
+                         f"image '{image.filename}'.")
 
-    if not len(detections.regions):
-        LOG.warning("No faces detected in image '%s'.", image.filename)
-        return None, None, False
+    regions = len(detections.regions)
+    if regions == 0:
+        raise ValueError("There were 0 regions returned by detector for "
+                         f"image '{image.filename}'.")
 
-    if len(detections.regions) % 2 != 0:
-        LOG.warning("Odd number (%d) of regions for image '%s'.",
-                    len(detections.regions), image.filename)
-        return None, None, False
+    if regions % 2 != 0:
+        raise ValueError("The box-and-landmark-detector returned "
+                         f"an odd number ({regions}) of regions "
+                         f"for image '{image.filename}'.")
 
-    # for idx, region in enumerate(detections.regions):
-    #     print(idx, region)
-    bounding_boxes = [region.location for region in detections.regions
-                      if isinstance(region.location, BoundingBox)]
+    faces = regions // 2
+    if faces == 1:
+        best = 0
+    else:
+        best = detector.select_best(detections, image)
+        LOG.info("%d faces detected in '%s' (%d is best).",
+                 faces, image.filename, best)
 
-    faces = len(bounding_boxes)
-    if faces != 1:
-        LOG.warning("%d faces detected in '%s'.", faces, image.filename)
+    bbox = detections.regions[best*2].location
+    landmarks = detections.regions[best*2+1].location
 
-    best = select_face(bounding_boxes, image)
+    detector.mark_data(image, detections, best=best, group_size=2)
 
-    # for idx, region in enumerate(detections.regions):
-    #     color = (0, 255, 0) if idx // 2 == best else (255, 0, 0)
-    #     region.location.mark_image(image.array, color=color)
-    for idx, region in enumerate(detections.regions):
-        if idx // 2 == best:
-            continue
-        region.location.mark_image(image.array, color=(255, 0, 0))
-
-    box = detections.regions[2*best].location
-    landmarks = detections.regions[2*best+1].location
-
-    box.mark_image(image.array, color=(0, 255, 0))
-    landmarks.mark_image(image.array, color=(0, 255, 0))
-
-    return box, landmarks, faces == 1
+    return bbox, landmarks, faces == 1
 
 
-def align_face(image, landmarks) -> np.ndarray:
+def align_face(aligner, image, landmarks) -> np.ndarray:
+    """Align a face image given an aligner.
+    """
     # ./dltb/tool/face/landmarks.py
     #  - definition of a LandmarkDetector (called "DetectorBase")
     #    all subclasses should provide
@@ -180,20 +135,20 @@ def align_face(image, landmarks) -> np.ndarray:
     # ./dltb/thirdparty/datasource/lfw.py
     #
     #
-    reference = aligner.reference
-    print(f"reference (size={aligner.size}):\n {reference}")
-    for point in reference.points:
-        print(f"  {point}")
 
+    # The reference points used by the aligner
+    reference = aligner.reference
+
+    # The transformation computed by the aligner
     transformation = aligner.compute_transformation(landmarks)
-    print(f"transformation:\n{transformation}")
+
+    # The aligned image computed by the aligner
     aligned_image = aligner.apply_transformation(image, transformation)
-    print(aligned_image.shape, aligned_image.min(), aligned_image.max())
-    # return aligner(image, landmarks)
+
     return aligned_image
 
 
-def apply_single(data: Data, input_directory=None, output_directory=None,
+def apply_single(data: Data, detector, aligner,
                  display: Optional[ImageDisplay] = None) -> None:
     """Apply a transformation to a data objects.
 
@@ -212,65 +167,55 @@ def apply_single(data: Data, input_directory=None, output_directory=None,
         relative to this directory.
     """
 
-    # save = imwrite
-    save = print
+    # assume data is Imagelike: process_image transforms Imagelike -> Image
+    image = detector.process_image(data)
 
-    # assume data is Image
-    image = data
+    # bounding box and landmark for the (best) detection
+    bbox, landmarks, _unique = landmark_face(image, detector)
 
-    image2 = Image.as_array(image).copy()
-    
-    bbox, landmarks, unique = landmark_face(image)
+    # a marked version or the image
+    marked_image = detector.marked_image(image)
 
-    aligned_image = align_face(image, landmarks)
+    # an aligned (and cropped) version of the marked image
+    aligned_image_marked = align_face(aligner, marked_image, landmarks)
 
-    aligned_image2 = aligner(image2, landmarks)
+    # an aligned version of the original image
+    aligned_image = aligner(image, landmarks)
 
-    
     # print(data.filename, result[0], result[1], result[2])
-    #output_tuple = (image.filename,
+    # output_tuple = (image.filename,
     #                result[0].x1, result[0].y1, result[0].x2, result[0].y2
     #                )  # FIXME[todo]:  result[1]. ...
     # result[0].mark_image(image.array)
     # result[1].mark_image(image.array)
     if display is not None:
         shape = image.shape
-        canvas = np.zeros((shape[0]*2, shape[1]*2, shape[2]))
-        array = image.array
-        canvas[:shape[0], :shape[1]] = array
-        canvas[int(bbox.y1):int(bbox.y2),
-               shape[0]+int(bbox.x1):shape[0]+int(bbox.x2)] = \
-            array[int(bbox.y1):int(bbox.y2), int(bbox.x1):int(bbox.x2)]
+        canvas = canvas_create(size=(shape[0]*2, shape[1]*2),
+                               channels=shape[2])
 
-        dx = (image.shape[1] - aligned_image.shape[1]) // 2
-        dy = (image.shape[0] - aligned_image.shape[0]) // 2
-        canvas[shape[0]+dy:shape[0]+dy+aligned_image.shape[0],
-               dx:+dx+aligned_image.shape[1]] = aligned_image
+        # 1. the original image
+        canvas_add_image(canvas, marked_image, rows=2, columns=2, index=1)
 
-        canvas[shape[0]+dy:shape[0]+dy+aligned_image.shape[0],
-               shape[1]+dx:shape[1]+dx+aligned_image.shape[1]] = aligned_image2
+        # 2. the image cropped to the bounding box
+        cropped_image = \
+            marked_image[int(bbox.y1):int(bbox.y2), int(bbox.x1):int(bbox.x2)]
+        canvas_add_image(canvas, cropped_image, rows=2, columns=2, index=2)
+
+        # 3. the aligned image (marked version)
+        canvas_add_image(canvas, aligned_image_marked,
+                         rows=2, columns=2, index=3)
+
+        # 4. the aligned image
+        canvas_add_image(canvas, aligned_image, rows=2, columns=2, index=4)
+
         #display.show(canvas, blocking=not unique, wait_for_key=not unique)
         display.show(canvas, blocking=False)
-        if display.closed:
-            raise StopIteration("Display closed")
 
-    if input_directory and output_directory:
-        # Write result into a file in the output directory.
-        # Relative filenames in input and output directory will be the same.
-        if not data.has_attribute('filename'):
-            LOG.warning("No filename for data object. No output "
-                        "file will be written.")
-        elif not data.filename.startswith(input_directory):
-            LOG.warning("File will not be written: filename '%s' is outside "
-                        "the input directory '%s'.",
-                        data.filename, input_directory)
-        else:
-            output_filename = \
-                output_directory / data.filename[len(input_directory):]
-            save(output_filename, result)
+    return aligned_image
 
 
-def apply_multi(datasource: Iterable[Data],
+def apply_multi(datasource: Iterable[Data], detector, aligner,
+                input_directory=None, output_directory=None,
                 display: Optional[ImageDisplay] = None,
                 progress: Optional[Iterable] = None) -> None:
     """Apply a transformation to multiple data objects.
@@ -284,11 +229,36 @@ def apply_multi(datasource: Iterable[Data],
         output = print
 
     stop_on_key_press = SelectKeyboardObserver()
+
+    input_directory = input_directory and str(input_directory)
     
     try:
         for data in stop_on_key_press(datasource):
             output(f"{data.filename} [{data.shape}]")
-            apply_single(data, display=display)
+            aligned_image = apply_single(data, detector, aligner,
+                                         display=display)
+            if display is not None and display.closed:
+                LOG.error("Display was closed: stopping operation.")
+                break
+
+            if input_directory and output_directory:
+                # Write result into a file in the output directory.
+                # Relative filenames in input and output directory
+                # will be the same.
+                if not data.has_attribute('filename'):
+                    LOG.warning("No filename for data object. No output "
+                                "file will be written.")
+                elif not data.filename.startswith(input_directory):
+                    LOG.warning("File will not be written: filename '%s' "
+                                "is outside the input directory '%s'.",
+                                data.filename, input_directory)
+                else:
+                    output_filename = \
+                        output_directory / data.filename[len(input_directory):]
+                    print(f"{data.filename} -> {output_filename} "
+                          f"[{aligned_image.shape}]")
+                    # save(output_filename, aligned_image)
+
     except KeyboardInterrupt:
         LOG.error("Keyboard interrupt: stopping operation.")
 
@@ -312,6 +282,13 @@ def main():
                                 help='the face detector to use')
     group_detector.add_argument('--list-detectors', action='store_true',
                                 default=False, help='list available detectors')
+    group_detector.add_argument('--warper', type=str, default=None,
+                                help='the image warper to use')
+    group_detector.add_argument('--list-warpers', action='store_true',
+                                default=False,
+                                help='list available image warpers')
+    group_detector.add_argument('--size', type=str, default='112x112',
+                                help='size of the output image')
 
     ToolboxArgparse.add_arguments(parser)
     DatasourceArgparse.prepare(parser)
@@ -319,20 +296,46 @@ def main():
     args = parser.parse_args()
     ToolboxArgparse.process_arguments(parser, args)
 
+    if args.list_detectors:
+        print("FaceDetector implementations:")
+        for index, implementation in enumerate(implementations(FaceDetector)):
+            print(f"{index+1}) {implementation}")
+        return os.EX_OK
+
+    if args.list_warpers:
+        print("ImageWarper implementations:")
+        for index, implementation in enumerate(ImageWarper.implementations()):
+            print(f"{index+1}) {implementation}")
+        return os.EX_OK
+
+    # obtain the datasource if provided (otherwise None)
     datasource = DatasourceArgparse.datasource(parser, args)
 
+    # obtain an ImageDisplay object if --show is set (otherwise None)
     display = get_display() if args.show else None
 
-    print(f"Detector: {MTCNN} ({type(MTCNN)})")
-    
+    # obtain the face detector
+    detector = \
+        Detector(implementation='dltb.thirdparty.face_evolve.mtcnn.Detector')
+    print(f"Detector: {detector} ({type(detector)})")
+
+    # obtain the ImageWarper
+    #warper = ImageWarper(implementation='dltb.thirdparty.skimage.ImageUtil')
+    #warper = ImageWarper(implementation='dltb.thirdparty.opencv.ImageUtils')
+    warper = ImageWarper(implementation=args.warper)
+
+    # create the LandmarkAligner
+    aligner = LandmarkAligner(detector=detector, size=args.size, warper=warper)
+
     if not datasource:
         for image in args.images:
-            apply_single(Image(image), display=display)
-        LOG.error("No datasource. "
-                  "Specify a datasource (e.g. --datasource lfw).")
-        return os.EX_USAGE
+            apply_single(Image(image), detector, aligner, display=display)
+    else:
+        apply_multi(datasource, detector, aligner,
+                    input_directory=datasource.directory,
+                    output_directory=Path('output'),
+                    progress=tqdm.tqdm, display=display)
 
-    apply_multi(datasource, progress=tqdm.tqdm, display=display)
     return os.EX_OK
 
 

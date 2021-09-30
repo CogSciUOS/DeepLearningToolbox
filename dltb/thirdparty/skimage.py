@@ -15,7 +15,7 @@ from dltb.base.image import Size, Sizelike
 LOG = logging.getLogger(__name__)
 
 
-class ImageUtil(ImageResizer, ImageWarper):
+class ImageUtils(ImageResizer, ImageWarper):
     """Implementation of several image utilities, including resizing and
     warping.
 

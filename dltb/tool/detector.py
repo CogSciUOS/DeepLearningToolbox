@@ -451,7 +451,8 @@ class ImageDetector(Detector, ImageTool):
     #
 
     def mark_image(self, image: Imagelike, detections: Detections = None,
-                   copy: bool = True) -> np.ndarray:
+                   copy: bool = True, best: int = None,
+                   group_size: int = 1) -> np.ndarray:
         """Mark the given detections in an image.
 
         Arguments
@@ -464,6 +465,9 @@ class ImageDetector(Detector, ImageTool):
             A flag indicating if detections should be marked in
             a copy of the image (`True`) or into the original
             image object (`False`).
+        best:
+            If given, it will be the index of the "best" detection, that
+            should then be marked in a different way.
 
         Result
         ------
@@ -476,11 +480,15 @@ class ImageDetector(Detector, ImageTool):
         if detections is None:
             detections = self.detect(Image(array))
         if detections:
-            for region in detections.regions:
-                region.mark_image(array)
+            for idx, region in enumerate(detections.regions):
+                if best is None or idx // group_size == best:
+                    region.mark_image(array, color=(0, 255, 0))
+                else:
+                    region.mark_image(array, color=(255, 0, 0))
         return array
-
-    def mark_data(self, data: Data, detections: Detections = None) -> None:
+    
+    def mark_data(self, data: Data, detections: Detections = None,
+                  **kwargs) -> None:
         """Extend the given `Data` image object by a tool specific attribute,
         called `marked`, holding a copy of the original image in which
         the detections are marked. This function assumes that the
@@ -496,10 +504,14 @@ class ImageDetector(Detector, ImageTool):
             The detections to mark in the image. If None are provided
             the detections from the tools specific attribute `detections`
             is used.
+        **kwargs:
+            Additional keyword arguments to be passed to
+            :py:meth:`mark_image`.
         """
         if detections is None:
             detections = self.detections(data)
-        marked_image = self.mark_image(data.array, detections, copy=True)
+        marked_image = self.mark_image(data.array, detections, copy=True,
+                                       **kwargs)
         self.add_data_attribute(data, 'mark', marked_image)
 
     def marked_image(self, data) -> np.ndarray:
@@ -580,6 +592,55 @@ class ImageDetector(Detector, ImageTool):
         the argument `extract=True` when calling :py:meth:`process`.
         """
         return self.get_data_attribute(data, 'extract')
+
+    @staticmethod
+    def select_best(detections, image: Imagelike) -> int:
+        """Select the main face from a set of alternative detections.
+
+        The criteria for selecting the main detection may vary
+        depending on the data.  For example, if data is known to have
+        the object at central prosition and/or with a specific size,
+        these information can be used to select the best candidate.
+        Also the confidence score provided by the detector may be
+        used.
+
+        Arguments
+        ---------
+        bounding_boxes:
+            The bouding boxes returned by the detector.
+        image:
+            The image to which the bounding boxes refer.
+
+        Result
+        ------
+        best:
+            Index of the best detection.
+
+        """
+        # only consider the bounding boxes (some detectors may provide
+        # other detections, like landmarks)
+        bounding_boxes = [region.location for region in detections.regions
+                          if isinstance(region.location, BoundingBox)]
+
+        if not bounding_boxes:
+            raise ValueError("No detection")
+
+        if len(bounding_boxes) == 1:
+            return 0  # there is only one detection -> assume that is correct
+
+        # select bounding box with center closest to the image center
+        #shape = Image.as_shape(image)
+        shape = image.shape
+        center = (shape[1]/2, shape[0]/2)
+        best, distance = -1, float('inf')
+        for index, bounding_box in enumerate(bounding_boxes):
+            loc_center = bounding_box.center
+            dist2 = ((loc_center[0]-center[0]) ** 2 +
+                     (loc_center[1]-center[1]) ** 2)
+            if dist2 < distance:
+                best, distance = index, dist2
+
+        return best
 
 
 class BoundingBoxDetector:

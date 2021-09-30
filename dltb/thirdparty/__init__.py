@@ -83,9 +83,9 @@ Implementable.register_implementation(_DLTB + 'base.image.Display',
 Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'skimage')
 Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'scikit-image')
 Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
-                                      _THIRDPARTY + 'skimage.ImageUtil')
+                                      _THIRDPARTY + 'skimage.ImageUtils')
 Implementable.register_implementation(_DLTB + 'base.image.ImageWarper',
-                                      _THIRDPARTY + 'skimage.ImageUtil')
+                                      _THIRDPARTY + 'skimage.ImageUtils')
 
 Implementable.register_module_alias(_THIRDPARTY + 'qt', 'qt')
 Implementable.register_implementation(_DLTB + 'base.image.ImageDisplay',
@@ -166,7 +166,7 @@ _MODULES = {
     'skimage': {
         'modules': ['skimage'],
         'classes': {
-            'ImageResizer': 'ImageUtil'
+            'ImageResizer': 'ImageUtils'
         }
     },
     'sklearn': {

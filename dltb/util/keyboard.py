@@ -10,9 +10,13 @@ a uniform API that can be used to detect individual keystrokes.
 # standard imports
 from typing import Type, Optional, Iterable
 from types import TracebackType
+from threading import Thread
 import sys
-import threading
 import select
+import logging
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 class KeyboardObserver:
@@ -32,12 +36,13 @@ class KeyboardObserver:
         for i in stop_on_key(range(1000000)):
             print(i)
     """
+    _thread: Optional[Thread] = None
+    key_pressed: Optional[str] = None
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.thread = None
+        super().__init__(*args, **kwargs)  # type: ignore[call-arg]
+        self._thread = None
         self.key_pressed = None
-        self.capture_loop = False
 
     def __call__(self, iterable) -> Iterable:
         with self:
@@ -46,17 +51,19 @@ class KeyboardObserver:
                 if self:
                     break
 
-    def __enter__(self) -> 'KeyPress':
+    def __enter__(self) -> 'KeyboardObserver':
+        LOG.info("Entering the KeyboardObserver context manager")
+        self.start_capture()
         return self
 
     def __exit__(self, exc_type: Optional[Type[BaseException]],
                  exc_value: Optional[BaseException],
-                 exc_traceback: Optional[TracebackType]) -> bool:
-        thread = self.thread
-        if thread is not None:
-            self.stop_capture()
-            thread.join()
-        print("Leaving the context manager")
+                 exc_traceback: Optional[TracebackType]) -> None:  # bool
+        # Remark: type checker prefers return type None or Literal[False] over
+        # bool to signal that the context manager will not swallow exception
+        self.stop_capture()
+        LOG.info("Leaving the KeyboardObserver context manager")
+        # return False  # no exception handling was done in the __exit__ method
 
     def __bool__(self) -> bool:
         return self.key_pressed is not None
@@ -64,34 +71,47 @@ class KeyboardObserver:
     def start_capture(self) -> None:
         """Start a key capturing process.
         """
-        if self.thread is not None:
+        LOG.debug("KeyboardObserver: starting a capturing thread")
+
+        if self._thread is not None:
             raise RuntimeError("KeyPress is already running")
-        self.thread = threading.Thread(target=self.capture_key, args=(),
-                                       name='key_capture_thread', daemon=True)
-        self.thread.start()
+        self._thread = Thread(target=self._run_capture_key, args=(),
+                              name='key_capture_thread', daemon=True)
+        self._thread.start()
 
     def stop_capture(self) -> None:
         """Stop the key capturing process.
         """
-        # end the background thread
-        # print("Please hit the enter key to finish the KeyPress Manager")
-        print("Gracefully exiting the capture loop")
-        self.capture_loop = False
+        thread = self._thread
+        if thread is not None:
+            LOG.debug("KeyboardObserver: stopping the capturing thread")
+            self._stop_capture()
+            thread.join()
+            self._thread = None
+            LOG.debug("KeyboardObserver: capturing thread ended.")
+        else:
+            LOG.debug("KeyboardObserver: no capturing thread is running")
 
-    def run_capture_key(self) -> None:
+    def _run_capture_key(self) -> None:
         """Run the :py:meth:`capture_key` method and clean up, once it
         finishes.
 
         """
-        self.capture_key()
-        self.thread = None
-        print("Finished capturing keys.")
+        self._capture_key()
+        self._thread = None
+        LOG.info("Finished capturing keys with KeyboardObserver.")
 
-    def capture_key(self) -> None:
+    def _capture_key(self) -> None:
         """Run a loop to capture a key (to be implemented by subclasses).
         Once a key is pressed, this method should set the property
         :py:prop:`key_pressed` and stop.
         """
+        # to be implemented by subclasses
+
+    def _stop_capture(self) -> None:
+        """Stop the key capturing process (to be implemented by sublcasses).
+        """
+        # to be implemented by subclasses
 
 
 class DummyKeyboardObserver(KeyboardObserver):
@@ -100,16 +120,15 @@ class DummyKeyboardObserver(KeyboardObserver):
     key is pressed.
     """
 
-    def capture_key(self) -> None:
+    def _capture_key(self) -> None:
         """Run a loop to capture a key.
         """
         self.key_pressed = input()
-        self.thread = None
 
-    def stop_capture(self) -> None:
+    def _stop_capture(self) -> None:
         """Stop the key capturing process.
         """
-        # end the background thread
+        # end key capturing
         print("Please hit the enter key to finish the KeyPress Manager")
 
 
@@ -122,21 +141,21 @@ class LoopKeyboardObserver(KeyboardObserver):
         super().__init__(*args, **kwargs)
         self.capture_loop = False
 
-    def capture_key(self) -> None:
+    def _capture_key(self) -> None:
         """Run a loop to capture a key.
         """
         self.capture_loop = True
         while self.capture_loop and not self.key_pressed:
-            self.check_for_key()
+            self._check_for_key()
 
-    def check_for_key(self, timeout=.1) -> None:
-        """Check if a key was pressed (to be implemented by subclasses).
+    def _check_for_key(self, timeout=.1) -> None:
+        """Check if a key was pressed.
         """
+        # to be implemented by subclasses
 
-    def stop_capture(self):
+    def _stop_capture(self):
         """Stop the key capturing process.
         """
-        print("Gracefully exiting the capture loop")
         self.capture_loop = False
 
 
@@ -145,7 +164,7 @@ class SelectKeyboardObserver(LoopKeyboardObserver):
     to check if a key was pressed.
     """
 
-    def check_for_key(self, timeout=.1) -> None:
+    def _check_for_key(self, timeout=.1) -> None:
         """Check if a key was pressed.
         """
         # in_state is either an empty list (if no input is available)
@@ -162,7 +181,7 @@ class GetchKeyboardObserver(LoopKeyboardObserver):
     module to check if a key was pressed.
     """
 
-    def check_for_key(self, timeout=.1) -> None:
+    def _check_for_key(self, timeout=.1) -> None:
         """Run a loop to capture a key.
         """
         # from getch impor getch

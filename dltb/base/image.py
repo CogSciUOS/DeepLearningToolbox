@@ -265,8 +265,16 @@ class Image(DataDict):
             data.add_attribute('url', image)
         return data
 
+    def __new__(cls, image: Imagelike = None, array: np.ndarray = None,
+                copy: bool = False, **kwargs) -> None:
+        if isinstance(image, Image) and not copy:
+            return image  # just reuse the given Image instance
+        return super().__new__(cls, image, array, copy, **kwargs)
+
     def __init__(self, image: Imagelike = None, array: np.ndarray = None,
                  copy: bool = False, **kwargs) -> None:
+        if isinstance(image, Image) and not copy:
+            return  # just reuse the given Image instance
         if image is not None:
             array = self.as_array(image, copy=copy)
         super().__init__(array=array, **kwargs)

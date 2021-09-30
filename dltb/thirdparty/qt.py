@@ -229,3 +229,29 @@ class ImageDisplay(BaseImageDisplay):
         thread.
         """
         self._application.processEvents()
+
+    # FIXME[hack]: when running without an event loop (and even when
+    # setting blocking=False and using explicit event processing),
+    # we seem to be not notified when the window is closed (by clicking
+    # the window decoration close button).
+    # Hence we adapt opened and closed to explicitly check
+    # the status of the window.  A future implementation should
+    # improve this in several directions:
+    # - check why we are not informed (we probably need some event handler)
+    # - it seems suboptimal to have to adapt both methods
+    #   (opened and closed)- just changing one should be enough
+    #   -> redesign the class ...
+        
+    @property
+    def opened(self) -> bool:
+        """Check if this image :py:class:`Display` is opened, meaning
+        the display window is shown and an event loop is running.
+        """
+        return self._view.isVisible() and self._opened
+
+    @property
+    def closed(self) -> bool:
+        """Check if this image :py:class:`Display` is closed, meaning
+        that no window is shown (and no event loop is running).
+        """
+        return not self._view.isVisible() or not self._opened

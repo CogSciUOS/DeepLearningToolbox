@@ -6,7 +6,6 @@ tasks like verification, recognition, or attribute estimation.
 
 """
 # standard imports
-from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, Optional
 
 # thirdparty imports
@@ -78,7 +77,6 @@ class LandmarkAligner(Generic[LandmarksType]):
     def warper(self) -> ImageWarper:
         return self._image_warper
 
-    @abstractmethod
     def compute_transformation(self, landmarks: LandmarksType) -> np.ndarray:
         """Compute an (affine) transformation to map the given landmarks
         to the reference landmarks of the :py:class:`LandmarkAligner`.
@@ -88,7 +86,6 @@ class LandmarkAligner(Generic[LandmarksType]):
                                                       self._reference.points)
         return transformation
 
-    @abstractmethod
     def apply_transformation(self, image: Imagelike,
                              transformation: np.ndarray) -> np.ndarray:
         """Apply a Transformation to an image.
