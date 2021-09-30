@@ -13,8 +13,7 @@ import numpy as np
 
 # toolbox imports
 from ...base import image, video
-from ...base.image import Imagelike, Image, Sizelike, Size
-from ...tool.align import LandmarkAligner
+from ...base.image import Imagelike, Image, Sizelike, Size, Landmarks
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -147,48 +146,30 @@ class ImageDisplay(image.ImageDisplay):
         LOG.debug("blocking opencv event loop ended")
 
 
-class ImageUtils(image.ImageResizer):
+class ImageUtils(image.ImageResizer, image.ImageWarper):
+    """
+    """
 
     def resize(self, image: np.ndarray, size=(640, 360)) -> np.ndarray:
         """Resize the frame to a smaller resolution to save computation cost.
         """
         return cv2.resize(image, size, interpolation=cv2.INTER_LINEAR)
 
-
-    def align(self, image: Imagelike, points, reference,
-              size: Sizelike) -> np.ndarray:
-        """Align an image by applying an (affine) transformation that maps
-        source points to target points.
-
-        Arguments
-        ---------
-        image:
-            The image to align.
-        points:
-            A sequence of points to be mapped onto the reference points,
-            given as (x,y) coordinates
-        reference:
-            A sequence with the same number of points serving as reference
-            points to which `points` should be moved.
-        size:
-            The size of the resulting image.
-
-        Result
-        ------
-        aligned:
-            The aligned image.
+    @staticmethod
+    def warp(image: Imagelike, transformation: np.ndarray,
+             size: Sizelike) -> np.ndarray:
+        """Warp an image by applying a transformation.
         """
         image = Image.as_array(image)
-
-        transformation = self.align_points(points, reference)
-
-        aligned = cv2.warpAffine(image, transformation, size, borderValue=0.0)
-        return aligned
+        size = Size(size)
+        warped = cv2.warpAffine(image, transformation, size, borderValue=0.0)
+        return warped
 
     @staticmethod
-    def align_points(points, reference) -> np.ndarray:
-        """Compute a transformation to map a given list of points to their
-        reference positions.
+    def compute_transformation(points: np.ndarray,
+                               reference: np.ndarray) -> np.ndarray:
+        """Obtain a tranformation for aligning key points to
+        reference positions
 
         Arguments
         ---------
@@ -199,33 +180,14 @@ class ImageUtils(image.ImageResizer):
             A sequence with the same number of points serving as reference
             points to which `points` should be moved.
 
-        Result
-        ------
-        transformation:
-            A affine transformation matrix.  This is a 2x3 matrix,
-            allowing to compute [x',y'] = matrix * [x,y,1].
-
-        Note
-        ----
-        Affine transformations are more general than similarity
-        transformations, which can always be decomposed into a
-        combination of scaling, rotating, and translating.  General
-        affine tansformations can not be decomposed in this way.
-        The affine transformation matrix contains the following entries:
-        ```
-        cos(theta) * s   -sin(theta) * s    t_x
-        sin(theta) * s    cos(theta) * s    t_y
-        ```
-        with theta being the rotation angle, s the scaling factor and
-        t the translation.
         """
 
         # Obtain point and reference coordinates in a format suitable
         # for OpenCV, that can be numpy arrays of shape (N, 2), with
         # N being the number of points, and each point is described
         # by 2-dimensional cartesian coordinates (x, y).
-        src = points.reshape(1, -1, 2)
-        dst = reference.reshape(1, -1, 2)
+        dst = points.reshape(1, -1, 2)
+        src = reference.reshape(1, -1, 2)
 
         if src.shape != dst.shape:
             raise ValueError("Incompatible shapes: "
@@ -237,61 +199,24 @@ class ImageUtils(image.ImageResizer):
         # fullAffine=True
         # transformation, _ = cv2.estimateAffine2D(dst, src)
 
-
         # There are also function to estimate a similarity transform
         # (not a general affine transformation):
         #  * opencv 3.2 and newer (including 4.x):
         #    cv2.estimateAffinePartial2D()
-        #    
+        #
         #  * before opencv 3.2:
         #    cv2.estimateRigidTransform()
         #    https://docs.opencv.org/3.4/dc/d6b/group__video__track.html#
         #      ga762cbe5efd52cf078950196f3c616d48
         #    transformation = \
         #        cv2.estimateRigidTransform(dst, src, fullAffine=False)
-        # 
+        #
         #  M, inliers = cv2.estimateAffinePartial2D(pts1, pts2)
-        
+        #
         # There is also cv2.getAffineTransform in case there
         # are only three points, which allows to calculate an exact
-        # solution. 
+        # solution.
         return transformation
-
-
-class OpenCVLandmarkAligner(LandmarkAligner):
-
-    def compute_transformation(self, landmarks: LandmarksType,
-                               reference: LandmarksType) -> np.ndarray:
-        """
-        """
-        # Obtain point and reference coordinates in a format suitable
-        # for OpenCV, that can be numpy arrays of shape (N, 2), with
-        # N being the number of points, and each point is described
-        # by 2-dimensional cartesian coordinates (x, y).
-        src = landmarks.points
-        dst = reference.points
-
-        if src.shape != dst.shape:
-            raise ValueError("Incompatible shapes: "
-                             f"points {src.shape} vs. reference {dst.shape}")
-
-        # fullAffine=False
-        transformation, _ = cv2.estimateAffinePartial2D(dst, src)
-
-        # There is also cv2.getAffineTransform in case there
-        # are only three points, which allows to calculate an exact
-        # solution. 
-        return transformation
-
-    def apply_transformation(self, image: Imagelike,
-                             transformation: np.ndarray,
-                             size: Sizelike) -> np.ndarray:
-        """
-        """
-        size = Size(size)
-        array = Image.as_array(image)
-        aligned = cv2.warpAffine(array, transformation, size, borderValue=0.0)
-        return aligned
 
 
 class VideoReader(video.Reader):

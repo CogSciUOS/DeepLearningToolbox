@@ -58,8 +58,8 @@ Implementable.register_implementation(_DLTB + 'base.image.ImageDisplay',
                                       _THIRDPARTY + 'opencv.ImageDisplay')
 Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
                                       _THIRDPARTY + 'opencv.ImageUtils')
-Implementable.register_implementation(_DLTB + 'tool.align.PointAligner',
-                                      _THIRDPARTY + 'opencv.ImageUtil')
+Implementable.register_implementation(_DLTB + 'base.image.ImageWarper',
+                                      _THIRDPARTY + 'opencv.ImageUtils')
 Implementable.register_implementation(_DLTB + 'base.video.VideoReader',
                                       _THIRDPARTY + 'opencv.VideoReader')
 Implementable.register_implementation(_DLTB + 'base.video.VideoWriter',
@@ -84,7 +84,7 @@ Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'skimage')
 Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'scikit-image')
 Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
                                       _THIRDPARTY + 'skimage.ImageUtil')
-Implementable.register_implementation(_DLTB + 'tool.align.PointAligner',
+Implementable.register_implementation(_DLTB + 'base.image.ImageWarper',
                                       _THIRDPARTY + 'skimage.ImageUtil')
 
 Implementable.register_module_alias(_THIRDPARTY + 'qt', 'qt')

@@ -656,6 +656,84 @@ class ImageResizer(Implementable):
         return image[point1[0]:point2[0], point1[1]:point2[1]]
 
 
+class ImageWarper(Implementable):
+    """
+    """
+
+    @staticmethod
+    def warp(image: Imagelike, transformation: np.ndarray,
+             size: Size) -> np.ndarray:
+        """Warp an image by applying a transformation.
+
+        To be implemented by subclasses.
+        """
+
+    @staticmethod
+    def compute_transformation(points: np.ndarray,
+                               reference: np.ndarray) -> np.ndarray:
+        """Obtain a tranformation for aligning key points to
+        reference positions
+
+        To be implemented by subclasses.
+
+        Arguments
+        ---------
+        points:
+            A sequence of points to be mapped onto the reference points,
+            given as (x,y) coordinates
+        reference:
+            A sequence with the same number of points serving as reference
+            points to which `points` should be moved.
+
+        Result
+        ------
+        transformation:
+            A affine transformation matrix.  This is a 2x3 matrix,
+            allowing to compute [x',y'] = matrix * [x,y,1].
+
+        Note
+        ----
+        Affine transformations are more general than similarity
+        transformations, which can always be decomposed into a
+        combination of scaling, rotating, and translating.  General
+        affine tansformations can not be decomposed in this way.
+        The affine transformation matrix contains the following entries:
+        ```
+        cos(theta) * s   -sin(theta) * s    t_x
+        sin(theta) * s    cos(theta) * s    t_y
+        ```
+        with theta being the rotation angle, s the scaling factor and
+        t the translation.
+        """
+
+    @classmethod
+    def align(cls, image: Imagelike, points, reference,
+              size: Sizelike) -> np.ndarray:
+        """Align an image by applying an (affine) transformation that maps
+        key points to reference positions.
+
+        Arguments
+        ---------
+        image:
+            The image to align.
+        points:
+            A sequence of points to be mapped onto the reference points,
+            given as (x,y) coordinates
+        reference:
+            A sequence with the same number of points serving as reference
+            points to which `points` should be moved.
+        size:
+            The size of the resulting image.
+
+        Result
+        ------
+        aligned:
+            The aligned image.
+        """
+        transformation = cls.align(points, reference)
+        return cls.align(image, transformation, size)
+
+
 class ImageOperator:
     """An :py:class:`ImageOperator` can be applied to an image to
     obtain some transformation of that image.

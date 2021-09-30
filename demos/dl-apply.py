@@ -31,6 +31,7 @@ from dltb.base.video import Webcam
 from dltb.datasource import ImageDirectory
 from dltb.datasource import argparse as DatasourceArgparse
 from dltb.tool.face import Detector as FaceDetector
+from dltb.tool.align import LandmarkAligner
 from dltb.util.image import imshow, imwrite, get_display
 from dltb.util.keyboard import SelectKeyboardObserver
 from dltb.thirdparty import implementations, import_class
@@ -47,6 +48,13 @@ def do_nothing(data: Data):
 from dltb.tool.face.mtcnn import Detector
 #MTCNN = Detector()
 MTCNN = Detector(implementation='dltb.thirdparty.face_evolve.mtcnn.Detector')
+
+from dltb.base.image import ImageWarper
+warper = ImageWarper(implementation='dltb.thirdparty.skimage.ImageUtil')
+#warper = ImageWarper(implementation='dltb.thirdparty.opencv.ImageUtils')
+
+aligner = LandmarkAligner(detector=MTCNN, size=(112, 112), warper=warper)
+
 
 # /space/data/lfw/lfw/Marissa_Jaret_Winokur/Marissa_Jaret_Winokur_0001.jpg
 # /space/data/lfw/lfw/John_Allen_Muhammad/John_Allen_Muhammad_0010.jpg
@@ -100,36 +108,6 @@ def select_face(bounding_boxes: Sequence[BoundingBox],
     return best
 
 
-def align_face(image, landmarks) -> np.ndarray:
-    # ./dltb/tool/face/landmarks.py
-    #  - definition of a LandmarkDetector (called "DetectorBase")
-    #    all subclasses should provide
-    #     _reference_landmarkds: Landmarks
-    #     _reference_size: Size
-    #    the method reference can scale reference landmarks to a
-    #    desired size
-    #
-    # ./dltb/tool/align.py
-    #  - definition of abstract class LandmarkAligner
-    #
-    # ./dltb/thirdparty/opencv/__init__.py
-    #  - definition of class OpenCVLandmarkAligner(LandmarkAligner):
-    #    implementing the methods compute_transformation and
-    #    apply_transformation
-    #
-    # ./dltb/thirdparty/face_evolve/mtcnn.py
-    #   - Implementation of a LandmarkDetector providing
-    #     reference landmarks
-    #
-    # ./dltb/thirdparty/datasource/lfw.py
-    #
-    #
-    reference = MTCNN.reference(size=(112, 112))
-    print(f"reference:\n {reference}")
-    for point in reference.points:
-        print(f"  {point}")
-
-
 def landmark_face(image: Imagelike):
     """
     """
@@ -178,6 +156,43 @@ def landmark_face(image: Imagelike):
     return box, landmarks, faces == 1
 
 
+def align_face(image, landmarks) -> np.ndarray:
+    # ./dltb/tool/face/landmarks.py
+    #  - definition of a LandmarkDetector (called "DetectorBase")
+    #    all subclasses should provide
+    #     _reference_landmarkds: Landmarks
+    #     _reference_size: Size
+    #    the method reference can scale reference landmarks to a
+    #    desired size
+    #
+    # ./dltb/tool/align.py
+    #  - definition of abstract class LandmarkAligner
+    #
+    # ./dltb/thirdparty/opencv/__init__.py
+    #  - definition of class OpenCVLandmarkAligner(LandmarkAligner):
+    #    implementing the methods compute_transformation and
+    #    apply_transformation
+    #
+    # ./dltb/thirdparty/face_evolve/mtcnn.py
+    #   - Implementation of a LandmarkDetector providing
+    #     reference landmarks
+    #
+    # ./dltb/thirdparty/datasource/lfw.py
+    #
+    #
+    reference = aligner.reference
+    print(f"reference (size={aligner.size}):\n {reference}")
+    for point in reference.points:
+        print(f"  {point}")
+
+    transformation = aligner.compute_transformation(landmarks)
+    print(f"transformation:\n{transformation}")
+    aligned_image = aligner.apply_transformation(image, transformation)
+    print(aligned_image.shape, aligned_image.min(), aligned_image.max())
+    # return aligner(image, landmarks)
+    return aligned_image
+
+
 def apply_single(data: Data, input_directory=None, output_directory=None,
                  display: Optional[ImageDisplay] = None) -> None:
     """Apply a transformation to a data objects.
@@ -203,10 +218,15 @@ def apply_single(data: Data, input_directory=None, output_directory=None,
     # assume data is Image
     image = data
 
+    image2 = Image.as_array(image).copy()
+    
     bbox, landmarks, unique = landmark_face(image)
 
-    align_face(image, landmarks)
+    aligned_image = align_face(image, landmarks)
 
+    aligned_image2 = aligner(image2, landmarks)
+
+    
     # print(data.filename, result[0], result[1], result[2])
     #output_tuple = (image.filename,
     #                result[0].x1, result[0].y1, result[0].x2, result[0].y2
@@ -217,10 +237,18 @@ def apply_single(data: Data, input_directory=None, output_directory=None,
         shape = image.shape
         canvas = np.zeros((shape[0]*2, shape[1]*2, shape[2]))
         array = image.array
-        canvas[:shape[0],:shape[1]] = array
+        canvas[:shape[0], :shape[1]] = array
         canvas[int(bbox.y1):int(bbox.y2),
                shape[0]+int(bbox.x1):shape[0]+int(bbox.x2)] = \
             array[int(bbox.y1):int(bbox.y2), int(bbox.x1):int(bbox.x2)]
+
+        dx = (image.shape[1] - aligned_image.shape[1]) // 2
+        dy = (image.shape[0] - aligned_image.shape[0]) // 2
+        canvas[shape[0]+dy:shape[0]+dy+aligned_image.shape[0],
+               dx:+dx+aligned_image.shape[1]] = aligned_image
+
+        canvas[shape[0]+dy:shape[0]+dy+aligned_image.shape[0],
+               shape[1]+dx:shape[1]+dx+aligned_image.shape[1]] = aligned_image2
         #display.show(canvas, blocking=not unique, wait_for_key=not unique)
         display.show(canvas, blocking=False)
         if display.closed:
