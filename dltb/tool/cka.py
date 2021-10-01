@@ -12,9 +12,10 @@ from .activation import ActivationComparison, Activationslike
 from .. import config
 
 class CenteredKernelAlignment(ActivationComparison):
-    """Centered kernel alignment [1]
+    """Abstract base class for Centered kernel alignment [1,2].
 
     [1]
+    [2]
     """
 
     def cka(self,
@@ -22,7 +23,40 @@ class CenteredKernelAlignment(ActivationComparison):
             activations2: Activationslike) -> float:
         # pylint: disable=unused-argument,no-self-use
         """Compute CKA for two activation vectors.
+
+        Arguments
+        ---------
+        activations1:
+            First sequence of N activation vectors.  The row activations1[n]
+            contains the D1-dimensional activation vector for the n-th
+            datapoint.  In total, there are N such activation vectors.
+            When realized as an array, that array should have the shape
+            (N, D1), not (D1, N).
+        activations2:
+            Second sequence activation vectors, that is an array of (N, D2).
+            It is essential, that both activations arguments contain the same
+            number of activation vectors, and the the order of activation
+            vectors is the same, that is activations1[n] should contain
+            the activation vector for the same input datapoint as
+            activations1[n].
+
+        Result
+        ------
+        cka:
+            The empirical centered kernel alignment value computed for
+            the given activation values.
+
+        Raises
+        ------
+        ValueError:
+            The computation failed. This may for example happen, if
+            the two activation matrices have a different number of rows.
         """
+        if len(activations1) != len(activations2):
+            raise ValueError("Different number of datapoints for "
+                             f"activations1 {activations1.shape} and "
+                             f"activations2 {activations2.shape}")
+
         return -1.0  # dummy value - subclasses should implement this function
 
     def _cka_matrix(self, matrix1: np.ndarray, matrix2: np.ndarray) -> float:
@@ -30,7 +64,30 @@ class CenteredKernelAlignment(ActivationComparison):
         matrices typically occur in convolutional networks. This
         function flattens the matrices and the applies CKA to the
         resulting activation vectors.
+
+        Arguments
+        ---------
+        matrix1:
+            The first stack of activation maps.  In typical 2D convolutional
+            neural network such an activation map has three axes
+            (height, width, channels).
+            If provided as an array, it should have the shape (N, H, W, C),
+            that is, the first axis should iterate the different maps.
+        matrix2:
+            The second stack of activation maps.
+
+        Result
+        ------
+            The empirical centered kernel alignment value computed for
+            the given activation values.
         """
+        # FIXME[todo], instead of flattening the activation map,
+        # that is (N, H, W, C) -> (N, H*W*C), it may be more appropriate
+        # to actually interpret each activation map (H, W, C) as a
+        # collection of H*W feature vectors of dimension C,
+        # that is (N, H, W, C) -> (N*H*W, C).
+        # This would account for the fact, that at different locations
+        # the same kernel is applied to compute the activation value.
 
         # unfold the activations, that is make a (n, h*w*c) representation
         shape = matrix1.shape
@@ -243,6 +300,8 @@ class CKA1(CenteredKernelAlignment):
         """
         Centering the kernel matrix
         """
+        # FIXME[question]: why are we centering along two axis? this seems
+        # strange
         return (kmat - kmat.mean(axis=0, keepdims=True) -
                 kmat.mean(axis=1, keepdims=True) + kmat.mean())
 
@@ -250,11 +309,17 @@ class CKA1(CenteredKernelAlignment):
             activations1: Activationslike,
             activations2: Activationslike) -> float:
         r"""
-        Compute the Centred Kernel Alignment between two kernel matrices.
+        Compute the Centered Kernel Alignment between two kernel matrices.
         \rho(K_1, K_2) = \Tr (K_1 @ K_2) / ||K_1||_F / ||K_2||_F
         """
         kmat_1 = self._centering(activations1)
         kmat_2 = self._centering(activations2)
+        # FIXME[error]: this seems wrong. Here we would actually need
+        # something like 
+        #   kmat_1 = activations1 @ activations1.T
+        #   kmat_2 = activations2 @ activations2.T
+        # (or the other way around?)
+        
         # Krupal : changed kmat_2 to kmat_2.T to avoid passing transposed
         # matrix to the cka()
         # return np.trace(kmat_1 @ kmat_2) / np.linalg.norm(kmat_1) /
@@ -294,9 +359,18 @@ class CKA2(CenteredKernelAlignment):
 
 
     @staticmethod
-    def unbiased_hsic(K, L):
+    def unbiased_hsic(K: np.ndarray, L: np.ndarray) -> float:
         """Computes an unbiased estimator of HISC. This is equation (2) from
-        the paper
+        the paper.
+
+        Arguments
+        ---------
+        K:
+            The NxN Gram matrix (K=XX^T) obtained from a NxD1 data
+            (activation) matrix X.
+        L:
+            The NxN Gram matrix (L=YY^T) obtained from a NxD1 data
+            (activation) matrix Y.
         """
         # pylint: disable=invalid-name
 
@@ -458,6 +532,100 @@ class CKA3(CenteredKernelAlignment):
         sim = ((num/norm1) * (num/norm2))
         sim = sim.numpy()
         return sim
+
+
+
+###############################################################################
+# Implementation 3
+# Code from Anatome project
+
+
+# pylint: disable=wrong-import-position
+import torch
+
+class CKA4(CenteredKernelAlignment):
+    """PyTorch implementation of Centered Kernel Analysis based on code
+    from [1].  The code claims to be an implementation of CKA as
+    described in Kornblith et al. (2019) [2].
+
+    [1] https://github.com/moskomule/anatome/blob/master/anatome/similarity.py
+    [2]
+    """
+    @staticmethod
+    def _zero_mean(data: torch.Tensor, dim: int) -> torch.Tensor:
+        return data - data.mean(dim=dim, keepdim=True)
+
+    @staticmethod
+    def _debiased_dot_product_similarity(z: torch.Tensor,
+                                         sum_row_x: torch.Tensor,
+                                         sum_row_y: torch.Tensor,
+                                         sq_norm_x: torch.Tensor,
+                                         sq_norm_y: torch.Tensor,
+                                         size: int) -> torch.Tensor:
+        return (z
+                - size / (size - 2) * (sum_row_x @ sum_row_y)
+                + sq_norm_x * sq_norm_y / ((size - 1) * (size - 2)))
+
+    @classmethod
+    def linear_cka_distance(cls, x: torch.Tensor, y: torch.Tensor,
+                            reduce_bias: bool = False) -> torch.Tensor:
+        """ Linear CKA used in Kornblith et al. 2019.
+
+        Arguments
+        x:
+            input tensor of shape NxD1
+        y:
+            input tensor of shape NxD2
+        reduce_bias:
+            debias CKA estimator, which might be helpful when
+            D is limited.
+
+        Returns
+        -------
+
+        """
+        if x.size(0) != y.size(0):
+            raise ValueError("x.size(0) == y.size(0) is expected, but got "
+                             f"x.size(0)= {x.size(0)}, y.size(0)={y.size(0)} "
+                             "instead.")
+
+        x = cls._zero_mean(x, dim=0)
+        y = cls._zero_mean(y, dim=0)
+        dot_prod = (y.t() @ x).norm('fro').pow(2)
+        norm_x = (x.t() @ x).norm('fro')
+        norm_y = (y.t() @ y).norm('fro')
+
+        if reduce_bias:
+            size = x.size(0)
+            # (x @ x.t()).diag()
+            sum_row_x = torch.einsum('ij,ij->i', x, x)
+            sum_row_y = torch.einsum('ij,ij->i', y, y)
+            sq_norm_x = sum_row_x.sum()
+            sq_norm_y = sum_row_y.sum()
+            dot_prod = \
+                cls._debiased_dot_product_similarity(dot_prod,
+                                                     sum_row_x, sum_row_y,
+                                                     sq_norm_x, sq_norm_y,
+                                                     size)
+            norm_x = \
+                cls._debiased_dot_product_similarity(norm_x.pow_(2),
+                                                     sum_row_x, sum_row_y,
+                                                     sq_norm_x, sq_norm_y,
+                                                     size)
+            norm_y = \
+                cls._debiased_dot_product_similarity(norm_y.pow_(2),
+                                                     sum_row_x, sum_row_y,
+                                                     sq_norm_x, sq_norm_y,
+                                                     size)
+        return 1 - dot_prod / (norm_x * norm_y)
+
+    def cka(self, activations1: Activationslike,
+            activations2: Activationslike) -> float:
+        # Convert to tensor
+        # pylint: disable=no-member
+        activations1 = torch.from_numpy(activations1).float()
+        activations2 = torch.from_numpy(activations2).float()
+        return self.linear_cka_distance(activations1, activations2)
 
 
 ###############################################################################
