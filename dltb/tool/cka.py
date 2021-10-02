@@ -1,4 +1,6 @@
-"""Abstract interface for Centered Kernel Alignment (CKA).
+"""Abstract interface for Centered Kernel Alignment (CKA).  CKA is a
+popular method to compare activation values of network layers.
+
 """
 
 # standard imports
@@ -11,12 +13,79 @@ import numpy as np
 from .activation import ActivationComparison, Activationslike
 from .. import config
 
+
+class HilbertSchmidtIndependenceCriterion:
+    """Implementation of the Hilbert-Schmidt Independence Criterion (HSCI).
+
+    The HSCI was originally proposed in [1] as a statistic for determining
+    whether two sets of variables are independent.
+
+    [1] Arthur Gretton et al. (2005): ""Measuring Statistical Dependence
+        with Hilbert-Schmidt Norms"
+        https://doi.org/10.1007/11564089_7
+    """
+
+    @staticmethod
+    def _center_similarity_matrix(matrix):
+        """Center similarity matrix along rows and columns.
+        """
+        centered_matrix = matrix - matrix.mean(axis=0)
+        centered_matrix -= centered_matrix.mean(axis=1)[:, np.newaxis]
+        return centered_matrix
+
+    def __call__(self, k_matrix, l_matrix, centered: bool = False,
+                 sqroot: bool = False, biased: bool = False) -> float:
+        """
+        Arguments
+        ---------
+        k_matrix:
+        l_matrix:
+        centered:
+            A flag indicating of the similarity matrices are already
+            centered (i.e., obtained from centered data).  If `True`,
+            no additional centering step will be done.  Setting this
+            to `False` is harmless, as centering centered matrices again
+            does not change them, but will only waste computing resources.
+        """
+
+        # make sure both matrices are compatible
+        if k_matrix.shape != l_matrix.shape:
+            raise ValueError("HSCI matrices have different shapes: "
+                             f"{k_matrix.shape} vs. {l_matrix.shape}")
+        if k_matrix.shape[0] != k_matrix.shape[1]:
+            raise ValueError("HSCI matrices are non square matrices: "
+                             f"shape={k_matrix.shape}")
+        if not centered:
+            k_matrix = self._center_similarity_matrix(k_matrix)
+            l_matrix = self._center_similarity_matrix(l_matrix)
+        hsic = self._hsic(k_matrix, l_matrix)
+        return np.sqrt(hsic) if sqroot else hsic
+
+    @staticmethod
+    def _hsic(k_matrix, l_matrix) -> float:
+        """To be implemented by subclasses.
+        """
+        return float(k_matrix == l_matrix) - 2  # dummy value
+
+
 class CenteredKernelAlignment(ActivationComparison):
     """Abstract base class for Centered kernel alignment [1,2].
 
-    [1]
-    [2]
+    [1] Corinna Cortes et al. (2012): "Algorithms for Learning Kernels
+        Based on Centered Alignment"
+    [2] Simon Kornblith et al. (2019): "Similarity of Neural Network
+        Representations Revisited"
+    [3] Thao Nguyen et al. (2021): "Do wide and deep networks learn the
+        same things? Uncovering how neural network representations vary
+        with width and depth"
     """
+
+    hsic = HilbertSchmidtIndependenceCriterion()
+    kernel1 = lambda x: x @ x.T
+    kernel2 = lambda x: x @ x.T
+
+    def __call__(self, *args, **kwargs) -> float:
+        return self.cka(*args, **kwargs)
 
     def cka(self,
             activations1: Activationslike,
@@ -57,7 +126,16 @@ class CenteredKernelAlignment(ActivationComparison):
                              f"activations1 {activations1.shape} and "
                              f"activations2 {activations2.shape}")
 
-        return -1.0  # dummy value - subclasses should implement this function
+        return self._cka(activations1, activations2)
+
+    def _cka(self,
+             activations1: Activationslike,
+             activations2: Activationslike) -> float:
+        k_matrix = self.kernel1(activations1)
+        l_matrix = self.kernel2(activations2)
+        return (self.hsic(k_matrix, l_matrix, sqroot=False) /
+                (self.hsic(k_matrix, k_matrix, sqroot=True) *
+                 self.hsic(l_matrix, l_matrix, sqroot=True)))
 
     def _cka_matrix(self, matrix1: np.ndarray, matrix2: np.ndarray) -> float:
         """Compute the CKA for two activation matrices.  Activation
@@ -81,7 +159,7 @@ class CenteredKernelAlignment(ActivationComparison):
             The empirical centered kernel alignment value computed for
             the given activation values.
         """
-        # FIXME[todo], instead of flattening the activation map,
+        # FIXME[todo]: instead of flattening the activation map,
         # that is (N, H, W, C) -> (N, H*W*C), it may be more appropriate
         # to actually interpret each activation map (H, W, C) as a
         # collection of H*W feature vectors of dimension C,
@@ -178,7 +256,7 @@ class CenteredKernelAlignment(ActivationComparison):
         acts2 = self._demo_activations(2)
 
         # calculate CKA similarity score using second implementation
-        #cka_similarity_w_second_implementation = cka(acts1, acts2_tp)
+        # cka_similarity_w_second_implementation = cka(acts1, acts2_tp)
         cka_similarity_w_second_implementation = \
             self._cka_matrix(acts1, acts2)
         print(cka_similarity_w_second_implementation)
@@ -226,6 +304,13 @@ class CenteredKernelAlignment(ActivationComparison):
         cka_similarity_w_second_implementation = \
             self._cka_matrix(svacts1, svacts2)
         print(cka_similarity_w_second_implementation)
+
+    @staticmethod
+    def _plot_helper(arr, xlabel, ylabel):
+        plt.plot(arr, lw=2.0)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.grid()
 
 
 ###############################################################################
@@ -285,6 +370,18 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
+class HSIC1(HilbertSchmidtIndependenceCriterion):
+    """Simple numpy-based implementation of a (biased) Hilbert Schmidt
+    Independence Criterion (HSIC) estimator.
+    """
+
+    @staticmethod
+    def _hsic(k_matrix: np.ndarray, l_matrix: np.ndarray) -> float:
+        normalization = 1/(len(k_matrix)-1)**2
+        hsic = normalization * np.trace(k_matrix @ l_matrix)
+        return hsic
+
+
 class CKA1(CenteredKernelAlignment):
     """CKA Implementation - 1:
 
@@ -295,44 +392,35 @@ class CKA1(CenteredKernelAlignment):
     [2] https://github.com/amzn/xfer/
     """
 
+    def __init__(self, hsic=None) -> None:
+        super().__init__()
+        self.hsic = hsic or HSIC1()
+
     @staticmethod
     def _centering(kmat: np.ndarray) -> np.ndarray:
         """
         Centering the kernel matrix
         """
-        # FIXME[question]: why are we centering along two axis? this seems
-        # strange
         return (kmat - kmat.mean(axis=0, keepdims=True) -
                 kmat.mean(axis=1, keepdims=True) + kmat.mean())
 
-    def cka(self,
-            activations1: Activationslike,
-            activations2: Activationslike) -> float:
+    def _cka(self,
+             activations1: Activationslike,
+             activations2: Activationslike) -> float:
         r"""
         Compute the Centered Kernel Alignment between two kernel matrices.
         \rho(K_1, K_2) = \Tr (K_1 @ K_2) / ||K_1||_F / ||K_2||_F
         """
-        kmat_1 = self._centering(activations1)
-        kmat_2 = self._centering(activations2)
-        # FIXME[error]: this seems wrong. Here we would actually need
-        # something like 
-        #   kmat_1 = activations1 @ activations1.T
-        #   kmat_2 = activations2 @ activations2.T
-        # (or the other way around?)
-        
-        # Krupal : changed kmat_2 to kmat_2.T to avoid passing transposed
-        # matrix to the cka()
-        # return np.trace(kmat_1 @ kmat_2) / np.linalg.norm(kmat_1) /
-        #     np.linalg.norm(kmat_2)
-        return np.trace(kmat_1 @ kmat_2.T) \
-            / np.linalg.norm(kmat_1) / np.linalg.norm(kmat_2)
+        kmat_1 = self._centering(activations1 @ activations1.T)
+        kmat_2 = self._centering(activations2 @ activations2.T)
 
-    @staticmethod
-    def _plot_helper(arr, xlabel, ylabel):
-        plt.plot(arr, lw=2.0)
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.grid()
+        # Remark: np.linalg.norm computes the Frobenius norm, that is
+        # ||M||_F = \sqrt{\sum_{ij} M_{ij}**2}
+        # for symmetric M this is the same as \sqrt{tr(M@M)}
+        # Remark: the normalizing constant 1/(n-1)**2 in nominator
+        # and denominator cancel out
+        return np.trace(kmat_1 @ kmat_2) \
+            / np.linalg.norm(kmat_1) / np.linalg.norm(kmat_2)
 
 
 ###############################################################################
@@ -344,7 +432,71 @@ class CKA1(CenteredKernelAlignment):
 # pylint: disable=wrong-import-position, reimported
 import tensorflow as tf
 import numpy as np
-# import tqdm
+
+
+class HSIC2(HilbertSchmidtIndependenceCriterion):
+    """Unbiased HSIC estimation according to equation (3) in [1].
+    Implementation adapted from [2]. This implementation should
+    allow for minibatch CKA computation, so that the CKA value
+    is independent of the batch sizes.
+
+
+    Remark: this implementation yields significant different results
+    than the biased estimator implemented in :py:class:`HSIC1`.  It is
+    not clear yet, if this is desired, or due to some error in the
+    implementation.
+
+    References
+    ----------
+    [1] Thao Nguyen et al. (2021): "Do wide and deep networks learn the
+        same things? Uncovering how neural network representations vary
+        with width and depth"
+    [2] https://github.com/phrasenmaeher/cka
+        Notebook: do_nns_learn_the_same%3F.ipynb
+
+    """
+
+    def _hsic(self, k_matrix: np.ndarray, l_matrix: np.ndarray) -> float:
+        """Computes an unbiased estimator of HISC. This is equation (2) from
+        the paper.
+
+        Arguments
+        ---------
+        k_matrix:
+            The NxN Gram matrix (K=XX^T) obtained from a NxD1 data
+            (activation) matrix X.
+        l_matrix:
+            The NxN Gram matrix (L=YY^T) obtained from a NxD2 data
+            (activation) matrix Y.
+        """
+        # pylint: disable=invalid-name
+
+        # create the unit **vector** filled with ones
+        n = k_matrix.shape[0]
+        ones = np.ones(shape=(n,))
+
+        # fill the diagonal entries with zeros
+        np.fill_diagonal(k_matrix, val=0)  # this is now K_tilde
+        np.fill_diagonal(l_matrix, val=0)  # this is now L_tilde
+
+        # first part in the square brackets
+        trace = np.trace(np.dot(k_matrix, l_matrix))
+
+        # middle part in the square brackets
+        nominator1 = np.dot(np.dot(ones.T, k_matrix), ones)
+        nominator2 = np.dot(np.dot(ones.T, l_matrix), ones)
+        denominator = (n-1) * (n-2)
+        middle = np.dot(nominator1, nominator2) / denominator
+
+        # third part in the square brackets
+        multiplier1 = 2/(n-2)
+        multiplier2 = np.dot(np.dot(ones.T, k_matrix), np.dot(l_matrix, ones))
+        last = multiplier1 * multiplier2
+
+        # complete equation
+        unbiased_hsic = 1/(n*(n-3)) * (trace + middle - last)
+
+        return unbiased_hsic
 
 
 class CKA2(CenteredKernelAlignment):
@@ -354,65 +506,25 @@ class CKA2(CenteredKernelAlignment):
     Adapted from [1]
 
     [1] https://github.com/phrasenmaeher/cka
-        do_nns_learn_the_same%3F.ipynb
+        Notebook: do_nns_learn_the_same%3F.ipynb
     """
 
+    def __init__(self, hsic=None) -> None:
+        super().__init__()
+        self.hsic = hsic or HSIC2()
 
-    @staticmethod
-    def unbiased_hsic(K: np.ndarray, L: np.ndarray) -> float:
-        """Computes an unbiased estimator of HISC. This is equation (2) from
-        the paper.
-
-        Arguments
-        ---------
-        K:
-            The NxN Gram matrix (K=XX^T) obtained from a NxD1 data
-            (activation) matrix X.
-        L:
-            The NxN Gram matrix (L=YY^T) obtained from a NxD1 data
-            (activation) matrix Y.
-        """
-        # pylint: disable=invalid-name
-
-        # create the unit **vector** filled with ones
-        n = K.shape[0]
-        ones = np.ones(shape=(n,))
-
-        # fill the diagonal entries with zeros
-        np.fill_diagonal(K, val=0)  # this is now K_tilde
-        np.fill_diagonal(L, val=0)  # this is now L_tilde
-
-        # first part in the square brackets
-        trace = np.trace(np.dot(K, L))
-
-        # middle part in the square brackets
-        nominator1 = np.dot(np.dot(ones.T, K), ones)
-        nominator2 = np.dot(np.dot(ones.T, L), ones)
-        denominator = (n-1) * (n-2)
-        middle = np.dot(nominator1, nominator2) / denominator
-
-        # third part in the square brackets
-        multiplier1 = 2/(n-2)
-        multiplier2 = np.dot(np.dot(ones.T, K), np.dot(L, ones))
-        last = multiplier1 * multiplier2
-
-        # complete equation
-        unbiased_hsic = 1/(n*(n-3)) * (trace + middle - last)
-
-        return unbiased_hsic
-
-    def cka(self,
-            activations1: Activationslike,
-            activations2: Activationslike) -> float:
+    def _cka(self,
+             activations1: Activationslike,
+             activations2: Activationslike) -> float:
         """Computes the CKA of two matrices. This is equation (1) from the
         paper.
         """
-        nominator = self.unbiased_hsic(np.dot(activations1, activations1.T),
-                                       np.dot(activations2, activations2.T))
-        denominator1 = self.unbiased_hsic(np.dot(activations1, activations1.T),
-                                          np.dot(activations1, activations1.T))
-        denominator2 = self.unbiased_hsic(np.dot(activations2, activations2.T),
-                                          np.dot(activations2, activations2.T))
+        nominator = self.hsic(np.dot(activations1, activations1.T),
+                              np.dot(activations2, activations2.T))
+        denominator1 = self.hsic(np.dot(activations1, activations1.T),
+                                 np.dot(activations1, activations1.T))
+        denominator2 = self.hsic(np.dot(activations2, activations2.T),
+                                 np.dot(activations2, activations2.T))
         cka = nominator/np.sqrt(denominator1*denominator2)
 
         return cka
@@ -510,71 +622,95 @@ class CKA2(CenteredKernelAlignment):
 # pylint: disable=wrong-import-position
 import torch
 
-class CKA3(CenteredKernelAlignment):
-    """
-    CKA Implementation - 3
 
-    Implementation based on [1]
+class CKA3(CenteredKernelAlignment):
+    """Torch based CKA implementation adapted from [1].
 
     [1] https://github.com/aky4wn/convolutions-for-music-audio/
         blob/main/Experiments/Similarity/NSynth-CKA.ipynb
     """
+    def __init__(self, hsic=None) -> None:
+        super().__init__()
+        self.hsic = hsic or HSIC2()
 
-    def cka(self, activations1: Activationslike,
-            activations2: Activationslike) -> float:
+    @staticmethod
+    def _cka_torch(activations1: torch.Tensor,
+                   activations2: torch.Tensor) -> torch.Tensor:
+        num = torch.norm(activations2.T@activations1, p='fro')
+        norm1 = torch.norm(activations1.T@activations1, p='fro')
+        norm2 = torch.norm(activations2.T@activations2, p='fro')
+        cka = ((num/norm1) * (num/norm2))
+        return cka
+
+    def _cka(self, activations1: Activationslike,
+             activations2: Activationslike) -> float:
         # Convert to tensor
         # pylint: disable=no-member
         activations1 = torch.from_numpy(activations1).float()
         activations2 = torch.from_numpy(activations2).float()
-        num = torch.norm(activations2.T@activations1, p='fro')
-        norm1 = torch.norm(activations1.T@activations1, p='fro')
-        norm2 = torch.norm(activations2.T@activations2, p='fro')
-        sim = ((num/norm1) * (num/norm2))
-        sim = sim.numpy()
-        return sim
-
+        cka = self._cka_torch(activations1, activations2)
+        return cka.numpy()
 
 
 ###############################################################################
-# Implementation 3
+# Implementation 4
 # Code from Anatome project
 
 
 # pylint: disable=wrong-import-position
 import torch
 
+
 class CKA4(CenteredKernelAlignment):
     """PyTorch implementation of Centered Kernel Analysis based on code
     from [1].  The code claims to be an implementation of CKA as
-    described in Kornblith et al. (2019) [2].
+    described in [2].
 
     [1] https://github.com/moskomule/anatome/blob/master/anatome/similarity.py
-    [2]
+    [2] Simon Kornblith et al. (2019): "Similarity of Neural Network
+        Representations Revisited"
     """
+
+    def __init__(self, hsic=None) -> None:
+        super().__init__()
+        self.hsic = hsic or HSIC1()
+
     @staticmethod
     def _zero_mean(data: torch.Tensor, dim: int) -> torch.Tensor:
         return data - data.mean(dim=dim, keepdim=True)
 
     @staticmethod
-    def _debiased_dot_product_similarity(z: torch.Tensor,
+    def _debiased_dot_product_similarity(matrix: torch.Tensor,
                                          sum_row_x: torch.Tensor,
                                          sum_row_y: torch.Tensor,
                                          sq_norm_x: torch.Tensor,
                                          sq_norm_y: torch.Tensor,
                                          size: int) -> torch.Tensor:
-        return (z
+        return (matrix
                 - size / (size - 2) * (sum_row_x @ sum_row_y)
                 + sq_norm_x * sq_norm_y / ((size - 1) * (size - 2)))
 
     @classmethod
-    def linear_cka_distance(cls, x: torch.Tensor, y: torch.Tensor,
+    def linear_cka_distance(cls, activations1: torch.Tensor,
+                            activations2: torch.Tensor,
                             reduce_bias: bool = False) -> torch.Tensor:
-        """ Linear CKA used in Kornblith et al. 2019.
+        """Compute linear CKA distance, that is one minus CKA value.x
+        """
+        return 1-cls.linear_cka(activations1, activations2,
+                                reduce_bias=reduce_bias)
+
+    @classmethod
+    def linear_cka(cls, activations1: torch.Tensor,
+                   activations2: torch.Tensor,
+                   reduce_bias: bool = False) -> torch.Tensor:
+        """Linear CKA (that is CKA with linear kernel) used in Kornblith et
+        al. 2019.
 
         Arguments
-        x:
+        ---------
+        activations1:
             input tensor of shape NxD1
-        y:
+        activations2:
             input tensor of shape NxD2
         reduce_bias:
             debias CKA estimator, which might be helpful when
@@ -582,50 +718,53 @@ class CKA4(CenteredKernelAlignment):
 
         Returns
         -------
-
+        cka:
+            The CKA value computed for teh tifen activations.
         """
-        if x.size(0) != y.size(0):
-            raise ValueError("x.size(0) == y.size(0) is expected, but got "
-                             f"x.size(0)= {x.size(0)}, y.size(0)={y.size(0)} "
+        if activations1.size(0) != activations2.size(0):
+            raise ValueError("activations1.size(0) == activations2.size(0) "
+                             "is expected, but got "
+                             f"activations1.size(0)={activations1.size(0)}, "
+                             f"activations2.size(0)={activations2.size(0)} "
                              "instead.")
 
-        x = cls._zero_mean(x, dim=0)
-        y = cls._zero_mean(y, dim=0)
-        dot_prod = (y.t() @ x).norm('fro').pow(2)
-        norm_x = (x.t() @ x).norm('fro')
-        norm_y = (y.t() @ y).norm('fro')
+        activations1 = cls._zero_mean(activations1, dim=0)
+        activations2 = cls._zero_mean(activations2, dim=0)
+        dot_prod = (activations2.t() @ activations1).norm('fro').pow(2)
+        norm_1 = (activations1.t() @ activations1).norm('fro')
+        norm_2 = (activations2.t() @ activations2).norm('fro')
 
         if reduce_bias:
-            size = x.size(0)
-            # (x @ x.t()).diag()
-            sum_row_x = torch.einsum('ij,ij->i', x, x)
-            sum_row_y = torch.einsum('ij,ij->i', y, y)
-            sq_norm_x = sum_row_x.sum()
-            sq_norm_y = sum_row_y.sum()
+            size = activations1.size(0)
+            # (activations1 @ activations1.t()).diag()
+            sum_row_1 = torch.einsum('ij,ij->i', activations1, activations1)
+            sum_row_2 = torch.einsum('ij,ij->i', activations2, activations2)
+            sq_norm_1 = sum_row_1.sum()
+            sq_norm_2 = sum_row_2.sum()
             dot_prod = \
                 cls._debiased_dot_product_similarity(dot_prod,
-                                                     sum_row_x, sum_row_y,
-                                                     sq_norm_x, sq_norm_y,
+                                                     sum_row_1, sum_row_2,
+                                                     sq_norm_1, sq_norm_2,
                                                      size)
-            norm_x = \
-                cls._debiased_dot_product_similarity(norm_x.pow_(2),
-                                                     sum_row_x, sum_row_y,
-                                                     sq_norm_x, sq_norm_y,
+            norm_1 = \
+                cls._debiased_dot_product_similarity(norm_1.pow_(2),
+                                                     sum_row_1, sum_row_2,
+                                                     sq_norm_1, sq_norm_2,
                                                      size)
-            norm_y = \
-                cls._debiased_dot_product_similarity(norm_y.pow_(2),
-                                                     sum_row_x, sum_row_y,
-                                                     sq_norm_x, sq_norm_y,
+            norm_2 = \
+                cls._debiased_dot_product_similarity(norm_2.pow_(2),
+                                                     sum_row_1, sum_row_2,
+                                                     sq_norm_1, sq_norm_2,
                                                      size)
-        return 1 - dot_prod / (norm_x * norm_y)
+        return dot_prod / (norm_1 * norm_2)
 
-    def cka(self, activations1: Activationslike,
-            activations2: Activationslike) -> float:
+    def _cka(self, activations1: Activationslike,
+             activations2: Activationslike) -> float:
         # Convert to tensor
         # pylint: disable=no-member
         activations1 = torch.from_numpy(activations1).float()
         activations2 = torch.from_numpy(activations2).float()
-        return self.linear_cka_distance(activations1, activations2)
+        return float(self.linear_cka(activations1, activations2))
 
 
 ###############################################################################
@@ -720,3 +859,69 @@ def demo() -> None:
                     print()
 
         visited_files_path.append(file_path)
+
+
+def test1():
+    """Generate some data and check the function
+    """
+    samples = 100
+    dim_x = 30
+    dim_y = 40
+    activations_x = np.random.randn(samples, dim_x)
+    activations_y = np.random.randn(samples, dim_y)
+    activations_x_permuted = activations_x[:, np.random.permutation(dim_x)]
+
+    #
+    # Step 1: test the HSIC implementations
+    #
+    tests = []
+    tests.append(HSIC1())
+    tests.append(HSIC2())
+
+    k_matrix = activations_x @ activations_x.T
+    l_matrix = activations_y @ activations_y.T
+
+    print("Testing HSIC(K,K):")
+    for idx, hsic in enumerate(tests):
+        print(idx, f"{type(hsic).__name__}(K,K):",
+              hsic(k_matrix, k_matrix))
+
+    print("Testing HSIC(L,L):")
+    for idx, hsic in enumerate(tests):
+        print(idx, f"{type(hsic).__name__}(L,L):",
+              hsic(l_matrix, l_matrix))
+
+    print("Testing HSIC(K,L):")
+    for idx, hsic in enumerate(tests):
+        print(idx, f"{type(hsic).__name__}(K,L):",
+              hsic(k_matrix, l_matrix))
+    print()
+
+    #
+    # Step 2: test the CKA implementations
+    #
+    tests = []
+    tests.append(CKA1())
+    tests.append(CKA2())
+    tests.append(CKA2(hsic=HSIC1()))
+    tests.append(CKA3())
+    tests.append(CKA4())
+
+    print("Testing CKA(X,X):")
+    for idx, cka in enumerate(tests):
+        print(idx, f"{type(cka).__name__}(X,X):",
+              cka(activations_x, activations_x))
+
+    print("Testing CKA(X,permute(X)):")
+    for idx, cka in enumerate(tests):
+        print(idx, f"{type(cka).__name__}(X,permute(X)):",
+              cka(activations_x, activations_x_permuted))
+
+    print("Testing CKA(X,Y):")
+    for idx, cka in enumerate(tests):
+        print(idx, f"{type(cka).__name__}(X,Y):",
+              cka(activations_x, activations_y))
+
+
+if __name__ == '__main__':
+    test1()
