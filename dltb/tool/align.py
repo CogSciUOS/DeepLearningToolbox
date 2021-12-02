@@ -111,7 +111,9 @@ class LandmarkAligner(Generic[LandmarksType]):
             The image to align.
         landmarks:
             A list of points to be mapped onto the reference points,
-            given as (x,y) coordinates
+            given as (x,y) coordinates.  If `None`, then the detector
+            will be used to obtain landmarks, and all detections
+            will be aligned.
 
         Result
         ------

@@ -629,8 +629,7 @@ class ImageDetector(Detector, ImageTool):
             return 0  # there is only one detection -> assume that is correct
 
         # select bounding box with center closest to the image center
-        #shape = Image.as_shape(image)
-        shape = image.shape
+        shape = Image.as_shape(image)
         center = (shape[1]/2, shape[0]/2)
         best, distance = -1, float('inf')
         for index, bounding_box in enumerate(bounding_boxes):

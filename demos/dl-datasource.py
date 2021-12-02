@@ -4,6 +4,11 @@
 
 .. moduleauthor:: Ulf Krumnack
 
+
+Invocation:
+
+
+
 """
 
 # standard imports
@@ -13,6 +18,8 @@ import argparse
 from collections.abc import Sized, Iterable, Sequence
 
 # third party imports
+import numpy as np
+import tqdm
 
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
@@ -45,6 +52,24 @@ def output_data(iterable, args) -> None:
         last = start
         count = 0
         index = 0
+
+        if args.pairs and args.show:
+            # FIXME[hack]: we need a general display interface
+            from PyQt5.QtCore import QSize, Qt
+            from PyQt5.QtWidgets import QApplication, QMainWindow, QSizePolicy
+            from qtgui.widgets.image import QMultiImageView
+            # from dltb.base.image import Image
+            qt_application = QApplication([])
+            qt_mainwindow = QMainWindow()
+            qt_display = QMultiImageView(grid=(1, 2))
+            qt_display.setAutoFillBackground(True)
+            qt_display.setImageSize(QSize(200, 200))
+            qt_display.setSizePolicy(QSizePolicy(QSizePolicy.Preferred,
+                                                 QSizePolicy.Preferred))
+            qt_mainwindow.setCentralWidget(qt_display)
+            qt_mainwindow.show()
+            # qt_application.exec()
+
         for index, data in enumerate(iterable):
             now = time.time()
             time_info = (f"[{(now-last)*1000:5.1f}ms], "
@@ -53,10 +78,21 @@ def output_data(iterable, args) -> None:
                 # pairs
                 count += 1
                 print(f"dl-datasource[{index}]: "
-                      f"pair: {str(data[0].shape)}/{str(data[1].shape)}: "
+                      f"tuple[{len(data)}]: "
+                      f"{str(data[0].shape)}/{str(data[1].shape)}: "
                       f"{str(data[2]):7} "
                       f"{time_info} pairs per second",
                       erase_to_end_of_line, end='\r')
+                if args.show:
+                    # FIXME[hack]: we need a general display interface
+                    qt_display.setImages(data[:2])
+                    p = qt_display.palette()
+                    p.setColor(qt_display.backgroundRole(),
+                               Qt.green if data[2] else Qt.red)
+                    qt_display.setPalette(p)
+                    qt_application.processEvents()
+                    if not qt_display.isVisible():
+                        raise KeyboardInterrupt("Window closed")
             elif data.is_batch:
                 count += len(data)
                 print(f"dl-datasource[{index}:{count-len(data)}-{count}]: "
@@ -84,6 +120,34 @@ def output_data(iterable, args) -> None:
           erase_to_end_of_line)
 
 
+def data_to_array(datasource) -> np.ndarray:
+    """Convert a datasource containing array data into a
+    (numpy) array containing the complete datasource.
+
+    This function assumes, that the arrays provided by the
+    datasource all have the same shape.  The resulting array
+    will have that shape with a new (first) axis added, indexing
+    the individual datapoints.
+
+    Arguments
+    ---------
+    datasource:
+        The :py:class:`Datasource`.
+
+    Result
+    ------
+    array:
+        An array containing all array data from the datasource.
+    """
+    data = datasource[0]
+    array = np.ndarray((len(datasource),) + data.array.shape)
+    print(f"Created array of shape {array.shape} "
+          f"(size={array.size}, nbytes={array.nbytes})")
+    for idx, data in enumerate(tqdm.tqdm(datasource)):
+        array[idx] = data.array
+    return array
+
+
 def main():
     """The main program.
     """
@@ -99,6 +163,8 @@ def main():
                         help='enumerate (labeled) pairs (if available)')
     parser.add_argument('--show', action='store_true', default=False,
                         help='show the data (if possible)')
+    parser.add_argument('--array', action='store_true', default=False,
+                        help='store data in (numpy) array')
     ToolboxArgparse.add_arguments(parser)
     DatasourceArgparse.prepare(parser)
 
@@ -111,6 +177,9 @@ def main():
         return
 
     output_info(datasource)
+
+    if args.array:
+        return data_to_array(datasource)
 
     if args.fetcher:
         fetcher = Datafetcher(datasource, batch_size=args.batch)

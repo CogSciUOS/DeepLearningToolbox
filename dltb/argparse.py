@@ -22,7 +22,7 @@ ToolboxArgparse.process_arguments(args)
 """
 
 # standard imports
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, Action
 import sys
 import logging
 import importlib
@@ -30,6 +30,14 @@ import importlib
 # toolbox imports
 from .config import config
 from .util.logging import TerminalFormatter
+
+
+class NegateAction(Action):
+    """An `Action` allowing to negate an option by prefixing
+    it with `'no'`.
+    """
+    def __call__(self, parser, ns, values, option):
+        setattr(ns, self.dest, option[2:4] != 'no')
 
 
 def add_arguments(parser: ArgumentParser) -> None:
@@ -41,6 +49,16 @@ def add_arguments(parser: ArgumentParser) -> None:
     parser: ArgumentParser
         The argument parser to which arguments are to be added.
     """
+    #
+    #
+    #
+    group = parser.add_argument_group("Computation")
+    group.add_argument('--cpu',
+                       help="Force CPU usage (even if GPU is available)",
+                       action='store_true', default=False)
+    
+
+
     group = parser.add_argument_group("General toolbox arguments")
 
     #
@@ -52,7 +70,7 @@ def add_arguments(parser: ArgumentParser) -> None:
     group.add_argument('--debug', default=[], action='append',
                        metavar='MODULE',
                        help='Show debug messages from MODLE')
-
+    
     #
     # Miscallenous
     #
@@ -77,6 +95,9 @@ def process_arguments(parser: ArgumentParser, args: Namespace = None) -> None:
 
     if args.warn_missing_dependencies:
         config.warn_missing_dependencies = True
+
+    if args.cpu:
+        config.use_cpu = True
 
     #
     # Debugging

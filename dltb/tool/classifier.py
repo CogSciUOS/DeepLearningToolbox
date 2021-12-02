@@ -7,7 +7,7 @@
 #   class labels, even if not applied to ImageNet data
 
 # standard imports
-from typing import Union, Tuple, Iterable, Iterator, Any, Sequence
+from typing import Union, Tuple, Iterable, Iterator, Any, Sequence, Optional
 from abc import abstractmethod, ABC
 import logging
 
@@ -346,6 +346,13 @@ class Classifier(ABC, Preparable):
     scheme, describing the set of classes ("labels").  Output units of
     the network have to be mapped to the class labels.
 
+    Use this class like this:
+
+    .. code-block:: python
+
+        label = classifier.classify(data)
+        labels = classifier.classify(batch)
+
 
     Attributes
     ----------
@@ -353,19 +360,32 @@ class Classifier(ABC, Preparable):
     _scheme: ClassScheme
         The classification scheme applied by this classifier.
 
+    _lookup: str
+        Name of a lookup table for the given `ClassScheme`. This
+        table is used to map (numeric) outputs of the classifier
+        to classes of that `ClassScheme`.
     """
 
-    def __init__(self, scheme: Union[ClassScheme, str, int],
+    def __init__(self, scheme: Optional[Union[ClassScheme, str, int]] = None,
                  lookup: str = None, **kwargs):
         LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
         super().__init__(**kwargs)
         if isinstance(scheme, str):
             scheme = ClassScheme[scheme]
         elif isinstance(scheme, int):
-            scheme = ClassScheme(10)
+            scheme = ClassScheme(scheme)
+        elif scheme is None:
+            raise ValueError("No class scheme provided for Classifier.")
         self._scheme = scheme
         self._lookup = lookup
 
+    @property
+    def scheme(self) -> ClassScheme:
+        """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
+        """
+        return self._scheme
+
+    # FIXME[old]: why scheme and class_scheme?
     @property
     def class_scheme(self) -> ClassScheme:
         """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.

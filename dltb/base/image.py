@@ -20,7 +20,7 @@ Relation to other `image` modules in the Deep Learning ToolBox:
 """
 
 # standard imports
-from typing import Union, List, Tuple, Dict, Any, Optional
+from typing import Union, List, Tuple, Dict, Any, Optional, Iterable
 from abc import abstractmethod, ABC
 from collections import namedtuple
 from enum import Enum
@@ -167,23 +167,36 @@ class Image(DataDict):
     def add_converter(cls, source: type, converter,
                       target: str = 'image') -> None:
         """Register a new image converter. An image converter is
-        a function, that can convert an given image into another
+        a function, that can convert a given image into another
         format.
 
         Arguments
         ---------
         source:
             The input type of the converter, that is the type of
-            its first argument.
+            its first argument of the `convert` function.
         convert:
-            The actual converter function.
+            The actual converter function. This function takes two
+            arguments: `image` is the image to convert and `bool` is
+            a flag indicating if the image data should be copied.
         target:
             The output format. This can be `image` (the converter
-            produces an instance of `Image`) or `array` (a numpy array).
+            produces an instance of `Image`) or `array` (a numpy array),
+            or another string identifying a third party format, if
+            available.
         """
         # FIXME[todo]: make this more flexible, use introspection,
         # get rid off the copy parameter, deal with other arguments
-        cls.converters[target].append((source, converter))
+        if target not in cls.converters:
+            cls.converters[target] = [(source, converter)]
+        else:
+            cls.converters[target].append((source, converter))
+
+    @classmethod
+    def supported_formats(cls) -> Iterable[str]:
+        """The names of supported image formats.
+        """
+        return cls.converters.keys()
 
     @classmethod
     def as_array(cls, image: Imagelike, copy: bool = False,
@@ -265,6 +278,14 @@ class Image(DataDict):
             data.add_attribute('url', image)
         return data
 
+    @classmethod
+    def as_shape(cls, image: Imagelike) -> Tuple[int]:
+        if isinstance(image, np.ndarray):
+            return image.shape
+        if isinstance(image, Image):
+            return image.array.shape
+        raise TypeError(f"Cannot determine shape of {type(image)}")
+
     def __new__(cls, image: Imagelike = None, array: np.ndarray = None,
                 copy: bool = False, **kwargs) -> None:
         if isinstance(image, Image) and not copy:
@@ -273,6 +294,9 @@ class Image(DataDict):
 
     def __init__(self, image: Imagelike = None, array: np.ndarray = None,
                  copy: bool = False, **kwargs) -> None:
+        # FIXME[todo]: it would be good to have the possibility to
+        # indicate desired attributes, e.g. 'array', 'pil', that
+        # should be filled during initialization.
         if isinstance(image, Image) and not copy:
             return  # just reuse the given Image instance
         if image is not None:
@@ -283,7 +307,7 @@ class Image(DataDict):
             self.add_attribute('shape', array.shape)
 
     def visualize(self, size=None) -> np.ndarray:
-        """Provide a visualization of this image. The may by simply
+        """Provide a visualization of this image. The may be simply
         the image (in case of a single image)
         In case of a batch, it can be an image galery.
         """
@@ -307,6 +331,12 @@ class Image(DataDict):
             matrix[row*size[1]:(row+1)*size[1],
                    column*size[0]:(column+1)*size[0]] = image
         return matrix
+
+    def size(self) -> Size:
+        """The size of this image.
+        """
+        if self.has_attribute('array'):
+            return Size(*self.shape[1::-1])
 
 
 class ImageAdapter(ABC):

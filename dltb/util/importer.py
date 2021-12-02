@@ -3,7 +3,7 @@
 
 # standard imports
 from types import ModuleType
-from typing import Union, Optional
+from typing import Union, Tuple, Optional
 import sys
 import logging
 import importlib
@@ -75,6 +75,59 @@ class Importer(BusyObservable):
         finally:
             sys.path.remove(str(directory))
         return module
+
+    @staticmethod
+    def import_module_class(module:
+                            Optional[Union[ModuleType, str]] = None,
+                            cls: Optional[Union[type, str]] = None) \
+            -> Tuple[ModuleType, type]:
+        """Ensure that module and class are imported.
+
+        Arguments
+        ---------
+        module:
+            Either an (already loaded) module or the name of the module.
+            If `None`, the module will be derived from the class.
+        cls:
+            Either an (already loaded) class (type) or the name of a
+            class, either relative or fully qualified.
+
+        Result
+        ------
+        module:
+            The imported module.
+        cls:
+            The class.
+        """
+        if isinstance(cls, type):
+            return cls.__module__, cls
+
+        module_name = None
+        if module is None:
+            if cls is None:
+                raise ValueError("Neither module nor class are given.")
+
+            if not isinstance(cls, str):
+                raise TypeError(f"Invalid type for class: {type(cls)}")
+
+            if '.' not in cls:
+                raise ValueError("Either Fully qualified class name expected")
+
+            module, cls = cls.rsplit('.', maxsplit=1)
+        elif isinstance(cls, str):
+            if '.' in cls:
+                module_name, cls = cls.rsplit('.', maxsplit=1)
+        else:
+            raise TypeError(f"Invalid type for class: {type(cls)}")
+
+        # now cls is str and module is not None
+
+        if isinstance(module, str):
+            module = importlib.import_module(module)
+        elif not isinstance(module, ModuleType):
+            raise TypeError(f"Invalid type for module: {type(module)}")
+
+        return module, getattr(module, cls)
 
     @staticmethod
     def module_is_imported(name: str) -> bool:

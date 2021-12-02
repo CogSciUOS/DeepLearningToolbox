@@ -3,11 +3,26 @@
 The module provides the different TensorFlow version (if available) as:
 * `tensorflow_v1`
 * `tensorflow_v2`
+
+Intended Usage
+--------------
+
+This module (`dltb.thirdparty.tensorflow`) should be imported before
+the actual `tensorflow` module is imported.  One way to achieve this
+is to import tensorflow via this module, e.g.
+
+```
+from dltb.thirdparty.tensorflow import v2 as tf
+```
+
+FIXME[todo]: the alternative could be to realize a pre-import hook,
+that imports this file before importing tensorflow.
 """
 
 import os
 import logging
 
+from dltb.config import config
 
 # TF_CPP_MIN_LOG_LEVEL: Control the amount of TensorFlow log
 # message displayed on the console.
@@ -28,6 +43,36 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 # TF_CPP_MIN_LOG_LEVEL of 0 to see any VLOG message.
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
 
+#
+# CPU/GPU info
+#
+
+# Different options to select the device:
+#
+#  * Using CUDA_VISIBLE_DEVICES environment variable.
+#  * with tf.device(...):  # '/gpu:2'
+#  * config = tf.ConfigProto(device_count = {'GPU': 1})
+#    sess = tf.Session(config=config).
+#
+# TensorFlow 2.x:
+#   physical_devices = tf.config.list_physical_devices('GPU')
+#   
+#   # tf.config.set_visible_devices(devices, device_type=None)
+#   #  device_type: 'GPU' or 'CPU'
+#   tf.config.set_visible_devices(physical_devices[1:], 'GPU')
+#
+#   logical_devices = tf.config.list_logical_devices('GPU')
+
+
+# inspect available GPU memory:
+#  nvidia-smi --query-gpu=memory.free --format=csv
+
+# 
+# CUDA_VISIBLE_DEVICES="0,1" 
+if False and config.use_cpu:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 
 # GPU/CUDA info
 # -------------
@@ -45,6 +90,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 
 import tensorflow  # pylint: disable=wrong-import-position
+
+if config.use_cpu:
+    tensorflow.config.set_visible_devices([], 'GPU')
+
 
 # logging
 LOG = logging.getLogger(__name__)

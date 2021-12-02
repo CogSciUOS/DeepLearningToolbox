@@ -45,7 +45,14 @@ def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image.Image:
         return image
 
     if isinstance(image, str):
-        return PIL.Image.open(image)
+        if image.startswith('http'):
+            # FIXME[todo]: download and read
+            import requests
+            import io
+            response = requests.get(image)
+            return PIL.Image.open(io.BytesIO(response.content))
+        else:
+            return PIL.Image.open(image)
 
     if isinstance(image, Data):
         if not hasattr(image, 'pil'):
@@ -55,7 +62,7 @@ def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image.Image:
     if not isinstance(image, np.ndarray):
         image = Image.as_array(image)
 
-    if issubclass(image.dtype.type, np.float):
+    if issubclass(image.dtype.type, float):
         image = (image*255).astype('uint8')
     elif image.dtype != np.uint8:
         image = image.astype('uint8')
@@ -70,3 +77,6 @@ Imagesource.add_loader('pil', PIL.Image.open)
 Image.add_converter(PIL.Image.Image,
                     lambda image, copy: (np.array(image), copy),
                     target='array')
+Image.add_converter(np.ndarray,
+                    lambda image, copy: (as_pil(image, copy), copy),
+                    target='pil')

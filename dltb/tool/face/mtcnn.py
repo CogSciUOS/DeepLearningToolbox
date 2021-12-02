@@ -29,8 +29,11 @@ class Landmarks(FacialLandmarksBase):
     points:
     """
 
-    keypoint_names = ('nose', 'mouth_right', 'right_eye', 'left_eye',
-                      'mouth_left')
+    # Canonical names for the 5 keypoints.  When keypoints are
+    # reported as an array, than the order of points in the array
+    # should follow the order of this list.
+    keypoint_names = ('mouth_left', 'mouth_right', 'nose', 'left_eye',
+                      'right_eye')
 
     def __init__(self, keypoints=None, points=None, **kwargs):
         if keypoints is not None:

@@ -3,6 +3,7 @@
 
 # standard imports
 from typing import Union, Tuple, List
+from pathlib import Path
 import logging
 
 # third party imports
@@ -21,7 +22,7 @@ _display: ImageDisplay = None
 _resizer: ImageResizer = None
 
 
-def imread(filename: str, module: Union[str, List[str]] = None,
+def imread(filename: Union[str, Path], module: Union[str, List[str]] = None,
            **kwargs) -> np.ndarray:
     """Read an image from a given file. FIXME[todo]: or URL
     """
@@ -32,13 +33,13 @@ def imread(filename: str, module: Union[str, List[str]] = None,
         _reader = None
     if _reader is None:
         _reader = ImageReader(module=module)
-    image = _reader.read(filename, **kwargs)
+    image = _reader.read(str(filename), **kwargs)
     LOG.debug("imread: read image of shape %s, dtype=%s from '%s' with %s.",
               image.shape, image.dtype, filename, _reader)
     return image
 
 
-def imwrite(filename: str, image: Imagelike, **kwargs) -> None:
+def imwrite(filename: Union[str, Path], image: Imagelike, **kwargs) -> None:
     """Write an image to a file.
 
     Arguments
@@ -53,7 +54,7 @@ def imwrite(filename: str, image: Imagelike, **kwargs) -> None:
     if _writer is None:
         _writer = (_reader if isinstance(_reader, ImageWriter) else
                    ImageWriter())
-    _writer.write(image, filename, **kwargs)
+    _writer.write(image, str(filename), **kwargs)
 
 
 def imshow(image: Imagelike, module: str = None, **kwargs) -> None:

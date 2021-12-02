@@ -63,24 +63,24 @@ class Detector(DetectorBase):
     """
     internal_arguments: Tuple[str, ...] = ('pil', )
 
-    # default reference facial points for crop_size = ;
-    # should adjust REFERENCE_FACIAL_POINTS accordingly for other crop_size
-    # reference landmark positions. This is taken from
-    # applications/align/align_trans.py in the face_evoLVe repository.
-    # According to the comments in that file, these landmarks are for a
-    # "facial points crop_size = (112, 112)", however, the crop size
-    # is then specified as (96, 112), and this actually seems to be more
-    # appropriate.
+    # Default reference facial points for crop_size = (96, 112); (this
+    # is taken from the the face_evoLVe repository,
+    # applications/align/align_trans.py. Note: According to the
+    # comments in that file, these landmarks are for a "facial points
+    # crop_size = (112, 112)", however, the crop size is then
+    # specified as (96, 112), and this actually seems to be more
+    # appropriate).  The coordinates are of the form (x, y), with the
+    # origin located at the bottom left corner of the image.
     _reference_landmarks = Landmarks(points=np.asarray([
-        [30.29459953,  51.69630051], 
-        [65.53179932,  51.50139999],
-        [48.02519989,  71.73660278],
-        [33.54930115,  92.3655014],
-        [62.72990036,  92.20410156]
+        [30.29459953,  51.69630051],   # left mouth
+        [65.53179932,  51.50139999],   # right mouth
+        [48.02519989,  71.73660278],   # nose
+        [33.54930115,  92.3655014],    # left eye
+        [62.72990036,  92.20410156]    # right eye
     ]))
 
     _reference_size = Size(96, 112)
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._face_evolve_repository = \
@@ -169,7 +169,14 @@ class Detector(DetectorBase):
 
             if self.detect_landmarks:
                 # landmarks are reported as array of length 10, consisting
-                # of 5 consecutive (x, y)-pairs.
+                # of 5 consecutive x-coordinates followed by 5 corresponding
+                # y-coordinates.  The order of these pairs
+                # is: left_mouth, right_mouth, nose, left_eye, right_eye
+                # That is the array holds
+                #    [left_mouth_x, right_mouth_x, nose_x,
+                #     left_eye_x, right_eye_x,
+                #     left_mouth_y, right_mouth_y, nose_y, 
+                #     left_eye_y, right_eye_y]
                 points = mark.reshape(2, 5).T.astype(int)
                 detections.add_region(Landmarks(points=points),
                                       confidence=confidence, id=face_id)

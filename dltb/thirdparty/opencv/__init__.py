@@ -78,9 +78,9 @@ class ImageIO(image.ImageReader, image.ImageWriter):
         #    this flag.
         return cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2RGB)
 
-    def write(self, image: image.Imagelike, filename: str, **kwargs) -> None:
+    def write(self, image: Imagelike, filename: str, **kwargs) -> None:
         cv2.imwrite(filename,
-                    cv2.cvtColor(image.Image.as_array(image),
+                    cv2.cvtColor(Image.as_array(image),
                                  cv2.COLOR_RGB2BGR))
 
 

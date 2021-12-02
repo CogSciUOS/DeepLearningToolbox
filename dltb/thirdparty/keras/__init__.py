@@ -1,17 +1,28 @@
 """Providing keras functionality.
 
-Importing this module: This module is usually automatically imported
-after the `keras` module have been imported (as post-import dependency).
-It is not possible to import this module directly.
+Importing this module (`dltb.thirdparty.keras`): This module is
+usually automatically imported after the `keras` module has been
+imported (as post-import dependency).  For this to work,
+`dltb.thirdparty` has to be imported before importing `keras`. It is
+not possible to import this module (`dltb.thirdparty.keras`) directly.
 
-
-Two different keras implementations are available:
+There exist Two different keras implementations:
 * keras.io
 * tensorflow.keras
 
-Also keras my use different backends
+Usually it seems preferable to use `tensorflow.keras` when available.
+There is some code in `dltb.thirdparty` that patches the import
+machinery to automatically import `tensorflow.keras` when `keras` is
+imported.  For this to work, it is essential, that `dltb.thirdparty`
+is imported before importing `keras`.
+
+Also keras.io my use different backends:
 * `theano`
 * `tensorflow`
+
+As theano is officially declared dead, usually the tensorflow backend
+should be used.  This module will ensure that this is actually the
+case.
 
 """
 

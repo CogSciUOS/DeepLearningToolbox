@@ -32,17 +32,20 @@ to which other exception handlers can register.
 import sys
 import traceback
 
+
 def print_exception(exception: BaseException) -> None:
     """Print the given exception including traceback to stdout.
     """
     print("-" * 79)
     print(f"\nUnhandled exception ({type(exception).__name__}): {exception}")
     # FIXME[bug]: sys.stderr may by set to os.devnull ...
-    #traceback.print_tb(exception.__traceback__, file=sys.stderr)
+    # traceback.print_tb(exception.__traceback__, file=sys.stderr)
     traceback.print_tb(exception.__traceback__, file=sys.stdout)
     print("-" * 79)
 
+
 _exception_handler = print_exception
+
 
 def handle_exception(exception: BaseException) -> None:
     """Handle the given exception.  This will delegate the exception
@@ -51,6 +54,7 @@ def handle_exception(exception: BaseException) -> None:
     """
     if _exception_handler is not None:
         _exception_handler(exception)
+
 
 def set_exception_handler(handler) -> None:
     """Set an alternative exception handler.
@@ -63,6 +67,7 @@ def set_exception_handler(handler) -> None:
     """
     global _exception_handler
     _exception_handler = handler
+
 
 def protect(function):
     """A decorator for top-level functions to protect the program from
@@ -94,6 +99,15 @@ def protect(function):
         # pylint: disable=broad-except
         try:
             return function(self, *args, **kwargs)
+        except KeyboardInterrupt:
+            # FIXME[hack]: in some caes KeyboardInterrupt may be
+            # processed by some outer loop.
+            # It would be good to have a way to indicate that some
+            # exception should not be protected.
+            # FIXME[bug]: when used with Qt event-handlers, this
+            # may cause core dumps
+            raise
         except BaseException as exception:
             handle_exception(exception)
+            return None
     return closure

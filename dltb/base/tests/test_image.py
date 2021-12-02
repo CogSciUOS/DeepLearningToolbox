@@ -4,13 +4,14 @@
 # standard imports
 from typing import get_origin, get_args
 import unittest
+import importlib
 
 # toolbox imports
-from dltb.base.image import Size, Sizelike
+from dltb.base.image import Size, Sizelike, Image
 
 
 class TestSize(unittest.TestCase):
-    """Tests the the :py:class:`Size ` type.
+    """Tests the :py:class:`Size` type.
     """
 
     def test_size_type(self):
@@ -117,3 +118,48 @@ class TestSize(unittest.TestCase):
         size_list = [3, 4]
         self.assertEqual(size1, size_list)
         self.assertEqual(size_list, size1)
+
+
+class TestImage(unittest.TestCase):
+    """Test the :py:class:`Image` type.
+    """
+
+    example_image_filename = 'examples/dog.jpg'
+    example_image_size = Size(1546, 1213)
+
+    def test_supported_formats(self):
+        """Test supported image formats.
+        """
+        self.assertIn('array', Image.supported_formats())
+        self.assertIn('image', Image.supported_formats())
+
+    def test_image_creation(self):
+        """Test creation of `Image`.
+        """
+        image = Image(self.example_image_filename)
+        self.assertEqual(image.size(), self.example_image_size)
+
+    @unittest.skipIf(importlib.util.find_spec("PyQt5") is None,
+                     reason="PyQt is not available")
+    def test_qt(self):
+        """Test :py:class:`Size` type.
+        """
+        module = importlib.import_module('qtgui.widgets.image')
+        self.assertIn('qimage', Image.supported_formats())
+
+        image = Image(self.example_image_filename)
+        qimage = Image.as_qimage(image)
+        self.assertIsInstance(qimage, module.QImage)
+
+    @unittest.skipIf(importlib.util.find_spec("PIL") is None,
+                     reason="Python Image Library (PIL/pillow)"
+                     " is not available")
+    def test_pillow(self):
+        """Test :py:class:`Size` type.
+        """
+        module = importlib.import_module('dltb.thirdparty.pil')
+        self.assertIn('pil', Image.supported_formats())
+
+        image = Image(self.example_image_filename)
+        pil = Image.as_pil(image)
+        self.assertIsInstance(pil, module.PIL.Image.Image)

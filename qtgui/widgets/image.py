@@ -1,4 +1,14 @@
 """QWidgets for displaying images.
+
+
+There are two Qt classes associated with images: `QPixmap` and
+`QImage`.  The `QPixmap` is an off-screen representation that
+can be used as a paint device.  A `QPixmap` cannot be manipulated
+outside a GUI thread, while a `QImage` has no such restrictions.
+If you plan to draw the same image more than once, use a `QPixmap`.
+The `QImage` provides hardware-independent image representation that
+allows direct access to pixel data, and can also be used as a paint
+device. If you plan to modify an image, use `QImage`.
 """
 
 # standard imports
@@ -12,7 +22,7 @@ import numpy as np
 from PyQt5.QtCore import Qt, QPoint, QPointF, QSize, QRect
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
-from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPaintEvent
+from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPaintEvent, QResizeEvent
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
 from PyQt5.QtWidgets import QToolTip
 
@@ -23,6 +33,8 @@ from dltb.base.image import Image, Imagelike, ImageObservable
 from dltb.base.image import BoundingBox, PointsBasedLocation, Region, Landmarks
 from dltb.tool.image import ImageTool
 from dltb.util.image import imresize, imwrite, grayscaleNormalized
+from dltb.datasource import Imagesource
+
 from toolbox import Toolbox
 
 # GUI imports
@@ -68,6 +80,48 @@ def imageToQImage(image: Imagelike) -> QImage:
 
     return QImage(image, image.shape[1], image.shape[0],
                   bytes_per_line, img_format)
+
+
+def qimageFromFilename(filename: str) -> QImage:
+    return QImage(filename)
+
+
+def qimageFromArray(array: np.ndarray, copy: bool = True) -> QImage:
+    array = array.astype(np.uint8)  # FIXME[todo]: maybe scale to 0-255?
+    array = np.transpose(array, (1, 0, 2)).copy()
+    return QImage(array.data, array.shape[1], array.shape[0],
+                  3 * array.shape[1], QImage.Format_RGB888)
+
+
+def qimageToArray(qimage: QImage, copy: bool = True) -> np.ndarray:
+    # qimage = qimage.convertToFormat(QImage.Format_RGBA8888)
+    # channels = 4
+    # qimage = qimage.convertToFormat(QImage.Format_RGB32)
+    # channels = 4
+    qimage = qimage.convertToFormat(QImage.Format_RGB888)
+    channels = 3
+
+    width = qimage.width()
+    height = qimage.height()
+
+    ptr = qimage.constBits()
+    array = np.array(ptr).reshape(height, width, channels)  # Copies the data
+    return array
+
+
+LOG.info("Adapting dltb.base.image.Image: "
+         "adding static method 'imageToQImage'")
+Image.as_qimage = staticmethod(imageToQImage)
+
+Imagesource.add_loader('qt', qimageFromFilename)
+
+Image.add_converter(QImage,
+                    lambda image, copy: (qimageToArray(image, copy), copy),
+                    target='array')
+
+Image.add_converter(np.ndarray,
+                    lambda image, copy: (qimageFromArray(image, copy), copy),
+                    target='qimage')
 
 
 class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
@@ -1121,7 +1175,8 @@ class QMultiImageView(QWidget):
     Readonly properties
     -------------------
     _images: List[Image]
-        A list of `QImage`s holding the images to be displayed.
+        A list of `Image`, each having a `qimage` attribute holding the
+        image to be displayed as a `QImage`.
     _qregions:
         A list of :py:class:`Region`s describing regions in a larger
         image from which the images displayed in this
@@ -1142,16 +1197,14 @@ class QMultiImageView(QWidget):
                  grid: Tuple[int, int] = None,
                  **kwargs) -> None:
         super().__init__(**kwargs)
+        self._regions = None
+        self._currentIndex = -1  # -1 means no image selected
         if grid is not None:
             self._grid = grid
         else:
             self._grid = \
                 (1, None) if orientation == Qt.Horizontal else (None, 1)
-        self._imageSize = QSize(100, 100)
-        self._spacing = 10
-        self._images = []
-        self._regions = None
-        self._currentIndex = -1  # -1 means no image selected
+        self.setImageSize(QSize(100, 100), spacing=10)
         self._initLayout()
         self._navigation = self.NavigationContinue
 
@@ -1166,13 +1219,14 @@ class QMultiImageView(QWidget):
         # QSizePolicy.MinimumExpanding: The sizeHint() is minimal, and
         # sufficient. The widget can make use of extra space, so it
         # should get as much space as possible.
-        self.setMinimumSize(self._imageSize.width() + self._spacing,
-                            self._imageSize.height() + self._spacing)
         if self.orientation() == Qt.Horizontal:
             self.setSizePolicy(QSizePolicy.MinimumExpanding,
                                QSizePolicy.Fixed)
-        else:
+        elif self.orientation() == Qt.Vertical:
             self.setSizePolicy(QSizePolicy.Fixed,
+                               QSizePolicy.MinimumExpanding)
+        else:
+            self.setSizePolicy(QSizePolicy.MinimumExpanding,
                                QSizePolicy.MinimumExpanding)
 
     def count(self) -> int:
@@ -1284,6 +1338,16 @@ class QMultiImageView(QWidget):
         """
         return self._imageSize
 
+    def setImageSize(self, imageSize: QSize, spacing: int = None) -> None:
+        """The size at which individual images are to be displayed
+        in this :py:class:`QMultiImageView`.
+        """
+        self._imageSize = imageSize
+        if spacing is not None:
+            self._spacing = spacing
+        self.setMinimumSize(imageSize.width() + self._spacing,
+                            imageSize.height() + self._spacing)
+
     def spacing(self) -> int:
         """The spacing to be put between the images displayed
         in this :py:class:`QMultiImageView`. At the outer boundary,
@@ -1306,13 +1370,11 @@ class QMultiImageView(QWidget):
         """
         self._currentIndex = -1
         self._regions = None
-
         self._images = []
         for image in images:
-            image = Image.as_data(image)
+            image = Image(image)
             image.add_attribute('qimage', imageToQImage(image))
             self._images.append(image)
-        self._images = [Image.as_data(image) for image in images]
 
         self._gridChanged()
 
@@ -1529,6 +1591,39 @@ class QMultiImageView(QWidget):
             self._debug()
         else:
             super().keyPressEvent(event)
+
+    @protect
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Process the resize event.  Resizing the
+        :py:class:`QMultiImageView` may adapt the image sizes.
+
+        This is an ad hoc implementation, details and policies need
+        still to be spelled out!
+        """
+        # FIXME[todo]: define the exact behviour and add methods to
+        # control the behaviour.
+        #  - what is the exact meaning of the imageSize property:
+        #    current size, minimum size?
+        #  - how to deal with images of different sizes?
+        #     -> all images are resized to imageSize
+        #     -> keep aspect ratio?
+        #  - should the new size respect some aspect ratio?
+        #    at least for a fixed grid size (or when not embedded in some
+        #    scroll area) this seems reasonable.
+        super().resizeEvent(event)
+        newSize = event.size()
+        if self._grid[0] is None:  # Qt.Vertical
+            pass
+        elif self._grid[1] is None:  # Qt.Horizontal
+            pass
+        else:
+            width = newSize.width() - self._grid[1] * self._spacing
+            height = newSize.height() - self._grid[0] * self._spacing
+            width //= self._grid[1]
+            height //= self._grid[0]
+            self._imageSize = QSize(width, height)
+            # FIXME[hack]: this will change the minimumSize which
+            # in turn prevents shrinking the widget again.
 
     @protect
     def paintEvent(self, event: QPaintEvent) -> None:

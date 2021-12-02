@@ -157,6 +157,8 @@ from dltb.base.image import Image, Imagelike
 from dltb.base.prepare import Preparable
 from dltb.util.importer import Importer
 from dltb.tool.face.recognize import ArcFace as ArcFaceBase
+from dltb.tool.face.landmarks import landmark_face_hack
+from dltb.tool.align import LandmarkAligner
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -262,7 +264,8 @@ class ArcFace(ArcFaceBase, Preparable):
     arcface_model_directory = config.model_directory / 'arcface-tf2'
 
     def __init__(self, cfg_path: str = None,  # './configs/arc_res50.yaml',
-                 gpu: int = 0, **kwargs) -> None:
+                 gpu: int = 0,
+                 aligner: Optional[LandmarkAligner] = None, **kwargs) -> None:
         """
         Arguments
         ---------
@@ -291,6 +294,8 @@ class ArcFace(ArcFaceBase, Preparable):
         # modules to be imported from the arcface-tf2 repository
         self._arcface_utils = None
         self._arcface_evaluations = None
+
+        self._aligner = aligner
 
     @property
     def input_size(self) -> Tuple[int, int]:
@@ -357,6 +362,10 @@ class ArcFace(ArcFaceBase, Preparable):
                  self._arcface_model_checkpoints)
         self._arcface_model.load_weights(ckpt_path)
 
+        # (3) Adapt the aligner
+        if self._aligner is not None:
+            self._aligner.size = self.input_size
+
     def _unprepare(self) -> None:
         self._arcface_model = None
         super()._unprepare()
@@ -395,6 +404,25 @@ class ArcFace(ArcFaceBase, Preparable):
             img = np.expand_dims(img, 0)
         return img
 
+    def _align_image(self, image: Imagelike) -> np.ndarray:
+        #image = Image.as_array(image)
+        #print("image:", image.shape, image.dtype)
+        image = Image(image)
+        print("image:", image.array.shape, image.array.dtype)
+
+        # bounding box and landmark for the (best) detection
+        bbox, landmarks, _unique = \
+            landmark_face_hack(image, self._aligner.detector)
+        print(bbox)
+
+        # an aligned version of the original image
+        aligned_image = self._aligner(image, landmarks)
+
+        # do further preprocessing
+        aligned_image = aligned_image.astype(np.float32) / 255.
+        aligned_image = np.expand_dims(aligned_image, 0)
+        return aligned_image
+
     #
     # Embedding
     #
@@ -412,9 +440,16 @@ class ArcFace(ArcFaceBase, Preparable):
         store the result in a file.
 
         """
-        img = self._preprocess_image(image)
-        embeddings = self.embed_batch(img.expand_dims(0), is_ccrop=is_ccrop,
-                                      is_flip=is_flip).squeeze(0)
+        if self._aligner is not None:
+            img = self._align_image(image)
+        else:
+            img = self._preprocess_image(image)
+        # self._preprocess_image(image) -> seems to already add batch
+        embeddings = self.embed_batch(img,  # np.expand_dims(img, 0)
+                                      is_ccrop=is_ccrop,
+                                      is_flip=is_flip)  # .squeeze(0)
+        # embeddings is an tensorflow.EagerTensor
+        #embeddings = embeddings.numpy().squeeze(0)
         if outfile is not None:
             LOG.info("Writing embeded image ot {%s}". outfile)
             np.save(outfile, embeddings)
@@ -446,9 +481,10 @@ class ArcFace(ArcFaceBase, Preparable):
             batch = self._arcface_evaluations.ccrop_batch(batch)
         if is_flip:
             flipped = self._arcface_evaluations.hflip_batch(batch)
-            emb_batch = self._model(batch) + self._model(flipped)
+            emb_batch = \
+                self._arcface_model(batch) + self._arcface_model(flipped)
         else:
-            emb_batch = self._model(batch)
+            emb_batch = self._arcface_model(batch)
 
         return self._arcface_evaluations.l2_norm(emb_batch)
 
