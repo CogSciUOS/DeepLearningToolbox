@@ -9,8 +9,10 @@ lfw.pair_mode = True
 pair = next(lfw.pairs())
 """
 
-from unittest import TestCase
+from unittest import TestCase, skipUnless
 
+# toolbox imports
+from dltb.config import config
 from dltb.thirdparty.datasource.lfw import LabeledFacesInTheWild
 
 
@@ -38,6 +40,8 @@ class TestLFW(TestCase):
         """
         self.assertEqual(len(self.lfw), 13233)
 
+    @skipUnless((config.lfw_meta_directory / 'pairs.txt').is_file(),
+                "LFW 'pairs.txt' file is not available.")
     def test_pair(self):
         """Check that LFW images pairs can be retrieved.
         """

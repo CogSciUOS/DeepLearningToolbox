@@ -1,3 +1,5 @@
+"""Testsuite for the abstract `Network` interface.
+"""
 
 # The following line allows the test to be run from within the test
 # directory:
@@ -12,7 +14,7 @@ from unittest import TestCase
 import numpy as np
 
 # toolbox imports
-from .. import Network as BaseNetwork
+from dltb.network import Network as BaseNetwork
 
 
 class MockLayer:
@@ -24,9 +26,12 @@ class MockLayer:
 class MockNetwork(BaseNetwork):
     """Mock to allow instantiation."""
 
-    def __init__(self, data_format: str, input_shape: Tuple[int]):
+    def __init__(self, data_format: str, input_shape: Tuple[int],
+                 **kwargs) ->None:
+        super().__init__(**kwargs)
         self._data_format = data_format
         layer = MockLayer(input_shape)
+        self.input_shape = layer.input_shape
         self.layer_dict = OrderedDict(input_layer=layer)
 
 
@@ -45,12 +50,14 @@ class TestBaseNetwork(TestCase):
         input_sample, is_batch, is_internal = \
             self.network_last._transform_input(mock_input_sample,
                                                data_format='channels_last')
+        self.assertEqual(mock_input_sample.shape, (1, 28, 30, 1))
         self.assertTrue(np.all(mock_input_sample == input_sample))
 
+        mock_input_sample = np.zeros((1, 1, 28, 30))
         input_sample, is_batch, is_internal = \
             self.network_first._transform_input(mock_input_sample,
-                                                data_format='channels_last')
-        self.assertTrue(input_sample.shape == (1, 1, 28, 30))
+                                                data_format='channels_first')
+        self.assertEqual(input_sample.shape, (1, 1, 28, 30))
 
     def test_fill_up_ranks(self):
 

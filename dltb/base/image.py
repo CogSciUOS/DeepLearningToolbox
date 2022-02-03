@@ -299,9 +299,14 @@ class Image(DataDict):
         # should be filled during initialization.
         if isinstance(image, Image) and not copy:
             return  # just reuse the given Image instance
-        if image is not None:
-            array = self.as_array(image, copy=copy)
-        super().__init__(array=array, **kwargs)
+        try:
+            if image is not None:
+                array = self.as_array(image, copy=copy)
+        finally:
+            # make sure super().__init__() is called even if
+            # preparing the array fails. If ommitted, the object may
+            # be in an incomplete state, causing problems at destruction.
+            super().__init__(array=array, **kwargs)
         if isinstance(image, str):
             self.add_attribute('filename', image)
             self.add_attribute('shape', array.shape)

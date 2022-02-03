@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from unittest import TestCase
+from unittest import TestCase, skip
 from typing import Tuple
 
 # third party imports
@@ -14,7 +14,7 @@ from dltb.tool import Tool
 
 
 class SingleTestTool(Tool):
-    """
+    """A tool that can operate on single data points.
     """
     
     def _process_single(array: np.ndarray) -> Tuple[float, bool]:
@@ -24,7 +24,7 @@ class SingleTestTool(Tool):
 
 
 class BatchTestTool(Tool):
-    """
+    """A tool that can operate on a batch of data.
     """
 
     def _process_batch(batch: np.ndarray) -> Tuple[np.ndarray, bool]:
@@ -38,6 +38,7 @@ class DualTestTool(SingleTestTool, BatchTestTool):
     """
 
 
+@skip("The Tool class (or this test) require some redesign ...")
 class TestTool(TestCase):
     """Tests for the :py:class:`Tool` class.
     """

@@ -1,6 +1,7 @@
 from unittest import TestCase
 
-from ..datasource import KerasDatasource
+# toolbox imports
+from dltb.thirdparty.keras.datasource import KerasDatasource
 
 
 class TestKeras(TestCase):

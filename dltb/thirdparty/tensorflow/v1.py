@@ -37,8 +37,7 @@ import importlib
 # thirdparty imports
 from packaging import version
 import tensorflow
-# plyint: disable=import-error
-from tensorflow.version import VERSION
+from tensorflow.version import VERSION  # plyint: disable=import-error
 
 # toolbox imports
 from dltb.base.prepare import Preparable

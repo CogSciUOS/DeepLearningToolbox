@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Iterable, Literal, Union, overload
+from typing import Iterable, Union, overload
 from pathlib import Path
 import os
 import re
@@ -26,6 +26,9 @@ except ImportError:
     # "cannot import name 'py3nvml'"
     py3nvml = None
 
+# toolbox imports
+from dltb.typing import Literal
+    
 
 class _component(dict):
     def __init__(self, name: str = None):

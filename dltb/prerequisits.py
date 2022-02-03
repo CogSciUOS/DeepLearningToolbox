@@ -71,13 +71,19 @@ if sys.version_info[0] < 3 or sys.version_info[1] < 6:
 # Prerequisite 2: Python 3.8 or the module typing_extensions
 #
 # See dltb(/typing.py)
-if sys.version_info[1] < 8 and \
-          importlib.util.find_spec('typing_extensions') is None:
-    # Insufficient typing support
-    print("Insufficient typing support. "
-          "Consider installing the package 'typing_extensions' or "
-          "updating your Python installation to 3.8 or above.",
-          file=sys.stderr)
+if sys.version_info[1] < 8:
+    if importlib.util.find_spec('typing_extensions') is None:
+        # Insufficient typing support
+        print("Insufficient typing support. "
+              "Consider installing the package 'typing_extensions' or "
+              "updating your Python installation to 3.8 or above.",
+              file=sys.stderr)
+    if importlib.util.find_spec('typing_inspect') is None:
+        # Insufficient typing support
+        print("Insufficient typing support. "
+              "Consider installing the package 'typing_inspect' or "
+              "updating your Python installation to 3.8 or above.",
+              file=sys.stderr)
 
 
 # Prerequisite 3: version comparison

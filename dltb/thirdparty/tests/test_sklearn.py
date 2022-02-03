@@ -2,14 +2,14 @@
 """
 
 # standard imports
-from unittest import TestCase, skipIf
+from unittest import TestCase, skipIf, skipUnless
 import importlib
 
 # toolbox imports
 from ...datasource import Datasource
 
 
-@skipIf(not importlib.util.find_spec('sklearn'), "sklearn not installed")
+@skipIf(importlib.util.find_spec('sklearn') is None, "sklearn not installed")
 class TestSklearn(TestCase):
     """Unit tests for deep learning toolbox API to the scikit-learn module.
     """
@@ -19,6 +19,8 @@ class TestSklearn(TestCase):
         # and register resources like datasources:
         importlib.import_module('sklearn')
 
+    @skipUnless('lfw-sklearn' in Datasource,
+                "Datasource 'lfw-sklearn' is not registered.")
     def test_lfw1(self):
         """Test the scikit-learn function to access the Labeled Faces in the
         Wild (LFW) dataset.

@@ -15,18 +15,24 @@ from dltb.tool.classifier import ClassScheme, ClassIdentifier
 class TestAlexnet(TestCase):
     """Tests for the :py:class:`Alexnet` image classification network.
     """
-    alexnet = Network['alexnet-tf']
-    alexnet.prepare()
 
-    image = imread('images/elephant.jpg')
+    def setUp(self):
+        """Initialize a detector to be used in the tests.
+        """
+        self.alexnet = Network['alexnet-tf']
+        self.image = imread('images/elephant.jpg')
 
     def test_alexnet_types(self):
+        """Check that AlexNet satisfies all type constraints.
+        """
         self.assertIsInstance(self.alexnet, Network)
         self.assertIsInstance(self.alexnet, Classifier)
         self.assertIsInstance(self.alexnet, SoftClassifier)
         self.assertIsInstance(self.alexnet, ImageClassifier)
 
     def test_alexnet_classification(self):
+        """Check that AlexNet correctly classifies the example image.
+        """
         scheme = self.alexnet.class_scheme
         self.assertIsInstance(scheme, ClassScheme)
 

@@ -802,6 +802,10 @@ class Network(Extendable, Preparable, method='network_changed',
     def get_output_layer(self):
         return self.layer_dict[self.output_layer_id()]
 
+    @property
+    def input_shape(self) -> Tuple[int]:
+        return self.get_input_shape()
+
     def get_input_shape(self, include_batch: bool = True,
                         include_channel: bool = True) -> tuple:
         """Get the shape of the input data for the network.
@@ -1302,11 +1306,13 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
     def image_to_internal(self, image: Imagelike) -> Any:
         """
         """
+        return self._image_to_internal(image)[np.newaxis]
         # to be implemented by subclasses
 
     def internal_to_image(self, data: Any) -> Imagelike:
         """
         """
+        return self._internal_to_image(image)
         # to be implemented by subclasses
 
 

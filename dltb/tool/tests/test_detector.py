@@ -1,19 +1,32 @@
-from unittest import TestCase
+"""Test suite for the general face detector module.
+"""
+# standard imports
+from unittest import TestCase, skipUnless
+import os
 
+# toolbox imports
 from dltb.tool import Tool
 from dltb.tool.detector import Detections
 from dltb.base.image import Image
 
 
+@skipUnless(os.path.isfile("examples/reservoir-dogs.jpg"),
+           "Example image 'examples/reservoir-dogs.jpg' is missing.")
 class TestDetector(TestCase):
+    """Test suite for the general face detector module.
+    """
 
     def setUp(self):
+        """Initialize a detector to be used in the tests.
+        """
         self.detector = Tool['haar']
         self.detector.prepare()
-        # self.image = imread('examples/reservoir-dogs.jpg')
         self.image = Image.as_data('examples/reservoir-dogs.jpg')
 
     def test_detect1(self):
+        """Check that the detector finds the correct number of faces
+        on the example image.
+        """
         detections = self.detector.detect(self.image)
         self.assertTrue(isinstance(detections, Detections))
         # self.datasource.unprepare()

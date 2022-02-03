@@ -2,11 +2,12 @@
 """
 
 # standard imports
-from typing import get_origin, get_args
 import unittest
 import importlib
+import os
 
 # toolbox imports
+from dltb.typing import get_origin, get_args
 from dltb.base.image import Size, Sizelike, Image
 
 
@@ -133,13 +134,16 @@ class TestImage(unittest.TestCase):
         self.assertIn('array', Image.supported_formats())
         self.assertIn('image', Image.supported_formats())
 
+    @unittest.skipUnless(os.path.isfile(example_image_filename),
+                         reason="Example image file is not available")
     def test_image_creation(self):
         """Test creation of `Image`.
         """
         image = Image(self.example_image_filename)
         self.assertEqual(image.size(), self.example_image_size)
 
-    @unittest.skipIf(importlib.util.find_spec("PyQt5") is None,
+    @unittest.skipIf(importlib.util.find_spec("PyQt5") is None or
+                     not os.path.isfile(example_image_filename),
                      reason="PyQt is not available")
     def test_qt(self):
         """Test :py:class:`Size` type.
@@ -151,7 +155,8 @@ class TestImage(unittest.TestCase):
         qimage = Image.as_qimage(image)
         self.assertIsInstance(qimage, module.QImage)
 
-    @unittest.skipIf(importlib.util.find_spec("PIL") is None,
+    @unittest.skipIf(importlib.util.find_spec("PIL") is None or
+                     not os.path.isfile(example_image_filename),
                      reason="Python Image Library (PIL/pillow)"
                      " is not available")
     def test_pillow(self):

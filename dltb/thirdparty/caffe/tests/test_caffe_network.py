@@ -1,10 +1,11 @@
-from .conf import MODELS_DIRECTORY
-from unittest import TestCase
+from unittest import TestCase, SkipTest, skipUnless
 
 import os
 import numpy as np
 
 from keras.datasets import mnist
+
+from dltb.config import config
 
 
 os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
@@ -15,19 +16,26 @@ os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
 # if __package__: from . import MODELS_DIRECTORY
 # else: from __init__ import MODELS_DIRECTORY
 
-from network.caffe import Network as CaffeNetwork
-from network.layers import caffe_layers
+try:
+    from dltb.thirdparty.caffe.network import Network as CaffeNetwork
+    from network.layers import caffe_layers
+    caffe_available = True
+except ImportError:
+    caffe_available = False
+    SkipTest("Skipping caffe tests as package 'caffe' is not installed.")
 
 
+@skipUnless(caffe_available, "package 'caffe' is not installed")
 class TestCaffeNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_def = os.path.join(MODELS_DIRECTORY,
-                                 'example_caffe_network_deploy.prototxt')
-        model_weights = os.path.join(MODELS_DIRECTORY,'mnist.caffemodel')
-        cls.loaded_network = CaffeNetwork(model_def=model_def,
-                                          model_weights=model_weights)
+        model_def = \
+            config.model_directory / 'example_caffe_network_deploy.prototxt'
+        model_weights = \
+            config.model_directory / 'mnist.caffemodel'
+        cls.loaded_network = CaffeNetwork(model_def=str(model_def),
+                                          model_weights=str(model_weights))
         # Load the images from the test set and normalize.
         cls.data = mnist.load_data()[1][0]
         cls.data = cls.data / cls.data.max()

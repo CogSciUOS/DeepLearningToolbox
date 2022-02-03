@@ -1,13 +1,13 @@
 """General numpy helper functions.
 """
-# FIXME[todo]: rename to multimax (and argmultimax) and introduce
-# multimin (and argmultimin)
+# standard imports
+from typing import Optional
 
 # third-party imports
 import numpy as np
 
 
-def multimin(array: np.ndarray, num: int = 1, axis: int = None,
+def multimin(array: np.ndarray, num: int = 1, axis: Optional[int] = None,
              sort: bool = False) -> np.ndarray:
     """Get the `num` smallest values of an array.
 
@@ -30,9 +30,10 @@ def multimin(array: np.ndarray, num: int = 1, axis: int = None,
     values:
         The `num` smallest values in this array.
     """
-    num = min(num, array.size if axis is None else array.shape[axis])
+    length = array.size if axis is None else array.shape[axis]
+    num = min(num, length)
     min_unsorted = np.partition(array, num, axis=axis) \
-        if num < array.shape[axis] else array
+        if num < length else array
     # FIXME[hack]: special treatment in case of axis == 1 should be
     # avoided or should be made more general; currently does not covers
     # axis is None and axis == 0!
@@ -41,7 +42,7 @@ def multimin(array: np.ndarray, num: int = 1, axis: int = None,
     return np.sort(min_unsorted, axis=axis) if sort else min_unsorted
 
 
-def multimax(array: np.ndarray, num: int = 1, axis: int = None,
+def multimax(array: np.ndarray, num: int = 1, axis: Optional[int] = None,
              sort: bool = False) -> np.ndarray:
     """Get the `num` largest values of an array.
 
@@ -67,7 +68,7 @@ def multimax(array: np.ndarray, num: int = 1, axis: int = None,
     return -multimin(-array, num=num, axis=axis, sort=sort)
 
 
-def argmultimin(array: np.ndarray, num: int = 1, axis: int = None,
+def argmultimin(array: np.ndarray, num: int = 1, axis: Optional[int] = None,
                 sort: bool = False) -> np.ndarray:
     # get indices for num smallest elements along axis
     # Remark: here we could use np.argsort(-array)[:n]
@@ -103,7 +104,7 @@ def argmultimin(array: np.ndarray, num: int = 1, axis: int = None,
     return np.take_along_axis(min_indices_unsorted, top_order, axis=axis)
 
 
-def argmultimax(array: np.ndarray, num: int = 1, axis: int = None,
+def argmultimax(array: np.ndarray, num: int = 1, axis: Optional[int] = None,
                 sort: bool = False) -> np.ndarray:
     """Get indices for the `num` largest values of an array.
 

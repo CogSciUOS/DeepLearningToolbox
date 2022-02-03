@@ -53,12 +53,31 @@ import inspect
 
 # toolbox imports
 from .types import Pathlike, as_path
+from .typing import get_args
 
 # Logging
 LOG = logging.getLogger(__name__)
 
-# dtype = Enum('DtypeEnum', {n: idx for n, idx in enumerate(dtype)})
-# default = getattr(dtype, default)
+# Xtype: either a type or a (finite) set of values.
+#
+# Having a type consisting of a finite collection of values seems to be
+# a common situation (especially with configuration values), but I have
+# not yet found a python way to declare such a type.
+#
+# Potential solutions do not really work out:
+#
+# 1. Enum:  dtype = Enum('DtypeEnum', {n: idx for n, idx in enumerate(dtype)})
+#    This is a proper type, but instances are only the attributes of this
+#    type: dtype.value1, dtype.value2, ...
+#    There seems to be no way to directly check isinstance(value, dtype)
+#
+# 2. Literal:  dtype = Literal[(n for n in dtype)]
+#    Literals are mainly used for type checking, there is no
+#    isinstance() check - the values are still instances of their
+#    original type (int, str, ...), but nut of the restricted Literal.
+#
+# Hence, until figuring out a better solution, we will go with our custom
+# approach.
 Xtype = Union[type, set]
 
 
@@ -154,7 +173,8 @@ class Config:
         # if self.config_assign_unknown == 'remember' else None
 
     def _check_type(self, value: Any, dtype: Optional[Xtype] = None) -> type:
-        """Chekc if a given `value` has a suitable type.
+        """Check if a given `value` has a suitable type.
+        Adapt the value if automatic conversion is provided for this type.
 
         Arguments
         ---------
@@ -168,6 +188,8 @@ class Config:
 
         Result
         ------
+        value:
+            The `value`, potentially converted to the expected type.
         dtype:
             The type of value. Same as `dtype` if provided.
 
@@ -180,21 +202,21 @@ class Config:
             value = value(self)
 
         if dtype is None:
-            return type(value), value
+            return value, type(value)
 
         if isinstance(dtype, set):
             if value not in dtype:
                 raise TypeError(f"Value '{value}' is no member of {dtype}.")
-            return dtype, value
+            return value, dtype, 
 
-        if isinstance(dtype, Path):
-            if not isinstance(value, Pathlike):
+        if issubclass(dtype, Path):
+            if not isinstance(value, get_args(Pathlike)):
                 raise TypeError(f"Value '{value}' cannot be used as Path.")
-            return dtype, as_path(value)
+            return as_path(value), dtype
 
         if value is not None and not isinstance(value, dtype):
             raise TypeError(f"Value '{value}' is no instance of {dtype}.")
-        return dtype, value
+        return value, dtype
 
     def __getattr__(self, name: str) -> Any:
         if name in self._config:
@@ -210,7 +232,7 @@ class Config:
             if name in self._config:
                 # we know this property - assign new value after typecheck
                 prop = self._config[name]
-                _dtype, value = self._check_type(value, prop.dtype)
+                value, _dtype = self._check_type(value, prop.dtype)
                 prop.value = value
             else:
                 # no property with that name was registered yet -
@@ -257,7 +279,7 @@ class Config:
             raise ValueError("Double registration of configuration property "
                              f"'name' (with default value {default}).")
 
-        dtype, default = self._check_type(default, dtype)
+        default, dtype = self._check_type(default, dtype)
         prop = Property(dtype=dtype, default=default, **kwargs)
         self._config[name] = prop
 
@@ -338,10 +360,9 @@ config.add_property('prepare_on_init', default=True,
 #
 
 config.add_property('base_directory',
-                    default=Path(os.path.dirname(os.path.dirname(__file__))))
-
-config.add_property('github_directory',
-                    default=lambda c: c.base_directory / 'github')
+                    default=Path(__file__).parents[1],
+                    description="A base directory.  "
+                    "Other directories can be defined based on this path.")
 
 config.add_property('model_directory',
                     default=lambda c: c.base_directory / 'models',
@@ -350,13 +371,23 @@ config.add_property('model_directory',
                     "pretrained models, downloaded from some "
                     "third-party repository.")
 
+config.add_property('data_directory',
+                    default=lambda c: c.base_directory / 'data',
+                    description="A directory for storing data. "
+                    "Intended as to be used as a base directory in which "
+                    "subdirectories for individual datasets can be created.")
+
 config.add_property('work_directory',
                     default=Path(os.environ.get('WORK', '.')) / 'dltb-data',
-                    description="a place where data generated by "
+                    description="A place where data generated by "
                     "the toolbox can be stored")
+
+config.add_property('github_directory',
+                    default=lambda c: c.base_directory / 'github',
+                    description="A directory into which github repositories "
+                    "can be cloned.  Cloning a repository can be a way to "
+                    "uses software for which no (current) package "
+                    "is released.")
 
 config.add_property('activations_directory',
                     default=lambda c: c.work_directory / 'activations')
-
-config.add_property('data_directory',
-                    default=lambda c: c.base_directory / 'data')

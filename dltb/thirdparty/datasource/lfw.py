@@ -50,6 +50,7 @@ import numpy as np
 
 # toolbox imports
 from dltb.config import config
+from dltb.types import Pathlike
 from dltb.base.image import Image, Imagelike
 from dltb.util.image import imresize
 from dltb.util.itertools import SizedGenerator, ignore_errors
@@ -58,13 +59,24 @@ from dltb.datasource import Imagesource, DataDirectory
 # logging
 LOG = logging.getLogger(__name__)
 
-# types
-Pathlike = Union[str, Path]
+# Configuration
+config.add_property('lfw_directory',
+                    default=lambda c: c.data_directory / 'lfw',
+                    description="A directory in which the LFW image files are "
+                    "located.  The images should be organized in subfolders, "
+                    "with one folder per person.")
+config.add_property('lfw_meta_directory',
+                    default=lambda c: c.lfw_directory.parent,
+                    description="A directory in which LFW meta files like "
+                    "the 'pairs.txt' can be found.")
 
+# types
 LfwID = Tuple[str, int]
 # LfwPair = LabeledPair[LfwID]
 LfwPair = Tuple[LfwID, LfwID, bool]
 ImagePair = Tuple[np.ndarray, np.ndarray, bool]
+
+
 
 
 class LabeledFacesInTheWild(DataDirectory, Imagesource):
@@ -133,8 +145,7 @@ class LabeledFacesInTheWild(DataDirectory, Imagesource):
             of the known persons.
         """
         if directory is None:
-            directory = getattr(config, 'data_directory_lfw',
-                                config.data_directory / 'lfw' / 'lfw')
+            directory = config.lfw_directory
         description = "Labeled Faces in the Wild"
         super().__init__(key=key or "lfw",
                          directory=directory,
@@ -142,7 +153,7 @@ class LabeledFacesInTheWild(DataDirectory, Imagesource):
                          label_from_directory='name',
                          **kwargs)
         self.meta_directory = Path(meta_directory) if meta_directory \
-            else Path(self.directory).parent
+            else config.lfw_meta_directory
         self._pairs_txt = self.meta_directory / 'pairs.txt'
         self._pair_coding = 'lfw'  # or 'custom'
         self.sklearn = None

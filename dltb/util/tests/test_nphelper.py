@@ -1,5 +1,4 @@
-"""Tests for the :py:class:`ActivationTool` and the
-:py:class:`ActivationWorker`
+"""Tests for the :py:mod:`nphelper` module.
 """
 
 # standard imports
@@ -17,17 +16,15 @@ class TestNPHelper(TestCase):
     """
 
     def test_multimax_01(self):
-        """Test `nphelper.multimax` a 1-dimensional value array.
+        """Test `nphelper.multimax` on a 1-dimensional value array.
         """
         values = np.asarray([4, 2, 5, 3, 7], dtype=np.float)
 
-        top_indices = np.argsort(-values)
         top3_indices = nphelper.argmultimax(values, num=3, sort=True)
-        self.assertTrue(np.array_equal(top3_indices, top_indices[:3]))
+        self.assertTrue(np.array_equal(top3_indices, [4, 2, 0]))
 
-        top = -np.sort(-values)
         top3 = nphelper.multimax(values, num=3, sort=True)
-        self.assertTrue(np.array_equal(top3, top[:3]))
+        self.assertTrue(np.array_equal(top3, [7, 5, 4]))
 
     def test_multimax_02a(self):
         """Test `nphelper.multimax` a 2-dimensional value array
