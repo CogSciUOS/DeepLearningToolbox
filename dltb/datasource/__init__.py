@@ -41,6 +41,8 @@ from .noise import Noise
 from .video import Video, Thumbcinema
 from .webcam import DataWebcam
 
+ABC = 3
+
 # logging
 LOG = logging.getLogger(__name__)
 del logging
@@ -60,3 +62,10 @@ Datasource.register_instance('dummy', 'dltb.datasource.dummy', 'Dummy')
 
 LOG.info("Predefined data sources: %r",
          list(Datasource.instance_register.keys()))
+
+
+__all__ = ['Datasource', 'Labeled', 'Random', 'Sectioned',
+           'Datafetcher', 'Livesource', 'Indexed', 'Imagesource',
+           'Imagesourcelike', 'DataArray', 'LabeledArray', 'DataFile',
+           'DataFiles', 'DataDirectory', 'ImageDirectory', 'Noise',
+           'Video', 'Thumbcinema', 'DataWebcam']

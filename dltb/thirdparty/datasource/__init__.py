@@ -2,6 +2,7 @@
 """
 
 # toolbox imports
+from ...base.implementation import Implementable
 from ...datasource import Datasource
 
 Datasource.register_instance('imagenet-val', __name__ + '.imagenet',
@@ -21,3 +22,11 @@ Datasource.register_instance('celeba-aligned', __name__ + '.celeba',
                              'CelebA', aligned=True)
 
 Datasource.register_class('WiderFace', __name__ + '.widerface')
+
+
+_DLTB_DATASOURCE = 'dltb.datasource.Datasource'
+_TP_DATASOURCE = 'dltb.thirdparty.datasource'  # __name__
+
+Implementable.register_module_alias(_TP_DATASOURCE + '.mnist', 'mnist')
+Implementable.register_implementation(_DLTB_DATASOURCE,
+                                      _TP_DATASOURCE + '.mnist.MNIST')

@@ -374,15 +374,16 @@ class ArcFace(ArcFaceBase, Preparable):
     # Preprocessing
     #
 
-    def _preprocess_image(self, image: Imagelike) -> np.ndarray:
-        """Preprocess an image. Preprocessing includes (1) resizing to the
+    def _image_to_internal(self, image: np.ndarray) -> np.ndarray:
+        """Preprocess a single image. Preprocessing includes (1) resizing to the
         desired input size, (2) conversion to float32 with range 0 to
         1, (3) reshaping to include a batch dimension.
 
         Arguments
         ---------
         image:
-            The image to be preprocessed.
+            The image to be preprocessed. This is expected to be of
+            dtype uint8.
 
         Result
         ------
@@ -443,8 +444,8 @@ class ArcFace(ArcFaceBase, Preparable):
         if self._aligner is not None:
             img = self._align_image(image)
         else:
-            img = self._preprocess_image(image)
-        # self._preprocess_image(image) -> seems to already add batch
+            img = self.image_to_internal(image)
+        # self.image_to_internal(image) -> seems to already add batch
         embeddings = self.embed_batch(img,  # np.expand_dims(img, 0)
                                       is_ccrop=is_ccrop,
                                       is_flip=is_flip)  # .squeeze(0)

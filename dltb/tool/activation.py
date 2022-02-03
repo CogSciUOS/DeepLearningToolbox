@@ -331,7 +331,7 @@ class DatasourceActivations(DatasourceTool, NetworkTool, IteratorTool, ABC):
             Either a single activation map of `(layer, index)`, or
             a dictionary of activation maps for `index`.
         """
-        
+
     def __iter__(self) -> Iterator:
         return self.activations()
 
@@ -387,7 +387,7 @@ class ActivationsArchive(DatasourceActivations, Fillable, Storable, ABC):
     `config.activations_directory` as well as the `ActivationTool` and
     `Datasource` identifiers (as provided by the `key` property),
     to construct a directory name.
-    
+
     Use cases
     ---------
 
@@ -705,8 +705,8 @@ class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
             print(f" - {name+':':20s} {str(shape):20s} "
                   f"of type {str(dtype):10s} [{formating.format_size(size)}]")
             total_size += size
-        print((f"No layers" if self._layers is None else
-               f"Total {len(self._layers)} layers") + 
+        print(("No layers" if self._layers is None else
+               f"Total {len(self._layers)} layers") +
               f" and {formating.format_size(total_size)}")
 
 
@@ -1407,7 +1407,7 @@ class ActivationWorker(Worker):
                 # self.work() will make `batch` the current data object
                 # of this Worker (self._data) and store activation values
                 # as attributes of that data object:
-                self.work(batch, busy_async=False)
+                self.work(batch, run=False)
 
                 # obtain the activation values from the current data object
                 activations = self.activations()
@@ -1455,7 +1455,7 @@ class ActivationWorker(Worker):
         for data in fetcher:
             print("iterate_activations: "
                   f"processing {'batch' if data.is_batch else 'data'}")
-            self.work(data, busy_async=False)
+            self.work(data, run=False)
             activations = self.activations()
             if data.is_batch:
                 for index, _view in enumerate(data):
@@ -1498,7 +1498,7 @@ class OldTopActivations(TopActivations):
             The index of the activation value in the
             :py:class:`Datasource`-
         """
-        layer, name = self._network[layer], layer
+        layer = self._network[layer]
 
         # slim_values have shape (batch*position..., channel)
         slim_values = value.reshape((-1, value.shape[-1]))
@@ -1510,7 +1510,7 @@ class OldTopActivations(TopActivations):
         top_slim = nphelper.argmultimax(slim_values, num=top, axis=0)
 
         # top_activations: (top, channel)
-        top_activations = np.take_along_axis(slim_values, top_slim, axis=0)
+        # top_activations = np.take_along_axis(slim_values, top_slim, axis=0)
 
         # the index shape is (batch, positions...), without channel
         shape = (len(value), ) + layer.output_shape[1:-1]
@@ -1526,6 +1526,8 @@ class OldTopActivations(TopActivations):
             top_indices[:, :, 0] = index[top_indices[:, :, 0]]
 
     def old_merge_layer_top_activations(self, layer: Layer, top: int = None):
+        """Old merge_layer_top_activations implementation
+        """
         # channel last (batch, height, width, channel)
         new_activations = \
             self.activations(layer).reshape(-1, self.actviations.shape[-1])
@@ -1562,7 +1564,8 @@ class OldTopActivations(TopActivations):
             self._top_indices[layer] = merged_indices[:sort]
             self._top_activations[layer] = merged_activations[:sort]
 
-    def old_top_activations(self, activations: np.ndarray, top: int = 9,
+    @staticmethod
+    def old_top_activations(activations: np.ndarray, top: int = 9,
                             datasource_index: int = None) -> None:
         """Get the top activattion values and their indices in a
         batch of activation maps.
@@ -1630,7 +1633,8 @@ class OldTopActivations(TopActivations):
 
         return top_activations, top_indices
 
-    def old_merge_top_activations(self, top_activations: np.ndarray,
+    @staticmethod
+    def old_merge_top_activations(top_activations: np.ndarray,
                                   top_indices: np.ndarray,
                                   new_activations: np.ndarray,
                                   new_indices: np.ndarray) -> None:
@@ -1665,6 +1669,8 @@ class OldTopActivations(TopActivations):
 
     def old_init_layer_top_activations(self, layers=None,
                                        top: int = 9) -> None:
+        """old implementation of init_layer_top_activations
+        """
         if layers is None:
             layers = self._fixed_layers
         for layer in layers:
@@ -1677,6 +1683,8 @@ class OldTopActivations(TopActivations):
 
     def old_update_layer_top_activations(self, layers=None,
                                          top: int = 9) -> None:
+        """old implementation of update_layer_top_activations
+        """
         if layers is None:
             layers = self._fixed_layers
         for layer in layers:
@@ -1712,7 +1720,7 @@ class OldTopActivations(TopActivations):
 
 Activationslike = np.ndarray
 
-            
+
 class ActivationComparison:
     """Compare activation values collected from two layers (same or
     different size), which can be from same or different networks,
@@ -1724,7 +1732,7 @@ class ActivationProbe:
     """Probe the performance achievable from given activation activation
     values in a supervised learning task
     """
-    
+
     def train(self, activations: Activationslike, labels, **kwargs) -> None:
         """Train the activation probe on a given supervised
         learning problem.

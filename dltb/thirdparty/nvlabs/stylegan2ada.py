@@ -26,15 +26,16 @@ from ...base import Preparable
 from ...config import config
 from ...tool.generator import ImageGAN
 
-
 # logging
 LOG = logging.getLogger(__name__)
 
+# Configuration
+config.add_property('nvlabs_stylegan2ada_pytorch_directory',
+                    default=lambda c: c.github_directory /
+                    'stylegan2-ada-pytorch')
+
 
 class StyleGAN2Ada(ImageGAN, Preparable):
-
-    config.set_default_value('nvlabs_stylegan2ada_pytorch_directory',
-                             config.github_directory / 'stylegan2-ada-pytorch')
 
     stylegan_dir = config.nvlabs_stylegan2ada_pytorch_directory
     stylegan_github = 'https://github.com/NVlabs/stylegan.git'

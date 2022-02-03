@@ -101,7 +101,7 @@ if HAVE_KERAS_IO:
                           f"but you have tensorflow {tf.__version__}.")
 
 
-if False:  # FIXME[concept]: we nee some genral concept what to do here ...
+if False:  # FIXME[concept]: we nee some general concept what to do here ...
     # image_dim_ordering:
     #   'tf' - "tensorflow":
     #   'th' - "theano":
@@ -110,6 +110,9 @@ if False:  # FIXME[concept]: we nee some genral concept what to do here ...
     LOG.info(f"image_data_format: {keras.backend.image_data_format()}")
 
     if config.use_cpu:
+        #  * Can Keras with Tensorflow backend be forced to use CPU or GPU
+        #    at will?
+        #    https://stackoverflow.com/q/40690598
         # unless we do this, TF still checks and finds gpus (not
         # sure if it actually uses them)
         #
@@ -120,6 +123,7 @@ if False:  # FIXME[concept]: we nee some genral concept what to do here ...
         # FIXME[todo]: the following setting causes a TensorFlow
         # error: failed call to cuInit: CUDA_ERROR_NO_DEVICE
         # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        #  os.environ['CUDA_VISIBLE_DEVICES'] = ''
         LOG.info("Running in CPU-only mode.")
         from multiprocessing import cpu_count
         num_cpus = cpu_count()

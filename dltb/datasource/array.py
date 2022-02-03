@@ -11,6 +11,7 @@
 
 
 # third party imports
+from typing import Union
 import numpy as np
 
 # toolbox imports
@@ -98,7 +99,10 @@ class DataArray(Indexed):
     def _get_batch(self, data: Data, index: int = None, **kwargs) -> None:
         # pylint: disable=arguments-differ
         if index is not None:
-            data.array = self._array[index:index+len(data)]
+            if isinstance(index, np.ndarray):
+                data.array = self._array[index]
+            else:
+                data.array = self._array[index:index+len(data)]
         super()._get_batch(data, index=index, **kwargs)
 
     def _get_index(self, data: Data, index: int, **kwargs) -> None:
@@ -117,12 +121,28 @@ class LabeledArray(DataArray, Labeled):
     """
 
     _labels: np.ndarray = None
+    _one_hot: bool = False
+    _scheme: ClassScheme = None
+
+    def __init__(self, labels: np.ndarray = None, one_hot: bool = False,
+                 scheme: ClassScheme = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._labels = labels
+        self._one_hot = one_hot
+        self._scheme = scheme
 
     @property
     def labels_prepared(self) -> bool:
         """Check if labels for this dataset have been prepared.
         """
         return self._labels is not None
+
+    @property
+    def label_scheme(self) -> ClassScheme:
+        """The :py:class:`ClassScheme` in case the `Datasource` is a
+        classification dataset.
+        """
+        return self._scheme
 
     def _prepare_labels(self, labels: np.ndarray = None) -> None:
         """Set the labels for for this labeled Array datasource.
@@ -182,10 +202,15 @@ class LabeledArray(DataArray, Labeled):
         """Get data from this :py:class:`Datasource`\\ .
         """
         super()._get_batch(data, **kwargs)
-        data.label = self._labels[data.index] if self.labels_prepared else None
+        if self.labels_prepared:
+            label = self._labels[data.index]
+            if self._one_hot and self._scheme is not None:
+                data.label = self.label_to_one_hot(label)
+            else:
+                data.label = label
 
     def _get_index(self, data, index: int, **kwargs) -> None:
-        """
+        """Get a single data element for a given index.
 
         Raises
         ------
@@ -194,7 +219,30 @@ class LabeledArray(DataArray, Labeled):
         """
         super()._get_index(data, index, **kwargs)
         label = self._labels[index] if self.labels_prepared else None
-        data.label = label
+        if self._one_hot:
+            data.label = self.label_to_one_hot(label)
+        else:
+            data.label = label
+
+    def label_to_one_hot(self, label: Union[int, np.ndarray]) -> np.ndarray:
+        """Get a one-hot representation for a numerical class label.
+        """
+        if isinstance(label, int):
+            one_hot = np.zeros(len(self._scheme))
+            one_hot[label] = 1
+            return one_hot
+
+        return np.eye(len(self._scheme))[label]
+
+    def one_hot_to_label(self, one_hot: np.ndarray) -> Union[int, np.ndarray]:
+        """Obtain numerical label(s) for a (single or batch of)
+        one-hot vector(s).
+        """
+        if one_hot.ndims == 1:
+            return np.argmax(one_hot)
+
+        # batch of one-hot vectors, shape (batch, n_labels)
+        return np.argmax(one_hot, axis=1)
 
     def _get_description(self, index: int = None, short: bool = False,
                          with_label: bool = False, **kwargs) -> str:

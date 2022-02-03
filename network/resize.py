@@ -1,4 +1,4 @@
-'''
+"""
 .. module:: resize
 
 This module defines the :py:class:`ShapeAdaptor` and
@@ -7,9 +7,13 @@ This module defines the :py:class:`ShapeAdaptor` and
 contain a resized version of the original image.
 
 .. moduleauthor:: Rasmus Diederichsen
-'''
-from network import Network
+"""
+
+# third party imports
 import numpy as np
+
+# toolbox imports
+from dltb.network import Network
 
 
 class _ResizePolicyBase(object):
@@ -24,7 +28,7 @@ class _ResizePolicyBase(object):
     _new_shape: tuple = None
 
     def setShape(self, new_shape):
-        '''Set the shape to match. If the last dimension is 1, it is removed.
+        """Set the shape to match. If the last dimension is 1, it is removed.
 
         Parameters
         ----------
@@ -35,7 +39,7 @@ class _ResizePolicyBase(object):
         ------
         ValueError
             If leading dimension is None (aka batch)
-        '''
+        """
         if new_shape[0] is None:
             raise ValueError('Cannot work with None dimensions')
         if new_shape[-1] == 1:
@@ -44,13 +48,13 @@ class _ResizePolicyBase(object):
         self._new_shape = new_shape
 
     def resize(self, image):
-        '''Resize an image according to this policy.
+        """Resize an image according to this policy.
 
         Parameters
         ----------
         image   :   np.ndarray
                     Image to resize
-        '''
+        """
         raise NotImplementedError("Abstract base class ResizePolicy "
                                   "cannot be used directly.")
 
@@ -75,18 +79,22 @@ class ResizePolicyBilinear(_ResizePolicyBase):
 
 
 class ResizePolicyPad(_ResizePolicyBase):
-    '''Resize policy which will pad the input image to the target size. This will not work if
-    the target size is smaller than the source size in any dimension.'''
+    """Resize policy which will pad the input image to the target
+    size. This will not work if the target size is smaller than the
+    source size in any dimension.
 
-    def __init__(self, mode, **kwargs):
-        '''
+    """
+
+    def __init__(self, mode: str, **kwargs):
+        """
         Parameters
         ----------
-        mode    :   str
-                    Any of the values excepted by :py:func:`np.pad`
-        kwargs  :   dict
-                    Additional arguments to pass to :py:func:`np.pad`, such as the value to pad with
-        '''
+        mode:
+            Any of the values excepted by :py:func:`np.pad`
+        kwargs:
+            Additional arguments to pass to :py:func:`np.pad`,
+            such as the value to pad with
+        """
         self._pad_mode = mode
         self._pad_kwargs = kwargs
 
@@ -97,12 +105,13 @@ class ResizePolicyPad(_ResizePolicyBase):
         new_h, new_w = self._new_shape[:2]
 
         if new_h < h or new_w < w:
-            raise ValueError('Cannot pad to a smaller size. Use `ResizePolicy.Crop` instead.')
+            raise ValueError("Cannot pad to a smaller size. "
+                             "Use `ResizePolicy.Crop` instead.")
 
         # necessary padding to reach desired size
         pad_h = new_h - h
         pad_w = new_w - w
-        
+
         # If padding is not even, we put one more padding pixel to the
         # bottom/right
         top = pad_h // 2
@@ -110,12 +119,12 @@ class ResizePolicyPad(_ResizePolicyBase):
         left = pad_w // 2
         right = pad_w - left
 
-        return np.pad(img, (top, bottom, left, right), self._pad_mode, **self._pad_kwargs)
+        return np.pad(img, (top, bottom, left, right), self._pad_mode,
+                      **self._pad_kwargs)
 
 
 class ResizePolicyChannels(_ResizePolicyBase):
     """Resize policy which adapts the number of channels.
-
 
     Attributes
     ----------
@@ -157,19 +166,22 @@ class ResizePolicyChannels(_ResizePolicyBase):
             # conversion
             img = np.mean(img, axis=2, keepdims=True).astype(np.uint8)
         elif self._channels != img.shape[2]:
-            raise ValueError('Incompatible network input shape: network expects {} channels, but image has shape {}.'.format(self._channels,img.shape))
+            raise ValueError("Incompatible network input shape: "
+                             f"network expects {self._channels} channels, "
+                             f"but image has shape {img.shape}.")
         return img
+
 
 class ResizePolicy(object):
 
     @staticmethod
     def Bilinear():
-        '''Create a bilinear interpolation policy.'''
+        """Create a bilinear interpolation policy."""
         return ResizePolicyBilinear()
 
     @staticmethod
     def Pad():
-        '''Create a pad-with-zero policy.'''
+        """Create a pad-with-zero policy."""
         return ResizePolicyPad('constant', constant_values=0)
 
     @staticmethod
@@ -182,27 +194,27 @@ class ResizePolicy(object):
 
 
 class ShapeAdaptor:
-    '''Adaptive wrapper around a :py:class:`Datasource`'''
+    """Adaptive wrapper around a :py:class:`Datasource`"""
 
     def __init__(self, resize_policy, network: Network = None):
-        '''
+        """
         Parameters
         ----------
         resize  :   ResizePolicy
                     Policy to use for resizing images
         network :   network.Network
                     Network to adapt to
-        '''
+        """
         self._resize = resize_policy
         self.setNetwork(network)
 
     def setNetwork(self, network: Network):
-        '''Change the network to adapt to.
+        """Change the network to adapt to.
 
         Parameters
         ----------
         network :   network.Network
-        '''
+        """
         if network is not None:
             self._resize.setShape(network.get_input_shape(include_batch=False))
 

@@ -24,6 +24,7 @@ base class.
 # standard imports
 from types import ModuleType
 from typing import Iterable, Union, Sequence, List, Dict, Tuple, Type, Optional
+import os
 import sys
 import logging
 import importlib
@@ -262,6 +263,28 @@ class Implementable:
         """
         return cls is not Implementable and Implementable not in cls.__bases__
 
+    @classmethod
+    def implementation_info(cls) -> str:
+        """Provide information on the implementations for this class.
+        """
+        inv_modules = \
+            {mod: alias for alias, mod in cls._module_aliases.items()}
+        info = f"Implementation information for {cls.__name__}." + os.linesep
+        info += "Loaded implementations:" + os.linesep
+        for idx, impl in enumerate(cls.implementations(loaded=True,
+                                                       as_str=True)):
+            info += f"{idx}) {impl}" + os.linesep
+        info += "Implementations not loaded yet:" + os.linesep
+        for idx, impl in enumerate(cls.implementations(loaded=False,
+                                                       as_str=True)):
+            module_name = impl.rsplit('.', maxsplit=1)[0]
+            info += f"{idx}) {impl}"
+            if module_name in inv_modules:
+                info += f" (module='{inv_modules[module_name]}')"
+            info += os.linesep
+
+        return info
+
     def __init_subclass__(cls, **kwargs) -> None:
         # mypy currently has a problem with __init_subclass__
         # see: https://github.com/python/mypy/issues/4660
@@ -305,6 +328,10 @@ class Implementable:
 
     def __init__(self, implementation: Optional[Implementationlike] = None,
                  module: Optional[Moduleslike] = None, **kwargs) -> None:
+        # This is an open issue in pylint -
+        # "unused-argument for required argument in __new__"   #3670
+        # https://github.com/PyCQA/pylint/issues/3670
+        # pylint: disable=unused-argument
         super().__init__(**kwargs)
 
     @classmethod
@@ -383,7 +410,7 @@ class Implementable:
                       implementation, cls.__module__, cls.__name__)
             raise ImportError(f"{Implementable._fully_qualified_name(new_cls)}"
                               " is not a proper implementation of "
-                              f"Implementable._fully_qualified_name(cls)")
+                              f"{Implementable._fully_qualified_name(cls)}")
 
         LOG.info("Loaded implementation '%s.%s' for '%s.%s'.",
                  new_cls.__module__, new_cls.__name__,
@@ -431,7 +458,7 @@ class Implementable:
                 tuple(cls._canonical_module_name(mod) for mod in module)
 
         # If a implementation is provided, check that it matches
-        # the module constratin and if so return it
+        # the module constraint and if so return it
         if implementation is not None:
             if not cls._from_modules(implementation, module_names):
                 raise ValueError(f"Class '{implementation}' does not fit "
@@ -451,9 +478,9 @@ class Implementable:
             try:
                 return cls.load_implementation(implementation=implementation,
                                                module=module)
-            except ImportError:
+            except ImportError as error:
                 raise NotImplementedError(f"Implementatation {implementation} "
-                                          "could not be imported")
+                                          "could not be imported") from error
 
         # Check if we already have loaded an implementation
         # and if so return it.
@@ -508,4 +535,7 @@ class Implementable:
                 if isinstance(implementation, type) else
                 implementation.rsplit('.', maxsplit=1)[0])
 
-        return name in module_names
+        # strict match:
+        # return name in module_names
+        # allow for submodules:
+        return any(name.startswith(n) for n in module_names)

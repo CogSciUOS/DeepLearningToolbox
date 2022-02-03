@@ -6,8 +6,8 @@ import numpy as np
 
 # Qt imports
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
-from PyQt5.QtCore import QSize, QPoint
-from PyQt5.QtGui import QMouseEvent, QKeyEvent, QFocusEvent
+from PyQt5.QtCore import QSize, QPoint, QRect
+from PyQt5.QtGui import QMouseEvent, QKeyEvent, QFocusEvent, QPaintEvent
 from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtWidgets import QWidget, QFrame, QLabel
 from PyQt5.QtWidgets import QGridLayout, QSizePolicy, QToolTip
@@ -34,7 +34,7 @@ class QFeatureView(QFrame):
     featuresChanged = pyqtSignal()
 
     def __init__(self, orientation: int = Qt.Horizontal, **kwargs) -> None:
-        """Initialize the :py:class:`OrientationtransferPanel`.
+        """Initialize the :py:class:`QFeatureView`.
         """
         super().__init__(**kwargs)
 
@@ -79,7 +79,7 @@ class QFeatureView(QFrame):
         self._range = (-max_value, max_value)
         self.update()
 
-    def minimumSizeHint(self):
+    def minimumSizeHint(self) -> QSize:
         """The minimum size hint.
 
         Returns
@@ -141,7 +141,7 @@ class QFeatureView(QFrame):
                  (offset * (self._range[1]-self._range[0]) / total))
         return value
 
-    def paintEvent(self, event) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:
         """Process the paint event by repainting this Widget.
 
         Parameters
@@ -156,7 +156,7 @@ class QFeatureView(QFrame):
             self._drawFeatures(painter, event.rect())
             painter.end()
 
-    def _drawFeatures(self, painter, rect) -> None:
+    def _drawFeatures(self, painter: QPainter, rect: QRect) -> None:
         """Draw a given portion of this widget.
         Parameters
         ----------

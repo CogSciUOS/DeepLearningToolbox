@@ -21,7 +21,7 @@ class Attacker(Tool):
     """
 
     def attack(self, victim: Classifier, example: np.ndarray,
-               correct: ClassIdentifier, target: ClassIdentifier = None,
+               correct: ClassIdentifier = None, target: ClassIdentifier = None,
                **kwargs) -> np.ndarray:
         """
         Perform an attack against a victim.
@@ -33,9 +33,13 @@ class Attacker(Tool):
         example: np.ndarray
             The example that should be altered.
         correct: ClassIdentifier
-            Correct class label for the example.
+            Correct class label for the example. Can be given in
+            case of untargeted attacks.  The adversarial example
+            will then have a small confidence value for that class.
+            If `None`, the model prediction is assumed to be the
+            correct class.
         target: ClassIdentifier
-            Target label for the attack. If none is given,
+            Target label for the attack. If `None`,
             an untargeted attack is done.
 
         Result

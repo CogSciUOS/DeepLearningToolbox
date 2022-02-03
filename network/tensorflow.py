@@ -8,7 +8,7 @@ import logging
 
 # third party imports
 import numpy as np
-from dltb.thirdparty.tensorflow import v1 as tf
+from dltb.thirdparty.tensorflow.v1 import tf
 
 # toolbox imports
 from dltb.network import Network as BaseNetwork, NetworkParsingError
@@ -827,14 +827,17 @@ class Alexnet(Classifier, ImageNetwork, Network):
         LOG.debug("alexnet: prepare")
         self._online()
 
-    def _prepare_image(self, imagelike: Imagelike) -> np.ndarray:
+    def _image_to_internal(self, imagelike: Imagelike) -> np.ndarray:
+        # FIXME[todo]: check out the correct preprocessing for AlexNet
+        # with the current approach the accuracy is only around 30%
+
         # get a numpy.ndarray
         image = Image.as_array(imagelike, dtype=np.float32,
                                colorspace=Colorspace.RGB)
 
         # FIXME: probably we should do center crop here ...
         image = imresize(image, (227, 227))
-        # print("Alexnet._prepare_image:", image.dtype, image.shape)
+        # print("Alexnet._image_to_internal:", image.dtype, image.shape)
 
         # dividing by 256 brings accuracy down to almost 0%.
         # image = image/256.
@@ -849,34 +852,10 @@ class Alexnet(Classifier, ImageNetwork, Network):
         # Caffe Uses BGR Order
         # RGB to BGR: this really boosts performance; from 33% to 55%
         image = image[:, :, ::-1]
-        #tmp = image[:, :, 2].copy()
-        #image[:, :, 2] = image[:, :, 0]
-        #image[:, :, 0] = tmp
+        # tmp = image[:, :, 2].copy()
+        # image[:, :, 2] = image[:, :, 0]
+        # image[:, :, 0] = tmp
         return image
-
-    def image_to_internal(self, image: Imagelike) -> np.ndarray:
-        """
-        """
-        # FIXME[todo]: check out the correct preprocessing for AlexNet
-        # with the current approach the accuracy is only around 30%
-
-        # FIXME[hack]: batch handling
-        from dltb.base.data import Data
-        if isinstance(image, Data) and image.is_batch:
-            result = np.ndarray((len(image), 227, 227, 3))
-            for index, img in enumerate(image.array):
-                result[index] = self._prepare_image(img)
-            print("Alexnet.image_to_internal: new batch:", result.shape)
-            return result
-        elif isinstance(image, list):
-            result = np.ndarray((len(image), 227, 227, 3))
-            for index, img in enumerate(image):
-                result[index] = self._prepare_image(img)
-            print("Alexnet.image_to_internal: new batch:", result.shape)
-            return result
-
-        image = self._prepare_image(image)
-        return image[np.newaxis]
 
     def internal_to_image(self, internal: tf.Tensor) -> np.ndarray:
         return internal[0].numpy()

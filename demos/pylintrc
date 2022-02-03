@@ -1,0 +1,4 @@
+[BASIC]
+# Regular expression matching correct module names. Overrides module-naming-
+# style.
+module-rgx=dl-.*

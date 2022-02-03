@@ -85,6 +85,15 @@ from ..util.download import download
 LOG = logging.getLogger(__name__)
 
 
+# Configuration
+config.add_property('nnabla_examples_directory',
+                    default=lambda c: c.github_directory / 'nnabla-examples',
+                    description="Path to a directory into which the "
+                    "`nnabla-examples` repository "
+                    "(https://github.com/sony/nnabla-examples.git) "
+                    "was cloned.")
+
+
 class NNabla(Preparable, BusyObservable):
     """Abstract base class for networks realized in `nnabla`.
     """
@@ -125,14 +134,6 @@ class NNabla(Preparable, BusyObservable):
         images = images.transpose(0, 2, 3, 1)
 
         return images
-
-
-# nnabla_examples_directory:
-#     path to a directory, into which the `nnabla-examples` repository
-#     (https://github.com/sony/nnabla-examples.git) was cloned.
-config.set_default_value('nnabla_examples_directory',
-                         os.path.join(config.github_directory,
-                                      'nnabla-examples'))
 
 
 class NNablaExample(NNabla):

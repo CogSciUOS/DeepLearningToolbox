@@ -79,6 +79,14 @@ class WiderFace(DataDirectory, Imagesource, Sectioned,
     illumination: Tuple[str]
     occlusion: Tuple[str]
     invalid: Tuple[str]
+
+
+    Evaluation
+    ----------
+    [1] Code for WiderFace evaluation:
+        https://github.com/wondervictor/WiderFace-Evaluation/blob/master/evaluation.py
+    [2] Benchmark of Publicly Available Face Model on WIDER Dataset
+        https://github.com/nodefluxio/face-detector-benchmark
     """
 
     blur = ('clear', 'normal blur', 'heavy blur')

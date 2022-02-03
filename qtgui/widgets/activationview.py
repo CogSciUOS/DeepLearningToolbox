@@ -171,6 +171,8 @@ class QActivationView(QWidget, QObserver, qobservables={
         self._localContrast = False
         self._colorScale = False
 
+        self._showDetails = False
+
         # By default, a QWidget does not accept the keyboard focus, so
         # we need to enable it explicitly: Qt.StrongFocus means to
         # get focus by 'Tab' key as well as by mouse click.
@@ -198,7 +200,6 @@ class QActivationView(QWidget, QObserver, qobservables={
 
         self._activations = activations
         self._updateGeometry()
-
 
     def layer(self) -> Layer:
         """The layer for which activations are currently displayed in this
@@ -665,9 +666,19 @@ class QActivationView(QWidget, QObserver, qobservables={
         ----------
         painter : QPainter
         """
-        painter.drawText(self.rect(), Qt.AlignCenter, "No data,\n"
-                         f"layer='{self._layer.key if self._layer else None}',"
-                         f"\nworker={self._activationWorker is not None}!")
+        text = "No data"
+        if self._showDetails:
+            if self._layer:
+                text += f",\nlayer='{self._layer.key}'"
+            else:
+                text += f",\nno layer"
+
+            if self._activationWorker is not None:
+                text += ",\nno ActivationWorker"
+            else:
+                text += ",\nActivationWorker is available"
+
+        painter.drawText(self.rect(), Qt.AlignCenter, text)
 
     def paintEvent(self, _: QPaintEvent) -> None:
         """Process the paint event by repainting this Widget.
@@ -799,6 +810,10 @@ class QActivationView(QWidget, QObserver, qobservables={
         """Process special keys for this widget.  Allow moving selected entry
         using the cursor keys. Deselect unit using the Escape key.
 
+        Space: toggle display of tooltips
+        'C': toggle color scale
+        'L': toggle local contrast
+        
         Parameters
         ----------
         event: QKeyEvent
@@ -813,12 +828,16 @@ class QActivationView(QWidget, QObserver, qobservables={
         # Space will toggle display of tooltips
         if key == Qt.Key_Space:
             self.setToolTip(not self.toolTipActive)
-        # 'C' will toggle local contrast
+        # 'C' will toggle color scale
         elif key == Qt.Key_C:
             self.setColorScale(not self.colorScale())
         # 'L' will toggle local contrast
         elif key == Qt.Key_L:
             self.setLocalContrast(not self.localContrast())
+        # 'D' will toggle details
+        elif key == Qt.Key_D:
+            self._showDetails = not self._showDetails
+            self.update()
         # Arrow keyes will move the selected entry
         elif position is not None and not shiftPressed:
             if key == Qt.Key_Left:

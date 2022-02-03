@@ -3,10 +3,11 @@
 # FIXME[hack]: rename 'skip_if_exists' argument by 'overwrite' (with opposite semantics)
 # FIXME[hack]: do logging and error processing
 
+# standard imports
 import os
 import sys
+import logging
 
-# standard imports
 # third-party imports
 import requests
 
@@ -15,16 +16,20 @@ import requests
 from tqdm import tqdm
 
 # toolbox imports
+from ..types import Pathlike, as_path
 from ..base.busy import BusyObservable
+
+# logging
+LOG = logging.getLogger(__name__)
 
 
 # Helper function to download (windows compatibility)
-def download(url, filename, skip_if_exists=True):
+def download_request(url: str, filename: Pathlike, skip_if_exists=True):
     """
     """
-    if skip_if_exists and os.path.isfile(filename):
-        print(f"Download skipped - file '{filename}' already exists.",
-              file=sys.stderr)
+    filename = as_path(filename)
+    if skip_if_exists and filename.is_file():
+        LOG.info("Download skipped - file '%s' already exists.", filename)
         return
 
     response = requests.get(url, stream=True)
@@ -40,9 +45,12 @@ def download(url, filename, skip_if_exists=True):
     progress_bar.close()
 
     if total_size_in_bytes != 0 and progress_bar.n != total_size_in_bytes:
-        print("ERROR, something went wrong. "
-              "Please manually delete any residual download files",
-              file=sys.stderr)
+        LOG.error("Something went wrong while downloading '%s' to '%s'. "
+                  "Please manually delete any residual download files",
+                  url, filename)
+
+
+download = download_request
 
 # -- end: download --
 

@@ -21,7 +21,7 @@ import numpy as np
 # Qt imports
 from PyQt5.QtCore import Qt, QPoint, QPointF, QSize, QRect
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
+from PyQt5.QtGui import QImage, QPainter, QPen, QTransform, QWheelEvent
 from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPaintEvent, QResizeEvent
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QSizePolicy, QVBoxLayout
 from PyQt5.QtWidgets import QToolTip
@@ -823,7 +823,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
     @protect
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        if self._currentRegion >= 0:
+        if self._currentRegion is not None and self._currentRegion >= 0:
             self.invalidateRegion()
         else:
             # Reset the image
@@ -832,7 +832,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self._mouseStartPosition = None
             self.update()
 
-    def wheelEvent(self, event):
+    def wheelEvent(self, event: QWheelEvent):
         """Process the wheel event. The mouse wheel can be used for
         zooming.
 
@@ -843,6 +843,12 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         """
         delta = event.angleDelta().y() / 120  # will be +/- 1
         # position = (self._offset + event.pos()) / self._zoom
+
+        modifier = event.modifiers()
+        if modifier & Qt.ShiftModifier:
+            delta *= 5
+        if modifier & Qt.ControlModifier:
+            delta *= 10
 
         zoom = (1 + delta * 0.01) * self._zoom
         self.setZoom(zoom)
@@ -1233,7 +1239,7 @@ class QMultiImageView(QWidget):
         """The number of images currently displayed in this
         :py:class:`QMultiImageView`.
         """
-        return len(self._images)
+        return 0 if self._images is None else len(self._images)
 
     def navigation(self) -> int:
         return self._navigation
@@ -1650,13 +1656,14 @@ class QMultiImageView(QWidget):
         vertical_skip = self._spacing + self._imageSize.height()
         half_spacing = self._spacing // 2
         position = QPoint(half_spacing, half_spacing)
-        for index, image in enumerate(self._images):
-            # update position
-            row, column = self._gridPosition(index)
-            position = QPoint(column * horizontal_skip + half_spacing,
-                              row * vertical_skip + half_spacing)
-            rect = QRect(position, self._imageSize)
-            self._paintImage(painter, index, image, rect)
+        if self._images is not None:
+            for index, image in enumerate(self._images):
+                # update position
+                row, column = self._gridPosition(index)
+                position = QPoint(column * horizontal_skip + half_spacing,
+                                  row * vertical_skip + half_spacing)
+                rect = QRect(position, self._imageSize)
+                self._paintImage(painter, index, image, rect)
 
         painter.end()
 

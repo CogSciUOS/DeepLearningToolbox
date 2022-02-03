@@ -80,7 +80,6 @@ from dltb.network import Network, argparse as NetworkArgparse
 #from network import AutoencoderController
 # from network.examples import keras, torch
 from dltb.datasource import Datasource, Datafetcher, DataDirectory
-from tools.train import TrainingController
 from .process import Process
 
 # logging
@@ -690,7 +689,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         #
         # General options
         #
-        parser.add_argument('--cpu', help='Do not attempt to use GPUs',
+        # FIXME[bug]: conflicting argument (with dltb aguments)
+        parser.add_argument('--cpu2', help='Do not attempt to use GPUs',
                             action='store_true', default=False)
         # FIXME[old]: this option has been integrated into
         # NetworkArgparse
@@ -823,7 +823,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
                     detector = Tool[key]
                     detector.runner = self.runner  # FIXME[hack]
                     # LOG.info("Toolbox: Preparing detector '%s'", key)
-                    # detector.prepare(busy_async=False)
+                    # detector.prepare(run=False)
                     self.add_tool(detector)
 
         #
@@ -1489,14 +1489,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         return controller
 
     @property
-    def training_controller(self) -> TrainingController:
-        controller = getattr(self, '_training_controller', None)
-        if controller is None:
-            controller = TrainingController(runner=self._runner)
-            self._training_controller = controller
-        return controller
-
-    @property
     def maximization_engine(self) -> BaseController:  # -> tools.am.Controller
         """Get the Controller for the activation maximization engine. May
         create a new Controller (and Engine) if none exists yet.
@@ -1539,15 +1531,6 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         # self.x_test, self.y_test = mnist[1]
         self.dataset = mnist
         self.data = mnist[1]  # FIXME[hack]
-
-        # FIXME[hack]: we need a better training concept ...
-        from tools.train import Training
-        self.training = Training()
-        # self.training.\
-        #    set_data(self.get_inputs(dtype=np.float32, flat=True, test=False),
-        #             self.get_labels(dtype=np.float32, test=False),
-        #             self.get_inputs(dtype=np.float32, flat=True, test=True),
-        #             self.get_labels(dtype=np.float32, test=True))
 
     @property
     def data(self):

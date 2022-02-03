@@ -7,7 +7,7 @@ import logging
 # third party imports
 import numpy as np
 from dltb.thirdparty.keras import keras
-from dltb.thirdparty.tensorflow import v1 as tf
+from dltb.thirdparty.tensorflow.v1 import tf
 
 # toolbox imports
 from . import Network as BaseNetwork

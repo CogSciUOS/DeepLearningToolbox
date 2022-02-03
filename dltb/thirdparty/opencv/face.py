@@ -175,7 +175,7 @@ class DetectorHaar(Detector, BoundingBoxDetector, Installable):
     # Detection
     #
 
-    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+    def _image_to_internal(self, image: np.ndarray) -> np.ndarray:
         """Preprocess the image. The OpenCV CascadeClassifier expects the
         input image to # be of type CV_8U (meaning unsigned 8-bit, gray scale
         image # with pixel values from 0 to 255).
@@ -183,7 +183,7 @@ class DetectorHaar(Detector, BoundingBoxDetector, Installable):
         """
         # super preprocessing should obtain an image of appropriate size
         # and dtype = np.uint8
-        image = super()._preprocess_image(image)
+        image = super()._image_to_internal(image)
 
         # Convert to grayscale
         if image.ndim == 3 and image.shape[2] == 3:
@@ -354,14 +354,14 @@ class DetectorSSD(Detector, Installable):
     # Detection
     #
 
-    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+    def _image_to_internal(self, image: np.ndarray) -> np.ndarray:
         """Preprocess the image. The OpenCV SSD expects 3-channel images
         (BGR!).
 
         """
         # super preprocessing should obtain an image of appropriate size
         # and dtype = np.uint8
-        image = super()._preprocess_image(image)
+        image = super()._image_to_internal(image)
 
         # Convert gray scale image to 3-channel image (BGR!)
         if image.ndim < 3:  # gray scale image
@@ -376,7 +376,6 @@ class DetectorSSD(Detector, Installable):
         LOG.debug("Detecting with OpenCV SSD face detector on image "
                   "of shape %s, dtype %s", image.shape, image.dtype)
 
-
         # the image is converted to a blob, meaning:
         # 1. mean substraction
         # 2. scaling
@@ -384,17 +383,17 @@ class DetectorSSD(Detector, Installable):
         #
         # Arguments:
         #  image
-        #  scalefactor               # 
+        #  scalefactor               #
         #  size: Tuple[int,int]      # size for the output image
         #  mean:                     # (mean-red, mean-green, mean-blue)
         #  swapRB = [104, 117, 123]  # swap red and blue channel
         #  crop = False              # crop after resize
         #  ddepth = CV_32F
         # Results:
-        #                            # NCHW dimensions order. 
+        #                            # NCHW dimensions order.
         blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300),
                                      [104, 117, 123], False, False)
-        
+
         #  error: (-215:Assertion failed)
         #     image.depth() == blob_.depth() in function 'blobFromImages'
 
@@ -424,7 +423,7 @@ class DetectorSSD(Detector, Installable):
                   result.shape[2], image.shape, blob.shape, blob.dtype)
 
         conf_threshold = .1  # FIXME[hack]
-        #frameWidth, frameHeight = 300, 300
+        # frameWidth, frameHeight = 300, 300
         frame_width, frame_height = image.shape[1], image.shape[0]
         # print(image.shape)
 
@@ -432,7 +431,7 @@ class DetectorSSD(Detector, Installable):
             description='Detections by the OpenCV Deep Neural Network')
 
         for i in range(result.shape[2]):
-            #print(f"{i}: {result[0, 0, i, :]}")
+            # print(f"{i}: {result[0, 0, i, :]}")
             confidence = result[0, 0, i, 2]
             if confidence < conf_threshold:
                 break

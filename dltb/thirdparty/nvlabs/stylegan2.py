@@ -35,8 +35,14 @@ from ..tensorflow.keras import KerasTensorflowModel
 
 # Logging
 LOG = logging.getLogger(__name__)
-
 LOG.setLevel(logging.DEBUG)
+
+# Configuration
+config.add_property('nvlabs_stylegan2_directory',
+                    default=lambda c: c.github_directory / 'stylegan2',
+                    description="Path to a directory, into which the "
+                    "`stylegan2` repository "
+                    "(https://github.com/NVlabs/stylegan2.git) was cloned.")
 
 
 class StyleGAN2(ImageGAN, KerasTensorflowModel):
@@ -57,13 +63,6 @@ class StyleGAN2(ImageGAN, KerasTensorflowModel):
     """
 
     stylegan2_github = 'https://github.com/NVlabs/stylegan2.git'
-
-    # stylegan2_directory:
-    #     path to a directory, into which the `stylegan2` repository
-    #     (https://github.com/NVlabs/stylegan2.git) was cloned.
-    config.set_default_value('nvlabs_stylegan2_directory',
-                             os.path.join(config.github_directory,
-                                          'stylegan2'))
 
     # Prepare import of stylegan package
     if not os.path.isdir(config.nvlabs_stylegan2_directory):

@@ -21,7 +21,8 @@ from ..base.image import Imagelike, ImageExtension
 from ..tool import Tool
 from ..tool.image import ImageTool
 from ..tool.classifier import SoftClassifier
-from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_LAST
+from ..util.array import adapt_data_format
+from ..util.array import DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST
 from ..util.image import imresize
 from ..util.terminal import Terminal, DEFAULT_TERMINAL
 
@@ -51,8 +52,8 @@ class Network(Extendable, Preparable, method='network_changed',
     """Abstract Network interface for all frameworks.
 
 
-
-    ** Data format **
+    Data format
+    -----------
 
     There seem to be (at least) two formats in use in different
     frameworks: `channels_first` means that the channel axis is
@@ -108,6 +109,41 @@ class Network(Extendable, Preparable, method='network_changed',
         It may be more useful to be able to specify the desired order,
         either globally for a Network, in each method that gets or
         returns array data.
+
+    Data preprocessing
+    ------------------
+
+    Data preprocessing includes the following aspects:
+    * retyping:
+        convert the provided data to be in the correct format
+        for processing (e.g. convert a numpy array into a torch Tensor,
+        load image data when provided as image filename, etc.)
+    * resizing:
+        if the network implementation expects data of
+        a specific size, preprocessing should adjust the size
+        accordingly.
+    * reordering:
+        adapt channel ordering to fit the needs of the given
+        network implementation.
+    * normalization:
+        if the network expects data to be normalized, suitable
+        normalization should be applied
+    * aubmentation:
+        augmentation should be optional.
+
+    FIXME[todo]: Currently there is only a rudimentary implementation of
+    theses ideas:
+    * methods that need internal data (forward, get_activations, ...) call
+       - _transform_input(inputs, data_format)
+       - _transform_outputs
+
+    * in the ImageNetwork class, the method , get_activations is
+      overwritten, to use the follwing functions:
+       - image_to_internal(inputs)
+       - transform_outputs
+      and further:
+       - internal_to_image(data: Any) -> Imagelike:
+
 
     Attributes
     ----------
@@ -302,6 +338,54 @@ class Network(Extendable, Preparable, method='network_changed',
         raise TypeError("Network index argument layer has invalid type "
                         f"{type(layer)}, should by str or int")
 
+    #
+    # Applying the network to data
+    #
+
+    # @busy("forward propagation")
+    def forward(self, inputs: Datalike, data_format: str = None) -> np.ndarray:
+        """Perform forward propagation.
+
+        Arguments
+        ---------
+        inputs:
+            For multi-channel, two-dimensional data, we expect the
+            input data to be given in with channel last, that is
+            (N,H,W,C). For plain data of dimensionality D we expect
+            batch first (N,D).
+        layer_ids:
+            The layers the activations should be fetched for. Single
+            layer_id or list of layer_ids.
+        data_format: {DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST}
+            The format in which the `inputs` is provided.  If this is
+            different from the `data_format` of this :py:class:`Network`,
+            an appropriate transformation is performed prior to computing
+            the activation values and and the activation values will
+            be back-transformed accordingly. If `None` (default), the
+            method will try to automatically determine the data format
+            of `inputs`.
+        """
+        LOG.debug("Network[%s].forward: inputs[%s]: %s (%s, %s), "
+                  "layers=%s", self.key, type(inputs).__name__,
+                  getattr(inputs, 'shape', '?'), data_format)
+        internal, batched, internalized = \
+            self._transform_input(inputs, data_format)
+
+        # Transform the input_sample appropriate for the loaded_network.
+        LOG.debug("Network[%s]: internal[%s]: %s (%s, %s)",
+                  self.key, type(internal).__name__,
+                  getattr(internal, 'shape', '?'), self._internal_format,
+                  getattr(internal, 'dtype', '?'))
+        outputs = self._forward(internal)
+        print(f"Network.forward: {type(outputs)}: "
+              f"{type(outputs)} {getattr(outputs, 'shape', '?')}")
+
+        # Transform the output to stick to the canocial interface.
+        outputs = self._transform_outputs(outputs, data_format,
+                                          unbatch=batched,
+                                          internal=not internalized)
+        return outputs
+
     # @busy("getting activations")
     def get_activations(self, inputs: np.ndarray,
                         layer_ids: Any = None,
@@ -311,8 +395,8 @@ class Network(Extendable, Preparable, method='network_changed',
         """Gives activations values of the loaded_network/model
         for given layers and an input sample.
 
-        Parameters
-        ----------
+        Arguments
+        ---------
         inputs:
             For multi-channel, two-dimensional data, we expect the
             input data to be given in with channel last, that is
@@ -436,10 +520,16 @@ class Network(Extendable, Preparable, method='network_changed',
 
     # ------------------- Things to be implmeneted by subclasses --------------
 
+    def _forward(self, inputs: Any) -> List[Any]:
+        """Forward inputs through a network.
+        To be implemented by subclasses.
+        """
+        raise NotImplementedError
+
     def _get_activations(self, input_samples: Any,
                          layer_ids: list) -> List[Any]:
-        """To be implemented by subclasses.
-        Computes a list of activations from a list of layer ids.
+        """Computes a list of activations from a list of layer ids.
+        To be implemented by subclasses.
         """
         raise NotImplementedError
 
@@ -641,20 +731,24 @@ class Network(Extendable, Preparable, method='network_changed',
         """
         network_input_channels = self._get_number_of_input_channels()
         if len(input_shape) == 2:
-            ## Only width and height, so we will add the channel information
-            ## from the loaded_network input.
+            # Only width and height, so we will add the channel information
+            # from the loaded_network input.
             input_shape = (1, *input_shape, network_input_channels)
         elif len(input_shape) == 3:
             if input_shape[-1] == network_input_channels:
-                ## channel information is provided, add batch
+                # channel information is provided, add batch
                 input_shape = (1, *input_shape)
+            elif input_shape[0] == network_input_channels:
+                # input_shape seems to be channel first - change
+                # to canonical (channel last) format
+                input_shape = (1, *input_shape[1:], input_shape[0])
             else:
-                ## channel information is not provided, add it
+                # channel information is not provided, add it
                 input_shape = (*input_shape, network_input_channels)
         elif len(input_shape) != 4:
             raise ValueError('Incorrect input shape {}, len should be {}'
                              .format(input_shape, 4))
-        elif input_shape[-1] != input_network_input_channels:
+        elif input_shape[-1] != network_input_channels:
             raise ValueError('Invalid input shape {}: channels should be {}'
                              .format(input_shape, network_input_channels))
         return input_shape
@@ -678,7 +772,13 @@ class Network(Extendable, Preparable, method='network_changed',
             have input channels.
         """
         network_input_shape = self.get_layer_input_shape(self.layer_ids[0])
-        return network_input_shape[-1] if len(network_input_shape) > 2 else 0
+        if len(network_input_shape) <= 2:
+            return 0
+        if self._internal_format == DATA_FORMAT_CHANNELS_LAST:
+            return network_input_shape[-1]
+        if self._internal_format == DATA_FORMAT_CHANNELS_FIRST:
+            return network_input_shape[0]
+        return 0
 
     #
     # methods for accessing layer attributes
@@ -1083,6 +1183,12 @@ class Network(Extendable, Preparable, method='network_changed',
 class ImageNetwork(ImageExtension, ImageTool, base=Network):
     """A network for image processiong. Such a network provides
     additional methods to support passing images as arguments.
+
+    Working on images introduces some additional concepts:
+
+    size:
+        An image typically has a specific size, given by width
+        and height in pixels.
     """
     @property
     def input_size(self) -> Tuple[int, int]:
@@ -1143,11 +1249,6 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
     # Implementation of the Tool interface (not used yet)
     #
 
-    def _preprocess(self, image: Imagelike, *args, **kwargs) -> Data:
-        data = super(self, image=None, *args, **kwargs)
-        data.add_attribute('image', self.image_to_internal(image))
-        return data
-
     def extract_receptive_field(self, layer: 'Layer', unit: Tuple[int],
                                 image: Imagelike) -> Imagelike:
         """Extract the receptive field for a unit in this :py:class:`Network`
@@ -1198,6 +1299,16 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
         # the preprocessing logic
         return imresize(image, self.input_size)
 
+    def image_to_internal(self, image: Imagelike) -> Any:
+        """
+        """
+        # to be implemented by subclasses
+
+    def internal_to_image(self, data: Any) -> Imagelike:
+        """
+        """
+        # to be implemented by subclasses
+
 
 class Classifier(SoftClassifier, Network):
     """A :py:class:`Network` to be used as classifier.
@@ -1235,7 +1346,7 @@ class Classifier(SoftClassifier, Network):
         """
         return self.output_layer_id()
 
-    def _prepare(self, **kwargs) -> None:
+    def _prepare(self) -> None:
         """Prepare this :py:class:`Classifier`.
 
         Raises

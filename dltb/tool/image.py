@@ -144,28 +144,58 @@ class ImageTool(Tool):
         return scaled_image
 
     def _preprocess(self, image: Imagelike, *args, **kwargs) -> Data:
-        context = super()._preprocess(self, *args, **kwargs)
+        """Preprocessing of the image argument.  This will
+        add some image specific properties to the context:
+
+        input_image:
+            the original image as numpy array
+        input_size:
+            the size of the original input image.
+
+        image:
+            the preprocessed image as numpy array
+        size:
+            the size of the preprocessed array
+
+        Arguments
+        ---------
+        image:
+
+        *args, **kwargs:
+            Further arguments to be preprocessed by super classes.
+
+        Results
+        -------
+        context:
+            The context in which the input image and the preprocessed
+            image are stored.
+        """
+        context = super()._preprocess(*args, **kwargs)
 
         # get the input image as numpy array
         array = Image.as_array(image, dtype=np.uint8)
 
         # we store the original image, as some tools may use it
-        # for produding some output, e.g., painting bounding boxes
+        # for producing some output, e.g., painting bounding boxes
         # or heat maps.
         context.add_attribute('input_image', array)
         context.add_attribute('input_size', array.shape[:-1:-1])
 
         # now do the actual image preprocessing and stro results
         # as 'image' and 'size'
-        array = self._preprocess_image(array)
-        context.add_attribute('size', array.shape[:-1:-1])
+        array = self.image_to_internal(array)
+        if hasattr(array, 'shape'):
+            context.add_attribute('size', array.shape[:-1:-1])
         context.add_attribute('image', array)
 
         return context
 
-    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+    def _image_to_internal(self, image: Imagelike) -> np.ndarray:
+        """Preprocess a single image provided as a numpy array.
         """
-        """
+        # obtain array representation of the image
+        image = Image.as_array(image)
+
         # resizing the image
         if self._min_size is not None or self._max_size is not None:
             image = self.fit_image(image)

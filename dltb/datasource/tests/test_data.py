@@ -1,3 +1,6 @@
+"""Testsuite for the `Data` class.
+"""
+
 from unittest import TestCase
 
 from dltb.base.data import Data
@@ -5,21 +8,32 @@ from dltb.tool.classifier import ClassScheme
 
 
 class TestData(TestCase):
+    """Testsuite for the `Data` class.
+    """
 
     def setUp(self):
+        """Setup a ClassScheme to be used in the tests.
+        """
         self.imagenet_scheme = ClassScheme['ImageNet']
         self.imagenet_scheme.prepare()
 
     def test_data1(self):
+        """Ensure that default data objects are not batches.
+        """
         data = Data()
         self.assertFalse(data.is_batch)
 
     def test_batch(self):
+        """Data objects initialized with the `batch` argument should
+        be batches.
+        """
         data = Data(batch=3)
         self.assertTrue(data.is_batch)
         self.assertEqual(len(data), 3)
 
     def test_batch2(self):
+        """Using batch and non-batch attributes.
+        """
         data = Data(batch=3)
         data.add_attribute('a')
         data.add_attribute('b', batch=True)
@@ -31,6 +45,8 @@ class TestData(TestCase):
         self.assertFalse(data.is_batch_attribute('d'))
 
     def test_batch3(self):
+        """Testing attributes with `initalize` argument.
+        """
         data = Data(batch=3)
         data.add_attribute('a')
         data.add_attribute('b', batch=True, initialize=True)

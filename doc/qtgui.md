@@ -105,3 +105,30 @@ pylint --rcfile=qtgui/pylintrc [FILE]...
 
 * QDatasourceNavigate: contains a QDataView, but is also
   Toolbox or Datafetch observer
+
+
+# User Interface Demo
+
+The `qtgui` comes with a demo script `demo.py` which allows to run
+individual components in demo mode.  The script can be invoked in
+different ways:
+
+From the command line:
+```sh
+python qtgui/demo.py
+```
+or
+```sh
+python -m qtgui.demo
+```
+
+It is also possible to run the demo interactively, e.g., from an
+IPython shell:
+```
+import qtgui.debug
+from qtgui.demo import QDemo
+
+demo = QDemo()
+demo.show()
+```
+

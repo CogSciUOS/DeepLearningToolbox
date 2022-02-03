@@ -882,7 +882,7 @@ class QDataView(QWidget, QObserver, qobservables={
 
     def _loadAnnotations(self) -> None:
         filename = self._filenameForAnnotations()
-        haveAnnotations = os.path.isfile(filename)
+        haveAnnotations = filename is not None and os.path.isfile(filename)
         self._data.add_attribute('have_annotations', haveAnnotations)
         self._annotationsChanged = False
         if not haveAnnotations:

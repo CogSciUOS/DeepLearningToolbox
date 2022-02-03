@@ -7,7 +7,8 @@
 #   class labels, even if not applied to ImageNet data
 
 # standard imports
-from typing import Union, Tuple, Iterable, Iterator, Any, Sequence, Optional
+from typing import Union, Tuple, Iterable, Any, Sequence, Optional
+from typing import TypeVar, overload
 from abc import abstractmethod, ABC
 import logging
 
@@ -15,6 +16,7 @@ import logging
 import numpy as np
 
 # toolbox imports
+from ..typing import Protocol
 from ..base.prepare import Preparable
 from ..base.register import RegisterClass
 from ..base.data import Datalike
@@ -95,11 +97,16 @@ class ClassScheme(metaclass=RegisterClass):
         ----------
         index:
             A single class index or a collection of indices (list or tuple).
-            The
+            The result format will correspond to the format of this argument.
         name:
-            The name of the label format. If `None`, the default
-            format (the integer value) is returned.
-        
+            The name of the label format (output value). If `None`,
+            the default format (the integer value) is returned.
+        lookup:
+            The name of the lookup table for the index (input value).
+            If `None`, no lookup table will be used.
+
+        Result
+        ------
         """
         # FIXME[todo]:
         # 1) allow for more iterables than just lists
@@ -181,7 +188,7 @@ class ClassScheme(metaclass=RegisterClass):
         if name in self._lookup:
             return  # lookup table already exists -> nothing to do
         if isinstance(values, np.ndarray) and values.max() < 2*len(self):
-            self._lookup[name] = np.zeros(values.max()+1, dtype=np.int)
+            self._lookup[name] = np.zeros(values.max()+1, dtype=int)
             self._lookup[name][values] = np.arange(0, values.size)
         else:
             self._lookup[name] = \
@@ -367,7 +374,7 @@ class Classifier(ABC, Preparable):
     """
 
     def __init__(self, scheme: Optional[Union[ClassScheme, str, int]] = None,
-                 lookup: str = None, **kwargs):
+                 lookup: Optional[str] = None, **kwargs):
         LOG.debug("Classifier[scheme={%s}]: %s", scheme, kwargs)
         super().__init__(**kwargs)
         if isinstance(scheme, str):
@@ -386,11 +393,26 @@ class Classifier(ABC, Preparable):
         return self._scheme
 
     # FIXME[old]: why scheme and class_scheme?
+    # -> maybe classes can have other schemes?
     @property
     def class_scheme(self) -> ClassScheme:
         """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
         """
         return self._scheme
+
+    @property
+    def lookup(self) -> Optional[str]:
+        """The lookup table for the :py:class:`ClassScheme` used by
+        this :py:class:`Classifier` to map internal class numbers
+        to class identifiers and class labels.  If `None`, this
+        `Classifier` uses the default indices of the `ClassScheme`.
+        """
+        return self._lookup
+
+    def _prepared(self) -> None:
+        """Prepare this :py:class:`Classifier`.
+        """
+        return super()._prepared and self._scheme.prepared
 
     def _prepare(self) -> None:
         """Prepare this :py:class:`Classifier`.
@@ -420,6 +442,28 @@ class Classifier(ABC, Preparable):
             list of tuples of class identifiers.
         """
 
+    def get_label(self, index: int, name: str = None) -> Any:
+        """Look up a label for a given index for this
+        :py:class:`ClassScheme`.
+
+        Attributes
+        ----------
+        index:
+            A single class index or a collection of indices (list or tuple).
+            The result format will correspond to the format of this argument.
+        name:
+            The name of the label format (output value). If `None`,
+            the default format (the integer value) is returned.
+        """
+        return self.scheme.get_label(index, name=name, lookup=self._lookup)
+
+    def class_identifier(self, index: int) -> ClassIdentifier:
+        """Get a :py:class:`ClassIdentifier` representing a class index
+        for this class.
+        """
+        return (index if isinstance(index, ClassIdentifier) else
+                self.scheme.identifier(index, lookup=self._lookup))
+
 
 class ImageClassifier(ImageExtension, base=Classifier):
     """An :py:class:`ImageClassifier` is can classify images.
@@ -440,16 +484,28 @@ class SoftClassifier(Classifier):
     corresponding class of a classification scheme.
 
     """
+    # FIXME[concept]: there may be different types of scores.  For
+    # example, many deep network classifiers apply a softmax to the
+    # last layer (probits) to obtain a normalized (sum 1) output
+    # vector.  Depending on the application, one or the other may
+    # be of interest.  One may argue, that the probits contain
+    # more information than the normalized vector.
+    # But which of them are the "class_scores"?
 
     @abstractmethod
-    def class_scores(self, inputs: Datalike) -> np.ndarray:
+    def class_scores(self, inputs: Datalike,
+                     softmax: bool = False) -> np.ndarray:
         """Compute all class scores. The output array will have one entry for
         each class of the classification scheme.
 
         Arguments
         ---------
-        inputs: np.ndarray
+        inputs: 
             The input data, either a single data point or a batch of data.
+        softmax:
+            Usually the method will return unnormalized scores
+            (if available). If this flag is set, the returned
+            values are normalized using the softmax function.
         """
         # FIXME[concept]: we need a way to determine if inputs are single or
         # batch!
@@ -492,7 +548,7 @@ class SoftClassifier(Classifier):
         Parameters
         ----------
         scores: np.ndarray
-            The class scores ("probabilities").
+            The class scores, either probit or normalized ("probabilities").
         top: int
             The number of results to report.
 
@@ -581,12 +637,15 @@ class SoftClassifier(Classifier):
 
         return rank, score
 
-    def print_classification(self, scores: np.ndarray, top: int = 5):
+    def print_classification(self, inputs: Datalike, top: int = 5):
         """Output the classification scores.
         """
+        scores = self.class_scores(inputs)
         top_indices, top_scores = self.top_classes(scores, top=top)
         for i, (index, score) in enumerate(zip(top_indices, top_scores)):
-            print(f"  {i}: {index} ({score})")
+            print(f"  {i+1}: {self.scheme.get_label(index, self._lookup)} "
+                  f"({self.scheme.get_label(index, 'text')}) "
+                  f"[{score:.4f}]")
 
 
 class BinaryClassifier(Classifier):
@@ -632,13 +691,10 @@ class PairClassifier(BinaryClassifier):
     def process_pair(data) -> bool:
         return data[0] == data[1]  # FIXME[todo]
 
-
     def evaluate_pairs(pairs) -> float:
         # taken from evaluate arcface
 
-        
-        
-        print("Start evaluating on age group: "+current_age_group)
+        print("Start evaluating on age group: " + current_age_group)
 
         for img1, img2, same in pairs:
             img1 = short_preprocessing(img1)
@@ -766,3 +822,96 @@ class MetricPairVerifier:
     #
 
     _threshold: float = 1.
+
+
+# ---------------------------------------------------------------------------
+# FIXME[todo]: First ideas of ClassifierProtocols, not yet finished and
+# not yet used.
+
+DataType = TypeVar('DataType')
+ClassSchemeType = TypeVar('ClassSchemeType')
+
+# ClassIdentifierType could be ClassScheme.Identifer
+ClassIdentifierType = TypeVar('ClassIdentifierType')
+
+
+class Batch(Protocol[DataType]):
+    """
+    """
+
+
+class ClassifierProtocol(Protocol[DataType, ClassSchemeType,
+                                  ClassIdentifierType]):
+    """
+    """
+
+    @property
+    def class_scheme(self) -> ClassSchemeType:
+        """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
+        """
+
+    @overload
+    def classify(self, inputs: DataType) -> ClassIdentifierType:
+        """Output the classes for the given inputs.
+
+        Arguments
+        ---------
+        inputs: np.ndarray
+            A data point or a batch of input data to classify.
+
+        Results
+        -------
+        classes:
+            A class-identifier or a batch of class identifiers.
+        """
+
+    @overload
+    def classify(self, inputs: Batch[DataType]) \
+            -> Batch[ClassIdentifierType]:
+        """Classify a batch of data.
+        """
+
+
+class SoftClassifierProtocol(ClassifierProtocol[DataType, ClassSchemeType,
+                                                ClassIdentifierType]):
+
+    @property
+    def class_scheme(self) -> ClassSchemeType:
+        """The :py:class:`ClassScheme` used by this :py:class:`Classifier`.
+        """
+
+    @overload
+    def classify(self, inputs: DataType, top: int) \
+            -> Sequence[ClassIdentifierType]:
+        """Output the classes for the given inputs.
+
+        Arguments
+        ---------
+        inputs: np.ndarray
+            A data point or a batch of input data to classify.
+
+        Results
+        -------
+        classes:
+            A class-identifier or a batch of class identifiers.
+        """
+
+    @overload
+    def classify(self, inputs: Batch[DataType], top: int) \
+            -> Batch[Sequence[ClassIdentifierType]]:
+        """Classify a batch of data and return a batch of top classes.
+        """
+
+    def class_scores(self, inputs: DataType, softmax: bool = False) \
+            -> Sequence[float]:
+        """Provide the class scores for the given input data.
+
+        Argument
+        --------
+        inputs:
+            The input data to classify.
+        softmax:
+            Usually the method will return unnormalized scores
+            (if available). If this flag is set, the returned
+            values are normalized using the softmax function.
+        """

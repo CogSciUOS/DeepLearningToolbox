@@ -1,58 +1,64 @@
 """Integration of the torch library. Torch provides its
 own array types, similar to numpy.
 
-This module adds some hooks to work with pillow images:
-
-* adapt :py:func:`dltb.base.image.Data` to allow transformation of
-  `Datalike` objects to :py:class:`torch.Tensor` (as_torch) as well
-  as and from :py:class:`PIL.Image.Image` to other formats.
-
-* add a data kind 'torch' and an associated loader to the
-  :py:class:`Datasource` class.
-
 """
 
 # standard imports
-import logging
-
-# third party imports
-import numpy as np
-import torch
+from argparse import ArgumentParser, Namespace
+import sys
+import importlib
 
 # toolbox imports
-from ...base.data import Data, Datalike
-from ...datasource import Datasource
-
-# logging
-LOG = logging.getLogger(__name__)
+from dltb.network.argparse import extend, list_networks, select_network
 
 
-def as_torch(data: Datalike, copy: bool = False) -> torch.Tensor:
-    """Get a :py:class:`torch.Tensor` from a :py:class:`Datalike`
-    object.
+# Default github to use with torch hub.
+HUB_DEFAULT_GITHUB = 'pytorch/vision:v0.6.0'
+
+
+def prepare_argument_parser(group, name=None) -> None:
+    """Add torch related command line arguments to an `ArgumentParser`.
     """
-    if isinstance(data, torch.Tensor):
-        return data.clone().detach() if copy else data
-
-    if isinstance(data, str) and data.endswith('.pt'):
-        return torch.load(data)
-
-    if isinstance(data, Data):
-        if not hasattr(data, 'torch'):
-            data.add_attribute('torch', Data.as_torch(data.array, copy=copy))
-        return data.torch
-
-    if not isinstance(data, np.ndarray):
-        data = Data.as_array(data)
-
-    # from_numpy() will use the same data as the numpy array, that
-    # is changing the torch.Tensor will also change the numpy.ndarray.
-    # On the other hand, torch.tensor() will always copy the data.
-    return torch.tensor(data) if copy else torch.from_numpy(data)
+    if name == 'framework':
+        group.add_argument('--torch', metavar='GITHUB', nargs='?',
+                           const=True, help="use the torch backend")
+        group.add_argument('--torch-hub', metavar='GITHUB', nargs='?',
+                           const=HUB_DEFAULT_GITHUB,
+                           help='Use torch hub from GITHUB repository')
 
 
-LOG.info("Adapting dltb.base.data.Data: adding static method 'as_torch'")
-Data.as_torch = staticmethod(as_torch)
+def process_arguments(args: Namespace) -> None:
+    """Process torch related command line arguments.
 
-# add a loader for torch data: typical suffix is '.pt' (pytorch)
-Datasource.add_loader('torch', torch.load)
+    Arguments
+    ---------
+    """
+    if args.torch_hub:
+        hub = importlib.import_module('.hub', __name__)
+
+        if args.list_networks:
+            list_networks(hub.Network.models(args.torch_hub))
+
+        if args.network and isinstance(args.network, str):
+            name = select_network(args.network,
+                                  hub.Network.models(args.torch_hub))
+            args.network = hub.Network(repository=args.torch_hub,
+                                       model=name)
+
+    if args.torch:
+        vision = importlib.import_module('.vision', __name__)
+        if args.list_networks:
+            list_networks(vision.Network.pretrained())
+
+        arg = None
+        if args.network and isinstance(args.network, str):
+            arg = args.network
+        elif isinstance(args.torch, str):
+            arg = args.torch
+
+        if arg is not None:
+            name = select_network(arg, vision.Network.pretrained())
+            args.network = vision.Network(model=name)
+
+
+extend(prepare_argument_parser, process_arguments)

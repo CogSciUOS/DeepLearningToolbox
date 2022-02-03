@@ -14,8 +14,11 @@
 
 
 # standard imports
+from typing import Union
+from pathlib import Path
 import os
 import re
+import json
 import random
 import logging
 
@@ -29,6 +32,9 @@ from dltb.datasource import Imagesource, Sectioned, DataDirectory
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+Pathlike = Union[str, Path]
 
 
 class ImagenetScheme(ClassScheme):
@@ -127,7 +133,7 @@ class ImagenetScheme(ClassScheme):
 
         LOG.info("ImageNet is now prepared: %d", len(self))
 
-    def _read_classes_txt(self, classes_txt: str):
+    def _read_classes_txt(self, classes_txt: str) -> None:
         """Prepare the labels for the ImageNet Datasource. This will
         read in the file "classes.txt" from the imagenet_data directory.
         The file is expected to contain mapping of labels to synset names
@@ -156,6 +162,52 @@ class ImagenetScheme(ClassScheme):
             LOG.error("ImageNet class names not found. "
                       "Make sure that '%s' is available.", classes_txt)
             raise
+
+    def _read_classes_json(self,
+                           classes_json: Pathlike = 'labels.json') -> None:
+        """Read class information from a JSON file providing a mapping
+        from class indices to textual labels (using the caffe/torch
+        enumeration scheme):
+
+           {
+               "0": "tench, Tinca tinca",
+               "1": "goldfish, Carassius auratus",
+               "2": "great white shark, white shark, man-eater, ...",
+               ...
+               "999": "toilet tissue, toilet paper, bathroom tissue"
+           }
+
+        This file can be downloaded from [1]. Synset information are not
+        contained in this file.
+
+        Arguments
+        ---------
+        classes_json:
+            Path to the JSON-file.  If None is provided, the function
+            will download if from [1].
+
+        References
+        ----------
+        [1] https://s3.amazonaws.com/deep-learning-models/
+            image-models/imagenet_class_index.json
+        """
+        classes_json = Path(classes_json)
+
+        try:
+            with open(classes_json, 'r') as f:
+                labels_json = json.load(f)
+        except FileNotFoundError:
+            # labels_link = 'https://savan77.github.io/blog/files/labels.json'
+            # labels_link = ('https://s3.amazonaws.com/outcome-blog/'
+            #                'imagenet/labels.json')
+            # FIXME[hack]: thirdparty importy
+            import requests
+
+            labels_link = ('https://s3.amazonaws.com/deep-learning-models/'
+                           'image-models/imagenet_class_index.json')
+            labels_json = requests.get(labels_link).json()
+
+        self.add_labels('text', (label for _idx, label in labels_json.items()))
 
 
 class ImagenetClassifier(Classifier):

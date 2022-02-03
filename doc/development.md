@@ -41,20 +41,29 @@ frameworks if required.
 
 ## Synchronous and asynchronous invocation
 
+Traditional programs are based on synchronous processing, that is, all
+operations are executed in the same time line.  Invoking a function
+synchronously, means that execution in the main program is paused
+while the function is executed and then continued once it is finished.
+Function invocation blocks the main program.
+In contrast, in asynchronous processing there are multiple timelines
+and function invocation will not pause execution in the main program
+but rather execute the function code in some other timeline.
+
 A central difference between synchronous and asynchronous computation
 is, that the first can usually be realized in a stateless fashion,
 returning the result via the function call stack to the caller.  In a
 synchronous computation, the result has to be stored in order to be
-accessible to the initiator the computation (and maybe other
+accessible to the initiator of the computation (and maybe other
 interested parties).
 
-In the toolbox we account for this by separating the computation and
-the asynchronous invocation into different classes. The asynchronous
-invocation class will hold a reference to a computation class.
-Upon invocation, it will use that class for computation and store
-the result in a local attribute and notify observers once the computation
-is complete. The invocation may be synchronous (in library mode) or
-asynchronous (in GUI mode).
+In the Deep Learning Toolbox, we account for this by separating the
+computation and the asynchronous invocation into different classes.
+The asynchronous invocation class will hold a reference to a
+computation class.  Upon invocation, it will use that class for
+computation and store the result in a local attribute and notify
+observers once the computation is complete.  The invocation may be
+synchronous (in library mode) or asynchronous (in GUI mode).
 
  * Principle: all asynchronous methods should also be callable in a
    synchronously (blocking)
@@ -123,10 +132,35 @@ and no value_changed notification will send, just a busy changed
 message may be sent).
 
 
+### The `@run` decorator
+
+```python
+
+# function definition
+@run
+def do_something():
+   ...
+   return some_result
+
+
+# synchronous invocation
+result = do_something(run=False)
+
+
+# asynchronous invocation (ignore result)
+do_something(run=True)
+
+
+# asynchronous invocation (callback for results)
+def my_callback(result):
+    print("Result from is asynchronous:", result)
+    
+do_something(run_callback=my_callback)
+```
 
 
 
-### Asynchronous (blocking, non-threaded)
+### Synchronous (blocking, non-threaded)
 
 ```python
 tool.do_computation()
@@ -139,9 +173,9 @@ def do_computation():
     
     
     self.notify_end()  # notify observers
+```
 
-
-### Synchronous (Threaded, non-blocking)
+### Asynchronous (Threaded, non-blocking)
 
 
 ```python
@@ -400,4 +434,15 @@ libraries.
 
 ### directories.py
 
+
+# Extending the Toolbox
+
+The Deep Learning Toolbox provides different mechanisms to extend its
+functionality:
+* Adding an implementation of a base class
+  (using the `Implementable` API)
+* Registering instances of a class
+  (using the `Register` API)
+* Adding configuration values
+  (using the `Config` API)
 

@@ -13,6 +13,13 @@ Face verification:
 
 `dl-face.py `
 
+
+Resources
+---------
+
+FIXME[todo]: 
+[1] keras-vggface
+    https://github.com/rcmalli/keras-vggface
 """
 
 # standard imports

@@ -23,6 +23,15 @@ from ..tensorflow.keras import KerasTensorflowModel
 # logging
 LOG = logging.getLogger(__name__)
 
+# configuration
+config.add_property('nvlabs_stylegan_directory',
+                    default=lambda c: c.github_directory / 'stylegan')
+config.add_property('stylegan_directory',
+                    default=lambda c: c.github_directory / 'stylegan',
+                    description="path to a directory into which the "
+                    "NVlabs 'StyleGAN' repository "
+                    "(https://github.com/NVlabs/stylegan.git) was cloned.")
+
 
 class StyleGAN(ImageGAN, KerasTensorflowModel):
     """A StyleGAN1 demonstration. This class is based on the NVIDIA labs
@@ -55,19 +64,11 @@ class StyleGAN(ImageGAN, KerasTensorflowModel):
     ----------
     [1] https://github.com/NVlabs/stylegan
     """
-    config.set_default_value('nvlabs_stylegan_directory',
-                             os.path.join(config.github_directory,
-                                          'stylegan'))
 
     stylegan_dir = config.nvlabs_stylegan_directory
     stylegan_github = 'https://github.com/NVlabs/stylegan.git'
 
     # FIXME[hack]: we need a better import mechanism ...
-    # stylegan_directory:
-    #    path to a directory into which the NVlabs 'StyleGAN' repository
-    #    (https://github.com/NVlabs/stylegan.git) was cloned.
-    config.set_default_value('stylegan_directory',
-                             os.path.join(config.github_directory, 'stylegan'))
     print(f"Stylegan directory: {config.stylegan_directory}")
     # assert os.path.isdir(stylegan_directory)
 

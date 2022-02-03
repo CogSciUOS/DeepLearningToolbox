@@ -20,10 +20,15 @@ sufficient checks and fallback solutions, if those modules are not
 installed.
 
 """
+# standard imports
 from pathlib import Path
-import os
 import sys
 import importlib
+
+# Before proceeding, make sure that the Deep learning toolbox
+# prerequisits are satisfied.  This module will output error messages
+# and exit if some basic requiremants are not fulfilled.
+from . import prerequisits
 
 # The config module is the central interface for configuring the
 # Deep Learning ToolBox. It is imported as one of the first modules,
@@ -68,5 +73,7 @@ if __name__ == '__main__':
     # as we are using relative imports (which will fail befor this code
     # is reached).  Nevertheless, in case this code is executed despite
     # of being impossible, we will issue some feedback to the user:
-    print("To run the Deep Learning Toolbox (dltb), call 'python -m dltb' ")
-    print("or use the script `dl-toolbox.py`.")
+    print("To run the Deep Learning Toolbox (dltb), call 'python -m dltb' ",
+          file=sys.stderr)
+    print("or use the script `dl-toolbox.py`.",
+          file=sys.stderr)

@@ -1,7 +1,7 @@
 """Tools for the toolbox.
 
 """
-from .tool import Tool
+from .tool import Tool, Context
 from .worker import Worker
 
 Tool.register_instance('haar', 'dltb.thirdparty.opencv.face', 'DetectorHaar')

@@ -85,11 +85,13 @@ Worker classes
 
 # standard imports
 from typing import Union, Tuple, Iterator, Any, Dict, Callable, AbstractSet
-from abc import abstractmethod, ABC
+from typing import Optional, Iterable, List
+from abc import abstractmethod
 import time
 import random
 import logging
 import threading
+import itertools
 import collections.abc
 
 # third party imports
@@ -99,16 +101,21 @@ import numpy as np
 from ..base.data import Data
 from ..base.image import Image
 from ..base.sound import Sound
+from ..base.implementation import Implementable
 from ..base.register import RegisterClass
 from ..base.fail import FailableObservable
 from ..base import Preparable
 from ..util.image import imread
+from ..util.itertools import SizedGenerator
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class Datasource(Preparable, FailableObservable, # ABC,
+Attributes = Union[str, Tuple[str, ...]]
+
+
+class Datasource(Preparable, FailableObservable, Implementable, # ABC,
                  method='datasource_changed',
                  changes={'state_changed'},
                  metaclass=RegisterClass):
@@ -188,6 +195,8 @@ class Datasource(Preparable, FailableObservable, # ABC,
     _loader_kind: str = None
     _loader_auto: bool = True
 
+    _postprocessors: List[Callable] = None
+    
     def __init__(self, description: str = None, **kwargs) -> None:
         """Create a new Datasource.
 
@@ -200,6 +209,19 @@ class Datasource(Preparable, FailableObservable, # ABC,
         self._description = (self.__class__.__name__ if description is None
                              else description)
         self._data = None
+        self._postprocessors = []
+
+    def __call__(self, attributes: Optional[Attributes] = None,
+                 batch_size: Optional[int] = None, **kwargs) -> Iterable:
+        data_iterator = self.items(**kwargs) if batch_size is None else \
+            self.batches(size=batch_size, **kwargs)
+        for data in data_iterator:
+            if attributes is None:
+                yield data
+            elif isinstance(attributes, str):
+                yield getattr(data, attributes)
+            else:
+                yield tuple(getattr(data, attr) for attr in attributes)
 
     @property
     def name(self):
@@ -233,7 +255,21 @@ class Datasource(Preparable, FailableObservable, # ABC,
         else:
             self._get_data(data, **kwargs)
             LOG.debug("Datasource[%s].get_data(): %s", self, data)
+        self._postprocess(data)
         return data
+
+    def _postprocess(self, data: Data) -> None:
+        """Apply postprocessors to a given :py:class:`Data` object.
+        """
+        for postprocess in self._postprocessors:
+            postprocess(data)
+
+    def add_postprocessor(self, postprocessor: Callable[[Data], None]) -> None:
+        """Add a postprocessor to this :py:class:`Datasource`.
+        All :py:class:`Data` retrieved from this `Datasource`
+        will be postprocessed by this function.
+        """
+        self._postprocessors.append(postprocessor)
 
     def _get_meta(self, data: Data, **_kwargs) -> None:
         """Enrich the :py:class:`Data` object with meta information.
@@ -277,11 +313,28 @@ class Datasource(Preparable, FailableObservable, # ABC,
         """
 
     #
-    # Batches
+    # Items (singe data points)
     #
 
-    def batches(self, size: int, loop: bool = False,
-                **kwargs) -> Iterator[Data]:
+    def items(self, loop: bool = False, **kwargs) -> Iterator[Data]:
+        """Iterate over the data of this :py:class:`Datasoruce`.
+        """
+        if loop:
+            # run an (infinite) loop, getting randomly selected data
+            # from this datasource (with repetition)
+            while True:
+                yield self.get_data(**kwargs)
+        else:
+            # enumerate the data of this Datasource (without repetition)
+            for index in range(0, len(self)):
+                yield self.get_data(index=index, **kwargs)
+
+    #
+    # Batches (groups of data points)
+    #
+
+    def batches(self, size: int, loop: bool = False, random: bool = False,
+                epochs: int = 1, **kwargs) -> Iterator[Data]:
         """Batchwise iterate the data of this :py:class:`Datasoruce`.
 
         Arguments
@@ -292,21 +345,39 @@ class Datasource(Preparable, FailableObservable, # ABC,
         loop:
             A flag indicating if an (infinite) loop providing
             (random) datapoints should be run.
+        epochs:
+            The special value -1 can be used to run an infinite
+            loop.
         """
 
-        if loop:
-            # run an (infinite) loop, getting randomly selected data
+        #if random:
+        #    # run an (infinite) loop, getting randomly selected data
+        #    # from this datasource (with repetition)
+        #    while True:
+        #        yield self.get_data(batch=size, **kwargs)
+        #else:
+        return SizedGenerator(self._batches(size, loop, epochs, **kwargs),
+                              (len(self) // size) + 1)
+
+    def _batches(self, size: int, loop: bool,
+                 epochs: int, **kwargs) -> Iterator[Data]:
+
+        if loop or epochs == -1:
+            # run an (infinite) loop, getting selected data
             # from this datasource (with repetition)
-            while True:
-                yield self.get_data(batch=size, **kwargs)
+            epochs = itertools.count()
         else:
             # enumerate (batchwise) the data of this Datasource
             # (without repetition)
+            epochs = range(epochs)
+
+        for epoch in epochs:
             for index in range(0, len(self), size):
                 # there may not be enough data to fill the last batch:
-                # hence we will reduce the last batch size 
+                # hence we will reduce the last batch size
                 batch_size = min(size, len(self) - index)
-                yield self.get_data(batch=batch_size, index=index, **kwargs)
+                yield self.get_data(batch=batch_size, index=index,
+                                    **kwargs)
 
     #
     # Description
@@ -799,10 +870,50 @@ class Random(Loop):
 
 class Indexed(Random, collections.abc.Sequence):
     """Instances of this class can be indexed.
+
+    Indices can be of different kind (similar to numpy): integers will
+    pick individual datapoints, while slices and arrays can be used
+    to access a batch of data.
+
+    Index access will usually return a :py:class:`Data` object
+    (either single or batch).  By providing an optional second index
+    argument, one may instead access individual attributes.
+
+    .. code-block:: python
+
+        datasource = Datasource(module='mnist')
+        data = dataource[17]
+        batch = datasource[23:87]
+        np_image = datasource[23, 'array']
+        np_images, np_labels = datasource[10:20, ('array', 'label')]
+
+    :py:class:`Indexed` is an abstract base class. Subclasses should
+    implement :py:meth:`__len__` and :py:meth:`_get_index` methods.
     """
 
-    def __getitem__(self, index: int) -> Data:
-        return self.get_data(index=index)
+    def __getitem__(self, index: Union[int, Tuple[int, Attributes]]) -> Data:
+        if isinstance(index, Tuple):
+            index, attributes = index
+        else:
+            attributes = None
+
+        batch = None
+        length = len(self)
+        if isinstance(index, slice):
+            start = index.start or 0
+            stop = min(index.stop or length, length)
+            step = index.step or 1
+            index = np.arange(start, stop, step)
+        if isinstance(index, np.ndarray):
+            batch = len(index)
+
+        data = self.get_data(index=index, batch=batch)
+
+        if attributes is None:
+            return data
+        if isinstance(attributes, str):
+            return getattr(data, attributes)
+        return tuple(getattr(data, attr) for attr in attributes)
 
     @abstractmethod
     def __len__(self) -> int:

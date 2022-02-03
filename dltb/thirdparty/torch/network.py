@@ -1,4 +1,5 @@
-
+"""Torch implementation of the Deep Learning Toolbox Network API.
+"""
 # Some torch remarks:
 # * x.cpu() and x.cuda() is the old (pre 0.4) and now deprecated way
 #   for assigning computations to devices. The modern (now recommended)
@@ -31,29 +32,30 @@
 
 
 # standard imports
-from typing import Tuple, Union, List, Iterable
+from typing import Tuple, Union, List, Iterable, Optional
 from collections import OrderedDict
 import logging
-
 import importlib.util
 
 # third party imports
 import numpy as np
-
+import PIL
 import torch
-import torch.nn as nn
+from torch import nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 from torchvision import transforms
 
 # toolbox imports
-from dltb.base.data import Data
-from dltb.base.image import Image, Imagelike, ImageAdapter
+from dltb.base.data import Datalike
+from dltb.base.image import Image, Imagelike
+from dltb.tool.classifier import ClassIdentifier
 from dltb.network.network import Network as BaseNetwork
+from dltb.network.network import Classifier as BaseClassifier
 from dltb.network.network import ImageNetwork as BaseImageNetwork
 from dltb.network import layer as Base
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
-from . import Layer as BaseLayer, Classifier
-
+from .util import Debug
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -88,16 +90,18 @@ class Layer(Base.Layer):
     """
 
     def __new__(cls, module: nn.Module, **kwargs) -> None:
-        LOG.info(f"torch: new Layer with type %s", type(module))
+        LOG.info("torch: new Layer with type %s", type(module))
         if isinstance(module, nn.Conv2d):
-            cls = Conv2D
+            real_cls = Conv2D
         elif isinstance(module, nn.Sequential):
-            cls = Sequential
+            real_cls = Sequential
+        else:
+            real_cls = cls
 
         if super().__new__ is object.__new__:
             # object.__new__() takes exactly one argument
-            return object.__new__(cls)
-        return super().__new__(cls, **kwargs)
+            return object.__new__(real_cls)
+        return super().__new__(real_cls, **kwargs)
 
     def __init__(self, module: nn.Module, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -122,13 +126,24 @@ class Layer(Base.Layer):
             self._input_shape = None
             self._output_shape = None
 
-        print(f"Created new torch layer: {self} ({type(module)}): "
-              f"{self.input_shape}, {self.output_shape}")
+        LOG.debug("Created new torch layer: %s (%s): input=%s, output=%s",
+                  type(self), type(module),
+                  self.input_shape, self.output_shape)
+
+    @property
+    def module(self) -> nn.Module:
+        """The torch neural network module realizing this layer.
+        """
+        return self._module
 
     def adapt_shapes(self, module: nn.Module,
-                     input: torch.Tensor, output: torch.Tensor) -> None:
-        input_shape = input[0].size()
-        output_shape = output.size()
+                     incoming: torch.Tensor, outgoing: torch.Tensor) -> None:
+        # pylint: disable=unused-argument
+        """Adapt the input and output shape of this Layer to reflect
+        the size of the given sample data.
+        """
+        input_shape = incoming[0].size()
+        output_shape = outgoing.size()
         self._input_shape = (None, *input_shape[1:])
         self._output_shape = (None, *output_shape[1:])
 
@@ -182,12 +197,15 @@ class Sequential(Layer):
             The upper left corner and the lower right corner of the
             receptive field for the region of interest.
         """
-        
+
 
 # -----------------------------------------------------------------------------
 
 
 class NeuralLayer(Layer, Base.NeuralLayer):
+    """Torch implentation of the :py:class:`Base.NeuralLayer`
+    interface.
+    """
 
     @property
     def parameters(self):
@@ -207,7 +225,7 @@ class NeuralLayer(Layer, Base.NeuralLayer):
 
     @property
     def weights(self) -> np.ndarray:
-        return self._weight.numpy()
+        return self._weights.numpy()
 
     @property
     def bias(self) -> np.ndarray:
@@ -215,6 +233,13 @@ class NeuralLayer(Layer, Base.NeuralLayer):
 
 
 class StridingLayer(Layer, Base.StridingLayer):
+    """Torch implentation of the :py:class:`Base.StridingLayer`
+    interface.
+    """
+
+    @property
+    def filter_size(self):
+        return self._module.kernel_size
 
     @property
     def strides(self) -> Tuple[int]:
@@ -232,21 +257,36 @@ class StridingLayer(Layer, Base.StridingLayer):
         """The tensor that contains the activations of the layer."""
         # For now assume that the last operation is the activation.
         # Maybe differentiate with subclasses later.
-        return self._ops[0].outputs[0]
+        # return self._ops[0].outputs[0]
+        # FIXME[hack]: this does not really seem into the concept
+        # of a torch layer (i.e., a torch.nn.Module)
+        return None
 
 
 class Dense(NeuralLayer, Base.Dense):
-    pass
+    """Torch implentation of the :py:class:`Base.Dense`
+    interface.
+    """
 
 
 class Conv2D(NeuralLayer, StridingLayer, Base.Conv2D):
+    """Torch implentation of the :py:class:`Base.Conv2D`
+    interface.
+    """
 
     @property
-    def kernel_size(self):
+    def kernel_size(self) -> Tuple[int, int]:
         return self._module.kernel_size
 
     @property
-    def dilation(self):
+    def dilation(self) -> Tuple[int, int]:
+        """The diation describes the stepsize in which this filter is
+        applied. For example, a dilation of `(2, 2)` means that the
+        kernel is only applied at every second horizontal and vertical
+        position, that is at every fourth position in total. Hence the
+        output will have half the with and height of the input.
+
+        """
         print(f"torch.Conv2D: dilation={self._module.dilation}")
         return self._module.dilation
 
@@ -256,35 +296,62 @@ class Conv2D(NeuralLayer, StridingLayer, Base.Conv2D):
 
     @property
     def weight_tensor(self):
+        """The weight (parameter) tensor of this :py:class:`Layer`.
+        """
         # The last input of the first operation with strides
         # should correspond to the (first part of the) weights.
-        striding_op = self._first_module_with_attr('strides')
-        return striding_op.inputs[-1]
+        # FIXME[old]: is this old?
+        # striding_op = self._first_module_with_attr('strides')
+        # return striding_op.inputs[-1]
+        return self._module.weight
 
 
 class MaxPooling2D(StridingLayer, Base.MaxPooling2D):
+    """Torch implentation of the :py:class:`Base.MaxPooling2D`
+    interface.
+    """
 
     @property
-    def pool_size(self):
+    def pool_size(self) -> Tuple[int, int]:
         return self._module.kernel_size
 
     @property
-    def dilation(self):
+    def dilation(self) -> Tuple[int, int]:
+        """The diation describes the stepsize in which this filter is
+        applied. For example, a dilation of `(2, 2)` means that the
+        kernel is only applied at every second horizontal and vertical
+        position, that is at every fourth position in total. Hence the
+        output will have half the with and height of the input.
+
+        """
         return self._module.dilation
 
 
 class Dropout(Layer, Base.Dropout):
-    pass
+    """Torch implentation of the :py:class:`Base.Dropout`
+    interface.
+    """
+
+    @property
+    def rate(self) -> float:
+        """The dropout rate indicating the ratio of inputs to be dropped.
+        This should be a value between `0.0` and `1.0`
+        """
+        return self._module.p
 
 
 class Flatten(Layer, Base.Flatten):
-    pass
+    """Torch implentation of the :py:class:`Base.Flatten`
+    interface.
+    """
 
 
 # -----------------------------------------------------------------------------
 
+Modellike = Union[torch.nn.Module, str]
 
 class Network(BaseNetwork):
+    # pylint: disable=too-many-instance-attributes
     """A class implmenting the network interface (BaseNetwork) to access
     feed forward networks implemented in (py)Torch.  This is
     essentially a wrapper around a :py:class:`torch.nn.Module`.
@@ -310,9 +377,19 @@ class Network(BaseNetwork):
 
     torch_module: :py:class:`torch.nn.Module`
 
+    _input_shape:
+
+    _input_shapes:
+
+    _output_shapes:
+
+    _activations:
+
+    _train_mode: bool
+
     Arguments
     ---------
-    cls: Union[type, str, Tuple[str, str]]
+    model: Union[type, str, Tuple[str, str]]
         Either a sublcass of :py:class:`torch.nn.Module` or a str
         containing a fully qualified class name (module + class) or
         a pair consisting of the name of a python file (`.py`) and
@@ -328,13 +405,6 @@ class Network(BaseNetwork):
     # _hooks: a dictionary mapping layer names to hooks
     _hooks: dict = {}
 
-    # _python_class: a sublcass of :py:class:`torch.nn.Module` that
-    #   will be used to initialize a torch.Network upon preparation.
-    _python_class: type = None
-
-    # _torch_filename: name of the weights file (either .pth or .pth.tar)
-    _torch_filename: str = None
-
     # _device: the device to perform computations on
     #   ('cpu', 'cuda', or 'cuda0')
     _device: torch.device = None
@@ -342,7 +412,15 @@ class Network(BaseNetwork):
     # _train_mode: run model in train mode (True) or eval mode (False)
     _train_mode: bool = False
 
-    def __init__(self, *args, cuda: bool = True, train: bool = False,
+    # FIXME[todo]: move to some more suitable place ...
+    @staticmethod
+    def gpu_is_available():
+        """Check if a GPU is available for running this model.
+        """
+        return torch.cuda.is_available()
+
+    def __init__(self, model: Optional[Modellike] = None,
+                 cuda: bool = True, train: bool = False,
                  input_shape: Tuple[int, int] = None,
                  **kwargs):
         """
@@ -353,30 +431,24 @@ class Network(BaseNetwork):
         model_file
             Path to the .h5 model file.
         """
+        LOG.info("torch.Network(%s, cuda=%s, train=%s, input_shape=%s)",
+                 model if isinstance(model, str) else type(model),
+                 cuda, train, input_shape)
         super().__init__(**kwargs)
 
         #
-        # Try to get a model:
+        # Initialize properties
         #
+        self._input_shapes = None
+        self._output_shapes = None
+        self._activations = None
+        self._train_mode = train
+        self._input_shape = input_shape
 
-        if len(args) > 0:
-
-            if isinstance(args[0], nn.Module):
-                self._model = args[0]
-            elif isinstance(args[0], str) and args[0].endswith(".pth.tar"):
-                self._torch_filename = args[0]
-            elif (isinstance(args[0], Tuple) and len(args[0] == 2) and
-                  args[0][0].endswith(".py")):
-                spec = importlib.util.spec_from_file_location('torchnet',
-                                                              args[0][0])
-                net_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(net_module)
-                net_class_name = kwargs.get('network_class', 'Net')
-                net_class = getattr(net_module, net_class_name)
-                self._python_class = net_class()
-            else:
-                raise ValueError("Invalid arguments for "
-                                 "constructing a TorchNetwork")
+        if isinstance(model, nn.Module):
+            self._model, self._model_init = model, None
+        else:
+            self._model, self._model_init = None, model
 
         if cuda and not torch.cuda.is_available():
             LOG.warning("torch CUDA is not available, "
@@ -386,35 +458,66 @@ class Network(BaseNetwork):
         else:
             self._device = torch.device('cpu')
 
-        self._train_mode = train
-        self._input_shape = input_shape
+    def _prepared(self) -> bool:
+        return self._model is not None and super()._prepared()
 
     def _prepare(self) -> None:
+        LOG.info("torch.Network: prepare: model=%s, model_init=%s",
+                 type(self._model), self._model_init)
 
-        if self._model is None:
-            if not self._torch_filename:
-                raise ValueError("No filename provided for loading "
-                                 "torch model")
+        #
+        # Try to get a model:
+        #
+        if self._model is None and self._model_init is None:
+            raise ValueError("No model provided for torch Network.")
 
-            if self._torch_filename.endswith(".pth.tar"):
-                self._model = torch.load(self._torch_filename)
-            elif (self._torch_filename.endswith(".pth") and
-                  self._python_class is not None):
-                self._model = self._python_class()
-                self._model.load_state_dict(torch.load(self._torch_filename))
-            else:
-                raise ValueError("Invalid filene '{self._torch_filename}' "
-                                 "for loading torch model.")
+        if self._model is not None:
+            pass  # no model initialization is necessary
+        elif (isinstance(self._model_init, str) and
+                self._model_init.endswith(".pth.tar")):
+            # load model from .pth.tar file
+            self._model = torch.load(self._model)
+        elif (isinstance(self._model_init, Tuple) and len(self._model == 2) and
+              self._model[0].endswith(".py") and
+              self._model[1].endswith(".pth")):
+            # pair (module_name, weights_filename)
+            # module_name: a python module defining a class 'Net'
+            # weights_filename: name of a torch state dictionary
+            module_name, weights_filename = self._model_init
+            model_class_name = 'Net'
+            module_spec = \
+                importlib.util.spec_from_file_location('torchnet', module_name)
+            module = importlib.util.module_from_spec(module_spec)
+            module_spec.loader.exec_module(module_name)
+            model_class = getattr(module, model_class_name)
+            self._model = model_class()
+            self._model.load_state_dict(torch.load(weights_filename))
+        elif self._model is None:
+            raise ValueError("Invalid arguments for "
+                             "constructing a torch Network")
 
+        if not isinstance(self._model, nn.Module):
+            raise ValueError("Preparation of torch Network yielded bad type: "
+                             f"{type(self._model)}")
+
+        # assign the model to a device
+        # (should be done before preparing the layers with _prepare_layers,
+        # as this will propagate data through the model).
         self._model.to(self._device)
 
+        super()._prepare()
+
         # set train/eval mode
+        #
+        # Some layers have different behavior during training and
+        # evaluation.  By default all the modules are initialized to
+        # train mode (model.train() setting model.training = True). To
+        # switch to evaluation mode call model.eval().
+        self._model.eval()
         if self._train_mode:
             self._model.train()
         else:
             self._model.eval()
-
-        super()._prepare()
 
     def _prepare_layers(self) -> None:
         super()._prepare_layers()
@@ -446,15 +549,20 @@ class Network(BaseNetwork):
         """Add the given module to the layer dictionary
         """
         for index, (name, child) in enumerate(module.named_children()):
-            # print(f"adding layer: ", index, name, type(child))
-            layer_dict[name] = Layer(module=child, network=self, key=name)
+            if not isinstance(module, nn.Sequential):
+                layer_dict[name] = Layer(module=child, network=self, key=name)
+            elif recurse:
+                # FIXME[hack]
+                print(f"torch Network: not adding layer: {index}, {name}, "
+                      f"{type(child)}")
 
     def _layer_for_module(self, module: nn.Module) -> Layer:
         """Get the layer representing the given torch module.
         """
-        for layer in self._layer_dict.values():
-            if module is layer._module:
+        for layer in self.layer_dict.values():
+            if module is layer.module:
                 return layer
+        # pylint: disable=protected-access
         raise ValueError(f"Module {type(module)} ({module._get_name()}) "
                          "is not a Layer of this Network.")
 
@@ -483,6 +591,7 @@ class Network(BaseNetwork):
         self._input_shapes = {}
         self._output_shapes = {}
         self._prepare_hooks(self._shape_hook)
+
         # Send dummy data through the network to determine input and
         # output shapes of layers
         self._model(torch.zeros(*torch_input_shape, device=self._device))
@@ -499,7 +608,7 @@ class Network(BaseNetwork):
         if layers is None:
             layers = self
         for layer in layers:
-            module = layer._module
+            module = layer.module
             bound_hook = getattr(layer, hook.__name__)
             self._hooks[module] = module.register_forward_hook(bound_hook)
 
@@ -512,14 +621,15 @@ class Network(BaseNetwork):
         for module in modules:
             if isinstance(module, Layer):
                 name = module.get_id()
-                module = module._module
+                module = module.module
             elif isinstance(module, str) and module in self.layer_dict:
                 name = module
-                module = self.layer_dict[module]._module
+                module = self.layer_dict[module].module
             elif isinstance(module, nn.Module):
                 name = str(module)  # FIXME[hack]
             else:
                 raise ValueError(f"Illegal module specification: {module}")
+            # pylint: disable=protected-access
             module._name = name  # FIXME[hack]
             self._hooks[module] = module.register_forward_hook(hook)
 
@@ -529,34 +639,40 @@ class Network(BaseNetwork):
 
         for module in modules:
             if isinstance(module, Layer):
-                module = module._module
+                module = module.module
             elif isinstance(module, str) and module in self.layer_dict:
-                module = self.layer_dict[module]._module
+                module = self.layer_dict[module].module
             elif not isinstance(module, nn.Module):
                 raise ValueError(f"Illegal module specification: {module}")
             self._hooks[module].remove()
             del self._hooks[module]
 
-    def _shape_hook(self, module, input, output):
+    def _shape_hook(self, module: nn.Module, incoming, outgoing) -> None:
+        """
+        """
         name = module._name  # FIXME[hack]: how to acces the module name?
         # input[0].size() will be (N, C, H, W) -> store (H ,W, C)
-        input_shape = input[0].size()
+        input_shape = incoming[0].size()
         self._input_shapes[name] = (None, *input_shape[2:], input_shape[1])
-        # output.size() will be (N, C, H, W) -> store (C, H ,W)
-        output_shape = output.size()
+        # outgoing.size() will be (N, C, H, W) -> store (C, H ,W)
+        output_shape = outgoing.size()
         self._output_shapes[name] = (None, *output_shape[2:], output_shape[1])
 
-    def _activation_hook(self, module, input, output):
+    def _activation_hook(self, module: nn.Module,
+                         incoming, outgoing: Variable) -> None:
+        # pylint: disable=unused-argument
+        """
+        """
         name = module._name  # FIXME[hack]: how to acces the module name?
-        # output is a torch.autograd.variable.Variable,
-        # output.data holds the actual data
+        # outgoing is a torch.autograd.variable.Variable,
+        # outgoing.data holds the actual data
         # FIXME[quesion]: it is said in the documentation, that
         # the TorchTensor and the numpy array share the same memory.
         # However, the TorchTensor may be removed after usage (is this true?)
         # what will then happen with the numpy array? do we need to
         # copy or is that a waste of resources?
-        self._activations[name] = output.data.cpu().numpy().copy()
-        #if len(output.data.size()) == 4:  # convolution, (N,C,H,W)
+        self._activations[name] = outgoing.data.cpu().numpy().copy()
+        # if len(outgoing.data.size()) == 4:  # convolution, (N,C,H,W)
         #    self._activations[name] = \
         #        self._activations[name].transpose(0, 2, 3, 1)
 
@@ -572,6 +688,7 @@ class Network(BaseNetwork):
         -------
         The layer for the given identifier.
         """
+        # pylint: disable=protected-access
         return (layer_id if isinstance(layer_id, torch.nn.Module)
                 else self._model._modules[layer_id])
 
@@ -598,7 +715,12 @@ class Network(BaseNetwork):
             have input channels.
         """
         first = self._get_first_layer()
-        return first.in_channels if self.layer_is_convolutional(first) else 0
+        if self.layer_is_convolutional(first):
+            return first.in_channels
+        if (isinstance(first, nn.Sequential) and
+                self.layer_is_convolutional(first[0])):
+            return first[0].in_channels
+        return 0  # no idea how to determine the number of input channels
 
     @property
     def layer_ids(self) -> list:
@@ -609,6 +731,8 @@ class Network(BaseNetwork):
         -------
         The list of layer identifiers.
         """
+        # FIXME[hack]: we should avoid accessing protected members
+        # pylint: disable=protected-access
         return list(self._model._modules.keys())
 
     def layer_is_convolutional(self, layer_id) -> bool:
@@ -808,9 +932,90 @@ class Network(BaseNetwork):
         biases = layer.bias.data.numpy()
         return biases
 
+    def get_layer_info(self, layername):
+        """
+
+        Parameters
+        ----------
+        layername
+
+        Returns
+        -------
+        """
+        # FIXME[todo]: implementation
+        # (we still have to decide on some info API)
+
+    @property
+    def torch_device(self) -> torch.device:
+        """The device on which this :py:class:`Network` (or more
+        precisely the underlying torch model) is placed.
+        """
+        return self._device
+
+    @property
+    def model(self) -> nn.Module:
+        """The underlying torch model.
+        """
+        return self._model
+
+    @property
+    def torch_model(self) -> nn.Module:
+        """The underlying torch model.
+        """
+        return self._model
+
+    @property
+    def name(self) -> str:
+        """The name of this model.
+        """
+        return self._model.__class__.__name__
+
+    # -----------------------------------------------------------------------
+
+    #
+    # Applying the network to data
+    #
+
+    def _get_activations(self, input_samples: torch.Tensor,
+                         layer_ids) -> List[torch.Tensor]:
+        """Compute layer activations.
+        """
+        LOG.debug("TorchNetwork[%s]._get_activations: "
+                  "inputs[%s]: %s (%s, %s), layers=%s", self,
+                  type(input_samples).__name__,
+                  getattr(input_samples, 'shape', '?'), self._internal_format,
+                  getattr(input_samples, 'dtype', '?'), layer_ids)
+
+        # prepare to record the activations
+        self._activations = {}
+        self._prepare_hooks(self._activation_hook, layer_ids)
+
+        # run forward pass (this will fill self._activations)
+        self._model(input_samples)
+
+        # remove the hooks
+        self._remove_hooks(layer_ids)
+
+        for key, activations in self._activations.items():
+            print(f"torch._get_activations[{key}]: {activations.shape}")
+
+        # return the activations
+        return list(self._activations.values())
+
+    def _compute_net_input(self, layer_ids: list,
+                           input_samples: np.ndarray) -> np.ndarray:
+        """Computes a list of net inputs from a list of layer ids."""
+        # FIXME[todo]: implementation
+
+    def torch_forward(self, data: Datalike) -> np.ndarray:
+        """Perform a forward step.
+        """
+        internal = self.data_to_internal(data)
+
+
     # FIXME[old]
     def _old_get_activations(self, input_samples: np.ndarray,
-                        layer_ids) -> List[np.ndarray]:
+                             layer_ids) -> List[np.ndarray]:
         """Gives activations values of the network/model
         for a given layername and an input (inputsample).
 
@@ -835,38 +1040,19 @@ class Network(BaseNetwork):
 
         return super().get_activations(input_samples, layer_ids)
 
-    def _get_activations(self, inputs: torch.Tensor,
-                         layer_ids) -> List[torch.Tensor]:
-        """Compute layer activations.
-        """
-        LOG.debug("TorchNetwork[%s]._get_activations: "
-                  "inputs[%s]: %s (%s, %s), layers=%s", self.key,
-                  type(inputs).__name__,
-                  getattr(inputs, 'shape', '?'), self._internal_format,
-                  getattr(inputs, 'dtype', '?'), layer_ids)
-
-        # prepare to record the activations
-        self._activations = {}
-        self._prepare_hooks(self._activation_hook, layer_ids)
-
-        # run forward pass (this will fill self._activations)
-        self._model(inputs)
-
-        # remove the hooks
-        self._remove_hooks(layer_ids)
-
-        for key, activations in self._activations.items():
-            print(f"torch._get_activations[{key}]: {activations.shape}")
-
-        # return the activations
-        return list(self._activations.values())
+    #
+    # Pre- and postprocessing
+    #
 
     def _transform_input(self, inputs: np.ndarray,
-                         **kwargs) -> Tuple[torch.Tensor, bool, bool]:
-        """
-        Transform input data from the public interface (using numpy arrays)
+                         data_format: str = None) -> Tuple[torch.Tensor,
+                                                           bool, bool]:
+        # FIXME[refactor]: we need to restructure this class and come
+        # up with a better specialization/data conversion API that
+        # correctly works with subclassing ...
+        """Transform input data from the public interface (using numpy arrays)
         into the internal representation (`torch.Tensor`).
-        
+
         Arguments
         ---------
         inputs: np.ndarray
@@ -890,18 +1076,19 @@ class Network(BaseNetwork):
             into the internal format (torch.Tensor). This is `True`,
             if an active transformation was performed and `False`
             if the given `inputs` were already a `torch.Tensor`.
+
         """
-        
+
         if isinstance(inputs, torch.Tensor):
-            # The data seems already to be in interal format. 
+            # The data seems already to be in interal format.
             internalized = False
             batched = False
 
         else:
             inputs, batched, internalized = \
-                super()._transform_input(inputs, **kwargs)
+                super()._transform_input(inputs, data_format=data_format)
             internalized = True
-            
+
             inputs = torch.from_numpy(inputs)
             inputs = inputs.to(self._device)
             inputs = Variable(inputs)
@@ -915,8 +1102,8 @@ class Network(BaseNetwork):
         if (input_samples.shape[0] == 1
                 and len(input_samples.shape) < 4
                 and input_samples.shape[0] != 1):
-            for id in self._activations.keys():
-                self._activations[id] = self._activations[id].squeeze(0)
+            for key in self._activations:
+                self._activations[key] = self._activations[key].squeeze(0)
 
         # if a single layer_id was given (not a list), then just return
         # a single activtion array
@@ -925,15 +1112,24 @@ class Network(BaseNetwork):
                 else self._activations[layer_ids])
 
     def numpy_to_internal(self, array: np.ndarray) -> torch.Tensor:
-        """
+        # FIXME[refactor]: we need to restructure this class and come
+        # up with a better specialization/data conversion API that
+        # correctly works with subclassing ...
+        """Translate a numpy array into the internal representation,
+        that is a torch tensor.
         """
         tensor = torch.from_numpy(array)
         tensor = tensor.to(self._device)
         return tensor
 
     def internal_to_numpy(self, tensor: torch.Tensor,
-                           unbatch: bool = False) -> np.ndarray:
-        """
+                          unbatch: bool = False) -> np.ndarray:
+        # FIXME[refactor]: we need to restructure this class and come
+        # up with a better specialization/data conversion API that
+        # correctly works with subclassing ...
+        # pylint: disable=arguments-renamed
+        """Translate the internal representation (torch tensor) into
+        a numpy array.
         """
         if unbatch:
             if tensor.shape[0] != 1:
@@ -945,74 +1141,195 @@ class Network(BaseNetwork):
 
 
 class ImageNetwork(BaseImageNetwork, Network):
+    """A torch :py:class:`Network` operating on images.
+    """
 
-    def _prepare(self) -> None:
-        super()._prepare()
+    internal_result: Tuple[str, ...] = ('result', )
+    external_result: Tuple[str, ...] = ('result', )
 
-        # Construct an image preprocessing function using torch.transforms.
-        # Notice that (at least resize) expects as input a PIL image
-        # (not a numpy.ndarray).
-        self._preprocess_image = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-        ])
+    # the torch ImageNet dataset mean and std will remain the same
+    # irresptive of the torchvision model used. These values assume
+    # that ImageNet images are RGB and have range 0.0 to 1.0.
+    imagenet_mean_ = torch.FloatTensor([0.485, 0.456, 0.406])
+    imagenet_std_ = torch.FloatTensor([0.229, 0.224, 0.225])
 
+    # the lower and upper bound for image values, assuming that images
+    # are normalized to zero mean and unit variance using the ImageNet
+    # mean and standard deviation.
+    imagenet_normalized_min_ = -imagenet_mean_/imagenet_std_
+    imagenet_normalized_max_ = (1-imagenet_mean_)/imagenet_std_
+
+    lower_bound = imagenet_normalized_min_
+    upper_bound = imagenet_normalized_max_
+
+    # Construct an image preprocessing function using
+    # torch.transforms.  Notice that (at least transforms.Resize)
+    # expects as input a PIL image (not a numpy.ndarray).
+    # The result will be of type torch.Tensor.
+    _preprocess_pil_image = transforms.Compose([
+        transforms.Resize(256),  # requires PIL.Image
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=imagenet_mean_, std=imagenet_std_)
+    ])
+
+    preprocess_pil = transforms.Compose([
+        transforms.Resize((299, 299)),  # requires PIL.Image
+        transforms.ToTensor(),
+        transforms.Normalize(mean=imagenet_mean_, std=imagenet_std_)
+    ])
+
+    preprocess_numpy = transforms.Compose([
+        # transforms.Resize((299, 299)),  # requires PIL.Image
+        transforms.ToTensor(),
+        transforms.Normalize(mean=imagenet_mean_, std=imagenet_std_)
+    ])
+
+    def __init__(self, model: Optional[Modellike] = None, **kwargs):
+        super().__init__(model=model, **kwargs)
+
+    def _image_to_internal(self, image: PIL.Image) -> torch.Tensor:
+        """
+        """
+        return self._preprocess_pil_image(image)
+
+    # FIXME[hack]: image_to_internal of super class should made more general,
+    # so that overwriting that method is not necessary.
+    # This ad hoc function only works for a single image, not for a batch
+    # of images!
     def image_to_internal(self, image: Imagelike) -> torch.Tensor:
         """Transform an image into a torch Tensor.
         """
-        # the _preprocess_image function expects as input a PIL image!
-        image = Image.as_pil(image)
+        if isinstance(image, torch.Tensor):
+            image_tensor = image
 
-        # image should be PIL Image. Got <class 'numpy.ndarray'>
-        image_tensor = self._preprocess_image(image)
+        elif isinstance(image, np.ndarray):
+            # at this point we need to know the range (if further
+            # preprocessing, e.g., normalization, is required ...)
+            if False and (0 <= image).all():
+                if (image <= 1).all():  # image is range 0.0 - 1.0
+                    pass
+                elif (image <= 255).all():   # image is range 0 - 255
+                    pass
 
-        # create a mini-batch as expected by the model
-        image_batch = image_tensor.unsqueeze(0)
+            # Question: channel first or channel last?
+            # H X W X C  ==>   C X H X W
+            #  image = np.transpose(image, (2, 0, 1))
+
+            # preprocess_numpy expects numpy.ndarray of correct size,
+            # dtype float and values in range [0.0, 1.0].
+            # It performs the following operations:
+            #  1. [no resizing]
+            #  2. numpy.ndarray -> torch.Tensor
+            #  3. normalization [0.0, 1.0] -> torch.imagenet_range
+            image_tensor = self.preprocess_numpy(image)
+
+            # old: explicit transformation:
+            # H X W X C  ==>   C X H X W
+            # image = np.transpose(image, (2, 0, 1))
+            #
+            # image = torch.from_numpy(image)
+            # image = image.add(-self.imagenet_mean_.view(3, 1, 1)).\
+            #     div(self.imagenet_std_.view(3, 1, 1))
+            #
+            # add batch dimension:  C X H X W ==> B X C X H X W
+            # image = image.unsqueeze(0)
+
+        else:
+            # the _image_to_internal function expects as input a PIL image!
+            image = Image.as_pil(image)
+
+            # image should be PIL Image. Got <class 'numpy.ndarray'>
+            image_tensor = self._image_to_internal(image)
+
+        if image_tensor.dim() == 4:
+            # image is already batch
+            image_batch = image_tensor
+        elif image_tensor.dim() == 3:
+            # create a mini-batch as expected by the model
+            # by adding a batch dimension:  C X H X W ==> B X C X H X W
+            image_batch = image_tensor.unsqueeze(0)
+        else:
+            raise ValueError(f"Data of invalid shape {image.shape} cannot "
+                             "be transformed into an internal torch image.")
 
         # move the input and model to GPU for speed if available
         image_batch = image_batch.to(self._device)
 
         return image_batch
 
-    def internal_to_image(self, data: torch.Tensor) -> Imagelike:
-        """Transform a torch Tensor into an image.
+    def internal_to_image(self, data: torch.Tensor,
+                          dtype: type = float) -> Imagelike:
+        """Transform a data tensor into a numpy array, undoing the
+        :py:meth:`image_to_internal` operations.  This includes:
+
+        1. removing the batch axis (if batch size is 1)
+        2. unnormalizing: torch imagenet_range -> [0.0, 1.0]
+        3. convert to numpy
+        4. reorder: channel first to channel last
         """
+        
+        # remove batch dimension # B X C H X W ==> C X H X W
+        data = data.squeeze(0)
+
+        # "unnormalize": reverse of normalization operation
+        data = data.cpu().\
+            mul(self.imagenet_std_.view(3, 1, 1)).\
+            add(self.imagenet_mean_.view(3, 1, 1))
+        # clip values to the valid range
+        data = torch.clip(data, 0, 1)
+        # numpy equivalent: data = np.clip(data, 0, 1)
+
+        # C X H X W  ==>   H X W X C
+        data = data.permute(1, 2, 0)
+        # numpy equivalent: data = np.transpose(data, (1,2,0))
+
+        # to numpy
+        data = data.numpy()
+        if issubclass(dtype, int):
+            data = (data*255).astype(np.uint8)
+
         return data
 
+    def range_info(self):
+        """Output the range of values expected as inputs to this model.
+        """
+        range_min = self.lower_bound.numpy()
+        range_max = self.upper_bound.numpy()
+        delta = range_max-range_min
+        print("Images are transformed to the following range:\n"
+              f"  red:   {range_min[0]:.4f} - {range_max[0]:.4f}"
+              f"  (range={delta[0]:.4f}, quantization={delta[0]/256:.4f})\n"
+              f"  green: {range_min[1]:.4f} - {range_max[1]:.4f}"
+              f"  (range={delta[1]:.4f}, quantization={delta[1]/256:.4f})\n"
+              f"  blue:  {range_min[2]:.4f} - {range_max[2]:.4f}"
+              f"  (range={delta[2]:.4f}, quantization={delta[2]/256:.4f})")
 
-class DemoResnetNetwork(Classifier, ImageNetwork):
-    """An experimental Torch Network based on ResNet.
+    def _process(self, images: torch.Tensor) -> torch.Tensor:
+        # FIXME[refactor]: we need to come up with a better processing scheme
+        # to subclass the Tool class in a type save way.
+        # pylint: disable=arguments-differ
+        return self._model(images)
 
-    https://pytorch.org/hub/pytorch_vision_resnet/
+
+class ClassifierNetwork(BaseClassifier, Network):
+    """A torch realization of a classifier network.
     """
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(scheme='ImageNet', lookup='torch',
-                         input_shape=(3, 224, 244),  # FIXME[hack]: can be different
-                         **kwargs)
-
-    def _prepare(self) -> None:
-
-        self._model = torch.hub.load('pytorch/vision:v0.6.0',
-                                     'resnet18', pretrained=True)
-        # or any of these variants
-        # model = torch.hub.load('pytorch/vision:v0.6.0',
-        #                        'resnet34', pretrained=True)
-        # model = torch.hub.load('pytorch/vision:v0.6.0',
-        #                        'resnet50', pretrained=True)
-        # model = torch.hub.load('pytorch/vision:v0.6.0',
-        #                        'resnet101', pretrained=True)
-        # model = torch.hub.load('pytorch/vision:v0.6.0',
-        #                        'resnet152', pretrained=True)
-        super()._prepare()
-
-
     #
-    # Implementation of the SoftClassifier interface
+    # Implementation of the SoftClassifier API
     #
+
+    # FIXME[todo]: it should be possible to use the functionalitly
+    # implemented in the parent class (network.Classifier), if
+    # we could provide the logit_layer and score_layer properties
+
+    def class_scores(self, inputs: Datalike) -> np.ndarray:
+        """Get the class confidence scores for the given image.
+        """
+        # FIXME[hack]: this does not allow to be called with batches!
+        scores = self._class_scores(self.image_to_internal(inputs))
+        return scores[0].cpu().detach().numpy()
 
     def _class_scores(self, inputs: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
@@ -1025,3 +1342,76 @@ class DemoResnetNetwork(Classifier, ImageNetwork):
         # we run a softmax on it.
         scores = torch.nn.functional.softmax(logits, dim=1)
         return scores
+
+    def _old_classify(self, inputs: Datalike, top=False,
+                      output=None) -> ClassIdentifier:
+        """Output the top-n classes for given batch of inputs.
+
+        Arguments
+        ---------
+        inputs: np.ndarray
+            A data point or a batch of input data to classify.
+
+        Results
+        -------
+        classes:
+            A list of class-identifiers or a
+            list of tuples of class identifiers.
+        """
+        return self._predict(inputs, top=top, output=output)
+
+    # FIXME[todo]: this method is designed for classification and should
+    # probably be better integrated with the other methods of this
+    # class and the super classes
+    def _predict(self, data: torch.Tensor, top: Union[int, bool] = False,
+                 output=None) -> Tuple[np.ndarray, np.ndarray]:
+        """Do the actual prediction.
+
+        Arguments
+        ---------
+        output:
+            How to report the confidence values: None means that
+            no confidence values are reported, 'logits' means that
+            logit value are returned, while 'probs' will return
+            probability values (obtained by applying softmax).
+        """
+        logits = self._model.forward(data.to(self._device))
+
+        if not top:
+            indices = int(torch.argmax(logits, dim=1)[0])
+        else:
+            indices = torch.argsort(logits, dim=1,
+                                    descending=True)[:, :top].numpy()
+
+        if output is None:
+            return indices
+        if output == 'logits':
+            return indices, logits[:, indices].numpy()
+        if output == 'probs':
+            probs = F.softmax(logits, dim=1)
+            # confidence = round(float(torch.max(probs.data, 1)[0][0]) * 100, 4)
+            return indices, probs.data[0, indices].cpu().numpy()
+
+        raise ValueError(f"Invalid value for argument: output='{output}'")
+
+    def _old_classify_image(self, image: Imagelike,
+                            preprocess: bool = True, top: int = 5) -> None:
+        """Classify an image an output result(s).
+        """
+
+        if preprocess:
+            data = self.old_preprocess_image(image)
+        else:
+            data = image
+
+        # model predictions
+        indices, confidences = \
+            self._predict(data, top=top, output='probs')
+
+        # get an index(class number) of a largest element
+        # confidence, label_idx = torch.max(output.data, dim=1)
+        for i, (index, confidence) in \
+                enumerate(zip(indices[0], confidences[0])):
+            label = self.get_label(index, name='text')
+            print(f"  {i+1}). Label: {label} ({index}), "
+                  f"confidence={confidence*100:2.2f}%")

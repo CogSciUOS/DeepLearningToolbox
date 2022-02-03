@@ -380,8 +380,20 @@ class BatchWrapper(Data):
             super().__setattr__(attribute, value)
         elif self._data.is_batch_attribute(attribute):
             if len(value) != 1:
-                raise AttributeError(f"BatchWrapper only accepts batches "
-                                     "of size 1 for attribute '{attribute}'")
+                raise AttributeError("BatchWrapper only accepts batches "
+                                     f"of size 1 for attribute '{attribute}'")
             setattr(self._data, attribute, value[1])
         else:
             setattr(self._data, attribute, value)
+
+
+#
+# Utility functions
+#
+
+def add_noise(data: np.ndarray) -> np.ndarray:
+    """Add (Gaussian) noise to a given data.
+    """
+    image = data.array
+    noise = np.random.normal(0, 0.3, size=np.shape(image))
+    data.add_attribute('noisy', image + noise, batch=True)

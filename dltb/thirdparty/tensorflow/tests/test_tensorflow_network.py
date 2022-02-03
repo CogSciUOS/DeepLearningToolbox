@@ -25,7 +25,7 @@ class TestTensorFlowNetwork(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        checkpoints = os.path.join(config.models_directory,
+        checkpoints = os.path.join(config.model_directory,
                                    'example_tf_mnist_model',
                                    'tf_mnist_model.ckpt')
         cls.loaded_network = TensorFlowNetwork(checkpoint=checkpoints)

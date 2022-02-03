@@ -379,8 +379,27 @@ class ImageAdapter(ABC):
                           cls, cls.__bases__, new_bases)
                 cls.__bases__ = tuple(new_bases)
 
+    def image_to_internal(self, image: Imagelike) -> np.ndarray:
+        """
+        """
+        # FIXME[hack]: batch handling
+        from dltb.base.data import Data
+        if isinstance(image, Data) and image.is_batch:
+            result = np.ndarray((len(image), 227, 227, 3))
+            for index, img in enumerate(image.array):
+                result[index] = self._image_to_internal(img)
+            return result
+        elif isinstance(image, list):
+            result = np.ndarray((len(image), 227, 227, 3))
+            for index, img in enumerate(image):
+                result[index] = self._image_to_internal(img)
+            return result
+
+        image = self._image_to_internal(image)
+        return image[np.newaxis]
+
     @abstractmethod
-    def image_to_internal(self, image: Imagelike) -> Any:
+    def _image_to_internal(self, image: Imagelike) -> Any:
         "to be implemented by subclasses"
 
     @abstractmethod

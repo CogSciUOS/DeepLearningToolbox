@@ -8,6 +8,13 @@ and version matching, over package and data installation to abstract
 interfaces that allow to access common functionionality (like images,
 sound, video) using different libraries.
 
+
+This module should not actually load the thirdparty modules but
+only announce their availability to the program.  This includes:
+* registering implementations provided by the modules.
+* adding configuration properties used by the modules.
+* adding command line options (usually via the configuration properties)
+
 """
 # FIXME[old]: Some of the code below has been superseeded by the new
 # module 'dltb.base.implementation'. Sort out, what could is still
@@ -33,93 +40,102 @@ from ..util.importer2 import import_interceptor
 LOG = logging.getLogger(__name__)
 
 
-_DLTB = 'dltb.'
-_THIRDPARTY = 'dltb.thirdparty.'
+_DLTB = 'dltb'
+_THIRDPARTY = 'dltb.thirdparty'  # __name__
 
-Implementable.register_module_alias(_THIRDPARTY + 'imageio', 'imageio')
-Implementable.register_implementation(_DLTB + 'base.image.ImageReader',
-                                      _THIRDPARTY + 'imageio.ImageIO')
-Implementable.register_implementation(_DLTB + 'base.image.ImageWriter',
-                                      _THIRDPARTY + 'imageio.ImageIO')
-Implementable.register_implementation(_DLTB + 'base.video.VideoReader',
-                                      _THIRDPARTY + 'imageio.VideoReader')
-Implementable.register_implementation(_DLTB + 'base.video.VideoWriter',
-                                      _THIRDPARTY + 'imageio.VideoWriter')
-Implementable.register_implementation(_DLTB + 'base.video.Webcam',
-                                      _THIRDPARTY + 'imageio.Webcam')
+Implementable.register_module_alias(_THIRDPARTY + '.imageio', 'imageio')
+Implementable.register_implementation(_DLTB + '.base.image.ImageReader',
+                                      _THIRDPARTY + '.imageio.ImageIO')
+Implementable.register_implementation(_DLTB + '.base.image.ImageWriter',
+                                      _THIRDPARTY + '.imageio.ImageIO')
+Implementable.register_implementation(_DLTB + '.base.video.VideoReader',
+                                      _THIRDPARTY + '.imageio.VideoReader')
+Implementable.register_implementation(_DLTB + '.base.video.VideoWriter',
+                                      _THIRDPARTY + '.imageio.VideoWriter')
+Implementable.register_implementation(_DLTB + '.base.video.Webcam',
+                                      _THIRDPARTY + '.imageio.Webcam')
 
 Implementable.register_module_alias(_THIRDPARTY + 'opencv', 'cv2')
 Implementable.register_module_alias(_THIRDPARTY + 'opencv', 'opencv')
-Implementable.register_implementation(_DLTB + 'base.image.ImageReader',
-                                      _THIRDPARTY + 'opencv.ImageIO')
-Implementable.register_implementation(_DLTB + 'base.image.ImageWriter',
-                                      _THIRDPARTY + 'opencv.ImageIO')
-Implementable.register_implementation(_DLTB + 'base.image.ImageDisplay',
-                                      _THIRDPARTY + 'opencv.ImageDisplay')
-Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
-                                      _THIRDPARTY + 'opencv.ImageUtils')
-Implementable.register_implementation(_DLTB + 'base.image.ImageWarper',
-                                      _THIRDPARTY + 'opencv.ImageUtils')
-Implementable.register_implementation(_DLTB + 'base.video.VideoReader',
-                                      _THIRDPARTY + 'opencv.VideoReader')
-Implementable.register_implementation(_DLTB + 'base.video.VideoWriter',
-                                      _THIRDPARTY + 'opencv.VideoWriter')
-Implementable.register_implementation(_DLTB + 'base.video.Webcam',
-                                      _THIRDPARTY + 'opencv.Webcam')
-Implementable.register_implementation(_DLTB + 'tool.face.detector.Detector',
-                                      _THIRDPARTY + 'opencv.face.DetectorHaar')
-Implementable.register_implementation(_DLTB + 'tool.face.detector.Detector',
-                                      _THIRDPARTY + 'opencv.face.DetectorSSD')
+Implementable.register_implementation(_DLTB + '.base.image.ImageReader',
+                                      _THIRDPARTY + '.opencv.ImageIO')
+Implementable.register_implementation(_DLTB + '.base.image.ImageWriter',
+                                      _THIRDPARTY + '.opencv.ImageIO')
+Implementable.register_implementation(_DLTB + '.base.image.ImageDisplay',
+                                      _THIRDPARTY + '.opencv.ImageDisplay')
+Implementable.register_implementation(_DLTB + '.base.image.ImageResizer',
+                                      _THIRDPARTY + '.opencv.ImageUtils')
+Implementable.register_implementation(_DLTB + '.base.image.ImageWarper',
+                                      _THIRDPARTY + '.opencv.ImageUtils')
+Implementable.register_implementation(_DLTB + '.base.video.VideoReader',
+                                      _THIRDPARTY + '.opencv.VideoReader')
+Implementable.register_implementation(_DLTB + '.base.video.VideoWriter',
+                                      _THIRDPARTY + '.opencv.VideoWriter')
+Implementable.register_implementation(_DLTB + '.base.video.Webcam',
+                                      _THIRDPARTY + '.opencv.Webcam')
+Implementable.register_implementation(_DLTB + '.tool.face.detector.Detector',
+                                      _THIRDPARTY + '.opencv.face.DetectorHaar')
+Implementable.register_implementation(_DLTB + '.tool.face.detector.Detector',
+                                      _THIRDPARTY + '.opencv.face.DetectorSSD')
 
-Implementable.register_module_alias(_THIRDPARTY + 'matplotlib', 'plt')
-Implementable.register_module_alias(_THIRDPARTY + 'matplotlib', 'matplotlib')
-Implementable.register_implementation(_DLTB + 'base.image.ImageReader',
-                                      _THIRDPARTY + 'matplotlib.ImageIO')
-Implementable.register_implementation(_DLTB + 'base.image.ImageWriter',
-                                      _THIRDPARTY + 'matplotlib.ImageIO')
-Implementable.register_implementation(_DLTB + 'base.image.Display',
-                                      _THIRDPARTY + 'matplotlib.ImageDisplay')
+Implementable.register_module_alias(_THIRDPARTY + '.matplotlib', 'plt')
+Implementable.register_module_alias(_THIRDPARTY + '.matplotlib', 'matplotlib')
+Implementable.register_implementation(_DLTB + '.base.image.ImageReader',
+                                      _THIRDPARTY + '.matplotlib.ImageIO')
+Implementable.register_implementation(_DLTB + '.base.image.ImageWriter',
+                                      _THIRDPARTY + '.matplotlib.ImageIO')
+Implementable.register_implementation(_DLTB + '.base.image.Display',
+                                      _THIRDPARTY + '.matplotlib.ImageDisplay')
 
-Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'skimage')
-Implementable.register_module_alias(_THIRDPARTY + 'skimage', 'scikit-image')
-Implementable.register_implementation(_DLTB + 'base.image.ImageResizer',
-                                      _THIRDPARTY + 'skimage.ImageUtils')
-Implementable.register_implementation(_DLTB + 'base.image.ImageWarper',
-                                      _THIRDPARTY + 'skimage.ImageUtils')
+Implementable.register_module_alias(_THIRDPARTY + '.skimage', 'skimage')
+Implementable.register_module_alias(_THIRDPARTY + '.skimage', 'scikit-image')
+Implementable.register_implementation(_DLTB + '.base.image.ImageResizer',
+                                      _THIRDPARTY + '.skimage.ImageUtils')
+Implementable.register_implementation(_DLTB + '.base.image.ImageWarper',
+                                      _THIRDPARTY + '.skimage.ImageUtils')
 
-Implementable.register_module_alias(_THIRDPARTY + 'qt', 'qt')
-Implementable.register_implementation(_DLTB + 'base.image.ImageDisplay',
-                                      _THIRDPARTY + 'qt.ImageDisplay')
-
-
-Implementable.register_module_alias(_THIRDPARTY + 'arcface', 'arcface')
-Implementable.register_implementation(_DLTB + 'tool.face.recognize.ArcFace',
-                                      _THIRDPARTY + 'arcface.ArcFace')
+Implementable.register_module_alias(_THIRDPARTY + '.qt', 'qt')
+Implementable.register_implementation(_DLTB + '.base.image.ImageDisplay',
+                                      _THIRDPARTY + '.qt.ImageDisplay')
 
 
-Implementable.register_module_alias(_THIRDPARTY + 'mtcnn', 'mtcnn')
-Implementable.register_module_alias(_THIRDPARTY + 'face_evolve.mtcnn',
+Implementable.register_module_alias(_THIRDPARTY + '.arcface', 'arcface')
+Implementable.register_implementation(_DLTB + '.tool.face.recognize.ArcFace',
+                                      _THIRDPARTY + '.arcface.ArcFace')
+
+
+Implementable.register_module_alias(_THIRDPARTY + '.mtcnn', 'mtcnn')
+Implementable.register_module_alias(_THIRDPARTY + '.face_evolve.mtcnn',
                                     'mtcnn2')
-Implementable.register_implementation(_DLTB + 'tool.face.mtcnn.Detector',
-                                      _THIRDPARTY + 'mtcnn.Detector')
-Implementable.register_implementation(_DLTB + 'tool.face.mtcnn.Detector',
+Implementable.register_implementation(_DLTB + '.tool.face.mtcnn.Detector',
+                                      _THIRDPARTY + '.mtcnn.Detector')
+Implementable.register_implementation(_DLTB + '.tool.face.mtcnn.Detector',
                                       _THIRDPARTY +
-                                      'face_evolve.mtcnn.Detector')
+                                      '.face_evolve.mtcnn.Detector')
+
+Implementable.register_implementation(_DLTB + '.util.plot.Display',
+                                      _THIRDPARTY + '.matplotlib.MplDisplay')
+Implementable.register_implementation(_DLTB + '.util.plot.TilingPlotter',
+                                      _THIRDPARTY +
+                                      '.matplotlib.MplTilingPlotter')
+Implementable.register_implementation(_DLTB + '.util.plot.Scatter2dPlotter',
+                                      _THIRDPARTY +
+                                      '.matplotlib.MplScatter2dPlotter')
 
 
 _BASE_CLASSES = {
-    'ImageReader': _DLTB + 'base.image.ImageReader',
-    'ImageWriter': _DLTB + 'base.image.ImageWriter',
-    'ImageResizer': _DLTB + 'base.image.ImageResizer',
-    'VideoReader': _DLTB + 'base.video.VideoReader',
-    'VideoWriter': _DLTB + 'base.video.VideoWriter',
-    'SoundReader': _DLTB + 'base.image.SoundReader',
-    'SoundWriter': _DLTB + 'base.image.SoundWriter',
-    'SoundPlayer': _DLTB + 'base.image.SoundPlayer',
-    'SoundRecorder': _DLTB + 'base.image.SoundRecorder',
-    'Webcam': _DLTB + 'base.video.Webcam',
-    'FaceDetector': _DLTB + 'tool.face.detector.Detector',
-    'ImageGAN': _DLTB + 'tool.gan.ImageGAN',
+    'ImageReader': _DLTB + '.base.image.ImageReader',
+    'ImageWriter': _DLTB + '.base.image.ImageWriter',
+    'ImageResizer': _DLTB + '.base.image.ImageResizer',
+    'VideoReader': _DLTB + '.base.video.VideoReader',
+    'VideoWriter': _DLTB + '.base.video.VideoWriter',
+    'SoundReader': _DLTB + '.base.image.SoundReader',
+    'SoundWriter': _DLTB + '.base.image.SoundWriter',
+    'SoundPlayer': _DLTB + '.base.image.SoundPlayer',
+    'SoundRecorder': _DLTB + '.base.image.SoundRecorder',
+    'Webcam': _DLTB + '.base.video.Webcam',
+    'FaceDetector': _DLTB + '.tool.face.detector.Detector',
+    'ImageGAN': _DLTB + '.tool.gan.ImageGAN',
 }
 
 _MODULES = {
@@ -252,8 +268,7 @@ def check_module_requirements(module: str) -> bool:
         for requirement in _MODULES[module]['modules']:
             if not importlib.util.find_spec(requirement):
                 return False
-        else:
-            return True
+        return True
     return bool(importlib.util.find_spec(module))
 
 
@@ -560,18 +575,37 @@ def patch_keras_import(fullname, path, target=None):
         LOG.info("Not mapping 'keras' -> 'tensorflow.keras'")
 
 
-# FIXME[bug]: the current implementation of the preimport hokk imports
+#
+# import some further local modules
+#
+if importlib.util.find_spec('tensorflow'):
+    importlib.import_module('.tensorflow', __name__)
+
+
+def patch_tensorflow_import(fullname, path, target=None):
+    """Patch the tensorflow import process to output less information.
+    """
+    importlib.import_module('._preimport', __name__ + '.tensorflow')
+
+# FIXME[bug]: the current implementation of the preimport hook imports
 # 'tensorflow.keras' (as 'keras') at the first invocation of
 # importlib.util.find_spec('keras').  It would be more appropriate to
 # do the import only on loading the module, so that find_spec('keras')
 # could be used to check if 'keras' is available.  Repairing this
 # would probably need some adaptation of the ImportInterceptor class.
 import_interceptor.add_preimport_hook('keras', patch_keras_import)
+import_interceptor.add_preimport_hook('tensorflow', patch_tensorflow_import)
 
 import_interceptor.add_postimport_depency('PIL', ('.pil', __name__))
 import_interceptor.add_postimport_depency('torchvision', ('.pil', __name__))
-import_interceptor.add_postimport_depency('torch', ('.torch', __name__))
+import_interceptor.add_postimport_depency('torch',
+                                          ('.torch.postimport', __name__))
 import_interceptor.add_postimport_depency('sklearn', ('.sklearn', __name__))
+import_interceptor.add_postimport_depency('tensorflow',
+                                          ('.tensorflow._postimport',
+                                           __name__))
+
+
 
 
 #
@@ -618,6 +652,9 @@ def list_classes():
     for name in classes():
         LOG.warning("class '%s': %s", name,
                     ", ".join(modules_with_class(name)))
+
+if importlib.util.find_spec('torch'):
+    importlib.import_module('.torch', _THIRDPARTY)
 
 
 if config.warn_missing_dependencies:

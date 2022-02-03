@@ -2,9 +2,11 @@
 """
 
 # standard imports
-from typing import Tuple, List
-import numpy as np
+from typing import Tuple
 from collections import OrderedDict
+
+# thirdparty imports
+import numpy as np
 
 # toolbox imports
 from ..base.register import RegisterEntry
@@ -250,7 +252,7 @@ class StridingLayer(Layer):
 class Dense(NeuralLayer):
     """A dense layer (sometimes also called "fully connected layer").
     This layer connects every input unit with every output unit.
-    
+
     A dense layer removes all spatial structure that may be present in
     the input activation map, as each output unit can be affected by
     all input units.
@@ -345,6 +347,7 @@ class Dropout(Layer):
         This should be a value between `0.0` and `1.0`
         """
         raise NotImplementedError
+
 
 class Flatten(Layer):
     """A :py:class:`Flatten` layer removes spatial structure from

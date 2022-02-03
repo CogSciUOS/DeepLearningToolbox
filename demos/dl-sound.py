@@ -8,7 +8,6 @@
 """
 
 # standard imports
-import os
 from argparse import ArgumentParser
 
 # toolbox imports
@@ -31,7 +30,7 @@ def main():
     ToolboxArgparse.process_arguments(args)
 
     if args.play:
-        print(f"play sound files:")
+        print("play sound files:")
         reader = SoundReader()
         player = SoundPlayer()
         for soundfile in args.sound:

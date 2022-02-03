@@ -4,6 +4,18 @@
 
 .. moduleauthor:: Ulf Krumnack
 
+
+Examples
+--------
+
+Classify an image (examples/cat.jpg) using the DenseNet image classifier.
+
+   python demos/dl-classify.py --densenet examples/cat.jpg
+
+Evaluate AlexNet image classifier (on the ImageNet validation set):
+
+   python demos/dl-classify.py --densenet --evaluate
+
 """
 
 # standard imports
@@ -245,23 +257,14 @@ def main():
                         '(in case of soft classifier)')
     parser.add_argument('--classifier-info', action='store_true',
                         default=False,
-                        help='output additional information on the network')
-    parser.add_argument('--densenet', action='store_true', default=False,
-                        help='use densenet as classifier')
-    ToolboxArgparse.add_arguments(parser)
-    NetworkArgparse.prepare(parser)
+                        help='output additional information on the classifier')
+    ToolboxArgparse.add_arguments(parser, ('network',))
     parser.add_argument('image', metavar='IMAGE', nargs='*',
                         help='images to classify')
     args = parser.parse_args()
     ToolboxArgparse.process_arguments(parser, args)
 
-    if args.densenet:
-        # FIXME[hack]: densenet should be properly integrated into the toolbox
-        import dltb.thirdparty.tensorflow
-        from experiments.densenet import DenseNet
-        classifier = DenseNet()
-    else:
-        classifier = NetworkArgparse.network(parser, args)
+    classifier = NetworkArgparse.network(parser, args)
 
     if classifier is None:
         print("No classifier was specified.")

@@ -22,6 +22,7 @@ ToolboxArgparse.process_arguments(args)
 """
 
 # standard imports
+from typing import Any, Optional
 from argparse import ArgumentParser, Namespace, Action
 import sys
 import logging
@@ -32,15 +33,40 @@ from .config import config
 from .util.logging import TerminalFormatter
 
 
+# argparse modules from additional deep learning toolbox components
+# that want to do command line argument processing
+_components = []
+
+
 class NegateAction(Action):
+    # pylint: disable=too-few-public-methods
     """An `Action` allowing to negate an option by prefixing
     it with `'no'`.
     """
-    def __call__(self, parser, ns, values, option):
-        setattr(ns, self.dest, option[2:4] != 'no')
+    def __call__(self, parser: ArgumentParser, namespace: Namespace,
+                 values: Any, option_string: Optional[str] = None) -> None:
+        """
+        Arguments
+        ---------
+        parser:
+            The ArgumentParser object which contains this action.
+        namespace:
+            The Namespace object that will be returned by
+            `parse_args()`.
+        values:
+            The associated command-line arguments. There should be no
+            value associated with a `NegateAction`.
+        option_string:
+            The option string that was used to invoke this action.
+            The `option_string` argument is only optional if the action
+            is associated with a positional argument (which should not be
+            the case for a `NegateAction`).
+        """
+        if option_string:
+            setattr(namespace, self.dest, option_string[2:4] != 'no')
 
 
-def add_arguments(parser: ArgumentParser) -> None:
+def add_arguments(parser: ArgumentParser, components=()) -> None:
     """Add arguments to an :py:class:`ArgumentParser`, that
     allow to specify general options for the Deep Learning ToolBox.
 
@@ -49,15 +75,28 @@ def add_arguments(parser: ArgumentParser) -> None:
     parser: ArgumentParser
         The argument parser to which arguments are to be added.
     """
+
+    for component in components:
+        if component == 'network':
+            component_argparse = \
+                importlib.import_module('..network.argparse', __name__)
+        elif component == 'datasource':
+            component_argparse = \
+                importlib.import_module('..datasource.argparse', __name__)
+        else:
+            raise ValueError(f"Invalid component '{component}'. Known "
+                             "components are 'network' and 'datasource'")
+
+        component_argparse.prepare(parser)
+        _components.append(component_argparse)
+
     #
-    #
+    # Computation
     #
     group = parser.add_argument_group("Computation")
     group.add_argument('--cpu',
                        help="Force CPU usage (even if GPU is available)",
                        action='store_true', default=False)
-    
-
 
     group = parser.add_argument_group("General toolbox arguments")
 
@@ -70,7 +109,7 @@ def add_arguments(parser: ArgumentParser) -> None:
     group.add_argument('--debug', default=[], action='append',
                        metavar='MODULE',
                        help='Show debug messages from MODLE')
-    
+
     #
     # Miscallenous
     #
@@ -122,3 +161,6 @@ def process_arguments(parser: ArgumentParser, args: Namespace = None) -> None:
                     importlib.util.find_spec(module) is None):
                 logger.warning("Target module %s not found by importlib.",
                                module)
+
+    for component in _components:
+        component.process_arguments(parser, args)

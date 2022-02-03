@@ -221,7 +221,6 @@ class StatefulRegister(Register, StatefulRegisterEntry.Observer):
     """
 
     def add(self, entry: StatefulRegisterEntry) -> None:
-        # pylint: ignore
         """Add a new entry to this :py:class:`StatefulRegister`
         """
         super().add(entry)
@@ -489,7 +488,7 @@ class InstanceRegisterEntry(StatefulRegisterEntry, RegisterEntry):
             return  # Nothing to do
 
         # Initialize the class object
-        self._class_entry.initialize(busy_async=False)
+        self._class_entry.initialize(run=False)
 
         message = (f"Initialization of InstanceRegisterEntry '{self.key}' "
                    f"from class {self._class_entry}")
@@ -523,8 +522,8 @@ class InstanceRegisterEntry(StatefulRegisterEntry, RegisterEntry):
         which the object this :py:class:`InstanceRegisterEntry` belongs
         to.
         """
-        return (None if self._entry_class.cls is None else
-                self._entry_class.cls.instance_register)
+        return (None if self._class_entry.cls is None else
+                self._class_entry.cls.instance_register)
 
 
 class RegisterClass(ABCMeta):
@@ -767,6 +766,10 @@ class RegisterClass(ABCMeta):
         If the entry was not instantiated yet, it will be
         instantiated now.
         """
+        # pylint complains, that "Value 'cls' doesn't support membership test",
+        # however, as cls is supposed to have RegisterClass as metaclass,
+        # it should use the __contains__ method defined above.
+        # pylint: disable=unsupported-membership-test
         if key not in cls:
             raise KeyError(f"No key '{key}' registered for class "
                            f"{cls.instance_register.base_class}"
@@ -774,7 +777,7 @@ class RegisterClass(ABCMeta):
                            f"{list(cls.instance_register.keys())}")
         entry = cls.instance_register[key]
         if not entry.initialized:
-            entry.initialize(busy_async=False)
+            entry.initialize(run=False)
 
         return entry.obj
 

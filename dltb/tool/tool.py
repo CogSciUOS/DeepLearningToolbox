@@ -10,7 +10,7 @@ from threading import Event
 # third party imports
 
 # toolbox imports
-from ..base.data import Data, Datalike, BatchWrapper, BatchDataItem
+from ..base.data import Data, Datalike, DataDict, BatchWrapper, BatchDataItem
 from ..base.register import RegisterClass
 from ..base.prepare import Preparable
 
@@ -18,7 +18,7 @@ from ..base.prepare import Preparable
 LOG = logging.getLogger(__name__)
 
 
-class Context(Data):
+class Context(DataDict):
     """A context serves as a local namespace holding intermediate values
     obtained during preprocessing, processing and postprocessing.
     """
@@ -287,33 +287,33 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         return self._get_attributes(data, result, simplify=True)
 
     @staticmethod
-    def _get_attributes(data: Data, what: Tuple[str, ...],
+    def _get_attributes(context: Context, what: Tuple[str, ...],
                         simplify: bool = False) -> Any:
         if simplify:
             if len(what) == 0:
                 return None
             if len(what) == 1:
-                return getattr(data, what[0])
-        return tuple(getattr(data, arg) for arg in what)
+                return getattr(context, what[0])
+        return tuple(getattr(context, arg) for arg in what)
 
     @staticmethod
-    def _add_attributes(data: Data, what: Tuple[str, ...], args,
+    def _add_attributes(context: Context, what: Tuple[str, ...], args,
                         simplify: bool = False) -> None:
         """
         """
         if simplify and len(what) == 0:
             pass
         elif simplify and len(what) == 1:
-            data.add_attribute(what[0], args)
+            context.add_attribute(what[0], args)
         else:
             for name, value in zip(what, args):
-                data.add_attribute(name, value)
+                context.add_attribute(name, value)
 
     #
     # Private interface (to be implemented by subclasses):
     #
 
-    def _preprocess(self, *arg, batch: bool = False, **kwargs) -> Data:
+    def _preprocess(self, *arg, batch: bool = False, **kwargs) -> Context:
         """Perform preprocessing of arguments. Preprocessed arguments
         are stored as attributes of an auxiliary :py:class:`Data` object.
 
@@ -336,7 +336,7 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
             obtained during application of the :py:class:`Tool`
             should also be stored in that object.
         """
-        context = Data(batch=batch)
+        context = Context(batch=batch)
         if self.timer:
             context.add_attribute('start', time.time())
         return context
@@ -355,9 +355,11 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
         **kwargs:
             Optional keyword arguments passed when invoking the tool.
         """
-        raise NotImplementedError()
+        raise NotImplementedError(f"{self.__module__}.{type(self).__name__} "
+                                  "claims to be tool but does not implement "
+                                  "a _process() method.")
 
-    def _postprocess(self, data: Data, what: str) -> None:
+    def _postprocess(self, context: Context, what: str) -> None:
         """Perform postprocessing.
 
         This method is intended to be extended by subclasses. If doing
@@ -366,8 +368,8 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
 
         Arguments
         ---------
-        data:
-            The auxiliary :py:class:`Data` object to which results
+        context:
+            The auxiliary :py:class:`Context` object to which results
             of the postprocessing should be stored.
         what:
             An identifier specifying what kind of postprocessing operation
@@ -378,9 +380,9 @@ class Tool(Preparable, metaclass=RegisterClass, method='tool_changed'):
             call the method :py:meth:`_postprocess` of the super class.
         """
         if what == 'duration':
-            data.add_attribute('duration', time.time() - data.start_,
-                               batch=False)
-        elif not hasattr(data, what):
+            context.add_attribute('duration', time.time() - context.start_,
+                                  batch=False)
+        elif not hasattr(context, what):
             raise ValueError(f"Unknown property '{what}' for tool {self}")
 
     #

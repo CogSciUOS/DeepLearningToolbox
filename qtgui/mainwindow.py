@@ -27,6 +27,7 @@ from base import Runner
 from toolbox import Toolbox
 from dltb.network import Network
 from dltb.datasource import Datasource
+from dltb.tool.train import Trainer
 
 # FIXME[old]: this should not be needed for the MainWindow
 import dltb.base.hardware as hardware  # needed for the status bar
@@ -870,11 +871,12 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
                   panel_id, index)
 
     def _newAutoencoderPanel(self, AutoencoderPanel: type) -> Panel:
-        autoencoder = self._toolbox.autoencoder_controller
-        training = self._toolbox.training_controller
+        #autoencoder = self._toolbox.autoencoder_controller
+        # trainer = self._toolbox.trainer
+        # trainer = None
+        trainer = Trainer()
         return AutoencoderPanel(toolbox=self._toolbox,
-                                autoencoderController=autoencoder,
-                                trainingController=training)
+                                trainer=trainer)
 
     def _newActivationsPanel(self, ActivationsPanel: type) -> Panel:
         # FIXME[old]

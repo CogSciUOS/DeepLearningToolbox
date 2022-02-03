@@ -16,3 +16,27 @@ logging is going to be ignored. Instead the
 [Format Specification Mini-Language](https://docs.python.org/3/library/string.html#format-specification-mini-language) should be applied.
   
 
+
+## Logging a specific module
+
+
+```python
+import sys
+import logging
+
+module = 'dltb.thirdparty.torch.adversarial'
+level = logging.DEBUG
+
+handler = logging.StreamHandler(sys.stderr)
+handler.setLevel(level)
+
+logger = logging.getLogger(module)
+logger.addHandler(handler)
+logger.setLevel(level)
+```
+
+
+```python
+from dltb.util.logging import TerminalFormatter
+handler.setFormatter(TerminalFormatter())
+```

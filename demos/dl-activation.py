@@ -18,6 +18,7 @@ archive:
 Determine top n activation valus for a Network on a Datasource:
 
   dl-activation.py
+
 """
 
 # standard imports
@@ -51,6 +52,8 @@ LOG = logging.getLogger(__name__)
 
 
 def gui_show_activations(activations, title: str = None) -> None:
+    """Show top activations using a graphical user interface (Qt5).
+    """
     first_activations = next(iter(activations if isinstance(activations, list)
                                   else activations.values()))
 
@@ -167,12 +170,19 @@ def console_show_activations(activations, title: str=None) -> None:
 #
 
 def demo_image_activations1(network, image) -> None:
+    """Show activations for an `network` when applied to a given `image`.
+    Activations are obtained directly from `network` using the
+    method :py:meth:`Network.get_activations`.
+    """
     activations1 = network.get_activations(image)  # list
     show_activations(activations1, title="Demo 1: "
                      "network.get_activations(image): {type(activations1)}")
 
 
 def demo_image_activations2(network, image) -> None:
+    """Show activations for an `network` when applied to a given `image`.
+    Activations are obtained by applying an :py:class:`ActivationTool`.
+    """
     tool = ActivationTool(network)
     activations2 = tool(image)  # dict
     show_activations(activations2, title="Demo 2: "
@@ -180,6 +190,10 @@ def demo_image_activations2(network, image) -> None:
 
 
 def demo_image_activations3(network, image) -> None:
+    """Show activations for an `network` when applied to a given `image`.
+    Activations are obtained by applying an :py:class:`ActivationTool`,
+    passing the image as :py:class:`Data` object.
+    """
     tool = ActivationTool(network)
     data = Data(image)
     activations3 = tool(data)  # dict
@@ -188,6 +202,10 @@ def demo_image_activations3(network, image) -> None:
 
 
 def demo_image_activations4(network, image) -> None:
+    """Show activations for an `network` when applied to a given `image`.
+    Activations are obtained using an :py:class:`ActivationTool`,
+    that is applied to a :py:class:`Data` object, encapsulating the image.
+    """
     tool = ActivationTool(network)
     data = Data(image)
     tool.apply(data)
@@ -197,10 +215,14 @@ def demo_image_activations4(network, image) -> None:
 
 
 def demo_image_activations5(network, image) -> None:
+    """Show activations for an `network` when applied to a given `image`.
+    Activations are obtained using an :py:class:`ActivationTool`,
+    applied by an :py:class:`ActivationWorker`.
+    """
     tool = ActivationTool(network)
     worker = ActivationWorker(tool=tool)
     data = Data(image)
-    worker.work(data, busy_async=False)
+    worker.work(data, run=False)
     activations5 = tool.data_activations(data)  # dict
     show_activations(activations5, title="Demo 5: "
                      "ActivationWorker(tool).work(data):")
@@ -222,15 +244,15 @@ def demo_iterate_activations(network: Network, datasource: Datasource,
         and (a dictionary containing) the activation values.
     """
     def print_activations(index, activations) -> None:
-        print(f"Activations for index={idx}:",
+        print(f"Activations for index={index}:",
               ", ".join(f"{l}: {a.shape}" for l, a in activations.items()))
-        
+
     if action is None:
         action = print_activations
 
     worker = ActivationWorker(network=network)
     for idx, activations in enumerate(worker.iterate_activations(datasource)):
-        action(index, activations)
+        action(idx, activations)
 
 
 def demo_store_activations(network: Network, datasource: Datasource) -> None:
@@ -275,8 +297,11 @@ def demo_load_activations(network: Union[Network, str],
         for activations in archive:
             print(type(activations))
 
-    
+
 def demo_top_activations(network: Network, datasource: Datasource) -> None:
+    """Iterate over the activations a `network` produces for a
+    given `datasource` using an :py:class:`ActivationWorker`.
+    """
     worker = ActivationWorker(network=network)
     # FIXME[old]
     # worker._init_layer_top_activations()
@@ -284,11 +309,12 @@ def demo_top_activations(network: Network, datasource: Datasource) -> None:
         print(f"({idx})")
         # worker._update_layer_top_activations()
 
+
 def demo_store_top_activations(network: Network, datasource: Datasource,
                                top: int = 9) -> None:
     """Store top activation values in a :py:class:`TopActivations` archive.
     Such an archive does not store all activation values but just
-    the `top` activations for 
+    the `top` activations for the given `network` and `datasource`.
     """
     archive = TopActivations(network=network, datasource=datasource,
                              top=top, store=True)
@@ -302,8 +328,6 @@ def demo_store_top_activations(network: Network, datasource: Datasource,
             print("KeyboardInterrupt")
         finally:
             print(f"End: {archive.valid}/{archive.total}")
-
-
 
 
 def main():

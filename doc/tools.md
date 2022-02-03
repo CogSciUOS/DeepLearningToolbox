@@ -63,6 +63,9 @@ underlying implementation (which is usually only accessible via
 a private API).
 
 
+
+
+
 ### Data API
 
 The Data API allows to apply the `Tool` to a `Data` object.  Results are
@@ -169,9 +172,25 @@ these preprocessing operations should be applied:
 ### Postprocessing
 
 
-## Implementation
 
-A tool implements pre- and postprocessing by specific (private)
+## External and internal data
+
+All tools of the core of the Toolbox are defined in terms of general
+(abstract) datatypes.  The motivation is to make the description of a
+tool independent of a specific implementation.
+
+When using a `Tool`, the user should not assume any specific
+implementation or specific data representation.  It should be possible
+to call the tool with different variants of a datatype (e.g. numpy
+array, torch or tensorflow Tensor, etc.)  and the tool should
+automatically convert this into the desired format.  All of this
+should be as transparent as possible to both, the user applying the
+`Tool` and the developer implementing the `Tool`.
+
+
+# Implementing a new `Tool`
+
+A `Tool` implements pre- and postprocessing by specific (private)
 methods:
 * `_preprocess`: creates a `Data` object and fills it with values that
   may be used for processing and postprocessing.

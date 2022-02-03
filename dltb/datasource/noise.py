@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Tuple
+from typing import Tuple, Optional
 
 # third party imports
 import numpy as np
@@ -27,6 +27,7 @@ class Noise(Random, Livesource, Imagesource):
 
     def __init__(self, key: str = "Noise", description: str = None,
                  shape: Tuple[int, ...] = (100, 100),
+                 length: Optional[int] = None,
                  distribution: str = 'uniform', **kwargs) -> None:
         """Create a new :py:class:`Noise`
 
@@ -38,12 +39,17 @@ class Noise(Random, Livesource, Imagesource):
         description = description or f"<Noise Generator {shape}>"
         super().__init__(key=key, description=description,
                          random_generator='numpy', **kwargs)
+        self._length = length
         self.shape = shape
         self.distribution = distribution
 
     def __str__(self):
         return "Noise"
 
+    def __len__(self) -> int:
+        if self._length is None:
+            raise TypeError("Noise source has no length.")
+        return self._length
     #
     # Data
     #
