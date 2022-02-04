@@ -1,5 +1,6 @@
 
 from .exception import NetworkParsingError
+from .base import Layerlike, as_layer, layer_key
 from .network import Network, Classifier
 from .layer import Layer
 

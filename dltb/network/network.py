@@ -25,6 +25,7 @@ from ..util.array import adapt_data_format
 from ..util.array import DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST
 from ..util.image import imresize
 from ..util.terminal import Terminal, DEFAULT_TERMINAL
+from .base import NetworkBase, LayerBase as Layer, Layerlike, as_layer
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ LOG.setLevel(logging.DEBUG)
 #
 
 # Identifiable
-class Network(Extendable, Preparable, method='network_changed',
+class Network(NetworkBase, Extendable, Preparable, method='network_changed',
               changes={'state_changed', 'weights_changed'},
               metaclass=RegisterClass):
     """Abstract Network interface for all frameworks.
@@ -264,7 +265,7 @@ class Network(Extendable, Preparable, method='network_changed',
         """
         return len(self.layer_dict)
 
-    def __iter__(self) -> Iterator['Layer']:
+    def __iter__(self) -> Iterator[Layer]:
         """Iterate the layers of the network.
         """
         return iter(self.layer_dict.values())
@@ -278,7 +279,7 @@ class Network(Extendable, Preparable, method='network_changed',
             return key.key in self.layer_dict
         return False
 
-    def __getitem__(self, key: Any) -> 'Layer':
+    def __getitem__(self, key: Any) -> Layer:
         """Obtain the given layer from this :py:class:`Network`.
         """
         if isinstance(key, str):
@@ -322,7 +323,7 @@ class Network(Extendable, Preparable, method='network_changed',
     def _prepared(self) -> bool:
         return (self.layer_dict is not None) and super()._prepared()
 
-    def __getitem__(self, layer: Union[int, str]) -> 'Layer':
+    def __getitem__(self, layer: Union[int, str]) -> Layer:
         """Provide access to the layers by number. Access by id is provided
         via :py:attr:`layer_dict`."""
         if not self.prepared:
@@ -494,7 +495,7 @@ class Network(Extendable, Preparable, method='network_changed',
             activations = activations[0]
         return activations
 
-    def layers(self, layers: Iterable = None) -> Iterator['Layer']:
+    def layers(self, layers: Iterable[Layerlike] = None) -> Iterator[Layer]:
         if layers is None:
             # return self.layer_dict.values()
             for layer in self.layer_dict.values():
@@ -1253,7 +1254,7 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
     # Implementation of the Tool interface (not used yet)
     #
 
-    def extract_receptive_field(self, layer: 'Layer', unit: Tuple[int],
+    def extract_receptive_field(self, layer: Layerlike, unit: Tuple[int],
                                 image: Imagelike) -> Imagelike:
         """Extract the receptive field for a unit in this :py:class:`Network`
         from an input image.
@@ -1279,6 +1280,7 @@ class ImageNetwork(ImageExtension, ImageTool, base=Network):
             resized to fit the native input resolution of this
             :py:class:`Network`.
         """
+        layer = as_layer(layer)
         resized = self.resize(image)
         (fr1, fc1), (fr2, fc2) = layer.receptive_field(unit)
         extract_shape = (fr2 - fr1, fc2 - fc1)
@@ -1338,19 +1340,19 @@ class Classifier(SoftClassifier, Network):
         return self._labeling
 
     @property
-    def logit_layer(self) -> 'Layer':
+    def logit_layer(self) -> Layer:
         """The layer providing the class "logits".
         This is usually the prefinal layer that is passed
         in the softmax output layer.
         """
-        return self.output_layer_id()  # FIXME[todo]
+        return self.get_output_layer()  # FIXME[todo]
 
     @property
-    def score_layer(self) -> 'Layer':
+    def score_layer(self) -> Layer:
         """The layer computing the class scores ("probabilities").
         This is usually the output layer of the :py:class:`Classifier`.
         """
-        return self.output_layer_id()
+        return self.get_output_layer()
 
     def _prepare(self) -> None:
         """Prepare this :py:class:`Classifier`.

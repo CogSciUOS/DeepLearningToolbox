@@ -9,8 +9,6 @@ from sklearn.datasets import fetch_lfw_people  # , fetch_lfw_pairs
 from ...datasource import Datasource, Imagesource, LabeledArray
 from ...tool.classifier import ClassScheme
 
-Datasource.register_instance('lfw-sklearn', __name__, 'LFW')
-
 
 class LFW(Imagesource, LabeledArray):
     # pylint: disable=too-many-ancestors,too-many-instance-attributes
@@ -123,3 +121,6 @@ class LFW(Imagesource, LabeledArray):
         be last, that is shape (13233, 62, 47, 3), in RGB color space.
         """
         return self._lfw_people
+
+
+Datasource.register_instance('lfw-sklearn', __name__, 'LFW')

@@ -120,3 +120,23 @@ class debug_object:
                          for cls in type(self).__bases__])
         print("MRO:", [cls.__module__ + '.' + cls.__name__
                        for cls in type(self).__mro__])
+
+
+def mro_implementations(method_name: str, target: object,
+                        files: bool = False) -> None:
+    """Output a list of classes implementing a given method.
+
+    Arguments
+    ---------
+    method_name:
+        Name of the method of interest.
+    target:
+        Target (object or class) of interest.
+    files:
+        Show filenames where method is implemented.
+    """
+    print(f"Implementations of method 'method_name' in the MRO of object:")
+    mro = obj.__mro__ if isinstance(obj, type) else type(obj).__mro__
+    for cls in mro:
+        if hasattr(cls, method_name):
+            print(f"- {cls}.{method_name}()")

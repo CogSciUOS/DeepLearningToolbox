@@ -412,7 +412,7 @@ class Classifier(ABC, Preparable):
     def _prepared(self) -> None:
         """Prepare this :py:class:`Classifier`.
         """
-        return super()._prepared and self._scheme.prepared
+        return super()._prepared() and self._scheme.prepared
 
     def _prepare(self) -> None:
         """Prepare this :py:class:`Classifier`.

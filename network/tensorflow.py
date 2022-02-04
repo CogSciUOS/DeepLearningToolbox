@@ -218,6 +218,8 @@ class Network(BaseNetwork):
         self._init_checkpoint = checkpoint
         self._init_session = session
 
+        self._input_placeholder = None
+
         super().__init__(**kwargs)
 
     def _prepare(self):
@@ -255,7 +257,8 @@ class Network(BaseNetwork):
         super()._unprepare()
 
     def _prepared(self):
-        return (self._graph is not None and self._session is not None
+        return (self._input_placeholder is not None and
+                self._graph is not None and self._session is not None
                 and super()._prepared())
 
     def _init_from_graph_def(self, graph_def: tf.GraphDef):

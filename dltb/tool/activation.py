@@ -20,7 +20,8 @@ The actual tools for working with activations are:
 
 # standard imports
 from abc import ABC, abstractmethod
-from typing import Union, Sequence, List, Tuple, Iterable, Iterator, Set
+from typing import List, Tuple, Iterable, Iterator, Set
+from typing import Optional, Union, Sequence
 from pathlib import Path
 import os
 import logging
@@ -30,7 +31,7 @@ import numpy as np
 
 # toolbox imports
 from network import Network, Classifier, ShapeAdaptor, ResizePolicy
-from network.layers import Layer
+from ..network import Layer, Layerlike, layer_key, as_layer
 from ..datasource import Datasource, Datafetcher
 from ..base.observer import BaseObserver
 from ..base.prepare import Preparable
@@ -59,6 +60,7 @@ class Fillable(Storable, ABC, storables=['_valid', '_total']):
     def __len__(self) -> int:
         """The length of this :py:class:`Fillable` is its
         :py:prop:`valid` size.
+        To access the total size, use `:py:prop:total`.
         """
         return self.valid
 
@@ -132,8 +134,9 @@ class DatasourceTool(Preparable):
     _datasource: Union[str, Datasource] = None
     _datasource_required: bool = True
 
-    def __init__(self, datasource: Union[Datasource, str] = None,
-                 layers=None, **kwargs) -> None:
+    def __init__(self, datasource: Optional[Union[Datasource, str]] = None,
+                 layers: Optional[Iterable[Layerlike]] = None,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
 
         if isinstance(datasource, str):
@@ -146,8 +149,7 @@ class DatasourceTool(Preparable):
             raise ValueError(f"Invalid type {type(datasource)} "
                              "for datasource argument.")
 
-        self._layers = layers and [layer.key if isinstance(layer, Layer)
-                                   else layer for layer in self._layers]
+        self._layers = layers and [layer_key(layer) for layer in layers]
 
     def _prepare(self) -> None:
         super()._prepare()
@@ -178,8 +180,9 @@ class NetworkTool(Preparable):
     #    The keys of the network layers that are used by this NetworkTool
     _layers: List[str] = None  # sequence of layers
 
-    def __init__(self, network: Union[Network, str] = None,
-                 layers: Union[Layer, str] = None, **kwargs) -> None:
+    def __init__(self, network: Optional[Union[Network, str]] = None,
+                 layers: Optional[Iterable[Layerlike]] = None,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
         if isinstance(network, str):  # we got a network key
             self._network_key = network
@@ -191,11 +194,7 @@ class NetworkTool(Preparable):
             raise ValueError(f"Invalid type {type(network)} "
                              "for network argument.")
 
-        if layers is not None:
-            self._layers = [layer.key if isinstance(layer, Layer) else layer
-                            for layer in layers]
-        else:
-            self._layers = None
+        self._layers = layers and [layer_key(layer) for layer in layers]
 
     @property
     def network_key(self) -> str:
@@ -240,8 +239,8 @@ class NetworkTool(Preparable):
             raise ValueError(f"Iterating over {what} is only possible with "
                              "an initialized Network.")
         for layer in self._layers:
-            name = layer.key if isinstance(layer, Layer) else layer
-            layer = layer if isinstance(layer, Layer) else self._network[name]
+            name = layer_key(layer)
+            layer = as_layer(layer, network)
             values = tuple((name if info == 'name' else
                             layer if info == 'layer' else
                             layer.output_shape[1:] if info == 'shape' else
@@ -249,7 +248,7 @@ class NetworkTool(Preparable):
                            for info in what)
             yield values[0] if len(what) == 1 else values
 
-    def check_layers(self, layers: Sequence[Union[Layer, str]],
+    def check_layers(self, layers: Iterable[Layerlike],
                      exact: bool = False) -> None:
         """Check if the layers requested by the tool (stored in
         :py:prop:`_layers`) are contained in the available layers.
@@ -264,8 +263,7 @@ class NetworkTool(Preparable):
             `layers`.
         """
         # check if all requested layers are availabe
-        available_layers = set(layer.key if isinstance(layer, Layer)
-                               else layer for layer in layers)
+        available_layers = set(layer_key(layer) for layer in layers)
         requested_layers = set(self._layers)
 
         if exact and (available_layers != requested_layers):
@@ -568,7 +566,7 @@ class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
             raise ValueError("Iterating over Layers is only possible with "
                              "an initialized Network.")
         for layer in self._layers:
-            name = layer.key if isinstance(layer, Layer) else layer
+            name = layer_key(layer)
             memmap = self._layers_memmap[name]
             yield ((name if info == 'name' else
                     memmap.dtype if info == 'dtype' else
@@ -685,13 +683,12 @@ class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
         else:
             self._update_values(layer, index, values)
 
-    def _update_values(self, layer, index, value) -> None:
-        if isinstance(layer, Layer):
-            layer = layer.key
+    def _update_values(self, layer: Layerlike, index, value) -> None:
+        name = layer_key(layer)
         try:
-            self._layers_memmap[layer][index] = value
+            self._layers_memmap[name][index] = value
         except KeyError as error:
-            raise KeyError(f"Invalid layer '{layer}', valid layers are "
+            raise KeyError(f"Invalid layer '{name}', valid layers are "
                            f"{list(self._layers_memmap.keys())}") from error
 
     def info(self) -> None:
@@ -759,13 +756,12 @@ class TopActivations(HighscoreCollection, DatasourceTool, NetworkTool,
         """
         return self.highscore_group(discipline[0])[discipline[1]]
 
-    def highscore_group(self, layer: Union[Layer, str]) -> HighscoreGroup:
+    def highscore_group(self, layer: Layerlike) -> HighscoreGroup:
         """The highscore group for a layer.
         """
-        name = layer.key if isinstance(layer, Layer) else layer
-        return self._highscores[name]
+        return self._highscores[layer_key(layer)]
 
-    def activations(self, layer: Union[Layer, str],
+    def activations(self, layer: Layerlike,
                     channel: slice = ...) -> np.ndarray:
         """Top activation values for a given layer and channel.
 
@@ -788,7 +784,7 @@ class TopActivations(HighscoreCollection, DatasourceTool, NetworkTool,
         """
         return self.highscore_group[layer].scores[channel]
 
-    def indices(self, layer: Union[Layer, str],
+    def indices(self, layer: Layerlike,
                 channel: slice = ...) -> np.ndarray:
         """Return indices identifying the input stimuli that
         resulted in the top activation values.
@@ -914,7 +910,7 @@ class TopActivations(HighscoreCollection, DatasourceTool, NetworkTool,
         while self._current_index < len(activations):
             self += activations[self._current_index]
 
-    def receptive_field(self, layer: Union[Layer, str],
+    def receptive_field(self, layer: Layerlike,
                         channel: int, top: int = 0) -> np.ndarray:
         """Optain the image patch that causes a top activation of
         the :py:class:`network`.
@@ -1100,10 +1096,9 @@ class ActivationTool(Tool, Network.Observer):
             A list of layers for which to compute activations.
         """
 
-        print(f"ActivationTool._process({type(inputs)}, {type(layers)})")
-        # LOG.info("ActivationTool: computing activations for data <%s>, "
-        #          "layers=%s, activation format=%s",
-        #          inputs.shape, layers, self.data_format)
+        LOG.info("ActivationTool: computing activations for data <%s>, "
+                 "layers=%s, activation format=%s",
+                 inputs.shape, layers, self.data_format)
 
         if self._network is None:
             return None
@@ -1122,7 +1117,7 @@ class ActivationTool(Tool, Network.Observer):
         else:
             super()._postprocess(data, what)
 
-    def data_activations(self, data: Data, layer: Layer = None,
+    def data_activations(self, data: Data, layer: Optional[Layerlike] = None,
                          unit: int = None,
                          data_format: str = None) -> np.ndarray:
         """Get the precomputed activation values for the current
@@ -1179,10 +1174,8 @@ class ActivationTool(Tool, Network.Observer):
                                               input_format=self._data_format,
                                               output_format=data_format),
                             activations))
-        if isinstance(layer, Layer):
-            layer = layer.key
-        activations = activations[layer]
 
+        activations = activations[layer_key(layer)]
         if data_format is not self.data_format:
             activations = adapt_data_format(activations,
                                             input_format=self.data_format,
@@ -1358,15 +1351,15 @@ class ActivationWorker(Worker):
         #   'QObserverHelper' object has no attribute 'layers_of_interest'
         # for observer in self._observers:
         #     layers |= observer.layers_of_interest(self)
-        layer_ids = set(map(lambda layer: layer.key, layers))
+        layer_ids = set(map(layer_key, layers))
 
-        layer_ids |= set(map(lambda layer: layer.key, self._fixed_layers))
+        layer_ids |= set(map(layer_key, self._fixed_layers))
         if self._classification and isinstance(network, Classifier):
             layer_ids |= {network.score_layer.key}
 
         # from set to list
-        layer_ids = [layer.key for layer in network.layers()
-                     if layer.key in layer_ids]
+        layer_ids = [layer_key for layer in network.layer_names()
+                     if layer_key in layer_ids]
 
         got_new_layers = layer_ids > self._layer_ids and self._data is not None
         self._layer_ids = layer_ids
