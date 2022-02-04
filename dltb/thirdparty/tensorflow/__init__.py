@@ -32,6 +32,30 @@ tensorflow is to import the submodule v1 or v2 respectively.
 from dltb.thirdparty.tensorflow.v2 import tf
 ```
 
+
+Implementation
+--------------
+
+There are several files involved in realizing the import mechanism:
+
+* `__init__.py`: setup the pre- and post-import hooks
+   This file (that is the module `dltb.thirdparty.tensorflow`)
+   should be imported early enough (that is before importing `tensorflow`)
+   to work.
+
+* `_preimport.py`: code to be executed before tensorflow is imported.
+   This module should not be imported explicitly but will used by
+   the internal import hooks.
+
+* `_postimport.py`: code to be executed after tensorflow is imported.
+   This module should not be imported explicitly but will used by
+   the internal import hooks.
+
+* `v1.py`: the public interface to import tensorflow in version 1 mode.
+
+* `v2.py`: the public interface to import tensorflow in version 1 mode.
+
+
 FIXME[todo]: the alternative could be to realize a pre-import hook,
 that imports this file before importing tensorflow.
 
@@ -42,6 +66,7 @@ from typing import Optional
 import os
 import sys
 import logging
+import importlib
 
 # toolbox imports
 from dltb.base.implementation import Implementable
@@ -56,6 +81,11 @@ TF_LOGGER = logging.getLogger('tensorflow')
 #LOG.addHandler(handler)
 
 LOG.info("init: Importing Deep Learning Toolbox 'tensorflow' module.")
+
+if 'tensorflow' in sys.modules:
+    LOG.warning("Tensorflow has been imported before "
+                "`dltb.thirdparty.tensorflow'. "
+                "Import hooks will have no effect.")
 
 #
 # tensorflow_version
@@ -78,6 +108,27 @@ def set_tensorflow_version(version: Optional[str]) -> None:
                     "Setting the API version may have no effect.")
 
     _TENSORFLOW_VERSION = version
+
+
+def tensorflow_version_available(version: str) -> bool:
+    """Check if the given tensorflow version is available.
+    This means that tensorflow is installed and no other
+    version has been activated yet.
+    """
+    if _TENSORFLOW_VERSION is not None:
+        # tensorflow was already imported
+        return _TENSORFLOW_VERSION == version
+
+    tensorflow_spec = importlib.util.find_spec('tensorflow')
+    if tensorflow_spec is None:
+        # tensorflow is not installed
+        return False
+
+    if version == 'v1':
+        return True
+
+    return os.path.isdir(tensorflow_spec.submodule_search_locations[0] +
+                         '/_api/' + version)
 
 
 #

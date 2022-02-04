@@ -30,9 +30,8 @@ class MockNetwork(BaseNetwork):
                  **kwargs) ->None:
         super().__init__(**kwargs)
         self._data_format = data_format
-        layer = MockLayer(input_shape)
-        self.input_shape = layer.input_shape
-        self.layer_dict = OrderedDict(input_layer=layer)
+        self.layer = MockLayer(input_shape)
+        self.layer_dict = OrderedDict(input_layer=self.layer)
 
 
 class TestBaseNetwork(TestCase):

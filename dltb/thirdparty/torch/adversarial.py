@@ -143,7 +143,7 @@ class TorchAttacker(Attacker):
             context.add_attribute(what, logits)
         elif what == 'original_float':
             original_ = context.original_
-            context.add_attribute(what, victim.data_to_image(original_))
+            context.add_attribute(what, victim.internal_to_image(original_))
         elif what == 'original_predicted':
             predicted, confidence = \
                 victim.classify(context.original_, confidence=True)
@@ -163,7 +163,7 @@ class TorchAttacker(Attacker):
             context.add_attribute(what, logits)
         elif what == 'adversarial_float':
             adversarial_ = context.adversarial_
-            context.add_attribute(what, victim.data_to_image(adversarial_))
+            context.add_attribute(what, victim.internal_to_image(adversarial_))
         elif what == 'adversarial_predicted':
             predicted, confidence = \
                 victim.classify(context.adversarial_, confidence=True)

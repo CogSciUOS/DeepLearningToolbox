@@ -3,7 +3,7 @@
 """
 
 # standard imports
-from unittest import TestCase
+from unittest import TestCase, skipUnless
 
 # third party imports
 import numpy as np
@@ -14,15 +14,18 @@ from dltb.base.data import Data
 from dltb.util.image import imread
 from dltb.tool.activation import ActivationsArchiveNumpy
 from dltb.tool.activation import TopActivations
+from dltb.thirdparty.tensorflow import tensorflow_version_available
 
 
+@skipUnless(tensorflow_version_available('v1'),
+            "TensorFlow version 1 is not available.")
 class TestActviation(TestCase):
     """Tests for the :py:class:`activation` module.
     """
-    network = Network['alexnet-tf']
-    network.prepare()
 
-    image = imread('images/elephant.jpg')
+    def setUp(cls) -> None:
+        cls.network = Network['alexnet-tf']
+        cls.image = imread('images/elephant.jpg')
 
     def test_actviation_01(self):
         activations = self.network.get_activations(self.image, 'conv2d_1')

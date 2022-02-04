@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from unittest import TestCase
+from unittest import TestCase, skipUnless
 import os
 
 # third-party imports
@@ -15,28 +15,36 @@ import numpy as np
 
 # toolbox imports
 from dltb.config import config
-import network.tensorflow
-from network.tensorflow import Network as TensorFlowNetwork
+from dltb.thirdparty.tensorflow import tensorflow_version_available
+#import network.tensorflow
 
 # FIXME[hack]: we need tf, but we want to make sure that it is only
 # loaded after the import mechanism was patched by the deep learning
 # toolbox
 # pylint: disable=wrong-import-order
-import tensorflow as tf
-from keras.datasets import mnist
+#import tensorflow as tf
 
+@skipUnless(tensorflow_version_available('v1'),
+            "TensorFlow version 1 is not available.")
 class TestTensorFlowNetwork(TestCase):
     """Test suite for a Tensorflow `Network`.
     """
-
+    dltb_tensorflow_network = None
+    
     @classmethod
     def setUpClass(cls):
         """Load a small MNIST classifier for testing the interface.
         """
+        import network.tensorflow
+        cls.dltb_tensorflow_network = network.tensorflow
+        TensorFlowNetwork = network.tensorflow.Network
+
         checkpoints = os.path.join(config.model_directory,
                                    'example_tf_mnist_model',
                                    'tf_mnist_model.ckpt')
         cls.loaded_network = TensorFlowNetwork(checkpoint=checkpoints)
+
+        from keras.datasets import mnist
         cls.data = mnist.load_data()[1][0].astype('float32')
         cls.data = cls.data / cls.data.max()
 
@@ -117,21 +125,21 @@ class TestTensorFlowNetwork(TestCase):
 
         # Check that the right types where selected.
         self.assertIsInstance(self.loaded_network.layer_dict['conv2d_1'],
-                              network.tensorflow.Conv2D)
+                              self.dltb_tensorflow_network.Conv2D)
         self.assertIsInstance(self.loaded_network.layer_dict['max_pooling2d_1'],
-                              network.tensorflow.MaxPooling2D)
+                              self.dltb_tensorflow_network.MaxPooling2D)
         self.assertIsInstance(self.loaded_network.layer_dict['conv2d_2'],
-                              network.tensorflow.Conv2D)
+                              self.dltb_tensorflow_network.Conv2D)
         self.assertIsInstance(self.loaded_network.layer_dict['dropout_1'],
-                              network.tensorflow.Dropout)
+                              self.dltb_tensorflow_network.Dropout)
         self.assertIsInstance(self.loaded_network.layer_dict['flatten_1'],
-                              network.tensorflow.Flatten)
+                              self.dltb_tensorflow_network.Flatten)
         self.assertIsInstance(self.loaded_network.layer_dict['dense_1'],
-                              network.tensorflow.Dense)
+                              self.dltb_tensorflow_network.Dense)
         self.assertIsInstance(self.loaded_network.layer_dict['dropout_2'],
-                              network.tensorflow.Dropout)
+                              self.dltb_tensorflow_network.Dropout)
         self.assertIsInstance(self.loaded_network.layer_dict['dense_2'],
-                              network.tensorflow.Dense)
+                              self.dltb_tensorflow_network.Dense)
 
     #
     # Testing the layer properties.

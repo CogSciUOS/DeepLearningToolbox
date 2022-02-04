@@ -81,6 +81,14 @@ def disable_v2_behavior():
         exp_readers.make_batched_features_dataset_v1)
     exp_readers.make_csv_dataset = exp_readers.make_csv_dataset_v1
 
+
+def enable_v2_behavior():
+    """Enable the tensorflow v2 behavior.
+    """
+    # FIXME[todo]: it would be nice to be able to switch back and forth
+    # between the different versions.
+
+
 # the following line will make subsequent imports of tensorflow
 # use the v1 interface
 if sys.modules['tensorflow'].__name__ != 'tensorflow_core.compat.v1':

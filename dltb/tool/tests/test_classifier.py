@@ -3,15 +3,18 @@
 """
 
 # standard imports
-from unittest import TestCase
+from unittest import TestCase, skipUnless
 
 # toolbox imports
 from dltb.network import Network
 from dltb.util.image import imread
 from dltb.tool.classifier import Classifier, SoftClassifier, ImageClassifier
 from dltb.tool.classifier import ClassScheme, ClassIdentifier
+from dltb.thirdparty.tensorflow import tensorflow_version_available
 
 
+@skipUnless(tensorflow_version_available('v1'),
+            "TensorFlow version 1 (required for AlexNet) is not available.")
 class TestAlexnet(TestCase):
     """Tests for the :py:class:`Alexnet` image classification network.
     """

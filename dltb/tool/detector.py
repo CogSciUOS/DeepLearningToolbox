@@ -5,6 +5,11 @@ Clean it!
 
 Example:
 
+from dltb.tool import Tool
+Tool['haar'].detect_and_show('examples/reservoir-dogs.jpg')
+
+detect_and_show
+
 from dltb.thirdparty.opencv.face import DetectorHaar
 detector = DetectorHaar()
 
@@ -43,6 +48,7 @@ import numpy as np
 from ..base.data import Data
 from ..base.meta import Metadata
 from ..base.image import Image, Imagelike, Region, BoundingBox
+from ..util.image import imshow
 from .tool import Tool
 from .image import ImageTool
 
@@ -425,6 +431,16 @@ class ImageDetector(Detector, ImageTool):
             The detections obtained from the detector.
         """
         return self.detect(Image(image))
+
+    def detect_and_show(self, image: Imagelike, **_kwargs) -> None:
+        """Apply the detector to the given `image` and show the result.
+
+        Arguments
+        ---------
+        image:
+            The image to be processed by this :py:class:`ImageDetector`.
+        """
+        imshow(self.mark_image(image))
 
     def process_image(self, image: Imagelike, **kwargs) -> Image:
         """Create an :py:class:`Image` data object and process it with this
