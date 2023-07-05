@@ -25,10 +25,12 @@ This module only require the standard python logging module.
 """
 
 # standard imports
+import sys
 import logging
 
 # toolbox imports
 from .terminal import Terminal
+from .importer import importable
 
 
 class RecorderHandler(logging.Handler):
@@ -113,7 +115,8 @@ class RecorderHandler(logging.Handler):
 
 
 class TerminalFormatter(logging.Formatter):
-    """
+    """A logging formatter to output (colorful) messages to a
+    :py:class:`Terminal`.
     """
 
     def __init__(self, *args, terminal: Terminal = None, **kwargs) -> None:
@@ -123,7 +126,13 @@ class TerminalFormatter(logging.Formatter):
         self._terminal = terminal or Terminal()
 
     def format(self, record: logging.LogRecord) -> None:
-        """
+        """Format a logging record.  The `TerminalFormatter` will
+        choose different colors for different log levels.
+
+        Arguments
+        ---------
+        record:
+            The logging record to format.
         """
         message = super().format(record)
         if record.levelno <= logging.DEBUG:
@@ -135,3 +144,33 @@ class TerminalFormatter(logging.Formatter):
         else:
             color = Terminal.Bformat.RED
         return self._terminal.form(message, color)
+
+
+_DEBUG_HANDLER = None
+
+
+def debug_module(module: str, what: str = 'debug') -> None:
+    """Activate debugging for the given module.
+
+    Arguments
+    ---------
+    module:
+        Fully qualified module name for the module to be debugged.
+    what:
+        What to debug (the debug level as string).
+    """
+    global _DEBUG_HANDLER
+
+    level = getattr(logging, what.upper())
+    if _DEBUG_HANDLER is None:
+        _DEBUG_HANDLER = logging.StreamHandler(sys.stderr)
+        _DEBUG_HANDLER.setLevel(level)
+        _DEBUG_HANDLER.setFormatter(TerminalFormatter())
+
+    logger = logging.getLogger(module)
+    logger.addHandler(_DEBUG_HANDLER)
+    logger.setLevel(level)
+    log = getattr(logger, what)
+    log("Outputting %s messages from module %s", what, module)
+    if module != '__main__' and not importable(module):
+        logger.warning("Cannot find target module '%s'.", module)

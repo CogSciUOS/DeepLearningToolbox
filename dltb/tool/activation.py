@@ -20,8 +20,9 @@ The actual tools for working with activations are:
 
 # standard imports
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Iterable, Iterator, Set
+from typing import List, Tuple, Iterable, Iterator, Set, Any
 from typing import Optional, Union, Sequence
+from collections import Counter
 from pathlib import Path
 import os
 import logging
@@ -30,19 +31,21 @@ import logging
 import numpy as np
 
 # toolbox imports
-from network import Network, Classifier, ShapeAdaptor, ResizePolicy
+from ..network import Network, Networklike, network_key
 from ..network import Layer, Layerlike, layer_key, as_layer
+from ..network import Classifier
 from ..datasource import Datasource, Datafetcher
 from ..base.observer import BaseObserver
 from ..base.prepare import Preparable
 from ..base.store import Storable, FileStorage
-from ..base.data import Data
-from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_FIRST
+from ..base.data import Data, Datalike
 from ..util import nphelper, formating
+from ..util.array import adapt_data_format, DATA_FORMAT_CHANNELS_FIRST
+from ..util.image import ShapeAdaptor, ResizePolicy
 from ..config import config
 from .highscore import Highscore, HighscoreGroup, HighscoreCollection
 from .highscore import HighscoreGroupNumpy
-from . import Tool, Worker
+from . import Tool, Worker, Context
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -170,20 +173,55 @@ class DatasourceTool(Preparable):
 
 class NetworkTool(Preparable):
     """A :py:class:`NetworkTool` makes use of a :py:class:`Network`.
+    The `Network` can be provided by upon initialization and can
+    later be changed by setting the :py:prop:`network` property (either
+    :py:class:`Network` or a key for registered networks)
+
+    A `NetworkTool` can also hold a list of layers, accessible by the
+    :py:meth:`layers` iterator.
     """
     # _network:
     #    The Network by which activation values are obtained.
-    _network: Union[str, Network] = None
+    _network: Network = None
+    _network_key: str = None
     _network_required: bool = True
 
     # _layers:
     #    The keys of the network layers that are used by this NetworkTool
     _layers: List[str] = None  # sequence of layers
 
-    def __init__(self, network: Optional[Union[Network, str]] = None,
+    def __init__(self, network: Optional[Networklike] = None,
                  layers: Optional[Iterable[Layerlike]] = None,
                  **kwargs) -> None:
         super().__init__(**kwargs)
+
+        self.network = network
+        self._layers = layers and [layer_key(layer) for layer in layers]
+
+    @property
+    def network(self) -> Network:
+        """The network. This may by `None` even if a network key was
+        assigned, in case that network has not been initialized yet.
+        """
+        return self._network
+
+    @network.setter
+    def network(self, network: Networklike) -> None:
+        """Set the network. The network will be used to compute
+        the activation values.
+
+        Note: setting the network may be an expensive operation: in
+        case `network` is a key of an unitialized network, setting the
+        network may include loading and preparing the network.
+
+        Arguments
+        ---------
+        network:
+            The new network. `None` will make the tool unprepared.
+        """
+        if self._network_key == network_key(network):
+            return  # nothing changed
+
         if isinstance(network, str):  # we got a network key
             self._network_key = network
             self._network = None
@@ -194,13 +232,14 @@ class NetworkTool(Preparable):
             raise ValueError(f"Invalid type {type(network)} "
                              "for network argument.")
 
-        self._layers = layers and [layer_key(layer) for layer in layers]
-
     @property
     def network_key(self) -> str:
         """Network key.
         """
         return self._network_key
+
+    def _preparable(self) -> bool:
+        return self._network_key is not None and super()._preparable()
 
     def _prepare(self) -> None:
         super()._prepare()
@@ -238,6 +277,7 @@ class NetworkTool(Preparable):
               not isinstance(self._network, Network)):
             raise ValueError(f"Iterating over {what} is only possible with "
                              "an initialized Network.")
+        network = self._network
         for layer in self._layers:
             name = layer_key(layer)
             layer = as_layer(layer, network)
@@ -464,7 +504,7 @@ class ActivationsArchive(DatasourceActivations, Fillable, Storable, ABC):
 
         if not isinstance(self._storage, FileStorage):
             directory = Path(config.activations_directory) /\
-                (self._network_key + '-' + self._datasource_key)
+                (self.network.key + '-' + self._datasource_key)
             self._storage = FileStorage(directory=directory)
 
         if self._store_flag:
@@ -538,7 +578,7 @@ class ActivationsArchiveNumpy(ActivationsArchive, DatasourceTool, storables=[
         self.dtype = dtype
         self.shape = None
         LOG.info("%s initalized (%s/%s).", type(self).__name__,
-                 self._network_key, self._datasource_key)
+                 self.network.key, self._datasource_key)
 
     def layers(self, *what) -> Iterator[Tuple]:
         """Iterate over the layer information for the layers covered by this
@@ -902,10 +942,10 @@ class TopActivations(HighscoreCollection, DatasourceTool, NetworkTool,
                              f"{self.datasource_key} for TopActivations vs."
                              f"{activations.datasource_key} for "
                              "DatasourceActivations")
-        if self.network_key != activations.network_key:
+        if self.network.key != activations.network.key:
             raise ValueError("Incompatible networks:"
-                             f"{self.network_key} for TopActivations vs."
-                             f"{activations.network_key} for "
+                             f"{self.network.key} for TopActivations vs."
+                             f"{activations.network.key} for "
                              "DatasourceActivations")
         while self._current_index < len(activations):
             self += activations[self._current_index]
@@ -1061,24 +1101,38 @@ class ActivationTool(Tool, Network.Observer):
     #
 
     external_result = ('activations', )
-    internal_arguments = ('inputs', 'layer_ids')
+    internal_arguments = ('inputs', 'layers')
     internal_result = ('activations_list', )
 
-    def _preprocess(self, inputs: np.ndarray, layer_ids: List[Layer] = None,
+    def _preprocess(self, inputs: Datalike,
+                    layers: Optional[Union[Layerlike,
+                                           Iterable[Layerlike]]] = None,
                     **kwargs) -> Data:
         # pylint: disable=arguments-differ
-        # FIXME[todo]: inputs should probably be Datalike
         """Preprocess the arguments and construct a Data object.
         """
         context = super()._preprocess(**kwargs)
-        array = inputs.array if isinstance(inputs, Data) else inputs
-        context.add_attribute('inputs', array)
-        unlist = False
-        if layer_ids is None:
-            layer_ids = list(self._network.layer_dict.keys())
-        elif not isinstance(layer_ids, list):
-            layer_ids, unlist = [layer_ids], True
-        context.add_attribute('layer_ids', layer_ids)
+
+        # preprocess inputs
+        context.add_attribute('inputs', Data.as_array(inputs))
+
+        # preprocess layers
+        unlist = False  # unlist: should (singleton) layer list be unpacked?
+        # FIXME[todo]: unlist seems not to be used
+        if layers is None:
+            layer_keys = list(self._network.layer_dict.keys())
+        elif isinstance(layers, str):  # individual layer
+            layer_keys, unlist = [layers], True
+        elif isinstance(layers, Layer):  # individual layer
+            layer_keys, unlist = [layers.key], True
+        elif isinstance(layers, Sequence):  # layers in specific order
+            layer_keys = [layer_key(layer) for layer in layers]
+        else:  # layers without specific order - use network order
+            key_set = set(layer_key(layer) for layer in layers)
+            # form a list, ordered according to network layer order
+            layer_keys = [key for key in self._network.layer_names()
+                          if key in key_set]
+        context.add_attribute('layers', layer_keys)
         context.add_attribute('unlist', unlist)
         return context
 
@@ -1109,13 +1163,26 @@ class ActivationTool(Tool, Network.Observer):
         return self._network.get_activations(inputs, layers,
                                              data_format=self.data_format)
 
-    def _postprocess(self, data: Data, what: str) -> None:
+    def _postprocess(self, context: Context, what: str) -> None:
         if what == 'activations':
-            activations_dict = dict(zip(data.layer_ids, data.activations_list))
-            data.add_attribute(what, activations_dict)
-            data.add_attribute('activations_dict', activations_dict)
+            activations = dict(zip(context.layers, context.activations_list))
+            context.add_attribute(what, activations)
         else:
-            super()._postprocess(data, what)
+            super()._postprocess(context, what)
+
+    def add_data_attribute(self, data: Data, name: str, value: Any = None,
+                           batch: bool = True) -> None:
+        """Add a tool specific attribute to a data object.
+        """
+        if name == 'activations':
+            old_activations = self.get_data_attribute(data, name)
+            if old_activations is not None:
+                # merge activation values - value and old_activations are
+                # supposed to be a dicts.
+                print(f"Updating actvivations for keys {list(value.keys())}")
+                old_activations.update(value)
+                return
+        super().add_data_attribute(data, name, value=value, batch=batch)
 
     def data_activations(self, data: Data, layer: Optional[Layerlike] = None,
                          unit: int = None,
@@ -1191,6 +1258,12 @@ class ActivationTool(Tool, Network.Observer):
     def top_indices(activations: np.ndarray, top: int = 1,
                     sort: bool = False) -> np.ndarray:
         """Get the indices of the top activations.
+
+        Result
+        ------
+        top_indices:
+            An array (of `dtype=int`) and shape `(batch, top)` listing
+            for each batch index the `top` indices.
         """
         return nphelper.argmultimax(activations, num=top, sort=sort)
 
@@ -1198,6 +1271,17 @@ class ActivationTool(Tool, Network.Observer):
     def top_activations(activations: np.ndarray, top: int = 1,
                         sort: bool = False) -> np.ndarray:
         """Get the top activation values.
+
+        Remark: Calling this method is equivalent to
+        `activations[top_indices(...)]`, but may be implemented
+        more efficiently.
+
+        Result
+        ------
+        top_activations:
+            An array (of the same `dtype` as `activations`) and shape
+            `(batch, top)` containing for each batch the `top` activation
+            values.
         """
         return nphelper.multimax(activations, num=top, sort=sort)
 
@@ -1206,15 +1290,26 @@ class ActivationWorker(Worker):
     """A :py:class:`Worker` specialized to work with the
     :py:class:`ActivationTool`.
 
+
+    Properties
+    ----------
     layers:
         The layers for which activations shall be computed.
 
     data: (inherited from Worker)
-        The current input data
+        The current input data.
+
     activations: dict
-        The activations for the current data
+        The activations for the current data. This dictionary is
+        also stored as in `data` as tool attribute with the
+        name `'activations'`.
 
     """
+
+    # a "multiset" allowing to register layers for which activations are
+    # to be obtained
+    _layer_keys: Counter = None  # Counter[str]
+    _classification: bool = False
 
     class Observer(BaseObserver):
         """An :py:class:`Observer` of a :py:class:`ActivationWorker`
@@ -1235,25 +1330,60 @@ class ActivationWorker(Worker):
                                  "for initializing a ActivationWorker")
             tool = ActivationTool(network)
         super().__init__(tool=tool, **kwargs)
-        self._layer_ids = []
-        self._fixed_layers = []
-        self._classification = False
-
-        self._activations = None
 
     #
-    # Tool core functions
+    # Worker core functions
     #
 
-    def _apply_tool(self, data: Data, **kwargs) -> None:
-        """Apply the :py:class:`ActivationTool` on the given data.
+    def _work(self, data: Data, layers: Optional[Iterable[Layerlike]] = None,
+              **kwargs) -> None:
+        """Work on the given data.
+
+        This method overwrites the super method to adapt the `layers`
+        argument.
+
+        Arguments
+        ---------
+        layers:
+            The layers for which activations should be obtained. If `None`,
+            the current layer selection of this `ActivationWorker` will
+            be used.
         """
-        self.tool.apply(self, data, layers=self._layer_ids, **kwargs)
+        # obtain the set of layer keys for which activations should
+        # be obtained
+        if layers is None:
+            layer_keys = self._layer_keys
+        else:
+            layer_keys = set(layer_key(layer) for layer in layers)
+
+        # remove layers for which activations have already been stored in data
+        # (use "layer_keys = layer_keys - ...", not "layer_keys -= ...",
+        # to avoid changing self._layer_keys)
+        layer_keys = layer_keys - \
+            self._tool.get_data_attribute(data, 'activations', {}).keys()
+
+        if layer_keys:
+            LOG.debug("ActivationWorker: work on %s with new layers=%s",
+                      data, layer_keys)
+            super()._work(data, layers=layer_keys, **kwargs)
+        else:
+            LOG.debug("ActivationWorker: skip work and reusing "
+                      "previous results for %s (no new layers)", data)
 
     def activations(self, layer: Layer = None, unit: int = None,
                     data_format: str = None) -> np.ndarray:
         """Get the precomputed activation values for the current
         :py:class:`Data`.
+
+        Arguments
+        ---------
+        layer:
+            The layer of interest.  If `None`, this will return the
+            full activations dictionary (mapping layer keys to
+            activation arrays).
+        unit:
+            The unit of interest.  If `None`, activation values for
+            the complete layer will be returned.
         """
         activations = \
             self._tool.data_activations(self._data, layer=layer, unit=unit,
@@ -1267,8 +1397,8 @@ class ActivationWorker(Worker):
     def _ready(self) -> bool:
         # FIXME[hack]
         return (super()._ready() and
-                self._tool.network is not None and
-                self._tool.network.prepared)
+                self.network is not None and
+                self.network.prepared)
 
     @property
     def network(self) -> Network:
@@ -1303,68 +1433,76 @@ class ActivationWorker(Worker):
         self.set_layers(layers)
         self.change(tool_changed=True)
 
+    def _set_tool(self, tool: Optional[Tool]) -> None:
+        super()._set_tool(tool)
+        self.set_layers(())
+
     #
     # Layer configuration
     #
 
-    def set_layers(self, layers: List[Layer]) -> None:
+    def set_layers(self, layers: Iterable[Layerlike]) -> None:
         """Set the layers for which activations shall be computed.
 
         """
-        self._fixed_layers = \
-            layers if isinstance(layers, list) else list(layers)
-        self._update_layers()
+        self._layer_keys = Counter(layer_key(layer) for layer in layers)
+        if self._classification and isinstance(self.network, Classifier):
+            self._layer_keys[self.network.score_layer] += 1
 
-    def add_layer(self, layer: Union[str, Layer]) -> None:
+        LOG.info("ActivationWorker: set layers: %s", layers)
+
+        # update the activations (if necessary)
+        self.work(self._data)
+
+    def add_layer(self, layer: Layerlike) -> None:
         """Add a layer to the list of activation layers.
         """
-        if isinstance(layer, str):
-            self._fixed_layers.append(self.network[layer])
-        elif isinstance(layer, Layer):
-            self._fixed_layers.append(layer)
-        else:
-            raise TypeError("Invalid type for argument layer: {type(layer)}")
-        self._update_layers()
+        layer = layer_key(layer)
+        self._layer_keys[layer] += 1
+        LOG.info("ActivationWorker: added layer %s, now working on %s",
+                 layer, self._layer_keys)
 
-    def remove_layer(self, layer: Layer) -> None:
+        # update the activations (if necessary)
+        self.work(self._data)
+
+    def remove_layer(self, layer: Layerlike) -> None:
         """Remove a layer from the list of activation layers.
         """
-        self._fixed_layers.remove(layer)
-        self._update_layers()
+        layer = layer_key(layer)
+        # as we do not have a real multiset but just a Counter, we
+        # have to explicitly remove elements if the count goes down to 0.
+        count = self._layer_keys[layer]
+        if count > 1:
+            self._layer_keys[layer] -= 1
+        elif count == 1:
+            del self._layer_keys[layer]
+        LOG.info("ActivationWorker: removed layer %s, now working on %s",
+                 layer, self._layer_keys)
 
-    def set_classification(self, classification: bool = True) -> None:
+        # update the activations (if necessary)
+        self.work(self._data)
+
+    @property
+    def classification(self) -> bool:
+        """Flag indicating if classification results should be recorded.
+        This flag only has an effect if the :py:class:`ActivationTool`
+        is a :py:class:`Classifier`.
+        """
+        return self._classification
+
+    @classification.setter
+    def classification(self, classification: bool) -> None:
         """Record the classification results.  This assumes that the network
         is a classifier and the results are provided in the last
         layer.
         """
+        LOG.info("ActivationWorker: set classification to %s (was %s)",
+                 classification, self._classification)
         if classification != self._classification:
             self._classification = classification
-            self._update_layers()
-
-    def _update_layers(self) -> None:
-        network = self.network
-        if network is None or not network.prepared:
-            return  # nothing to do
-
-        layers = set()
-        # FIXME[problem]: does not work with QObserver:
-        #   'QObserverHelper' object has no attribute 'layers_of_interest'
-        # for observer in self._observers:
-        #     layers |= observer.layers_of_interest(self)
-        layer_ids = set(map(layer_key, layers))
-
-        layer_ids |= set(map(layer_key, self._fixed_layers))
-        if self._classification and isinstance(network, Classifier):
-            layer_ids |= {network.score_layer.key}
-
-        # from set to list
-        layer_ids = [layer_key for layer in network.layer_names()
-                     if layer_key in layer_ids]
-
-        got_new_layers = layer_ids > self._layer_ids and self._data is not None
-        self._layer_ids = layer_ids
-        if got_new_layers:
-            self.work(self._data)
+            self.change('worker_changed')
+            if classification and isinstance(self.network, Classifier):
+                self.add_layer(self.network.score_layer)
 
     #
     # work on Datasource
@@ -1382,9 +1520,9 @@ class ActivationWorker(Worker):
         #  np.memmap(filename, dtype='float32', mode='w+',
         #            shape=(samples,) + network[layer].output_shape[1:])
         results = {
-            layer: np.ndarray((samples,) +
-                              self.tool.network[layer].output_shape[1:])
-            for layer in self._layer_ids
+            layer_key: np.ndarray((samples,) + \
+                    self.tool.network[layer_key].output_shape[1:])
+            for layer_key in self._layer_keys
         }
 
         fetcher = Datafetcher(datasource, batch_size=batch_size)
@@ -1403,6 +1541,9 @@ class ActivationWorker(Worker):
                 self.work(batch, run=False)
 
                 # obtain the activation values from the current data object
+                # (a dict mapping layer keys to activation arrays)
+                # FIXME[old]: may alyo be a list(?) -> this option should
+                # be removed ...
                 activations = self.activations()
 
                 # print(type(activations), len(activations))
@@ -1420,7 +1561,7 @@ class ActivationWorker(Worker):
                           f"[{activations[0].dtype}]")
                     for index, values in enumerate(activations):
                         print(f"dl-activation:  [{index}]: {values.shape}")
-                        layer = self._layer_ids[index]
+                        layer = list(self._layer_keys)[index]
                         results[layer][index:index+len(batch)] = values
                 print("dl-activation: batch finished in "
                       f"{self.tool.duration(self._data)*1000:.0f} ms.")

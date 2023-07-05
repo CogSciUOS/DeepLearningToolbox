@@ -6,6 +6,9 @@ Github: https://github.com/krumnack
 """
 
 # standard imports
+from typing import Callable, Union, Any, Optional, Iterable
+from types import ModuleType
+import multiprocessing
 import importlib
 import sys
 import os
@@ -13,65 +16,535 @@ import re
 
 # Qt imports
 from PyQt5 import QtCore
+from PyQt5.QtCore import QTimer, pyqtSlot, pyqtSignal, QThread, QThreadPool
+from PyQt5.QtGui import QFontDatabase, QPaintEvent
 from PyQt5.QtWidgets import QWidget, QGroupBox, QLabel, QPushButton
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout
 from PyQt5.QtWidgets import QPlainTextEdit, QComboBox
-from PyQt5.QtGui import QFontDatabase
 
 # toolbox imports
-from dltb.util.resource import Resource, ModuleResource
-from dltb.util.hardware import cpus, gpus, cuda
+from dltb.base.info import Info, InfoSource
+from dltb.base.package import Package
+from dltb.util.hardware import HardwareInfo, SystemInfo, ResourceInfo
+from dltb.util.hardware import CudaInfo, CudaDeviceInfo, PythonInfo
+from dltb.util.importer import Importer, ImportInterceptor, add_postimport_hook
 from util import add_timer_callback
 from toolbox import Toolbox
 
 # GUI imports
 from .panel import Panel
-from ..utils import QObserver, QAttribute, protect
+from ..utils import QObserver, QAttribute, protect, QBusyWidget, QPrepareButton
 
 
-class ModuleInfo(QGroupBox, QObserver, qobservables={
-        # FIXME[hack]: check what we are really interested in ...
-        Resource: Resource.Change.all()}):
-    """A Widget providing information about a module.
+class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
+    """A Panel displaying system internals.
+    May be of interest during development.
 
-    The Widget observes the :py:class:`ModuleResource` associated
-    with the module it provides information about.  If the
-    state of this resource changes (e.g. if the module is imported),
+
+    The `InternalsPanel` makes use of the following classes defined
+    below:
+    * :py:class:`QInfoWidget`
+    * :py:class:`QPackageInfo`
+    * :py:class:`QPackageList`
+    * :py:class:`QProcessInfo`
+    * :py:class:`QNvmlInfo`
+    
+    Attributes
+    ----------
+    _packages: dict
+        A mapping from package names to package information.
+        This can be the acutal package (if already loaded),
+        or a string describing the state of the package
+        ("not loaddd" or "not found"). This information
+        is initialized and updated by the method
+        :py:meth:_updatePackages.
+
+    _packageName: str = None
+
+    Graphical elements
+    ------------------
+    _grid: QGridLayout
+    _packageGrid: QGridLayout = None
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._packages = {}
+        self._packageName = None
+
+        self.initUI()
+
+    def initUI(self):
+        self._layout = QVBoxLayout()
+        self._packageList = QPackageList()
+        self._packageList.packageSelected.connect(self.showPackageInfo)
+
+        self._grid = QGridLayout()
+        self._grid.addWidget(self._packageList, 0, 0)
+        self._grid.addLayout(self.systemInfo(), 0, 1)
+
+        self._layout.addLayout(self._grid)
+        self._info = QLabel("Info")
+        self._layout.addWidget(self._info)
+
+
+        self.setLayout(self._layout)
+
+    #@pyqtSlot
+    @protect
+    def showPackageInfo(self, package: str) -> None:
+        """Show a :py:class:`PackageInfo` widget in the info part
+        of this `InternalsPanel`.
+
+        """
+        self.showInfo(QPackageInfo(package=Package[package]))
+
+    def showInfo(self, info: QWidget):
+        """Show a new info widget.
+
+        Arguments
+        ---------
+        info: QWidget
+           The widget to be displayed in the info region of the
+           panel. This will replace the previously displayed
+           info widget.
+        """
+        if self._layout.replaceWidget(self._info, info) is not None:
+            self._info.deleteLater()
+        self._info = info
+
+    def systemInfo(self):
+
+        #
+        # Python
+        #
+
+        pythonBox = QGroupBox('Python')
+        pythonInfoWidget = QInfoWidget(source=PythonInfo())
+        boxLayout = QVBoxLayout()
+        boxLayout.addWidget(pythonInfoWidget)
+        boxLayout.addStretch()
+        pythonBox.setLayout(boxLayout)
+
+        #
+        # Hardware
+        #
+
+        hardwareBox = QGroupBox('Hardware')
+        boxLayout = QVBoxLayout()
+        hardwareInfoWidget = QInfoWidget(source=HardwareInfo())
+        boxLayout.addWidget(hardwareInfoWidget)
+        boxLayout.addStretch()
+        hardwareBox.setLayout(boxLayout)
+
+        #
+        # Platform
+        #
+        systemBox = QGroupBox('System')
+        boxLayout = QVBoxLayout()
+        systemInfoWidget = QInfoWidget(source=SystemInfo())
+        boxLayout.addWidget(systemInfoWidget)
+        boxLayout.addStretch()
+        systemBox.setLayout(boxLayout)
+
+        #
+        # Resources
+        #
+        resourcesBox = QGroupBox('Resources')
+        boxLayout = QVBoxLayout()
+        resourceInfoWighet = QInfoWidget(source=ResourceInfo())
+        boxLayout.addWidget(resourceInfoWighet)
+        boxLayout.addStretch()
+        resourcesBox.setLayout(boxLayout)
+
+        #
+        # CUDA
+        #
+
+        cudaBox = QGroupBox('CUDA')
+        boxLayout = QVBoxLayout()
+        cudaInfo = CudaInfo()
+        cudaInfoWighet = QInfoWidget(source=cudaInfo)
+        boxLayout.addWidget(cudaInfoWighet)
+        deviceInfoWiget = QInfoWidget()
+        if cudaInfo.number_of_devices:
+            deviceInfoWiget.addInfosFromSource(cudaInfo[0])
+        boxLayout.addWidget(deviceInfoWiget)
+        boxLayout.addStretch()
+        cudaBox.setLayout(boxLayout)
+
+        button = QPushButton("Torch")
+        #button.setFlat(True)
+        @protect
+        def slot(clicked: bool):
+            self.showInfo(self.torchInfo())
+        button.clicked.connect(slot)
+        boxLayout.addWidget(button)
+
+        button = QPushButton("Tensorflow")
+        #button.setFlat(True)
+        @protect
+        def slot(clicked: bool):
+            self.showInfo(self.tensorflowInfo())
+        button.clicked.connect(slot)
+        boxLayout.addWidget(button)
+
+        #
+        # CUDA (old)
+        #
+
+        cuda2Box = QGroupBox('CUDA2')
+        boxLayout = QVBoxLayout()
+        try:
+            nvmlInfo = QNvmlInfo()
+            boxLayout.addWidget(nvmlInfo)
+            add_timer_callback(nvmlInfo.update)
+        except ImportError as e:
+            print(e, file=sys.stderr)
+            label = QLabel("Python NVML module (py3nvml) not availabe")
+            boxLayout.addWidget(label)
+        boxLayout.addStretch()
+        cuda2Box.setLayout(boxLayout)
+
+        cuda3Box = QGroupBox('CUDA3')
+        layout = self._cudaOld()
+        cuda3Box.setLayout(layout)
+
+        #
+        # processes
+        #
+        
+        self._processInfo = QProcessInfo()
+        self.addAttributePropagation(Toolbox, self._processInfo)
+
+        #
+        # layout the boxes
+        #
+        layout = QVBoxLayout()
+        row = QHBoxLayout()
+        row.addWidget(hardwareBox)
+        row.addWidget(systemBox)
+        row.addWidget(pythonBox)
+        layout.addLayout(row)
+
+        row = QHBoxLayout()
+        row.addWidget(resourcesBox)
+        row.addWidget(cudaBox)
+        row.addWidget(cuda2Box)
+        row.addWidget(cuda3Box)
+        row.addStretch()
+        layout.addLayout(row)
+
+        layout.addWidget(self._processInfo)
+        layout.addStretch()
+        return layout
+
+    def tensorflowInfo(self):
+        tensorflowBox = QGroupBox('Tensorflow')
+        layout = QHBoxLayout()
+
+        tensorflowInfo = QInfoWidget()
+        layout.addWidget(tensorflowInfo)
+        tensorflowInfo.addInfosFromSource(Package['tensorflow'])
+
+        layout.addStretch()
+        tensorflowBox.setLayout(layout)
+        return tensorflowBox
+
+    def torchInfo(self):
+        torchBox = QGroupBox('Torch')
+        layout = QHBoxLayout()
+
+        torchInfo = QInfoWidget()
+        layout.addWidget(torchInfo)
+        torchInfo.addInfosFromSource(Package['torch'])
+
+        layout.addStretch()
+        torchBox.setLayout(layout)
+        return torchBox
+
+
+    def _cudaOld(self):
+        boxLayout = QVBoxLayout()
+        boxLayout.addWidget(QLabel("Python CUDA module (pycuda) not availabe"))
+
+        # boxLayout.addWidget(QLabel(f"NVIDIA Kernel driver: "
+        #                            f"{cuda.driver_version}"))
+        # boxLayout.addWidget(QLabel(f"CUDA Toolkit version: "
+        #                            f"{cuda.toolkit_version}"))
+
+        text = QPlainTextEdit()
+        fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        text.document().setDefaultFont(fixedFont)
+        text.setReadOnly(True)
+        # text.setPlainText(str(cuda.nvidia_smi))
+        text.appendPlainText(str())
+        boxLayout.addWidget(text)
+
+        boxLayout.addStretch()
+        return boxLayout
+
+
+class QInfoWidget(QWidget):
+    """A QInfoBox displays a collection of information.
+
+    Information
+    -----------
+    
+    Each piece of information is registered with an internal name, a
+    (human readable) title that describes its meaning and a value. In
+    addition it may specify a unit (like seconds, bytes, etc.).
+
+    Dynamic Information
+    -------------------
+
+    Information can be dynamic, that is they change over time (like
+    the current time or runtime of some model, the amount of memory
+    allocated, the current GPU utilization and temperature, etc.).
+    Such dynamic information can be registered by a function that
+    returns the current value.
+
+    If an `QInfoBox` contains dynamic information, that is the method
+    :py:meth:`containsDynamicInformation` returns `True`, it has to be
+    updated on a regular basis. There are different ways to achieve this:
+    * call :py:class:`startDynamic()` to run a QTimer that calls
+      :py:class:`update()` on a regular basis.
+    * use some external mechanism to regularly call :py:class:`update()`.
+
+    Layout
+    ------
+
+    The information can be arranged in different ways, referred to as
+    layout.  Currently only one layout is implemented: a two-column
+    grid in which the entries are displayed in the order in which they
+    have been added to the `QInfoBox`.
+
+    Wishlist (for the future)
+    -------------------------
+    
+    For the future it may be nice to arrange information based on
+    groups, allow to make better use of the available space, etc.
+
+    It may also be useful to highlight certain
+    important/critical/unusual values.
+
+    """
+
+    def __init__(self, dynamic: Optional[float] = None,
+                 source: Optional[InfoSource] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        # dict mapping attribute names to a triple (info, qtitle, qvalue),
+        # Dict[str, Tuple[Info, QLabel, QLabel]]
+        self._infos = {}
+
+        # a list of Info objects that should be added/updated 
+        self._newInfos = []
+
+        # a list of names of Info objects that should be deleted
+        self._deleteInfoNames = []
+
+        # a set of names of Info objects that have a dynamic value
+        self._dynamic = set()
+        
+        self._initDynamic(dynamic)
+        self._initUI()
+
+        if source is not None:
+            self.addInfosFromSource(source)
+
+    def _initUI(self) -> None:
+        """Initialize the user interface.
+        """
+        layout = QVBoxLayout()
+        self._grid = QGridLayout()
+        layout.addLayout(self._grid)
+        layout.addStretch()
+
+        # -- begin: debug
+        row = QVBoxLayout()
+        if self._dynamicTimer is not None:
+            self._dynamicButton = QPushButton("Dynamic")
+            self._dynamicButton.setCheckable(True) 
+            self._dynamicButton.clicked.connect(self.toggleDynamic)
+            row.addWidget(self._dynamicButton)
+
+        self._repaintCounter = QLabel('0')
+        row.addWidget(self._repaintCounter)
+        row.addStretch()
+
+        layout.addLayout(row)
+        # -- end: debug
+
+        self.setLayout(layout)
+        self.setMinimumWidth(400)
+
+    def addInfo(self, info: Info) -> None:
+        self._newInfos.append(info)
+        self.update()
+
+    def addInfosFromSource(self, source: Info, clear: bool = False) -> None:
+        if clear:
+            self.clear_infos()
+        for name in source.info_names():
+            self._newInfos.append(source.get_info(name))
+        self.update()
+
+    def clearInfos(self) -> None:
+        self._newInfos = []
+        self._deleteInfoNames = list(self._widgets.keys)
+        self.update()
+
+    def _updateUI(self) -> None:
+        """Update the user interface to match the information
+        mentioned in `_attributes`.
+        """
+        oldInfos = self._infos      
+        oldDynamic = bool(self._dynamic)
+        self._widgets = {}
+
+        for info in self._newInfos:
+            oldEntry = oldInfos.pop(info.name, None)
+            if oldEntry is None:  # new entry -> create widgets
+                qtitle = QLabel(info.title)
+                qvalue = QLabel(info.format_value())
+                row = self._grid.rowCount()
+                self._grid.addWidget(qtitle, row, 0)
+                self._grid.addWidget(qvalue, row, 1)
+            else:  # old entry -> update content
+                _oldInfo, qtitle, qvalue = oldEntry
+                qtitle.setText(info.title)
+                qtitle.setText(info.format_value())
+
+            self._infos[info.name] = (info, qtitle, qvalue)
+            if info.is_dynamic:
+                self._dynamic.add(info.name)
+            else:
+                self._dynamic.discard(info.name)
+        self._newInfos = []
+
+        # delete the widgets mentioned in _deleteInfoNames 
+        for name in self._deleteInfoNames:
+            oldEntry = oldInfos.pop(info.name, None)
+            if oldEntry is None:  # bad name -> nothing delete
+                continue
+            _oldInfo, qtitle, qvalue = oldEntry
+            self._grid.removeWidget(qtitle)
+            self._grid.removeWidget(qvalue)
+            qtitle.deleteLater()
+            qvalue.deleteLater()
+            self._dynamic.discard(info.name)
+        self._deleteInfoNames = []
+
+        # keep the remaining infos
+        self._widgets.update(oldInfos)
+
+        # start/stop the dynamic timer if the widget has become
+        # dynamic/non-dynamic
+        if self._dynamicTimer is not None:  # this widget provides a timer 
+            dynamic = bool(self._dynamic)
+            if not oldDynamic != dynamic:
+                self.toggleDynamic(dynamic)
+
+    @protect
+    def paintEvent(self, event: QPaintEvent) -> None:
+        self._repaintCounter.setText(str(int(self._repaintCounter.text())+1))
+        if self._newInfos or self._deleteInfoNames:
+            self._updateUI()
+        if self.containsDynamicInformation():
+            self._updateDynamicInformation()
+        super().paintEvent(event)
+
+    #
+    # dynamic information
+    #
+
+    def _initDynamic(self, dynamic: Optional[float]) -> None:
+        self._dynamicUdpateInterval = dynamic
+
+        if dynamic is not None and bool(dynamic):
+            self._dynamicTimer = QTimer()
+            self._dynamicTimer.setInterval(int(dynamic*1000))
+            self._dynamicTimer.timeout.connect(self.update)
+        else:
+            self._dynamicTimer = None
+        print(self, self._dynamicTimer, dynamic)
+        if self._dynamicTimer is not None:
+            print(self._dynamicTimer.isActive())
+
+    def containsDynamicInformation(self) -> bool:
+        """Checks if this QInfoBox contains dynamic information.
+        """
+        return bool(self._dynamic)
+
+    def dynamicUpdateInterval(self) -> float:
+        """The desired update interval for dynamic information in seconds.
+        This is a float value, allowing for intervals shorter than a
+        second, e.g., `0.5` is 500ms.
+        """
+        return self._dynamicUdpateInterval
+
+    def isDynamic(self) -> bool:
+        """Checks if this `QInfoBox` is running a timer to update dynamic
+        information.  This will only be the case if this `QInfoBox`
+        actually contains dynamic information, otherwise it is False,
+        even if this `QInfoBox` was marked as dynamic.
+        """
+        return self._dynamicTimer is not None and self._dynamicTimer.isActive()
+
+    def _updateDynamicInformation(self) -> None:
+        for name in self._dynamic:
+            info, _qtext, qvalue = self._widgets[name]
+            qvalue.setText(info.format_value())
+
+    @protect
+    def toggleDynamic(self, checked: bool) -> None:
+        print("toggle dynamic:", checked, self._dynamicTimer)
+        if checked == self.isDynamic():
+            return  # nothing to do
+        if checked:
+            self._dynamicTimer.start()
+        else:
+            self._dynamicTimer.stop()
+
+class QPackageInfo(QGroupBox, QObserver, qobservables={
+        Package: Package.Change('state_changed')}):
+    """A Widget providing information about a package.
+
+    The Widget observes the :py:class:`Package` associated
+    with the package it provides information about.  If the
+    state of this Package changes (e.g. if the package is imported),
     the information will be updated.
     """
-    _resource: Resource = None
+    _package: Package = None
 
-    def __init__(self, resource: Resource = None, **kwargs) -> None:
+    def __init__(self, package: Package = None, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._initGui()
-        self.setResource(resource)
+        self._initUI()
+        self.setPackage(package)
+        add_postimport_hook(ImportInterceptor.THIRDPARTY_MODULES,
+                            self.moduleImported)
 
     def __del__(self):
-        self.setResource(None)
+        self.setPackage(None)
         super().__del__()
 
-    def setResource(self, resource: Resource) -> None:
-        interests = Resource.Change('status_changed')
-        self._exchangeView('_resource', resource, interests=interests)
-
-    def resource_changed(self, resource: Resource,
-                         change: Resource.Change) -> None:
-        if change.status_changed:
-            self.update()
-
-    def _initGui(self):
-        """Create a :py:class:`QGroupBox` showing module information.
+    def _initUI(self):
+        """Create a :py:class:`QGroupBox` showing package information.
         """
         layout = QVBoxLayout()
 
         buttonLayout = QHBoxLayout()
-        self._importButton = QPushButton("Load")
-        self._importButton.clicked.connect(self._onImportButtonClicked)
+        self._importButton = QPrepareButton("Load")
+        # Unprepare (=unloading module) is not implemented
+        self._importButton.setUnpreparable(False)
         buttonLayout.addWidget(self._importButton)
 
         self._installButton = QPushButton("Install")
         self._installButton.clicked.connect(self._onInstallButtonClicked)
         buttonLayout.addWidget(self._installButton)
+        self._busyWidget = QBusyWidget()
+        buttonLayout.addWidget(self._busyWidget)
         buttonLayout.addStretch()
 
         self._nameLabel = QLabel()
@@ -86,438 +559,244 @@ class ModuleInfo(QGroupBox, QObserver, qobservables={
         layout.addStretch()
         self.setLayout(layout)
 
-    @QtCore.pyqtSlot()
-    def _onImportButtonClicked(self):
-        self._resource.prepare()
+    def setPackage(self, package: Package) -> None:
+        self._updateUI(package)
 
-    @QtCore.pyqtSlot()
-    def _onInstallButtonClicked(self):
-        self._resource.install()
+    def _updateUI(self, package: Package) -> None:
+        havePackage = package is not None and bool(package)
 
-    def update(self):
-        haveResource = self._resource is not None and bool(self._resource)
-        self.setTitle(self._resource.label if haveResource else "None")
-        self._installButton.setVisible(haveResource and
-                                       not self._resource.available)
-        self._importButton.setVisible(haveResource and
-                                      self._resource.available and
-                                      not self._resource.prepared)
+        self.setTitle(package.label if havePackage else "None")
+        self._installButton.setVisible(havePackage and
+                                       not package.available)
+        #self._importButton.setVisible(havePackage and
+        #                              package.available and
+        #                              not package.prepared)
+        self._importButton.setPreparable(package)
 
-        if not haveResource:
+        if havePackage:
+            self._nameLabel.setText(package.module_name)
+            self._descriptionLabel.setText(package.description)
+            if package.prepared:
+                module = sys.modules[package.module_name]
+                version = package.version or '?'
+                directory = package.directory or '?'
+                self._versionLabel.setText(f"Version: {version}")
+                self._libraryLabel.setText(f"Library: {directory}")
+            else:
+                self._versionLabel.setText("")
+                self._libraryLabel.setText("")
+        else:
             self._nameLabel.setText("No module")
             self._versionLabel.setText("")
             self._libraryLabel.setText("")
             self._descriptionLabel.setText("")
-        else:
-            self._nameLabel.setText(self._resource.module)
-            self._descriptionLabel.setText(self._resource.description)
-            if self._resource.prepared:
-                module = sys.modules[self._resource.module]
-                self._versionLabel.setText("Version: " +
-                                           self._resource.version)
-                self._libraryLabel.setText("Library: " +
-                                           module.__file__)
+
+        # if package is not self._package:
+        #     interests = Package.Change('state_changed')
+        #     self._exchangeView('_package', package, interests=interests)
+
+    def preparable_changed(self, package: Package,
+                           change: Package.Change) -> None:
+        """Notification that a :py:class:`Package` has changed.
+        """
+        if change.state_changed:
+            self._updateUI(package)
+
+    @QtCore.pyqtSlot(bool)
+    @protect
+    def _onInstallButtonClicked(self, checked: bool = False) -> None:
+        self._package.install()
+
+    def moduleImported(self, module: ModuleType) -> None:
+        """Called when a new module was imported.
+        """
+        name = module.__name__
+        package = Package[name] if name in Package else None
+        self.setPackage(package)
+
+
+class QPackageList(QGroupBox):
+    """A `QWidget` to display the :py:class:`Package` known to the
+    Toolbox.  It will display the package name as well es the
+    installation status of these packages including the version if
+    the package is already loaded.
+
+    The `QPackageList` emits the `packageSelected` signal with the
+    :py:prop:`Package.key` of the package in case a package was
+    selected.
+
+    FIXME[todo]: The `QPackageList` should observe the `Package`
+    regsiter to get informed if the state of a package changed.
+
+    """
+    packageSelected: pyqtSignal = pyqtSignal(str)
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__("Packages", **kwargs)
+        self._packages = {}
+        self._packageName = None
+
+        self._updateFlag = False
+        self._initUI()
+
+    def _initUI(self) -> None:
+        """Create a QGridLayout with two columns displaying package
+        information. The first column contains the package name, the
+        second column version (if loaded) or availability.
+        Packages are listed in the order given by :py:meth:packages.
+        """
+        self.setMinimumWidth(300)
+
+        self._packageGrid = QGridLayout()
+        self._packageGrid.addWidget(QLabel("<b>Package</b>", self), 0, 0)
+        self._packageGrid.addWidget(QLabel("<b>Version</b>", self), 0, 1)
+        self._updateFlag = True
+
+        boxLayout = QVBoxLayout()
+        boxLayout.addLayout(self._packageGrid)
+
+        updateButton = QPushButton("Update")
+        updateButton.clicked.connect(self._onUpdatePackages)
+        boxLayout.addWidget(updateButton)
+        boxLayout.addStretch()
+        self.setLayout(boxLayout)
+
+    def _updatePackageList(self) -> None:
+        """To be called in the main task.
+        """
+        for idx in range(self._packageGrid.rowCount(), len(Package) + 1):
+            button = QPushButton('')
+            button.setFlat(True)
+            button.clicked.connect(self._onPackageClicked)
+            self._packageGrid.addWidget(button, idx, 0)
+            self._packageGrid.addWidget(QLabel(''), idx, 1)
+
+        for idx, package in enumerate(Package._register, start=1):
+            button = self._packageGrid.itemAtPosition(idx, 0).widget()
+            label = self._packageGrid.itemAtPosition(idx, 1).widget()
+            if package.prepared:
+                info = package.version
+            elif package.available:
+                info = "not loaded"
             else:
-                self._versionLabel.setText("")
-                self._libraryLabel.setText("")
+                info = "not found"
+            button.ID = package.key
+            button.setText(package.label)
+            label.setText(info)
+
+    @protect
+    def paintEvent(self, event: QPaintEvent) -> None:
+        if self._updateFlag:
+            self._updatePackageList()
+            self._updateFlage = False
+        super().paintEvent(event)
+
+    @protect
+    @pyqtSlot(bool)
+    def _onPackageClicked(self, checked: bool = False) -> None:
+        sender = self.sender()
+        print(sender, type(sender), sender.text(), sender.ID)
+        self.packageSelected.emit(sender.ID)
+        #resource = Resource._register[sender.ID]
+        # resource = Package._register[sender.ID]
+        # self.showInfo(QPackageInfo(resource=resource))
+
+    @protect
+    @pyqtSlot(bool)
+    def _onUpdatePackages(self, checked: bool = False) -> None:
+        self._updateFlage = True
+        self.update()
 
 
 class QProcessInfo(QWidget, QObserver, qobservables={
         Toolbox: {'processes_changed'}}):
+    """A ``QWidget`` for displaying process information.  Process
+    information is obtained from the Toolbox.
+
+    The `QProcessInfo` observes the py:class:`Toolbox` to get informed
+    when process information changes.
+
+    Work in progress: this class is not finished yet 
+    """
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        self._updateFlag = False
         self._initUI()
 
     def _initUI(self) -> None:
         self._button = QPushButton("Test")
         self._button.clicked.connect(self._onButtonClicked)
 
+        self._grid = QGridLayout()
+        self._grid.addWidget(QLabel("<b>Process</b>", self), 0, 0)
+        self._grid.addWidget(QLabel("<b>Name</b>", self), 0, 1)
+        self._grid.addWidget(QLabel("<b>Dämon</b>", self), 0, 2)
+        self._grid.addWidget(QLabel("<b>Alive</b>", self), 0, 3)
+        self._updateFlag = True
+
         layout = QVBoxLayout()
+        layout.addLayout(self._grid)
         layout.addWidget(self._button)
         self.setLayout(layout)
+
+    def _updateProcessList(self) -> None:
+        """To be called in the main task.
+        """
+        processes = [multiprocessing.current_process()] \
+            + multiprocessing.active_children()
+        for idx in range(max(self._grid.rowCount()-1, len(processes))):
+            if idx >= len(processes):
+                # remve a row of labels
+                last_row = self._grid.rowCount() - 1
+                for column in range(self._grid.columnCount()):
+                    widget = \
+                        self._grid.itemAtPosition(last_row, column).widget()
+                    self._grid.removeWidget(widget)
+                    widget.deleteLater()
+                continue
+            if idx+1 >= self._grid.rowCount():
+                # add a row of labels
+                for column in range(self._grid.columnCount()):
+                    self._grid.addWidget(QLabel(''), idx+1, column)
+            process = processes[idx]
+            self._grid.itemAtPosition(idx+1, 0).widget().\
+                         setText(f"{process.pid}")
+            self._grid.itemAtPosition(idx+1, 1).widget().\
+                         setText(f"{process.name}")
+            self._grid.itemAtPosition(idx+1, 2).widget().\
+                         setText(f"{process.daemon}")
+            self._grid.itemAtPosition(idx+1, 3).widget().\
+                         setText(f"{process.is_alive()}")
+
+        # thread = QThread.currentThread()
+        # pool = QThreadPool.globalInstance()
+
+    @protect
+    def paintEvent(self, event: QPaintEvent) -> None:
+        if self._updateFlag:
+            self._updateProcessList()
+            self._updateFlage = False
+        super().paintEvent(event)
 
     @QtCore.pyqtSlot()
     @protect
     def _onButtonClicked(self):
         self._toolbox.notify_process("Test")
+        self.update()
 
     def toolbox_changed(self, toolbox: Toolbox, info: Toolbox.Change) -> None:
-        pass  # FIXME[todo]: implementation
+        self.update()
 
-
-class InternalsPanel(Panel, QAttribute, qattributes={Toolbox: False}):
-    """A Panel displaying system internals.
-    May be of interest during development.
-
-    Attributes
-    ----------
-    _modules: dict
-        A mapping from module names to module information.
-        This can be the acutal module (if already loaded),
-        or a string describing the state of the module
-        ("not loaddd" or "not found"). This information
-        is initialized and updated by the method
-        :py:meth:_updateModules.
-
-    _moduleName: str = None
-
-    Graphical elements
-    ------------------
-    _grid: QGridLayout
-    _moduleGrid: QGridLayout = None
-    """
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._modules = {}
-        self._moduleName = None
-
-        self.initUI()
-
-    def initUI(self):
-        self._layout = QVBoxLayout()
-        self._grid = QGridLayout()
-        self._grid.addWidget(self.modulesInfo(), 0, 0)
-        self._grid.addLayout(self.systemInfo(), 0, 1)
-
-        self._layout.addLayout(self._grid)
-        self._info = QLabel("Info")
-        self._layout.addWidget(self._info)
-
-        self._processInfo = QProcessInfo()
-        self.addAttributePropagation(Toolbox, self._processInfo)
-        self._layout.addWidget(self._processInfo)
-
-        self.setLayout(self._layout)
-
-    #@QtCore.pyqtSlot()
-    @protect
-    def _onInfo(self, checked: bool = False):
-        sender = self.sender()
-        print(sender, type(sender), sender.text())
-        resource = Resource[sender.ID]
-        self.showInfo(ModuleInfo(resource=resource))
-
-    #@QtCore.pyqtSlot()
-    @protect
-    def _onUpdateModules(self, checked: bool = False) -> None:
-        self._updateModules()
-
-    def showInfo(self, info: QWidget):
-        """Show a new info widget.
-
-        Arguments
-        ---------
-        info: QWidget
-           The widget to be displayed in the info region of the
-           panel. This will replace the previously displayed
-           info widget.
-        """
-        if self._layout.replaceWidget(self._info, info) is not None:
-            self._info.deleteLater()
-            self._info = info
-
-    def modulesInfo(self) -> QGroupBox:
-        """Create a QGridLayout with two columns displaying module
-        information. The first column contains the module name, the
-        second column version (if loaded) or availability.
-        Modules are listed in the order given by :py:meth:modules.
-
-        Returns
-        ------
-        box: QGroupBox
-            A QWidget displaying the module information.
-        """
-        box = QGroupBox('Modules')
-        box.setMinimumWidth(300)
-        
-        self._moduleGrid = QGridLayout()
-        self._moduleGrid.addWidget(QLabel("<b>Package</b>", self), 0,0)
-        self._moduleGrid.addWidget(QLabel("<b>Version</b>", self), 0,1)
-
-        for i,m in enumerate(ModuleResource):
-            button = QPushButton(m.label, self)
-            button.ID = m._id  # FIXME[hack]
-            button.setFlat(True)
-            button.clicked.connect(self._onInfo)
-            self._moduleGrid.addWidget(button, 1+i, 0)
-            self._moduleGrid.addWidget(QLabel('', self), 1+i, 1)
-        self._updateModules()
-
-        boxLayout = QVBoxLayout()
-        boxLayout.addLayout(self._moduleGrid)
-
-        updateButton = QPushButton("Update")
-        updateButton.clicked.connect(self._onUpdateModules)
-        boxLayout.addWidget(updateButton)
-        boxLayout.addStretch()
-        box.setLayout(boxLayout)
-
-        return box
-
-    def _updateModules(self):
-        """Update the module list.
-        """
-        for i, m in enumerate(ModuleResource):
-            if m.prepared:
-                info = m.version
-            elif m.available:
-                info = "not loaded"
-            else:
-                info = "not found"
-            self._moduleGrid.itemAtPosition(1+i, 1).widget().setText(info)
-
-    def systemInfo(self):
-
-        pythonBox = QGroupBox('Python')
-        boxLayout = QVBoxLayout()
-        boxLayout.addWidget(QLabel(f"Python version: {sys.version}"))
-        boxLayout.addWidget(QLabel(f"Platform: {sys.platform}"))
-        boxLayout.addWidget(QLabel(f"Prefix: {sys.prefix}"))
-        boxLayout.addWidget(QLabel(f"Executable: {sys.executable}"))
-        boxLayout.addStretch()
-        pythonBox.setLayout(boxLayout)
-
-        hardwareBox = QGroupBox('Hardware')
-        boxLayout = QVBoxLayout()
-        for i, cpu in enumerate(cpus):
-            prefix = f"{i+1}. " if len(cpus) > 1 else ""
-            boxLayout.addWidget(QLabel(f"{prefix}CPU: {cpu.name}"))
-        for i, gpu in enumerate(gpus):
-            prefix = f"{i+1}. " if len(gpus) > 1 else ""
-            boxLayout.addWidget(QLabel(f"{prefix}GPU: {gpu.name}"))
-        # Memory (1)
-        import os
-        mem_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
-        # SC_PAGE_SIZE is often 4096.
-        # SC_PAGESIZE and SC_PAGE_SIZE are equal.
-        mem = mem_bytes>>20
-        boxLayout.addWidget(QLabel("Total physical memory: {:,} MiB".
-                                   format(mem)))
-        boxLayout.addStretch()
-        hardwareBox.setLayout(boxLayout)
-        
-        #
-        # Platform
-        #
-        systemBox = QGroupBox('System')
-        boxLayout = QVBoxLayout()
-
-        import platform
-        boxLayout.addWidget(QLabel(f"node: {platform.node()}"))
-        # boxLayout.addWidget(QLabel(f"uname: {platform.uname()}"))
-        boxLayout.addWidget(QLabel(f"system: {platform.system()}"))
-        boxLayout.addWidget(QLabel(f"release: {platform.release()}"))
-        # boxLayout.addWidget(QLabel(f"version: {platform.version()}"))
-        boxLayout.addWidget(QLabel(f"machine/processor: "
-                                   f"{platform.machine()}/"
-                                   f"{platform.processor()}"))
-        boxLayout.addStretch()
-        systemBox.setLayout(boxLayout)
-        
-
-        resourcesBox = QGroupBox('Resources')
-        boxLayout = QVBoxLayout()
-
-
-        # Memory (2)
-        # a useful solution that works for various operating systems,
-        # including Linux, Windows 7, etc.:
-        try:
-            import psutil
-            mem = psutil.virtual_memory()
-            # mem.total: total physical memory available
-            boxLayout.addWidget(QLabel("Total physical memory: "
-                                       f"{mem.total}"))
-            process = psutil.Process(os.getpid())
-            boxLayout.addWidget(QLabel("Memory usage: "
-                                       f"{process.memory_info().rss}"))
-        except ModuleNotFoundError:
-            pass
-
-        # For Unixes (Linux, Mac OS X, Solaris) you could also use the
-        # getrusage() function from the standard library module
-        # resource. The resulting object has the attribute ru_maxrss,
-        # which gives peak memory usage for the calling process.
-        
-        # resource is a standard library module.
-        import resource
-        
-        # The Python docs aren't clear on what the units are exactly,
-        # but the Mac OS X man page for getrusage(2) describes the
-        # units as bytes. The Linux man page isn't clear, but it seems
-        # to be equivalent to the information from /proc/self/status,
-        # which is in kilobytes.
-        rusage = resource.getrusage(resource.RUSAGE_SELF)
-        boxLayout.addWidget(QLabel("Peak Memory usage: {:,} kiB".
-                                   format(rusage.ru_maxrss)))
-
-
-        if cuda is not None:
-            button = QPushButton("CUDA")
-            #button.setFlat(True)
-            @protect
-            def slot(clicked: bool):
-                self.showInfo(self.cudaInfo())
-            button.clicked.connect(slot)
-            boxLayout.addWidget(button)
-
-        resourcesBox.setLayout(boxLayout)
-
-
-
-        #
-        # layout the boxes
-        #
-        layout = QVBoxLayout()
-        row = QHBoxLayout()
-        row.addWidget(hardwareBox)
-        row.addWidget(pythonBox)
-        row.addWidget(systemBox)        
-        layout.addLayout(row)
-        layout.addWidget(resourcesBox)
-        layout.addStretch()
-        return layout
-
-    def cv2Info(self, cv2):
-        layout = QVBoxLayout()
-        
-        info = cv2.getBuildInformation()
-        
-        text = QPlainTextEdit()
-        fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-        text.document().setDefaultFont(fixedFont)
-        text.setReadOnly(True)
-        text.setPlainText(info)
-
-        layout.addWidget(QLabel(f"Version: {cv2.__version__}"))
-        layout.addWidget(QLabel(f"Library: {cv2.__file__}"))
-        layout.addWidget(text)
-        layout.addStretch()
-        return layout
-
-    def tensorflowInfo(self, tf):
-        layout = QVBoxLayout()
-        label = QLabel("<b>Tensorflow<b>\n"
-                       f"Version = {tf.__version__}")
-        layout.addWidget(label)
-
-        layout.addWidget(QLabel(f"Tensorflow devices:"))
-        #  There is an undocumented method called
-        #  device_lib.list_local_devices() that enables you to list
-        #  the devices available in the local process (As an
-        #  undocumented method, this is subject to backwards
-        #  incompatible changes.)
-        from tensorflow.python.client import device_lib
-        local_device_protos = device_lib.list_local_devices()
-        for dev in local_device_protos:
-            layout.addWidget(QLabel(f"Device: {dev.name} ({dev.device_type})"))
-
-        # Note that (at least up to TensorFlow 1.4), calling
-        # device_lib.list_local_devices() will run some initialization
-        # code that, by default, will allocate all of the GPU memory
-        # on all of the devices (GitHub issue). To avoid this, first
-        # create a session with an explicitly small
-        # per_process_gpu_fraction, or allow_growth=True, to prevent
-        # all of the memory being allocated. See this question for
-        # more details
-
-        # https://stackoverflow.com/questions/38009682/how-to-tell-if-tensorflow-is-using-gpu-acceleration-from-inside-python-shell
-        layout.addStretch()
-        return layout
-
-    def kerasInfo(self, keras):
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel(f"Backend: {keras.backend.backend()}"))
-        layout.addStretch()
-        return layout
-
-    def cudaInfo(self):
-        cudaBox = QGroupBox('CUDA')
-        boxLayout = QVBoxLayout()
-
-        if os.path.exists('/proc/driver/nvidia/version'):
-            with open('/proc/driver/nvidia/version') as f:
-                driver_info = f.read()
-            match = re.search('Kernel Module +([^ ]*)', driver_info)
-            if match:
-                boxLayout.addWidget(QLabel(f"Kernel module: {match.group(1)}"))
-            match = re.search('gcc version +([^ ]*)', driver_info)
-            if match:
-                boxLayout.addWidget(QLabel(f"GCC version: {match.group(1)}"))
-
-
-            boxLayout.addWidget(QLabel(f"NVIDIA Kernel driver: "
-                                       f"{cuda.driver_version}"))
-            boxLayout.addWidget(QLabel(f"CUDA Toolkit version: "
-                                       f"{cuda.toolkit_version}"))
-
-            text = QPlainTextEdit()
-            fixedFont = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-            text.document().setDefaultFont(fixedFont)
-            text.setReadOnly(True)
-            text.setPlainText(str(cuda.nvidia_smi))
-            text.appendPlainText(str(cuda.nvidia_smi_l))
-            boxLayout.addWidget(text)
-
-        # Now use the python module pycuda
-        try:
-            import pycuda.autoinit
-            import pycuda.driver as cuda
-
-            (free,total) = cuda.mem_get_info()
-            boxLayout.addWidget(QLabel("<b>Global GPU Memory</b>"))
-            boxLayout.addWidget(QLabel(f"Total: {total}"))
-            boxLayout.addWidget(QLabel(f"Free: {free}"))
-            boxLayout.addWidget(QLabel("Global memory occupancy: "
-                                       f"{free*100/total:2.4}% free"))
-
-            for devicenum in range(cuda.Device.count()):
-                device=cuda.Device(devicenum)
-                attrs=device.get_attributes()
-            
-                # Beyond this point is just pretty printing
-                print("\n===Attributes for device %d"%devicenum)
-                for (key,value) in attrs.items():
-                    print("%s:%s"%(str(key),str(value)))
-        except ImportError as e:
-            print(e, file=sys.stderr)
-            # ImportError: libcurand.so.8.0
-            # The problem occurs with the current anaconda version
-            # (2017.1, "conda install -c lukepfister pycuda").
-            # The dynamic library "_driver.cpython-36m-x86_64-linux-gnu.so"
-            # is linked against "libcurand.so.8.0". However, the cudatookit
-            # installed by anaconda is verion 9.0.
-            boxLayout.addWidget(QLabel("Python CUDA module (pycuda) not availabe"))
-
-        try:
-            nvmlInfo = QNvmlInfo()
-            boxLayout.addWidget(nvmlInfo)
-            add_timer_callback(nvmlInfo.update)
-        except ImportError as e:
-            print(e, file=sys.stderr)
-            boxLayout.addWidget(QLabel("Python NVML module (py3nvml) not availabe"))
-
-        cudaBox.setLayout(boxLayout)
-        return cudaBox
+    def update(self) -> None:
+        self._updateFlag = True
+        super().update()
 
 
 class QNvmlInfo(QWidget):
     """A QWidget for displaying information obtained from the
-    NVIDIA Management Library (Python bindings: py3nvml)
+    NVIDIA Management Library.
 
-    Attributes
-    ----------
-
-    nvml: module
-        A reference to the NVIDIA Management Library.
-    _deviceCount: int
-        The number of NVIDA devices.
-    _handle:
-        An NVML handle for the current device. None if no device
-        is selected.
-    
     Graphical elements
     ------------------
     _devices: QComboBox
@@ -546,7 +825,8 @@ class QNvmlInfo(QWidget):
         except ModuleNotFoundError:
             self.nvml = None
             layout = QVBoxLayout()
-            layout.addWidget(QLabel("NVIDIA Management Library not available"))
+            layout.addWidget(QLabel("NVIDIA Management Library (py3nvml) "
+                                    "not available."))
             self.setLayout(layout)
 
     def __del__(self):
@@ -567,8 +847,8 @@ class QNvmlInfo(QWidget):
         grid = QGridLayout()
 
         self._driver_version = QLabel(self.nvml.nvmlSystemGetDriverVersion())
-        grid.addWidget(QLabel("Driver Version"), 0,0)
-        grid.addWidget(self._driver_version, 0,1)
+        grid.addWidget(QLabel("Driver Version"), 0, 0)
+        grid.addWidget(self._driver_version, 0, 1)
 
         layout.addLayout(grid)
 
@@ -585,32 +865,32 @@ class QNvmlInfo(QWidget):
         grid = QGridLayout()
 
         self._name = QLabel()
-        grid.addWidget(QLabel("Name"), 0,0)
-        grid.addWidget(self._name, 0,1)
+        grid.addWidget(QLabel("Name"), 0, 0)
+        grid.addWidget(self._name, 0, 1)
 
         self._temperature = QLabel()
-        grid.addWidget(QLabel("Temperatur"), 1,0)
+        grid.addWidget(QLabel("Temperatur"), 1, 0)
         box = QHBoxLayout()
         box.addWidget(self._temperature)
         box.addWidget(QLabel(u'\N{DEGREE SIGN}C'))
         box.addStretch()
-        grid.addLayout(box, 1,1)
+        grid.addLayout(box, 1, 1)
 
         self._temperature_slowdown = QLabel()
-        grid.addWidget(QLabel("Slowdown Temperatur"), 2,0)
+        grid.addWidget(QLabel("Slowdown Temperatur"), 2, 0)
         box = QHBoxLayout()
         box.addWidget(self._temperature_slowdown)
         box.addWidget(QLabel(u'\N{DEGREE SIGN}C'))
         box.addStretch()
-        grid.addLayout(box, 2,1)
+        grid.addLayout(box, 2, 1)
 
         self._temperature_shutdown = QLabel()
-        grid.addWidget(QLabel("Shutdown Temperatur"), 3,0)
+        grid.addWidget(QLabel("Shutdown Temperatur"), 3, 0)
         box = QHBoxLayout()
         box.addWidget(self._temperature_shutdown)
         box.addWidget(QLabel(u'\N{DEGREE SIGN}C'))
         box.addStretch()
-        grid.addLayout(box, 3,1)
+        grid.addLayout(box, 3, 1)
 
         layout.addLayout(grid)
         layout.addStretch()
@@ -625,14 +905,14 @@ class QNvmlInfo(QWidget):
             self._handle = self.nvml.nvmlDeviceGetHandleByIndex(currentIndex)
             self._name.setText(self.nvml.nvmlDeviceGetName(self._handle))
 
-            slowdown = self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,
-                self.nvml.NVML_TEMPERATURE_THRESHOLD_SLOWDOWN)
-            shutdown = self.nvml.nvmlDeviceGetTemperatureThreshold(self._handle,
-                self.nvml.NVML_TEMPERATURE_THRESHOLD_SHUTDOWN)
+            slowdown = self.nvml.nvmlDeviceGetTemperatureThreshold(
+                self._handle, self.nvml.NVML_TEMPERATURE_THRESHOLD_SLOWDOWN)
+            shutdown = self.nvml.nvmlDeviceGetTemperatureThreshold(
+                self._handle, self.nvml.NVML_TEMPERATURE_THRESHOLD_SHUTDOWN)
             self._temperature_slowdown.setText(str(slowdown))
             self._temperature_shutdown.setText(str(shutdown))
 
         if self._handle is not None:
-            temperature = self.nvml.nvmlDeviceGetTemperature(self._handle,
-                self.nvml.NVML_TEMPERATURE_GPU)
+            temperature = self.nvml.nvmlDeviceGetTemperature(
+                self._handle, self.nvml.NVML_TEMPERATURE_GPU)
             self._temperature.setText(str(temperature))

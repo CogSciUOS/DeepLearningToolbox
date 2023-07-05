@@ -9,6 +9,7 @@ import numpy as np
 
 # toolbox imports
 from dltb.tool.highscore import HighscoreGroupNumpy
+from dltb.util import nphelper
 
 
 class TestHighscore(TestCase):
@@ -40,19 +41,19 @@ class TestHighscore(TestCase):
         """Test updating a :py:class:`HighscoreGroupNumpy`.
         """
         highscore_group = HighscoreGroupNumpy(top=5, size=3)
-        owners = np.asarray([1, 2, 3, 4], np.int)
+        owners = np.asarray([1, 2, 3, 4], nphelper.np_int)
         scores = np.asarray([(10, 50, 33),
                              (20, 40, 31),
                              (30, 30, 32),
-                             (40, 20, 34)], np.float)
+                             (40, 20, 34)], nphelper.np_float)
         highscore_group.update(owners, scores)
         self.assertEqual(highscore_group[0].owners[0], owners[3])
         self.assertEqual(highscore_group[0].scores[0], scores[3, 0])
 
-        owners2 = np.asarray([11, 22, 33], np.int)
+        owners2 = np.asarray([11, 22, 33], nphelper.np_int)
         scores2 = np.asarray([(11, 51, 37),
                               (21, 41, 36),
-                              (41, 21, 35)], np.float)
+                              (41, 21, 35)], nphelper.np_float)
 
         highscore_group.update(owners2, scores2)
         self.assertEqual(highscore_group[0].owners[0], owners2[2])
@@ -66,20 +67,20 @@ class TestHighscore(TestCase):
         """
         highscore_group = \
             HighscoreGroupNumpy(top=5, size=3, owner_dimensions=2)
-        owners = np.asarray([(1, 1), (2, 2), (3, 3), (4, 4)], np.int)
+        owners = np.asarray([(1, 1), (2, 2), (3, 3), (4, 4)], nphelper.np_int)
         scores = np.asarray([(10, 50, 33),
                              (20, 40, 31),
                              (30, 30, 32),
-                             (40, 20, 34)], np.float)
+                             (40, 20, 34)], nphelper.np_float)
         highscore_group.update(owners, scores)
         self.assertEqual(highscore_group[0].owners[0].tolist(),
                          owners[3].tolist())
         self.assertEqual(highscore_group[0].scores[0], scores[3, 0])
 
-        owners2 = np.asarray([(11, 11), (22, 22), (33, 33)], np.int)
+        owners2 = np.asarray([(11, 11), (22, 22), (33, 33)], nphelper.np_int)
         scores2 = np.asarray([(11, 51, 37),
                               (21, 41, 36),
-                              (41, 21, 35)], np.float)
+                              (41, 21, 35)], nphelper.np_float)
 
         highscore_group.update(owners2, scores2)
         self.assertEqual(highscore_group[0].owners[0].tolist(),

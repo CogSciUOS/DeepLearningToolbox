@@ -1,6 +1,10 @@
-from typing import Iterable, Iterator, TypeVar
+"""Collection of time related functions, types, and classes.
+
+"""
+
+from typing import Iterable, Iterator, TypeVar, Union, Optional
+from time import time as now, sleep
 import datetime
-import time
 
 def time_str(seconds: float) -> str:
     """A string representing the given times.
@@ -17,11 +21,37 @@ def time_str(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02}.{deciseconds}"
 
 
-T = TypeVar('T')
+def parse_time(time_string: str) -> float:
+    """Parse a timestring. The string is expected to have the format
+    `'[[hh:]mm:]ss[.d+]'` or `s+[.d+]`.
+
+    Arguments
+    ---------
+    time_string:
+        The time string.
+
+    Result
+    ------
+    seconds:
+        The time in seconds.
+    """
+    parts = time_string.split(':')
+    if len(parts) > 3:
+        raise ValueError(f"Invalid time string: '{time_string}'")
+
+    seconds = float(parts[-1])
+    if len(parts) > 1:
+        seconds *= int(parts[-2])
+        if len(parts) > 2:
+            seconds *= int(parts[-3])
+    return seconds
 
 
-def pacemaker(iterable: Iterable[T], seconds: float,
-              absolute: bool = True) -> Iterator[T]:
+ElementType = TypeVar('ElementType')
+
+
+def pacemaker(iterable: Iterable[ElementType], seconds: float,
+              absolute: bool = True) -> Iterator[ElementType]:
     """Provide values from an iterable in regular time steps.
 
     Arguments
@@ -60,10 +90,43 @@ def pacemaker(iterable: Iterable[T], seconds: float,
     >>>     print(f"({i}) {time()-start:.3f}s")
     >>>     sleep(1.0)
     """
-    last_time = time.time() - seconds
+    last_time = now() - seconds
     for element in iterable:  # first source of delay: the producer
-        current_time = time.time()
+        current_time = now()
         if last_time + seconds > current_time:
-            time.sleep(last_time + seconds - current_time)
+            sleep(last_time + seconds - current_time)
         yield element  # second source of delay: the producer
-        last_time = (last_time + seconds) if absolute else time.time()
+        last_time = (last_time + seconds) if absolute else now()
+
+
+Time = float
+Timelike = Union[Time, str]
+
+
+class IndexTiming:
+    """Translating between index values (integer) and time in seconds
+    (float).
+
+    Just a simple version - will not work for variable samplerates ...
+    """
+
+    def __init__(self, samplerate: float) -> None:
+        self._samplerate = samplerate
+
+    def index_to_time(self, index: int) -> Time:
+        """Translate the given index into a point in time.
+        """
+        return index / self._samplerate
+
+    def time_to_index(self, time: Timelike) -> int:
+        """Translate a given point in time into an index.
+        """
+        if not isinstance(time, Time):
+            time = parse_time(time)
+        return round(time * self._samplerate)
+
+    @property
+    def samplerate(self) -> float:
+        """The samplerate applied by this `IndexTiming`.
+        """
+        return self._samplerate

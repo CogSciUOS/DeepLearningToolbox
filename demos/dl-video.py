@@ -16,7 +16,7 @@ import dltb.argparse as ToolboxArgparse
 from dltb.datasource import Datasource, DataDirectory, Imagesource
 from dltb.base.data import Data
 from dltb.base.image import ImageDisplay
-from dltb.base.video import Reader as VideoReader, Writer as VideoWriter
+from dltb.base.video import VideoReader, VideoWriter
 from dltb.tool import Tool
 from dltb.tool.detector import ImageDetector
 
@@ -35,7 +35,7 @@ def main():
     ToolboxArgparse.add_arguments(parser)
 
     args = parser.parse_args()
-    ToolboxArgparse.process_arguments(args)
+    ToolboxArgparse.process_arguments(parser, args)
 
     if args.webcam:
         Datasource['Webcam']
@@ -55,8 +55,8 @@ def main():
                                       writer=writer)
                     if display.closed:
                         break
-            except KeyboardInterrupt:
-                print("stop")
+        except KeyboardInterrupt:
+            print("stop")
 
     elif args.video:
         # FIXME[todo]: displays other than 'qt' do not work!

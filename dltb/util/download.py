@@ -1,11 +1,15 @@
+"""Interface to support downloading files.
+"""
+
 # FIXME[hack]: get rid of third-party imports
 # FIXME[hack]: allow to pass progress bar argument
 # FIXME[hack]: rename 'skip_if_exists' argument by 'overwrite' (with opposite semantics)
 # FIXME[hack]: do logging and error processing
 
 # standard imports
-import os
-import sys
+from typing import Optional, Union
+from io import BytesIO
+from pathlib import Path
 import logging
 
 # third-party imports
@@ -18,6 +22,7 @@ from tqdm import tqdm
 # toolbox imports
 from ..types import Pathlike, as_path
 from ..base.busy import BusyObservable
+from ..base.implementation import Implementable
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -44,7 +49,7 @@ def download_request(url: str, filename: Pathlike, skip_if_exists=True):
 
     progress_bar.close()
 
-    if total_size_in_bytes != 0 and progress_bar.n != total_size_in_bytes:
+    if total_size_in_bytes not in (0, progress_bar.n):
         LOG.error("Something went wrong while downloading '%s' to '%s'. "
                   "Please manually delete any residual download files",
                   url, filename)
@@ -153,18 +158,70 @@ class Downloadable(BusyObservable):
         request = requests.get(self._download_url, stream=True)
 
         self._download_size = request.headers.get('Content-Length')
-        print("Downloading: %s Bytes: %s" % (file_name, self._download_size))
+        print(f"Downloading: {file_name} Bytes: {self._download_size}")
 
         with open(file_name, 'wb') as output_file:
             for chunk in request.iter_content(chunk_size=chunk_size):
                 self._downloaded_bytes += len(chunk)
                 output_file.write(chunk)
-                status = r"%10d  [%3.2f%%]" % \
-                    (self._downloaded_bytes,
-                     self._downloaded_bytes * 100. / self._download_size)
+                status = "{self._downloaded_bytes:10d}  " \
+                    "[{self._downloaded_bytes*100./self._download_size:3.2f}%]"
                 status = status + chr(8)*(len(status)+1)
                 print(status)
 
         delattr(self, '_downloaded_bytes')
         delattr(self, '_download_size')
         delattr(self, '_downloading')
+
+
+
+URL = str
+URLlike = Union[URL, str]
+
+
+class YoutubeDownloader(Implementable):
+    """A downloader for the Youtube platform. The downlader supports
+    downloading video files als well as metadata.
+
+    Example
+    -------
+    from dltb.util.download import YoutubeDownloader
+    path = YoutubeDownloader.download_to_file('dQw4w9WgXcQ')
+
+    url:
+        Youtube URL for the video.
+    
+    """
+
+    @staticmethod
+    def download_to_file(url: URLlike,
+                         filename: Optional[Pathlike] = None,
+                         overwrite: bool = False,
+                         skip_if_exists: bool = False) -> Path:
+        """Download a given Youtube video to a file.
+        """
+        downloader = YoutubeDownloader(url=url)
+        return downloader.to_file(filename, overwrite=overwrite,
+                                  skip_if_exists=skip_if_exists)
+
+    def __init__(self, url: Optional[URLlike] = None,
+                 youtube: Optional[str] = None) -> None:
+        if (url is None) == (youtube is None):
+            raise ValueError("Provide either URL or youtube ID to "
+                             "initialized a YoutubeDownloader.")
+
+        if url is not None:
+            youtube = url.split('/')[-1]
+            if '=' in youtube:
+                youtube = youtube.split('=')[-1]
+
+        self.url = f'https://youtu.be/{youtube}'
+
+    def to_file(self, filename: Optional[Pathlike] = None,
+                overwrite: bool = False, skip_if_exists: bool = False) -> Path:
+        """Download the video into a file.
+        """
+
+    def to_buffer(self, buffer: Optional[BytesIO] = None) -> BytesIO:
+        """Download the video into a buffer.
+        """

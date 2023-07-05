@@ -6,7 +6,8 @@ Github: https://github.com/krumnack
 """
 
 from toolbox import Toolbox
-from network import Network, Controller as NetworkController
+from dltb.network import Network
+from network import Controller as NetworkController
 from tools.am import (Engine as MaximizationEngine,
                       Controller as MaximizationController)
 

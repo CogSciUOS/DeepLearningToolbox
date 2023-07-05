@@ -16,7 +16,7 @@ LOG = logging.getLogger(__name__)
 
 
 class Worker(BusyObservable, Tool.Observer, method='worker_changed',
-             changes={'tool_changed', 'data_changed',
+             changes={'tool_changed', 'data_changed', 'worker_changed',
                       'work_step', 'work_finished'}):
     """A worker can be used to work on data using a :py:class:`Tool`.
     The worker will hold a data object to which the tool is
@@ -36,6 +36,9 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
     tool_changed:
         The :py:class:`Tool` to be used for working was changed.
 
+    worker_changed:
+        The configuration of the worker changed.
+
     work_step:
         A work step was done. This will only happen, if the tool
         is an :py:class`IterativeTool` and that `stepwise=True`
@@ -54,6 +57,8 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         super().__init__(**kwargs)
         self._data = None
         self._next_data = None
+        self._next_kwargs = None
+        self._have_more_data = False
 
         self.tool = tool
         LOG.info("New Worker created: %r (tool=%s)", self, tool)
@@ -82,7 +87,7 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         if tool is not self._tool:
             if self._tool is not None:
                 self.unobserve(self._tool)
-            self._tool = tool
+            self._set_tool(tool)
             if tool is not None:
                 self.observe(tool, Tool.Change('tool_changed',
                                                'state_changed'))
@@ -92,6 +97,9 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
             self.change('tool_changed')
             if self._data is not None:
                 self.work(self._data)  # rework the current data with new tool
+
+    def _set_tool(self, tool: Optional[Tool]) -> None:
+        self._tool = tool
 
     @property
     def ready(self) -> bool:
@@ -128,22 +136,26 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         The main motivation for this method is to work on data from
         a data loop (like a webcam or a video) in real-time, always
         working on the most recent data available.
+
+        Arguments
+        ---------
+        data:
+            The `Data` the tool should be applied to. May be `None`.
         """
         LOG.info("Worker for Tool '%s' (ready=%s, prepared=%s) "
                  "works on data: %r",
                  self.tool and self.tool.key, self.ready,
                  self.tool is not None and self.tool.prepared, data)
+        self._have_more_data = True
+        self._next_data = data
+        self._next_kwargs = kwargs
         if self.ready and not self.busy:
-            self._next_data = data
-            self._work(**kwargs)
-        else:
-            self._next_data = data
-            # FIXME[bug/concept]: additional **kwargs arguments are ignored!
+            self._work_loop()
 
     @busy("working")
     # FIXME[hack/bug]: if queueing is enabled, we are not really busy ...
     # (that is we are busy, but nevertheless accepting more work)
-    def _work(self, stepwise: bool = False, **kwargs):
+    def _work_loop(self, stepwise: bool = False):
         """The implementation of the work loop. This method
         is assumed to run in a background thread. It will
         check the property `_next_data` for fresh data and
@@ -159,13 +171,18 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         tool = self.tool
         if tool is None:
             return
-        while self._next_data is not None:
-
+        while self._have_more_data:
             data = self._next_data
-            LOG.info("Working on next data (%r) with Tool %s.",
-                     data, tool)
-            self._data = data
-            self.change(data_changed=True)
+            kwargs = self._next_kwargs
+            self._next_data = None
+            self._have_more_data = False  # allow providing new data
+            LOG.info("Working on next data (%r) with Tool %s (rework=%s).",
+                     data, tool, data is self._data)
+            if data is not self._data:
+                self._data = data
+                self.change(data_changed=True)
+            if data is None:
+                continue
             with self.failure_manager(catch=True):
                 result = tool.external_result + ('duration', )
                 LOG.debug("Worker %r applying tool %r on data %r "
@@ -175,10 +192,8 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
                         tool.add_data_attributes(data, result, values)
                         self.change(work_step=True)
                 else:
-                    tool.apply(data, result=result, **kwargs)
+                    self._work(data, result=result, **kwargs)
                 self.change(work_finished=True)
-            if self._next_data is data:
-                self._next_data = None
             LOG.info("Working on data (%r/%r) with Tool %s finished.",
                      data, self._data, tool)
     # FIXME[bug]: In case of an error, we may also cause some Qt error here:
@@ -191,10 +206,28 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
     # The source of this messages is not clear to me yet (I have also
     # seen it at other locations ...)
 
-    def _apply_tool(self, data, **kwargs) -> None:
+    def _work(self, data: Data, **kwargs) -> None:
+        """This method does the actual work (applies the
+        :py:class:`Tool` to the :py:class:`Data`).
+
+        This method may be overwritten by subclasses, to perform
+        worker specific argument processing.
+
+        Arguments
+        ---------
+        data:
+            The :py:class:`Data` to work on.  This will usually be
+            the current `data` object of this `Worker`. The results
+            of applying the :py:class:`Tool` are stored as attributes
+            of that data object.
+        kwargs:
+            Additional keyword arguments, which may be general `Tool`
+            arguments or `Worker` or `Tool` specific arguments.
+        """
         tool = self.tool
-        if tool is not None:
-            tool.apply(self, data, **kwargs)
+        if tool is None:
+            raise RuntimeError("Worker has lost her Tool.")
+        tool.apply(data, **kwargs)
 
     #
     # Tool.Observer
@@ -205,7 +238,6 @@ class Worker(BusyObservable, Tool.Observer, method='worker_changed',
         the current :py:class:`Data`.
         """
 
-        print(f"Tool changed: {_info}")
         self.change('tool_changed')
 
         if self._data is None:

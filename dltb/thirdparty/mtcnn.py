@@ -21,7 +21,7 @@ import mtcnn
 
 # toolbox imports
 from dltb.tool.face.mtcnn import Detector as BaseDetector, Landmarks
-from dltb.base.meta import Metadata
+from dltb.base.metadata import Metadata
 from dltb.base.image import BoundingBox
 from .tensorflow.keras import KerasTensorflowModel
 

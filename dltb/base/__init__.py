@@ -5,26 +5,33 @@ Code in the `base` module should be as self-contained as possible.  It
 should not rely on code from other parts of the Deep Learning Toolbox.
 and it should not require any thirdparty modules (except `numpy`).
 
-                      pylint  mypy  tests  imports   fixmes
-  busy.py             9.39    5     -      1-2----   1
-  data.py             10.0    4     1      1---3--   0
-  fail.py             9.23    3     -      1-2----   1
-  hardware.py         5.57    4     -      ------4   0
-  image.py            9.66    5     -      1-2----   12
-  implementation.py   9.93    0     10     -------   1
-  __init__.py         10.0    0     -      1------   0
-  install.py          8.15    1     -      1------   5
-  meta.py             10.0    2     -      1---3--   0
-  observer.py         9.43    19    -      --2----   6
-  prepare.py          8.86    3     7      1-2----   5
-  register.py         10.0    42    2      1-2----   0
-  resource.py         5.58    26    -      1------   5
-  sound.py            9.93    33    -      1-2-3--   2
-  state.py            10.0    2     -      1------   0
-  store.py            10.0    15    -      1------   0
-  types.py            9.77    0     -      -------   1
-  video.py            6.56    27    -      1-2-3--   12
+State of the base module
+------------------------
 
+==================    ======  ====  =====  =======   ======
+module                pylint  mypy  tests  imports   fixmes
+==================    ======  ====  =====  =======   ======
+busy.py               9.39    5     -      1-2----   1
+data.py               10.0    4     1      1---3--   0
+fail.py               9.23    3     -      1-2----   1
+hardware.py           5.57    4     -      ------4   0
+image.py              9.66    5     -      1-2----   12
+implementation.py     9.93    0     10     x------   1
+__init__.py           10.0    0     -      1------   0
+install.py            8.15    1     -      1------   5
+meta.py               10.0    2     -      1---3--   0
+observer.py           9.43    19    -      --2----   6
+prepare.py            8.86    3     7      1-2----   5
+register.py           10.0    42    2      1-2----   0
+resource.py           5.58    26    -      1------   5
+sound.py              9.93    33    -      1-2-3--   2
+state.py              10.0    2     -      1------   0
+store.py              10.0    15    -      1------   0
+types.py              9.77    0     -      x------   1
+video.py              6.56    27    -      1-2-3--   12
+==================    ======  ====  =====  =======   ======
+
+(this list can be obtained by running `bash dltb-code-stats.sh`)
 
 Toolbox `base` imports (0=none, 1=base, 2=toolbox, 3=numpy, 4=other thirdparty)
   busy.py: 1: fail; 2: util.error
@@ -32,8 +39,8 @@ Toolbox `base` imports (0=none, 1=base, 2=toolbox, 3=numpy, 4=other thirdparty)
   fail.py: 1: observer;  2: util.error, util.debug
   hardware.py: 4: py3nvml
   image.py: 1: observer, data, implementation;
-            2: util.error, util.image;
-            3: numpy
+  "         2: util.error, util.image;
+  "         3: numpy
   implementation.py: 0
   __init__.py: 1: types, observer, prepare
   install.py: 1: busy, fail

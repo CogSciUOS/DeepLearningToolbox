@@ -11,7 +11,6 @@ import sys
 import time
 import logging
 import collections
-import importlib
 
 # Qt imports
 from PyQt5.QtCore import (Qt, QTimer, QThread, QTimerEvent,
@@ -25,12 +24,14 @@ from PyQt5.QtWidgets import (QMenu, QAction, QMainWindow,
 # Toolbox imports
 from base import Runner
 from toolbox import Toolbox
+from dltb.util.importer import import_module
 from dltb.network import Network
 from dltb.datasource import Datasource
 from dltb.tool.train import Trainer
 
 # FIXME[old]: this should not be needed for the MainWindow
-import dltb.base.hardware as hardware  # needed for the status bar
+from dltb.util.hardware import HardwareInfo, ResourceInfo   # needed for the status bar
+hardware = ResourceInfo()
 
 # Toolbox GUI imports
 from .utils import QtAsyncRunner, QObserver, QBusyWidget, QDebug, protect
@@ -139,8 +140,15 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         becomes hidden. The resulting :py:class:`QTimerEvent` are handled
         by :py:meth:`timerEvent`.
     """
+
+    # PanelMeta: a named tuple describing a Panel.
+    #  - name: unique name identifying the panel
+    #  - label: a panel label presented to the user
+    #  - cls: the class name (including the relative module path to MainWindow)
+    #  - tooltip: a tooltip describing the panel
+    #  - addons: FIXME[todo]: additional resources required for this panel
     PanelMeta = collections.namedtuple('PanelMeta',
-                                       'id label cls tooltip addons')
+                                       'name label cls tooltip addons')
     _panelMetas = [
         PanelMeta('activations', 'Activations',
                   '.panels.activations.ActivationsPanel',
@@ -338,10 +346,10 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         if self._toolbox is None:
             return  # FIXME[todo]: erase all Datasources from the menu
 
-        def slot(id, datasource):
+        def slot(key, datasource):
             def setDatasource(checked):
                 LOG.info("qtgui.MainWindow.setDatasource(%s): %s [%s]",
-                         checked, id, type(datasource))
+                         checked, key, type(datasource))
                 # We first set the Datasource in the toolbox
                 # and then prepare it, in order to get a smooth
                 # reaction in the user interface.
@@ -363,7 +371,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
             if True:  # datasource == self._toolbox.datasource:
                 # FIXME[bug]: seems to have no effect
                 action.font().setBold(True)
-            action.triggered.connect(slot(id, datasource))
+            action.triggered.connect(slot(key, datasource))
             self._datasourceMenu.addAction(action)
             self._datasources[key] = action
 
@@ -383,17 +391,17 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         """An iterator of panel identifiers.
         """
         for panelMeta in self._panelMetas:
-            yield panelMeta.id
+            yield panelMeta.name
 
-    def panel(self, panel_id: str,
+    def panel(self, name: str,
               create: bool = False, show: bool = False) -> Panel:
         """Get the panel for a given panel identifier. Optionally
         create that panel if it does not yet exist.
 
         Arguments
         ---------
-        panel_id:
-            The panel identifier. This must be one of the identifiers
+        name:
+            The panel identifier. This must be one of the names
             from the _panelMetas list.
         create:
             A flag indicating if the panel should be created in case
@@ -410,17 +418,17 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
             The panel requested has not yet been created and no creation
             was requested.
         """
-        if not any(m.id == panel_id for m in self._panelMetas):
-            raise KeyError(f"There is no panel with id '{panel_id}' "
+        if not any(m.name == name for m in self._panelMetas):
+            raise KeyError(f"There is no panel with name '{name}' "
                            "in DeepVisMainWindow.")
 
         if QThread.currentThread() != self.thread():
             # method was called from different thread
             # emit signal to run in main thread
-            self.panel_signal.emit(panel_id, create, show)
+            self.panel_signal.emit(name, create, show)
             return
 
-        meta = self._panelMeta(panel_id)
+        meta = self._panelMeta(name)
         panel = None
         if create:
             index = 0
@@ -429,7 +437,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
                 if label == meta.label:
                     panel = self._tabs.widget(index)
                     break
-                if m.id == meta.id:
+                if m.name == meta.name:
                     self._newPanel(meta, index, m.label, show)
                     # FIXME[hack]: panel creation is asynchronous and
                     # hence does not really fit in this synchronous
@@ -440,7 +448,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
                     index += 1
                     label = self._tabs.tabText(index)
         else:
-            index = self._panelTabIndex(panel_id)
+            index = self._panelTabIndex(name)
             panel = self._tabs.widget(index)
         if show and panel is not None:
             self._tabs.setCurrentIndex(index)
@@ -540,13 +548,13 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         toolsMenu = menubar.addMenu('&Tools')
         toolsMenu.setTearOffEnabled(True)
 
-        def slot(id):
-            panel = lambda checked: self.panel(id, create=True, show=True)
+        def slot(name):
+            panel = lambda checked: self.panel(name, create=True, show=True)
             return protect(panel)
         for meta in self._panelMetas:
             action = QAction(meta.label, self)
             action.setStatusTip(meta.tooltip)
-            action.triggered.connect(slot(meta.id))
+            action.triggered.connect(slot(meta.name))
             toolsMenu.addAction(action)
 
     ###########################################################################
@@ -596,10 +604,10 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         # message += (f", {self._runner.active_workers}/"
         #             f"{self._runner.max_workers} threads")
         message += (", Memory: " +
-                    "Shared={:,} kiB, ".format(hardware.mem.shared) +
-                    "Unshared={:,} kiB, ".format(hardware.mem.unshared) +
-                    "Peak={:,} kiB".format(hardware.mem.peak))
-        if len(hardware.gpus) > 0:
+                    "Shared={:,} kiB, ".format(hardware.shared_memory) +
+                    "Unshared={:,} kiB, ".format(hardware.unshared_memory) +
+                    "Peak={:,} kiB".format(hardware.peak_memory))
+        if False:  # len(hardware.gpus) > 0:  FIXME[todo]
             message += (f", GPU: temperature={hardware.gpus[0].temperature}/"
                         f"{hardware.gpus[0].temperature_max}\u00b0C")
             message += (", memory={:,}/{:,}MiB".
@@ -763,43 +771,43 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
     #                               Panels                                    #
     ###########################################################################
 
-    def _panelMeta(self, panel_id: str) -> 'PanelMeta':
-        """Get the :py:class:`PanelMeta` for a given panel id.
+    def _panelMeta(self, name: str) -> 'PanelMeta':
+        """Get the :py:class:`PanelMeta` for a given panel name.
 
         Arguments
         ---------
-        panel_id: str
-            The panel identifier
+        name: str
+            The unique name identifying the panel.
 
         Raises
         ------
         KeyError:
-            The panel_id given is not a valid panel identifier.
+            The name given is not a valid panel identifier.
         """
         try:
-            return next(filter(lambda m: m.id == panel_id, self._panelMetas))
+            return next(filter(lambda m: m.name == name, self._panelMetas))
         except StopIteration:
             raise KeyError(f"'{self}' does not know a panel identified "
-                           f"by '{panel_id}'. Known panels are: " +
-                           ", ".join([f"'{m.id}'"
+                           f"by '{name}'. Known panels are: " +
+                           ", ".join([f"'{m.name}'"
                                       for m in self._panelMetas]))
 
-    def _panelTabIndex(self, panel_id: str) -> int:
+    def _panelTabIndex(self, name: str) -> int:
         """Get the index of a (created) panel in the panel tab widget.
         """
-        meta = self._panelMeta(panel_id)
+        meta = self._panelMeta(name)
         for index in range(self._tabs.count()):
             if self._tabs.tabText(index) == meta.label:
                 return index
-        raise ValueError(f"Panel with id '{panel_id}' "
+        raise ValueError(f"Panel with name '{name}' "
                          "has not been created yet.")
 
-    def _panelModuleAndClass(self, panel_id: str) -> Tuple[str, str]:
+    def _panelModuleAndClass(self, name: str) -> Tuple[str, str]:
         """Get module name and class name for the Panel with the given panel
         identifier.  These information will be obtained from the panel
         metadata register.
         """
-        meta = self._panelMeta(panel_id)
+        meta = self._panelMeta(name)
         module_name, class_name = meta.cls.rsplit('.', 1)
         if module_name[0] == '.':  # relative import
             module_name = __name__.rsplit('.', 1)[0] + module_name
@@ -823,29 +831,29 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         (3) Set observables of the panel.
 
         """
-        LOG.info("Inserting new Panel '%s' at index %d.", meta.id, index)
+        LOG.info("Inserting new Panel '%s' at index %d.", meta.name, index)
         dummy = QBusyWidget()
         self._tabs.insertTab(index, dummy, label)
         if show:
             self._tabs.setCurrentIndex(index)
 
-        LOG.debug("Running import %s for Panel '%s'.", meta.cls, meta.id)
-        self._runner.runTask(self._importPanel, meta.id)
+        LOG.debug("Running import %s for Panel '%s'.", meta.cls, meta.name)
+        self._runner.runTask(self._importPanel, meta.name)
 
-    def _importPanel(self, panel_id: str) -> None:
-        module_name, class_name = self._panelModuleAndClass(panel_id)
+    def _importPanel(self, name: str) -> None:
+        module_name, class_name = self._panelModuleAndClass(name)
         LOG.debug("Importing module '%s' for panel '%s'.",
-                  module_name, panel_id)
-        module = importlib.import_module(module_name)
-        LOG.debug("Signaling sucessful imports for panel '%s'.", panel_id)
-        self._panel_import_signal.emit(panel_id)
+                  module_name, name)
+        module = import_module(module_name)
+        LOG.debug("Signaling sucessful imports for panel '%s'.", name)
+        self._panel_import_signal.emit(name)
 
     @pyqtSlot(str)
     @protect
-    def _onPanelImported(self, panel_id: str):
-        module_name, class_name = self._panelModuleAndClass(panel_id)
+    def _onPanelImported(self, name: str):
+        module_name, class_name = self._panelModuleAndClass(name)
         LOG.debug("Instantiating class %s from module %s for panel '%s'",
-                  class_name, module_name, panel_id)
+                  class_name, module_name, name)
         module = sys.modules[module_name]
         cls = getattr(module, class_name)
         if hasattr(type(self), '_new' + class_name):
@@ -857,9 +865,9 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
 
         # replace the dummy content by the actual pane
         LOG.debug("Setting new instance of %s as content for panel '%s'.",
-                  class_name, panel_id)
-        index = self._panelTabIndex(panel_id)
-        meta = self._panelMeta(panel_id)
+                  class_name, name)
+        index = self._panelTabIndex(name)
+        meta = self._panelMeta(name)
         dummy = self._tabs.widget(index)
         # self._tabs.replaceWidget(dummy, panel)
         currentIndex = self._tabs.currentIndex()
@@ -868,7 +876,7 @@ class DeepVisMainWindow(QMainWindow, QObserver, QDebug, qobservables={
         self._tabs.setCurrentIndex(currentIndex)
         dummy.deleteLater()
         LOG.debug("Creation of panel '%s' (index=%d) finished.",
-                  panel_id, index)
+                  name, index)
 
     def _newAutoencoderPanel(self, AutoencoderPanel: type) -> Panel:
         #autoencoder = self._toolbox.autoencoder_controller

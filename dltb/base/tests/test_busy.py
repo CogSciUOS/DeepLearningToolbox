@@ -40,7 +40,7 @@ class Mockup(BusyObject):
         self.result = result
 
 
-class TestRun(unittest.TestCase):
+class TestBusy(unittest.TestCase):
     """Tests for the :py:class:`BusyObject` class.
     """
 

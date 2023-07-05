@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Any, Union, Iterable
+from typing import Any, Union, Iterable, Optional
 from collections.abc import Sized
 
 # third party imports
@@ -28,17 +28,48 @@ class Data(Observable, method='data_changed', changes={'data_changed'}):
     a :py:class:`Datasource`.
     """
 
-    def __new__(cls, *args, **kwargs) -> 'Data':
+    def __new__(cls, **kwargs) -> 'Data':
         new_cls = DataDict if cls is Data else cls
         # error: Argument 2 for "super" not an instance of argument 1
         # probably a bug in mypy? https://github.com/python/mypy/issues/7595
         # type: ignore[misc]
         __new__ = super(Data, new_cls).__new__
         return (__new__(new_cls) if __new__ is object.__new__ else
-                __new__(new_cls, *args, **kwargs))
+                __new__(new_cls, **kwargs))
 
     # def __getattr__(self, attr) -> Any:
     # def __setattr__(self, attribute: str, value: Any) -> None:
+
+    @classmethod
+    def as_array(cls, data: Datalike, copy: Optional[bool] = False,
+                 dtype: Optional[type] = None) -> np.ndarray:
+        """Get a data-like object as nump array.
+
+        Arguments
+        ---------
+        data: Datalike
+            A data-like object to turn into an array.
+        copy: bool
+            A flag indicating if the data should be copied or
+            if the original data is to be returned (if possible).
+        dtype:
+            Numpy datatype, e.g., numpy.float32.
+        """
+        if isinstance(data, Data):
+            array = data.array
+        elif isinstance(data, np.ndarray):
+            array = data
+        else:
+            raise TypeError(f"Cannot convert {type(data)} to array.")
+
+        if dtype is not None and dtype != array.dtype:
+            array = array.astype(dtype)
+            copy = False
+
+        if copy:
+            array = array.copy()
+
+        return data
 
 
 class DataDict(Data):
@@ -123,6 +154,8 @@ class DataDict(Data):
             self.add_attribute('datasource', datasource)
         self.add_attribute('array', value=array, batch=True)
         self.add_attribute('type')
+        if array is not None:
+            self.add_attribute('shape', array.shape)
 
     def __bool__(self) -> bool:
         """Check if data has been assigned to this :py:class:`Data`

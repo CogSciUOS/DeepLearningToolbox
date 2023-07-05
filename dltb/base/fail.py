@@ -14,10 +14,10 @@ import logging
 # toolbox imports
 from .observer import Observable
 from ..util.error import handle_exception
-from ..util.debug import debug_object as object
+# from ..util.debug import debug_object as object
 
 
-class Failable(object):
+class Failable:
     """A base class for objects that are :py:class:`Failable`. Those are
     classes which can invoke methods that may fail.  The
     :py:class:`Failable` provides a mechanism to set instances of such
@@ -93,7 +93,7 @@ class Failable(object):
         """
         try:
             yield None
-        except Exception as exception:
+        except Exception as exception:  # pylint: disable=broad-except
             self.failure(exception)
             if logger:
                 logger.error((message or 'failure') + ': ' + str(exception))

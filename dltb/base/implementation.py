@@ -7,6 +7,9 @@ base class.
 # * adress class hierarchies: if an Implementable class has an
 #   Implementable subclass, than all implementations of that subclass
 #   will also be implementations of the superclass
+#   - an `Implementable` may not be registered as an implementation
+#     of an base `Implementable`, it should be registered as a
+#     subclass
 # * add a module mechanism: it should be possible to specify under
 #   which conditions modules can/should be used (for example third-party
 #   and other dependencies): for example, if required thirdparty modules
@@ -14,6 +17,17 @@ base class.
 #   other modules. And if required thirdparty dependencies are not installed,
 #   then there is no point in trying to import it.  One may even provide
 #   an option for specifying preferences.
+# * Some more "syntactic sugar". Allow to register implementations
+#   as arguments to the constructor:
+#
+#     Implementatable.register_implementation(Implementable, Implementationlike)
+#     -> Implementatable(Implementable, implementation=Implementationlike)
+#
+#     BaseClass.add_implementation(Implementationlike)
+#     -> BaseClass(implementation=Implementationlike)
+#
+#     BaseClass(implementation=Implementationlike)
+#     -> BaseClass(Implementationlike)
 #
 # Furthermore, there seems to be some conceptual overlap with
 # metaclass=RegisterClass, which also allows to register subclasses.
@@ -23,12 +37,15 @@ base class.
 
 # standard imports
 from types import ModuleType
-from typing import Iterable, Union, Sequence, List, Dict, Tuple, Type, Optional
+from typing import Iterable, Union, Optional
+from typing import Sequence, List, Dict, Tuple, Type
 import os
 import sys
 import logging
-import importlib
-import itertools
+
+# toolbox imports
+from ..util.importer import import_module
+
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -41,8 +58,8 @@ Moduleslike = Union[Modulelike, Sequence[Modulelike]]
 
 class Implementable:
     """A base class that can be implemented.  Implementations can be
-    registered and automagically loaded and initialized calling
-    Constructor of the :py:class:`Implementable` base class.
+    registered and automagically loaded and initialized calling the
+    constructor of the :py:class:`Implementable` base class.
 
     An :py:class:`Implementable` keeps track of available
     implementations (subclasses), either classes already loaded, or
@@ -66,10 +83,16 @@ class Implementable:
 
     .. code-block:: python
 
+       # Instantiate an instance of one of the registered
+       # implementations.
        my_object1 = BaseClass()
 
+       # Instantiate the retgisterd implementation from
+       # module 'other'.
        my_other_object = BaseClass(module='other')
 
+       # Instantiate the (potentially unregistered) implemntation
+       # 'thirdparty.TheirClass'
        my_thirdparty_object = BaseClass(implementation='thirdparty.TheirClass')
 
     The first call will instantiate `BaseClass` using one of the registered
@@ -99,11 +122,22 @@ class Implementable:
     postponed until the class is actually used.
     """
 
-    _implementation_register: Dict[str, Tuple[List, List]] = {}
+    # _implementation_register: the global implementation register,
+    # mapping (fully qualified) class names to register entries.
+    # Each register entry is a triple:
+    # 1. list: already imported implementations (type)
+    # 2. list: names of implementations not yet loaded (string)
+    # 3. set: set of Implementable subclasses
+    _implementation_register: Dict[str, Tuple[List, List, List]] = {}
+
+    # a global mapping from module aliases to fully qualified module names
     _module_aliases: Dict[str, str] = {}
 
+    # per class registers: each class declared as `Implementable` will
+    # have own instances of the three lists described above.
     _implementations: List[Implementation]
     _implementation_candidates: List[str]
+    _implementable_subclasses: List[str]
 
     @staticmethod
     def register_implementation(implementable: Implementationlike,
@@ -121,15 +155,18 @@ class Implementable:
         """
         # obtain the implementation and candidate registers for the
         # implementable
-        implementations, candidates = \
+        implementations, candidates, _subclasses = \
             Implementable._get_implementation_registers(implementable)
 
-        # register the implementation by updating the registers
+        # if implementation is given as a name, check if it is
+        # already loaded
         if isinstance(implementation, str):
             module_name, cls_name = implementation.rsplit('.', maxsplit=1)
             if module_name in sys.modules:
                 implementation = getattr(sys.modules[module_name], cls_name)
 
+        # if dealing with an already loaded implementation, add it to
+        # the 'implementations' list (and remove it from the candidates).
         if isinstance(implementation, type):
             if implementation not in implementations:
                 implementations.append(implementation)
@@ -144,11 +181,27 @@ class Implementable:
                 candidates.append(implementation)
 
     @staticmethod
-    def _get_implementation_registers(implementable: Implementationlike) \
-            -> Tuple[List[Implementation], List[str]]:
+    def _get_implementation_registers(implementable: Implementationlike) -> \
+            Tuple[List[Implementation], List[str], List[Implementationlike]]:
         """Obtain implementation and candidate registers for a given
         :py:class:`Implementable`.  If not registered yet, a new empty
         register is created.
+
+        Arguments
+        ---------
+        implementable:
+            The `Implementable` or its fully qualified name.
+
+        Results
+        -------
+        implementations:
+            Already loaded implementations.
+        candidates:
+            Fully qualified names if implementation candidates
+            (not loaded yet).
+        subclasses:
+            Implementable subclasses of `implementable` (which may
+            provide further implementations).
         """
         if isinstance(implementable, str):
             module_name, cls_name = implementable.rsplit('.', maxsplit=1)
@@ -157,20 +210,48 @@ class Implementable:
             except (KeyError, AttributeError):
                 # the module may not be loaded yet or it may only be
                 # partially initialized, not providing the class object.
-                pass
+                pass  # continue using the names
 
         if isinstance(implementable, str):
             cls_full_name = implementable
         else:
-            if not implementable.is_implementable():
-                raise TypeError("Implementations can only by added "
-                                "to Implementable classes.")
+            # here we have a specific class ...
             cls_full_name = Implementable._fully_qualified_name(implementable)
+            # check that it is indeed implementable
+            if not issubclass(implementable, Implementable):
+                raise TypeError("No implementation register for "
+                                f"non-Implementable type {cls_full_name}.")
+            if not implementable.is_implementable():
+                raise TypeError("No implementation register for class "
+                                f"'{cls_full_name}' as it claims "
+                                "not to be implementable.")
 
         # Obtain implementations from the global implementation register
         if cls_full_name not in Implementable._implementation_register:
-            Implementable._implementation_register[cls_full_name] = ([], [])
+            Implementable._implementation_register[cls_full_name] = \
+                ([], [], [])
         return Implementable._implementation_register[cls_full_name]
+
+    @staticmethod
+    def register_subclass(implementable: Implementationlike,
+                          subclass: Implementationlike) -> None:
+        """Add an `Implementable` subclass to this
+        :py:class:`Implementable` class.
+
+        Arguments
+        ---------
+        subclass:
+            The subclass to be added to the list of implementable
+            subclasses.
+        """
+        if not isinstance(implementable, str):
+            implementable = Implementable._fully_qualified_name(implementable)
+        if not isinstance(subclass, str):
+            subclass = Implementable._fully_qualified_name(subclass)
+        subclasses = \
+            Implementable._get_implementation_registers(implementable)[2]
+        if subclass not in subclasses:
+            subclasses.append(subclass)
 
     @staticmethod
     def register_module_alias(module: Modulelike, alias: str) -> None:
@@ -190,21 +271,68 @@ class Implementable:
     @staticmethod
     def registered_implementables() -> Iterable[str]:
         """Iterate the fully qualified names for registered
-        :py:class:`Implementable`s.
+        :py:class:`Implementable`\\s.
         """
         return Implementable._implementation_register.keys()
 
     @staticmethod
-    def registered_implementations(implementable: Implementationlike) \
-            -> Iterable[Implementationlike]:
+    def registered_implementations(implementable: Implementationlike,
+                                   loaded: bool = None, as_str: bool = False) \
+                                   -> Iterable[Implementationlike]:
         """Iterate the implementations of and implementation candidates
         for a given :py:class:`Implementable`.
+
+        Arguments
+        ---------
+        loaded:
+            Indicates if only loaded implementation (``True``) or only
+            implementation candidates that have not been loaded yet (``False``)
+            should be iterated.  If ``None``, itaration runs over both
+            variants.
+        as_str:
+            Usually loaded implementations will be reported as classes,
+            while unloaded implementations as fully qualified class names.
+            If ``True``, all implementations will be reported by their
+            fully qualified name, independed of their load state.
+
         """
         cls_full_name = (implementable if isinstance(implementable, str) else
                          Implementable._fully_qualified_name(implementable))
-        implementations, candidates = \
+        implementations, candidates, subclasses = \
             Implementable._implementation_register[cls_full_name]
-        return itertools.chain(implementations, candidates)
+        if loaded is not False:
+            for implementation in implementations:
+                yield (Implementable._fully_qualified_name(implementation)
+                       if as_str else implementation)
+        if loaded is not True:
+            for candidate in candidates:
+                yield candidate
+        for subclass in subclasses:
+            for impl in Implementable.\
+                    registered_implementations(subclass, loaded=loaded,
+                                               as_str=as_str):
+                yield impl
+
+    @staticmethod
+    def registered_subclasses(implementable: Implementationlike) \
+            -> Iterable[str]:
+        """Iterate the fully qualified names for registered
+        :py:class:`Implementable`\\s.
+
+        Remark: in case of multiple inheritance (non-tree like inheritance
+        structures), some subclasses may occur multipled times in the
+        iteration (may be changed in future versions).
+        """
+        cls_full_name = (implementable if isinstance(implementable, str) else
+                         Implementable._fully_qualified_name(implementable))
+        subclasses = Implementable._implementation_register[cls_full_name][2]
+
+        for subclass in subclasses:
+            yield (subclass if isinstance(subclass, str) else
+                   Implementable._fully_qualified_name(subclass))
+            # recursive invocation for that subclass
+            for impl in Implementable.registered_subclasses(subclass):
+                yield impl
 
     @classmethod
     def add_implementation(cls, implementation: Implementationlike) -> None:
@@ -217,6 +345,19 @@ class Implementable:
             class implementing `cls`.
         """
         Implementable.register_implementation(cls, implementation)
+
+    @classmethod
+    def add_subclass(cls, subclass: Implementationlike) -> None:
+        """Add an `Implementable subclass to this
+        :py:class:`Implementable` class.
+
+        Arguments
+        ---------
+        subclass:
+            The subclass to be added to the list of implementable
+            subclasses.
+        """
+        Implementable.register_subclass(cls, subclass)
 
     @classmethod
     def implementations(cls, loaded: bool = None,
@@ -236,23 +377,17 @@ class Implementable:
             If `True`, all implementations will be reported by their
             fully qualified name, independed of their load state.
         """
-        if loaded is not False:
-            for implementation in cls._implementations:
-                if implementation.is_implementable():
-                    for impl in implementation.implementations(loaded=loaded,
-                                                               as_str=as_str):
-                        yield impl
-                else:
-                    yield (Implementable._fully_qualified_name(implementation)
-                           if as_str else implementation)
-        if loaded is not True:
-            for candidate in cls._implementation_candidates:
-                yield candidate
+        return cls.registered_implementations(cls, loaded=loaded,
+                                              as_str=as_str)
 
     @classmethod
     def is_implementable(cls) -> bool:
         """Check if this class is implementable, meaning it is
         possible to register implementations for this class.
+
+        Currently a class is considered to be implementable if it
+        explicitly lists :py:class:`Implementable` as one of its
+        subclasses.
         """
         return Implementable in cls.__bases__
 
@@ -261,6 +396,9 @@ class Implementable:
         """Check if this class is can serve as an implementation of an
         :py:class:`Implementable` class.
         """
+        # A class `cls` is considered an implementation (of some
+        # Implementable), if it is a subclass of that class and does
+        # not declare to be :py:class:`Implementable`. itself.
         return cls is not Implementable and Implementable not in cls.__bases__
 
     @classmethod
@@ -269,16 +407,22 @@ class Implementable:
         """
         inv_modules = \
             {mod: alias for alias, mod in cls._module_aliases.items()}
-        info = f"Implementation information for {cls.__name__}." + os.linesep
+        info = "Implementation information for " \
+            f"{cls._fully_qualified_name(cls)}." + os.linesep
+        info += "Subclasses:" + os.linesep
+        for idx, impl in enumerate(cls.registered_subclasses(cls)):
+            info += f"{idx+1}) {impl} (loaded={not isinstance(impl, str)})" + \
+            os.linesep
         info += "Loaded implementations:" + os.linesep
+        print(cls, type(cls.implementations))
         for idx, impl in enumerate(cls.implementations(loaded=True,
                                                        as_str=True)):
-            info += f"{idx}) {impl}" + os.linesep
+            info += f"{idx+1}) {impl}" + os.linesep
         info += "Implementations not loaded yet:" + os.linesep
         for idx, impl in enumerate(cls.implementations(loaded=False,
                                                        as_str=True)):
             module_name = impl.rsplit('.', maxsplit=1)[0]
-            info += f"{idx}) {impl}"
+            info += f"{idx+1}) {impl}"
             if module_name in inv_modules:
                 info += f" (module='{inv_modules[module_name]}')"
             info += os.linesep
@@ -295,15 +439,21 @@ class Implementable:
         # registered with Implementable.
         if cls.is_implementable():
             cls_full_name = Implementable._fully_qualified_name(cls)
-            cls._implementations, cls._implementation_candidates = \
+            cls._implementations, cls._implementation_candidates, \
+                    cls._implementable_subclasses = \
                 Implementable._get_implementation_registers(cls_full_name)
+            for super_cls in (_ for _ in cls.__mro__[1:]
+                              if Implementable in _.__bases__):
+                super_cls.add_subclass(cls)
+                break
 
         # For classes that can serve as implementations: add this new class
-        # as implementation to all implementable superclasses.
+        # as implementation to the next implementable superclasses.
         if cls.is_implementation():
             for super_cls in (_ for _ in cls.__mro__
                               if Implementable in _.__bases__):
                 super_cls.add_implementation(cls)
+                break
 
     def __new__(cls, implementation: Optional[Implementationlike] = None,
                 module: Optional[Moduleslike] = None,
@@ -323,8 +473,16 @@ class Implementable:
             return (__new__(new_cls) if __new__ is object.__new__ else
                     __new__(new_cls, **kwargs))
         except TypeError:
-            LOG.error("Error instatiating %s as %s", new_cls, cls)
-            raise
+            LOG.error("Error instatiating %s as %s", cls, new_cls)
+            if cls is new_cls:
+                raise
+            try:
+                return (new_cls.__new__(new_cls)
+                        if new_cls.__new__ is object.__new__ else
+                        new_cls.__new__(new_cls, **kwargs))
+            except TypeError:
+                LOG.error("2nd error instatiating %s as %s", cls, new_cls)
+                raise
 
     def __init__(self, implementation: Optional[Implementationlike] = None,
                  module: Optional[Moduleslike] = None, **kwargs) -> None:
@@ -393,7 +551,7 @@ class Implementable:
                 raise ImportError("Module name mismatch for implementation "
                                   f"{implementation} of {cls}: is {module}"
                                   " but should be {module_name}.")
-            module = importlib.import_module(module)
+            module = import_module(module)
         elif (isinstance(module, ModuleType) and
               module_name is not None and module_name != module.__name__):
             raise ImportError("Inconsistent module provided for "
@@ -539,3 +697,10 @@ class Implementable:
         # return name in module_names
         # allow for submodules:
         return any(name.startswith(n) for n in module_names)
+
+    @classmethod
+    def list_implementations(cls) -> None:
+        """Output a list of the registered implementations.
+        """
+        for idx, impl in enumerate(cls.implementations(as_str=True), start=1):
+            print(f"{idx:2}) {impl}")

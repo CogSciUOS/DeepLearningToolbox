@@ -187,6 +187,15 @@ class ProcessRunner(Runner):
     pass
 
 class ProcessObservable: # (Observable):
+    # FIXME[question]: what is this class supposed to do. Some
+    # documentation would be good
+    """
+
+    Arguments
+    ---------
+    name:
+        The name of the detector class to use.
+    """
 
     def __init__(name: str, prepare: bool=True):
         self._name = name
@@ -205,7 +214,9 @@ class ProcessObservable: # (Observable):
 
     def _process_loop(self, detector=None):
         if detector is None:
-            self._detector = Detector.create(self._name, self._prepare)
+            self._detector = Detector(self._name)
+            if self._prepare:
+                self._detector.prepare()
         while True:
             self._task.wait()
             method, args, kwargs = self._queue.get()

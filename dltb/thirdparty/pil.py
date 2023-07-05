@@ -22,6 +22,7 @@ This module adds some hooks to work with pillow images:
 # * add hook for dltb.base.image.Image.as_data()
 
 # standard imports
+from typing import Optional
 import logging
 
 # third party imports
@@ -37,7 +38,7 @@ from ..datasource import Imagesource
 LOG = logging.getLogger(__name__)
 
 
-def as_pil(image: Imagelike, copy: bool = False) -> PIL.Image.Image:
+def as_pil(image: Imagelike, copy: Optional[bool] = False) -> PIL.Image.Image:
     # pylint: disable=unused-argument
     """Get a :py:class:`PIL.Image.Image` from a given
     """
@@ -74,9 +75,7 @@ Image.as_pil = staticmethod(as_pil)
 
 Imagesource.add_loader('pil', PIL.Image.open)
 
-Image.add_converter(PIL.Image.Image,
-                    lambda image, copy: (np.array(image), copy),
-                    target='array')
-Image.add_converter(np.ndarray,
-                    lambda image, copy: (as_pil(image, copy), copy),
-                    target='pil')
+Image.add_type(PIL.Image.Image, 'pil')
+Image.add_converter(lambda image, copy: np.array(image),
+                    PIL.Image.Image, target='array')
+Image.add_converter(as_pil, np.ndarray, target='pil')

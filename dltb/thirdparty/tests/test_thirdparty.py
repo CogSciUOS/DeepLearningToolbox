@@ -1,21 +1,19 @@
+"""Testsuite for the :py:mod:`dltb.thirdparty` module.
+"""
+
+# standard imports
 from unittest import TestCase
 
-from .. import available, import_class
+# toolbox imports
+from dltb import thirdparty
 
 
-class TestOpencv(TestCase):
+class TestThirdparty(TestCase):
+    """Testsuite for the :py:mod:`dltb.thirdparty` module.
+    """
 
-    def setUp(self):
-        self._have_imageio = available('imageio')
-        self._have_opencv = available('opencv')
-        self._have_tensorflow = available('tensorflow')
-        self._have_matplotlib = available('matplotlib')
-
-    def test_available_imageio(self):
-        have_imageio = available('imageio')
-        self.assertTrue(have_imageio)
-
-    def test_import_imageio(self):
-        # cls = import_class('ImageIO', 'opencv')
-        cls = import_class('ImageReader', 'opencv')
-        self.assertIsInstance(cls, type)
+    def test_names(self) -> None:
+        """Test if global names are set correctly.
+        """
+        self.assertEqual(thirdparty.DLTB, 'dltb')
+        self.assertEqual(thirdparty.THIRDPARTY, 'dltb.thirdparty')

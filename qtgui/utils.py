@@ -1,5 +1,5 @@
 # standard imports
-from typing import Callable, Iterable, Dict
+from typing import Callable, Iterable, Dict, Optional
 import os
 import logging
 
@@ -9,6 +9,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot, QMetaObject, Q_ARG
 from PyQt5.QtGui import QKeyEvent, QMouseEvent, QHideEvent, QShowEvent
 from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QApplication
+import sip
 
 # toolbox imports
 from dltb.base.observer import Observable
@@ -211,19 +212,19 @@ class QAttribute:
         name: str
             The name for the attribute.
         """
-        attribute_name, getter_name = \
+        attributeName, getterName = \
             cls._qAttributeNameFor(name, 'attribute', 'getter')
         LOG.debug("QAttribute: creating new attribute to %s.%s",
-                  cls, attribute_name)
+                  cls, attributeName)
 
         # add the attribue to the class with default value None.
-        setattr(cls, attribute_name, None)
+        setattr(cls, attributeName, None)
 
         # create a new getter and add it to the class.
-        getter = lambda self: getattr(self, attribute_name, None)
+        getter = lambda self: getattr(self, attributeName, None)
         LOG.debug("QAttribute: creating new getter to  %s.%s",
-                  cls, getter_name)
-        setattr(cls, getter_name, getter)
+                  cls, getterName)
+        setattr(cls, getterName, getter)
 
     @classmethod
     def _qAttributeSetter(cls, name):
@@ -258,16 +259,17 @@ class QAttribute:
         """
         name = cls.__name__
         LOG.debug("QAttribute: Using attribute name '%s' for class '%s'",
-                  name, cls.__name__)
+                  name, cls)
         return QAttribute._qAttributeNameFor(name, *args)
 
     @staticmethod
     def _qAttributeNameFor(name: str, *args) -> Iterable[str]:
         if not args:
             return name
-        return iter('_' + name[0].lower() + name[1:]
+        lower = name[0].lower() + name[1:]
+        return iter('_' + lower
                     if what == 'attribute' else
-                    name.lower() if what == 'getter' else
+                    lower if what == 'getter' else
                     'set' + name if what == 'setter' else
                     '_qAttribute' + name if what == 'propagation' else
                     '_qAttributeSet' + name if what == 'orig_setter' else
@@ -301,8 +303,8 @@ class QAttribute:
             if full == cls._qattributes[attributeClass]:
                 return  # nothing to do
 
-        LOG.debug("%s: Adding %s for %s.",
-                  cls, 'getter and setter' if full else 'setter', name)
+        LOG.info("%s: Adding %s for %s.",
+                 cls, 'getter and setter' if full else 'setter', name)
         if attributeClass not in cls._qattributes:
             cls._qAttributeSetter(name)
         if full:
@@ -848,9 +850,15 @@ class QObserver(QAttribute):
             change = self._change
             kwargs = self._kwargs
             if change is not None:
+                self._change = None
+                self._kwargs = {}
                 try:
-                    self._change = None
-                    self._kwargs = {}
+                    # make sure the wrapped C++ object has not
+                    # been deleted in the meantime
+                    self._observer.parent()
+                except RuntimeError:
+                    return
+                try:
                     self._notify(observable, change, **kwargs)
                 except Exception as ex:
                     handle_exception(ex)
@@ -991,6 +999,7 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
 
     """
     # FIXME[todo]: This could be made a 'QPreaparableObserver'
+    _unpreparable: bool = True
 
     def __init__(self, text: str = 'Prepare', **kwargs) -> None:
         """Initialize the :py:class:`QPrepareButton`.
@@ -1002,6 +1011,7 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
         """
         super().__init__(text, **kwargs)
         self.setCheckable(True)
+        self._text = text
 
         # We only want to react to button activation by user, not to
         # change of state via click() slot activation, or because
@@ -1015,11 +1025,15 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
         if info.state_changed:
             self.updateState()
 
-    def setPreparable(self, preparable: Preparable) -> None:
+    def setPreparable(self, preparable: Optional[Preparable]) -> None:
         # FIXME[hack/todo]: setting the preparable should actually
         # sent notification
         self.updateState()
 
+    def setUnpreparable(self, unpreparable: bool = True) -> None:
+        self._unpreparable = unpreparable
+        self.updateState()
+        
     @protect
     def onClicked(self, checked: bool) -> None:
         """React to a button activation by the user. This will
@@ -1044,15 +1058,18 @@ class QPrepareButton(QPushButton, QObserver, QDebug, qobservables={
         enabled = (isinstance(self._preparable, Preparable) and
                    self._preparable.preparable and
                    not self._preparable.busy)
+        checked = enabled and self._preparable.prepared
+        if checked and not self._unpreparable:
+            enabled = False
         if isinstance(self._preparable, Preparable) and self._preparable.busy:
             if self._preparable.prepared:
-                self.setText("Upreparing")
+                self.setText("Unpreparing")
             else:
                 self.setText("Preparing")
         else:
-            self.setText("Prepare")
+            self.setText(self._text)
         self.setEnabled(enabled)
-        self.setChecked(enabled and self._preparable.prepared)
+        self.setChecked(checked)
 
     def debug(self) -> None:
         if isinstance(self, QDebug):

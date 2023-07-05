@@ -4,6 +4,15 @@ The module provides the different TensorFlow version (if available) as:
 * `tensorflow_v1`
 * `tensorflow_v2`
 
+This module can either be imported directly, or it will be automatically
+imported as a `tensorflow` postimport hook (assuming that
+:py:mod:`dltb.thirdparty.tensorflow_register` has been imported).
+
+The goal of this module is to adapt TensorFlow to the desired behavior:
+* Switch on the TensorFlow 1.x compatibility mode if desired.
+* Introduce compatibility functions, like layers and initializers
+
+
 Intended Usage
 --------------
 
@@ -67,9 +76,25 @@ import os
 import sys
 import logging
 import importlib
+from warnings import simplefilter
+
+# thirdparty imports
+from packaging import version
+import tensorflow
+from tensorflow.version import VERSION
+# For Tensorflow 1.14+ the following should work
+try:
+    from tensorflow.python.util import module_wrapper as deprecation
+except ImportError:
+    from tensorflow.python.util import deprecation_wrapper as deprecation
+
+from tensorflow.python.client import device_lib
 
 # toolbox imports
-from dltb.base.implementation import Implementable
+from dltb.config import config
+from dltb.base.package import Package
+from dltb.util.importer import import_module
+
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -81,11 +106,6 @@ TF_LOGGER = logging.getLogger('tensorflow')
 #LOG.addHandler(handler)
 
 LOG.info("init: Importing Deep Learning Toolbox 'tensorflow' module.")
-
-if 'tensorflow' in sys.modules:
-    LOG.warning("Tensorflow has been imported before "
-                "`dltb.thirdparty.tensorflow'. "
-                "Import hooks will have no effect.")
 
 #
 # tensorflow_version
@@ -131,9 +151,69 @@ def tensorflow_version_available(version: str) -> bool:
                          '/_api/' + version)
 
 
+tensorflow_version = get_tensorflow_version()
+LOG.info("postimport: have imported TensorFlow %s (desired: %s)",
+         VERSION, tensorflow_version)
+
+
 #
-# tensorflow_verbosity
+# Import version specific file
 #
+if tensorflow_version is None:
+    tensorflow_version = \
+        'v1' if version.parse(VERSION) < version.parse("2.0.0") else 'v2'
+
+if tensorflow_version is not None:
+    LOG.info("postimport: importing %s.%s", __package__, tensorflow_version)
+    utils = import_module('.' + tensorflow_version, __package__)
+    # Utils = utils.Utils
+
+
+#
+# setting variables v1, v2, tf_contrib
+#
+
+tf_contrib = getattr(tensorflow, 'contrib', None)
+
+if hasattr(tensorflow, 'compat'):
+    v1 = getattr(tensorflow.compat, 'v1', None)
+    v2 = getattr(tensorflow.compat, 'v2', None)
+    if tf_contrib is not None and not hasattr(v1, 'contrib'):
+        v1.contrib = tf_contrib
+else:
+    v1 = tensorflow
+    v2 = None  # pylint: disable=invalid-name
+
+
+# Compatibility problems
+# ======================
+#
+# Numpy
+# -----
+#
+# Some Tensorflow versions have problems with newer versions of numpy:
+#  \tensorflow\python\framework\dtypes.py:516: FutureWarning:
+#      Passing (type, 1) or '1type' as a synonym of type is deprecated;
+#      in a future version of numpy, it will be understood as
+#      (type, (1,)) / '(1,)type'.
+# The options are to either upgrade TensorFlow or downgrade Numpy:
+# - TensorFlow 1.10.0 and Numpy ?
+#    -> upgrade TensorFlow to 1.10.1
+#   => tensorflow 1.10.0 has requirement numpy<=1.14.5,>=1.13.3
+# - TensorFlow 1.14.0 and Numpy 1.19.2
+#    -> downgrade Numpy to 1.16.4
+
+
+#
+# tensorflow verbosity: try to silence TensorFlow a bit
+#
+
+deprecation._PER_MODULE_WARNING_LIMIT = 0
+deprecation._PRINT_DEPRECATION_WARNINGS = False
+
+# reduce the number of warnings (does not only affect TensorFlow)
+simplefilter(action='ignore', category=FutureWarning)
+
 
 def set_tensorflow_verbosity() -> None:
     """Set desired verbosity of the TensorFlow API.
@@ -152,60 +232,51 @@ def set_tensorflow_verbosity() -> None:
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARNING)
 
 
-
 #
-# tensorflow_devices
+# TensorBoard
 #
 
-def set_tensorflow_devices(gpu: bool = True) -> None:
-    """Set desired TensorFlow devices.
+# older TensorBoard versions (e.g. tensorboard 2.4.0) cause numpy
+# deprecation warnings when used with numpy >= 1.20 (as tensorboard uses
+# the old np.object/np.bool instead of the builtin object/bool types).
+
+
+
+class TensorflowPackage(Package):
+    """An extended :py:class:`Package` for providing specific TensorFlow
+    information.
+
     """
-    if 'tensorflow' in sys.modules:
-        LOG.warning("Module 'tensorflow' is already loaded. "
-                    "Setting devices may have no effect.")
 
-    if not gpu:
-        # Different options to select the device:
-        #
-        #  * Using CUDA_VISIBLE_DEVICES environment variable.
-        #  * with tf.device(...):  # '/gpu:2'
-        #  * config = tf.ConfigProto(device_count = {'GPU': 1})
-        #    sess = tf.Session(config=config).
-        #
-        # TensorFlow 2.x:
-        #   physical_devices = tf.config.list_physical_devices('GPU')
-        #   
-        #   # tf.config.set_visible_devices(devices, device_type=None)
-        #   #  device_type: 'GPU' or 'CPU'
-        #   tf.config.set_visible_devices(physical_devices[1:], 'GPU')
-        #
-        #   logical_devices = tf.config.list_logical_devices('GPU')
-        #
-        #
-        # inspect available GPU memory:
-        #  nvidia-smi --query-gpu=memory.free --format=csv
-        #
-        #
-        # GPU/CUDA info
-        # -------------
-        #
-        # import tensorflow as tf
-        # if tf.test.gpu_device_name():
-        #    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-        # else:
-        #    print("Please install GPU version of TF")
-        # print(tf.list_devices())
-        # print(tf.test.is_built_with_cuda())
+    def __init__(self, **kwargs) -> None:
+        super().__init__(key='tensorflow', **kwargs)
 
+    def initialize_info(self) -> None:
+        """Register torch specific information.
+        """
+        super().initialize_info()
 
-        # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'  # first two GPUs
-        os.environ['CUDA_VISIBLE_DEVICES'] = ''  # do not use GPU
-        # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        #  There is an undocumented method called
+        #  device_lib.list_local_devices() that enables you to list
+        #  the devices available in the local process (As an
+        #  undocumented method, this is subject to backwards
+        #  incompatible changes.)
+        for idx, dev in enumerate(device_lib.list_local_devices()):
+            self.add_info(f'device{idx}',
+                          f"Device: {dev.name} ({dev.device_type})",
+                          title=f"Tensorflow device {idx}")
 
-        # TF_FORCE_GPU_ALLOW_GROWTH:
-        # os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+        # Note that (at least up to TensorFlow 1.4), calling
+        # device_lib.list_local_devices() will run some initialization
+        # code that, by default, will allocate all of the GPU memory
+        # on all of the devices (GitHub issue). To avoid this, first
+        # create a session with an explicitly small
+        # per_process_gpu_fraction, or allow_growth=True, to prevent
+        # all of the memory being allocated. See this question for
+        # more details
 
-Implementable.register_module_alias(__name__, 'tensorflow')
-Implementable.register_module_alias(__name__, 'tf')
-Implementable.register_implementation('dltb.tool.autoencoder.Autoencoder',
-                                      __name__ + '.ae.Autoencoder')
+        # https://stackoverflow.com/questions/38009682/how-to-tell-if-tensorflow-is-using-gpu-acceleration-from-inside-python-shell
+
+        
+
+TensorflowPackage()

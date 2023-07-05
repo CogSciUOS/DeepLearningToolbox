@@ -25,9 +25,8 @@ from PyQt5.QtWidgets import QSizePolicy
 from dltb.base.prepare import Preparable
 from dltb.base.busy import BusyObservable
 from dltb.base.image import ImageObservable
-from dltb.tool.generator import ImageGeneratorWorker
+from dltb.tool.generator import ImageGeneratorWorker, ImageGAN
 from dltb.util.importer import Importer
-from dltb.thirdparty import implementations
 
 # GUI imports
 from .panel import Panel
@@ -77,7 +76,7 @@ class GANPanel(Panel, QObserver, qobservables={
 
     # initialize the GAN classes dictionary
     GANClasses = dict()
-    for implementation in implementations('ImageGAN'):
+    for implementation in ImageGAN.implementations(as_str=True):
         module, name = implementation.rsplit('.', maxsplit=1)
         if name in GANClasses or True:
             name += f" ({module.rsplit('.', maxsplit=1)[1]})"

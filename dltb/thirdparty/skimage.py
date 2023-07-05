@@ -21,13 +21,17 @@ class ImageUtils(ImageResizer, ImageWarper):
 
     """
 
-    def resize(self, image: Imagelike, size=(640, 360)) -> np.ndarray:
+    def _internalize(self, image: Imagelike) -> np.ndarray:
+        """Scikit functions operate on numpy arrays.
+        """
+        Image.as_array(image)
+    
+    def _resize(self, image: np.ndarray, size=(640, 360)) -> np.ndarray:
         """Resize the frame to a smaller resolution to save computation cost.
         """
         # note: skimage.transform.resize takes on output_shape, not a size!
         # in the output_shape the number of channels is optional.
         output_shape = size[::-1]
-        image = Image.as_array(image)
         resized = resize(image, output_shape, preserve_range=True)
         resized = resized.astype(image.dtype)
         return resized

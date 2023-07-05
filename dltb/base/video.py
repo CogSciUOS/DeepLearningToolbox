@@ -1,11 +1,57 @@
+"""Definition of abstract video programming interfaces. There are
+several ideas covered by these interfaces.
+
+* A video as ImageSource: a datasource that provides images.
+  As such, it can have different properties:
+  - Video: it can be a sequence (providing index access). Individual
+  - VideoReader: it can be iterable. It has an internal state,
+      indicating the current frame. It may or may not be possible
+      to rewind the reader. From a rewindable Reader a Video can be
+      be constructed and from a Video, a (rewindable) VideoReader
+      can be constructed.
+
+* A video as a place where images (frames) can be deposited (VideoWriter).
+  - VideoWriter:
+    currently only sequential (incremental) writers are supported.
+
+from dltb.util.logging import debug_module
+debug_module('dltb.base.gui')
+debug_module('dltb.base.image')
+debug_module('dltb.base.video')
+
+Example 1
+---------
+from dltb.base.video import RandomReader, VideoDisplay
+reader = RandomReader(raw_mode=True)
+for frame in reader:
+    print(frame.shape, frame.mean())
+
+Example 2
+---------
+
+from dltb.base.video import RandomReader, VideoDisplay
+from tqdm import tqdm
+display = VideoDisplay()
+display(RandomReader(), progress=tqdm)
+
+with display:
+    for frame in reader:
+        display += frame
+
+FIXME[todo]: these ideas are not yet specified clearly and the implementation
+is currently not consistent with this description.
+
+"""
+
 # standard imports
-from typing import Union, List, Iterator, Any
-from abc import abstractmethod
+from typing import Union, Any, Tuple, Optional
+from typing import Sequence, Iterator
+#from abc import abstractmethod
 from pathlib import Path
+from time import time as now, sleep
 import os
 import sys
 import logging
-import time
 import datetime
 import threading
 
@@ -13,62 +59,243 @@ import threading
 import numpy as np
 
 # toolbox imports
-from .image import Image, Imagelike, ImageDisplay, ImageOperator
-from .image import Format as ImageFormat, Size as ImageSize
+from .image import Image, Imagelike, ImageProperties, ImageDisplay
+from .image import Format as ImageFormat, Size, Sizelike
+from .image import ImageReader, ImageWriter
 from .prepare import Preparable
-from .. import thirdparty
-from ..util.time import time_str
+from .implementation import Implementable
+from ..util.time import time_str, Timelike, IndexTiming
+from ..types import Pathlike, as_path
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class Video:
-    pass
+class FileBase:
+    """A base for classes that operate on a file.
+    """
+
+    def __init__(self, filename: Pathlike, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._path = as_path(filename)
+
+    @property
+    def filename(self) -> str:
+        """The name of the file this `FileBase` is operating (as `str`).
+        """
+        return str(self._path)
+
+    @property
+    def path(self) -> Path:
+        """The name of the file this `FileBase` is operating (as `Path`).
+        """
+        return self._path
+
+
+Indexlike = Union[int, Timelike]
+
+
+class VideoProperties(ImageProperties):
+    """A collection of properties that a video may possess.
+
+    Arguments
+    ---------
+    framerate:
+        A float value specifying the number of frames per second.
+    number_of_frames:
+        Number of frames of the complete video. ``None`` if length
+        is not known or undefined (e.g., in a video stream).
+    raw_mode:
+        A flag indicating if the frames are provided in raw format
+        (``True``), e.g., as numpy array, or as :py:class:`Image`
+        objects.
+    """
+
+    _timing: Optional[IndexTiming] = None
+    raw_mode: bool
+
+    def __init__(self, framerate: Optional[float] = None,
+                 number_of_frames: Optional[int] = None,
+                 raw_mode: bool = False, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._number_of_frames = number_of_frames
+        self.raw_mode = raw_mode
+        if framerate is not None:
+            self._timing = IndexTiming(samplerate=framerate)
+
+    def _to_index(self, index: Indexlike) -> int:
+        if isinstance(index, int):
+            return index
+        if self._timing is None:
+            raise ValueError(f"Video has no timing - time '{index}' "
+                             "cannot be mapped to index.")
+        return self._timing.time_to_index(index)
+
+    def _result_frame(self, frame: np.ndarray, index: int) -> Imagelike:
+        """
+        """
+        if self.raw_mode:
+            return frame
+        image = Image(frame)
+        # add video, index ...
+        image.add_attribute('index', index)
+        return image
+
+    @property
+    def size(self) -> Size:
+        """The size of a video frame.
+        """
+        return self._size
+
+    @property
+    def channels(self) -> int:
+        """The number of color channels.
+        """
+        return self._channels
+
+    @property
+    def shape(self) -> Tuple[int]:
+        """The shape of single frame in the video.
+        """
+        size = self.size
+        return (size.height, size.width, self.channels)
+
+    @property
+    def number_of_frames(self) -> Optional[int]:
+        """The total number of frames the video consists of.
+        """
+        return self._number_of_frames
+
+    @property
+    def framerate(self) -> Optional[float]:
+        """The number of frames per second.  If a framerate is
+        given, its meaning depends on the specific sublcass.
+        The framerate can be `None`.
+        """
+        return self._timing and self._timing.samplerate
+
+    @property
+    def frames_per_second(self) -> float:
+        """The number of frames per second.
+        """
+        return self.framerate
+
+    @property
+    def duration(self) -> Optional[float]:
+        """The number of frames per second.
+        """
+        number_of_frames = self.number_of_frames
+        if number_of_frames is None:
+            return None
+        framerate = self.framerate
+        if framerate is None:
+            return None
+        return number_of_frames / framerate
+
+
+class Video(Sequence[Image], VideoProperties):
+    """The `Video` class represents a video as a (immutable) `Sequence` of
+    images (frames).
+
+    The frames of a `Video` can be accessed by index access:
+    `video[index]` will give the frame with the given index.
+    If the video has a framerate, frames can also be accessed
+    as `video[time]`.
+
+    Arguments
+    ---------
+    framerate:
+        The number of frames per second (fps).
+    """
+
+    def __getitem__(self, indexlike: Indexlike) -> Image:
+        index = self._to_index(indexlike)
+        if not 0 <= index < len(self):
+            raise IndexError("Index '{indexlike}' ({index}) is out of Range.")
+        return self._result_frame(self._frame_at(index), index=index)
+
+    def __len__(self) -> int:
+        return self.number_of_frames
+
+    @property
+    def framerate(self) -> float:
+        """The Framerate of this `Video`.
+
+        Raises
+        ------
+        AttributeError:
+            Accessing this property may raise an `AttributeError` if
+            the Video has no framerate.
+        """
+        if self._timing is None:
+            raise AttributeError("No framerate was assigned to the video.")
+        return self._timing.samplerate
+
+    #
+    # methods to be implemented by subclasses
+    #
+
+    def _frame_at(self, index: int) -> np.ndarray:
+        """Get a specific frame from this video.
+        """
+        # to be implemented by subclasses
 
 
 Videolike = Union[Video]
 
 
-# FIXME[design]: what is this Reader/VideoReader etc. all about?
-class Reader:
-    """An abstract interface to read videos. A :py:class:`Reader`
-    allows to read a video source frame by frame.
+class VideoFile(Video, FileBase, Implementable):
+    """A :py:class:`Video` that is read from a file.
+
+    A `Videofile` provides a sequence view on a video, that is the
+    frames may be accessed by index.  Depending on the underlying
+    implementation and video codec, that may not be the best
+    option for video playback.  The :py:class:`VideoFileReader`
+    provides an alternative, realizing an iterator access to a
+    video file that may be better suited for playback.  A further
+    alternative is the :py:class:`VideoFilePlayer` that can be
+    used of an asynchronous playback.
+
     """
 
-    def __new__(cls, filename: str = None, device: int = None,
-                module: Union[str, List[str]] = None) -> 'Reader':
-        """Create a new Reader.
-        """
 
-        video_class = None
-        if cls.__name__ in ('VideoReader', 'Webcam'):
-            classname = cls.__name__
-        elif cls.__name__ in ('RandomReader', 'Thumbcinema'):
-            video_class = cls
-        elif filename is not None:
-            classname = 'VideoReader'
-        elif device is not None:
-            classname = 'Webcam'
-        else:
-            raise ValueError("You have to specify either filename or device "
-                             "to create a video Reader object.")
+class VideoReader(Iterator[Image], VideoProperties, Implementable):
+    """An abstract interface to read videos. A :py:class:`Reader`
+    allows to read a video source frame by frame.  Reading a
+    frame can be done explicitly by calling `frame = next(reader)` or
+    implicitly by looping over the frames (`for frame in reader: ...`).
 
-        if video_class is None:
-            video_class = thirdparty.import_class(classname, module=module)
-        return super(Reader, video_class).__new__(video_class)
+    A `VideoReader` provides the current frame number as the property
+    `index`. Certain `VideoReaders` may allow to set this property
+    to seek a specific position.  If a framerate is set for the
+    `VideoReader`, the current position can also be accessed as
+    :py:meth:`time` (in seconds).
 
-    def __init__(self, module: Union[str, List[str]] = None, **kwargs) -> None:
-        super().__init__(**kwargs)
+    If a framerate is set, iterating over the reader can also be
+    forced to occur in realtime, meaning that frames are not provided
+    at a rate higher than this framerate.
 
-    #
-    # Iterable
-    #
+    The `VideoReader` implements the context manager interface.
+    """
 
-    def __iter__(self) -> Iterator[np.ndarray]:
-        """Implementation of the :py:class:`Iterable` interface.
-        """
-        return self
+    # FIXME[old/todo]: integrate into the Implementation logic:
+    #   - when constructed as VideoReader or WebCam, use an implementation
+    #     of that class
+    #   - when constructing the classes RandomReader and Thumbcinema, use
+    #     that specific class
+    #   - when a `filename` argument is provided, use a VideoReader class
+    #   - when a `device` argument is provided, use a WebCam class
+    #   - otherwise raise an error
+
+    _index: int
+    _realtime: bool
+    _last_read_timestamp: float
+
+    def __init__(self, realtime: bool = False, **kwargs) -> None:
+        super().__init__(self, **kwargs)
+        self._index = 0
+        self._realtime = realtime
+        self._last_read_timestamp = now()
 
     #
     # Iterator
@@ -78,7 +305,18 @@ class Reader:
         """Implementation of the :py:class:`Iterator` interface. Will read and
         return the next frame.
         """
-        return self.read_frame()
+        if self._realtime:
+            time_since_last_read = now() - self._last_read_timestamp
+            remaining_time = time_since_last_read - (1/self.framerate)
+            if remaining_time > 0:
+                sleep(remaining_time)
+        self._last_read_timestamp = now()
+
+        index = self.index
+        frame = self._next_frame()
+        if frame is None:
+            raise StopIteration()
+        return self._result_frame(frame, index=index)
 
     #
     # Context manager
@@ -90,13 +328,33 @@ class Reader:
     def __exit__(self, exc_type, exc_value, exc_traceback):
         pass
 
+    #
+    # Index (current positions)
+    #
+
+    @property
+    def index(self) -> int:
+        """The index of the next frame to be fecthed from this
+        `VideoReader`.
+        """
+        return self._index
+
+    @index.setter
+    def index(self, index: int) -> None:
+        self._set_index(index)
+
+    def _set_index(self, index: int) -> None:
+        self._index = index  # to be overwritten by subclasses
+
     @property
     def time(self) -> float:
         """Current position in seconds.
         """
-        # FIXME[hack]: just an approximation - will not work for
-        # variable frame rates ...
-        return self.frame / self.frames_per_second
+        return self._timing.index_to_time(self.index)
+
+    @time.setter
+    def time(self, time: Timelike) -> None:
+        self.index = self._timing.time_to_index(time)
 
     @property
     def time_str(self) -> str:
@@ -122,65 +380,25 @@ class Reader:
             time = float(time)
         return time
 
-    # FIXME[todo]: documentation!
-
-    @property
-    def frames_per_second(self) -> float:
-        """
-        """
-        return self._frames_per_second()
-
-    @abstractmethod
-    def _frames_per_second(self) -> float:
-        """
-        """
-        # to be overwritten by subclasses
-
-    @property
-    @abstractmethod
-    def frame(self) -> int:
-        """
-        """
-
-    @abstractmethod
-    def frame_at(self, time: Union[int, float, str]) -> int:
-        """
-        """
-
-    #
-    # public interfac
-    #
-
-    def read_frame(self, time: Union[int, float, str] = None,
-                   **kwargs) -> np.ndarray:
-        """Read a frame from this :py:class:`VideoReader`.
-        """
-        if time is not None:
-            index = self.frame_at(time)
-        if index is not None:
-            frame = self._read_frame(index=index, **kwargs)
-        else:
-            frame = self._read_frame(**kwargs)
-        LOG.debug("Read frame of shape %s, dtype=%s with shape %s",
-                  frame.shape, frame.dtype, self)
-        return frame
-
     #
     # to be implemented by subclasses
     #
 
-    @abstractmethod
-    def _read_frame(self, **kwargs) -> np.ndarray:
+    #@abstractmethod
+    def _next_frame(self) -> np.ndarray:
         """Read the next from this :py:class:`Reader`.
         """
+        return self and None  # not used, but will make pylint happy ;-)
 
 
-class RandomReader(Reader):
+class RandomReader(VideoReader):
+    """A :py:class:`VideoReader` that provides random (noise) images.
+    """
 
-    def __init__(self, fps: float = 25.0, size=(100, 100), **kwargs) -> None:
-        super.__init__(**kwargs)
-        self._frames_per_second = lambda _: fps
-        self._size = size
+    def __init__(self, size: Sizelike = (100, 100), channels: int = 3,
+                 **kwargs) -> None:
+        super().__init__(size=size, channels=channels, **kwargs)
+        self._size = Size(size)
 
         # The following code will use the new random generator of numpy
         # 1.17 if available and otherwise fall back to the legacy version.
@@ -190,60 +408,56 @@ class RandomReader(Reader):
         except AttributeError:
             self._random_integers = rng.randint
 
-    def _read_frame(self, size=None) -> np.ndarray:
+    def _next_frame(self) -> np.ndarray:
         """Implementation of the :py:class:`Iterator` interface.
         """
-        if size is None:
-            size = self._size
         shape = self._size[::-1] + (3,)
         return self._random_integers(0, 256, size=shape, dtype=np.uint8)
 
 
-class VideoReader(Reader):
-    """A :py:class:`VideoReader` is a :py:class:`Reader` that reads
-    a video. This class adds length and index access.
+class VideoIteratoreReader(VideoReader):
+    """An Iterator for Video objects.
     """
+    _video: Video
 
-    def __new__(cls, filename: str = None,
-                module: Union[str, List[str]] = None) -> 'Reader':
-        """Create a new VideoReader.
-        """
-        if filename is None:
-            raise ValueError("You have to specify either filename "
-                             "to create a VideoReader object.")
-        return super().__new__(cls, filename=filename, module=module)
-
-    def __len__(self) -> int:
-        """Implementation of the :py:class:`Sized` interface.
-        The length of the video in frames.
-        """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
-                                  "be a VideoReader, but does not implement "
-                                  "the __len__ method.")
-
-    def __getitem__(self, frame: int) -> np.ndarray:
-        """Implementation of the :py:class:`Mapping` interface.
-        Get the frame at the given position from this video.
-        """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
-                                  "be a VideoReader, but provides no "
-                                  "'__getitem__' method.")
-
-
-class FileBase:
-    """
-    """
-
-    def __init__(self, filename: str, **kwargs) -> None:
+    def __init__(self, video: Video, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._filename = filename
+        self._video = video
 
-    @property
-    def filename(self) -> str:
-        return self._filename
+    def _next_frame(self) -> np.ndarray:
+        frame = self._video[self._index]
+        self._index += 1
+        return frame
 
 
-class FileReader(VideoReader, FileBase):
+class VideoArray(Video):
+    """A `VideoArray` provides access to a video stored in an array.
+    """
+    _frames: np.ndarray
+
+    def __init__(self, frames: Optional[np.ndarray] = None,
+                 reader: Optional[VideoReader] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if frames is not None:
+            self._frames = frames
+        elif reader is not None:
+            shape = (len(reader), reader.size.height, reader.sizewidth,
+                     reader.channels)
+            self._frames = np.ndarray(shape)
+            for index, frame in enumerate(reader):
+                self._frames[index] = frame
+        else:
+            raise ValueError("")
+
+        self._number_of_frames = len(self._frames)
+
+    def _frame_at(self, index: int) -> np.ndarray:
+        """Get a specific frame from this video.
+        """
+        return self._frames[index]
+
+
+class VideoFileReader(VideoReader, FileBase, Implementable):
     """An abstract interface to read videos. A :py:class:`FileReader`
     extends the base :py:class:`Reader` by adding the idea of length:
     a video file has an beginning and an end.  Within this interval,
@@ -253,26 +467,7 @@ class FileReader(VideoReader, FileBase):
     """
 
 
-class URLReader(VideoReader):  # FIXME[todo]: implementation
-    """Reading videos from a URL.
-
-    Attributes
-    ----------
-
-    _url: str
-        The URL for the video.
-    """
-
-    def __init__(self, url: str, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._url = url
-
-    @property
-    def url(self) -> str:
-        return self._url
-
-
-class Webcam(Reader):
+class Webcam(VideoReader, Implementable):
     """An abstract webcam backend.
 
     Attributes
@@ -295,7 +490,7 @@ class Webcam(Reader):
         self._device = device
         self._lock = threading.Lock()
         # Store time of last capture operation
-        self._last_read_timestamp = time.time()
+        self._last_read_timestamp = now()
 
     def __del__(self) -> None:
         if self._lock is not None:
@@ -304,6 +499,8 @@ class Webcam(Reader):
 
     @property
     def device(self) -> int:
+        """The webcam device number.
+        """
         return self._device
 
     def read_frame(self, clear_buffer: bool = None) -> np.ndarray:
@@ -322,12 +519,12 @@ class Webcam(Reader):
                   self, clear_buffer)
         with self._lock:
             if clear_buffer is None:
-                time_passed = time.time() - self._last_read_timestamp
+                time_passed = now() - self._last_read_timestamp
                 clear_buffer = time_passed > self.maximal_buffering_delay
             if clear_buffer:
                 self._clear_buffer()
-            frame = self._read_frame()
-            self._last_read = time.time()
+            frame = self._next_frame()
+            self._last_read_timestamp = now()
         LOG.debug("Captured frame of shape %s, dtype=%s with shape %s",
                   frame.shape, frame.dtype, self)
         return frame
@@ -343,40 +540,40 @@ class Webcam(Reader):
         if sys.platform == 'linux':
             ignore = 4
             for _ in range(ignore):
-                self._read_frame()
+                self._next_frame()
 
 
-class Writer(Preparable):
-    """A video :py:class:`Writer` is a "sink" for or "consumer" of video
+class VideoWriter(Preparable, Implementable):
+    """A video :py:class:`VideoWriter` is a "sink" or "consumer" of video
     data, that is a sequence of frames (images).  A video can be
     written completely, in chunks or framewise.  There is also the
-    option to asynchronously run a video :py:class:`Writer` either by
+    option to asynchronously run a :py:class:`VideoWriter` either by
     regularly querying or by observing an :py:class:`ImageObservable`.
 
-    A video :py:class:`Writer` can be associated with different speed
+    A :py:class:`VideoWriter` can be associated with different speed
     parameters, all expressed as frame rate in frames per second
     (fps).  The kind of supported parameters depends on the type of
-    the :py:class:`Writer`.  One may control the operational speed of
-    the :py:class:`Writer`, meaning how many frames per second should
-    be written.  If frames are written to the :py:class:`Writer` at a
+    the :py:class:`VideoWriter`.  One may control the operational speed of
+    the :py:class:`VideoWriter`, meaning how many frames per second should
+    be written.  If frames are written to the :py:class:`VideoWriter` at a
     higher rate, some frames may be skipped and if the
-    :py:class:`Writer` is actively querying an
+    :py:class:`VideoWriter` is actively querying an
     :py:class:`ImageObservable`, operational speed determines the
     maximal query frequency.
 
-    A video :py:class:`Writer` storing videos to file (or some other
+    A :py:class:`VideoWriter` storing videos to file (or some other
     form of storage) may save a frame rate as part of the metadata
     and will indicate the desired speed for playback. This can be set
-    independent of the operational speed of the :py:class:`Writer`.
+    independent of the operational speed of the :py:class:`VideoWriter`.
 
-    Frames may be provided to a video :py:class:`Writer` in form of
+    Frames may be provided to a :py:class:`VideoWriter` in form of
     :py:class:`Imagelike` objects.
 
-    The video :py:class:`Writer` is an abstract base class that has to
+    The :py:class:`VideoWriter` is an abstract base class that has to
     be subclassed to provide actual funcitonality.  The central method
     to be overwritten is :py:meth:`_write_frame` which will get a
     frame and should perform the write operation. If the
-    :py:class:`Writer` needs specific resources, those can be required
+    :py:class:`VideoWriter` needs specific resources, those can be required
     by overwriting the :py:meth:`_open_writer` and
     :py:meth:`_close_writer` methods.
 
@@ -384,44 +581,30 @@ class Writer(Preparable):
     # FIXME[todo]: most of what is described in the docstring is not
     # yet implemented.
 
-
     _frame_format: ImageFormat
 
-    def __new__(cls, filename: str = None,
-                module: Union[str, List[str]] = None, **kwargs) -> 'Writer':
-        """Create a new video :py:class:`Writer`. This constructor
-        will decide on what class to instantiate based on the arguments
-        provided.  It will use the `thirdparty` module to select an
-        actual implementation.
-        """
-        video_class = None
-        if cls.__name__ in ('NullWriter', 'Display'):
-            video_class = cls
-        elif filename is not None:
-            classname = 'VideoWriter'
-        else:
-            raise ValueError("You have to specify a filename to "
-                             "to create a video Writer object.")
+    # FIXME[old/todo]: integrate into the Implementation logic:
+    #   - when constructing the classes NullWriter or Display, use
+    #     that specific class
+    #   - when a `filename` argument is provided, use an implementation
+    #     of the VideoReader class
+    #   - otherwise raise an error
 
-        if video_class is None:
-            video_class = thirdparty.import_class(classname, module=module)
-        return super(Writer, video_class).__new__(video_class)
-
-    def __init__(self, fps: float, size: ImageSize,
-                 frame_format: ImageFormat, **kwargs) -> None:
+    def __init__(self, frame_format: Optional[ImageFormat] = None,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
-        self._fps = fps
-        self._size = size
         self._frame_format = frame_format
 
     def __del__(self) -> None:
         if self.opened:
             self.close()
 
-    def __call__(self, video: VideoReader, **kwargs) -> None:
-        self._assert_opened()
-        for frame in video:
-            self.write_frame(self._prepare_frame(frame), **kwargs)
+    def __call__(self, video: VideoReader, progress=None, **kwargs) -> None:
+        if progress is not None:
+            video = progress(video)
+        with self:  # ensure writer is usable ("opened")
+            for frame in video:
+                self.write_frame(self._prepare_frame(frame), **kwargs)
 
     def __bool__(self) -> bool:
         return self._is_opened()
@@ -435,7 +618,7 @@ class Writer(Preparable):
     # context manager
     #
 
-    def __enter__(self) -> 'Writer':
+    def __enter__(self) -> 'VideoWriter':
         self._open()
         return self
 
@@ -448,8 +631,8 @@ class Writer(Preparable):
 
     @property
     def frame_format(self) -> ImageFormat:
-        """The :py:class:`ImageFormat` used by this video :py:class:`Writer`.
-        Frames written to this :py:class:`Writer` are assumed to be in
+        """The :py:class:`ImageFormat` used by this :py:class:`VideoWriter`.
+        Frames written to this :py:class:`VideoWriter` are assumed to be in
         that format, except if explicitly stated otherwise (for
         example by providing explicit format information when calling
         :py:class:`write_frame` or when writing an :py:class:`Image`
@@ -459,13 +642,11 @@ class Writer(Preparable):
         return self._frame_format
 
     def write_frame(self, frame: Imagelike, **kwargs) -> None:
-        """Write a frame to this video :py:class:`Writer`.
+        """Write a frame to this video :py:class:`VideoWriter`.
         """
         self._assert_opened()
         self._write_frame(self._prepare_frame(frame, **kwargs))
 
-    # FIXME[todo]: remove - use __bool__ instead
-    # FIXME[todo]: and pepare/unprepare instead of open/close
     @property
     def opened(self) -> bool:
         """Check if this :py:class:`VideoWriter` is still open, meaning
@@ -486,14 +667,18 @@ class Writer(Preparable):
         self._close()
 
     def copy(self, video, transform=None, progress=None):
-        """Copy a given video to this video :py:class:`Writer`.
+        """Copy a given video to this :py:class:`VideoWriter`.
         """
+        # FIXME[design]: there are multiple implementations similar
+        # to this method:
+        #   - experiments.video: class VideoOperator
+        #   - dltb.util.video: function copy()
         if progress is not None:
             video = progress(video)
-        for index, frame in enumerate(video):
+        for frame in video:
             if transform is not None:
                 frame = transform(frame)
-            self._image_writer(self.filename_for_frame(index), frame)
+            self._write_frame(frame)
 
     #
     # private API (to be overwritten by subclasses)
@@ -504,27 +689,31 @@ class Writer(Preparable):
                                   "be a VideoWriter, but provides no "
                                   "'_write_frame' method.")
 
-    def _open(self) -> None:
-        """Make sure the Writer is open, that is, ready to write.
+    @staticmethod
+    def _open() -> None:
+        """Make sure the `VideoWriter` is open, that is, ready to write.
         If sufficient arguments are given to the constructor, this
         will be called automatically, otherwise it has to be called
         explicitly before the first read.
         """
 
-    def _is_opened(self) -> bool:
+    @staticmethod
+    def _is_opened() -> bool:
         """Check if this :py:class:`VideoWriter` is still open, meaning
         that it accepts more frames to be written.
         """
         return True  # may be overwritten by subclasses
 
-    def _close(self) -> None:
+    @staticmethod
+    def _close() -> None:
         """Actual implementation of the closing operation.
         This should release all system resources acquired by this
         :py:class:`VideoWriter`, like file handles, etc.
         """
-        pass  # may be overwritten by subclasses
+        # may be overwritten by subclasses
 
-    def _prepare_frame(self, frame: Imagelike) -> Any:
+    @staticmethod
+    def _prepare_frame(frame: Imagelike) -> Any:
         """Prepare a frame to be written. This includes operations
         like resizing it to fit into the video.
         """
@@ -540,34 +729,27 @@ class Writer(Preparable):
             raise RuntimeError("VideoWriter is not open.")
 
 
-class VideoWriter(Writer):
-    pass  # FIXME[hack]
-
-
-class NullWriter(Writer):
-    """The :py:class:`NullWriter` will discard all frames. It is
-    meant a convenience class to be used when a Writer is required,
-    but the written frames are not used.
+class NullWriter(VideoWriter):
+    """The :py:class:`NullWriter` will discard all frames. It is meant a
+    convenience class to be used when a :py:class:`VideoWriter` is
+    required, but the written frames are not used.
     """
 
-    def __init__(self, fps: float = None, size = None, **kwargs) -> None:
-        super().__init__(fps=fps, size=size, **kwargs)
-
-    def write_frame(self, frame: np.ndarray, **kwargs) -> None:
+    def _write_frame(self, frame: np.ndarray) -> None:
+        """Write a frame to this `NullWriter`.  The `NullWriter`
+        simply ignores this frame.
         """
-        """
-        pass
 
 
-class Display(Writer):
-    """
+class VideoDisplay(VideoWriter):
+    """A `VideoDisplay` displays a video by successively showing its
+    frames.
     """
     # FIXME[todo]: introduce a show method (show the video)
     # either in blocking or non-blocking mode
 
-    def __init__(self, fps: float = None, size=None,
-                 display: ImageDisplay = None, **kwargs) -> None:
-        super().__init__(fps=fps, size=size, **kwargs)
+    def __init__(self, display: ImageDisplay = None, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._display = ImageDisplay() if display is None else display
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -576,8 +758,8 @@ class Display(Writer):
         return super().__exit__(exc_type, exc_value, exc_traceback)
 
     def _open(self) -> None:
-        """Open the video :py:class:`Writer` for writing.  In the case
-        of a :py:class:`Display` this means preparing the display
+        """Open this :py:class:`VideoWriter` for writing.  In the case
+        of a :py:class:`VideoDisplay` this means preparing the display
         component for showing images.
         """
         # Do not use a display event loop: we will update the image
@@ -585,71 +767,38 @@ class Display(Writer):
         # be processed on each invocation of display.show(). This
         # should suffice for a smooth user interface except for
         # videos with a very low frame rate.
-        self._display.blocking = None  # do not start a display event loop
-        self._display._view.show()  # FIXME[hack]: design a better Display API
+        self._display.show(blocking=False)
 
     def _write_frame(self, frame: np.ndarray) -> None:
-        """Write a frame with this :py:class:`Writer`. In the case
-        of a :py:class:`Display` this means to show the frame in the
+        """Write a frame with this :py:class:`VideoWriter`. In the case
+        of a :py:class:`VideoDisplay` this means to show the frame in the
         display component.
+
+        The display is guaranteed to be opened when this message is
+        called.
 
         Arguments
         ---------
         frame:
             The frame to be displayed as an array. The frame is
             expected to be in the standard format of this
-            :py:class:`Writer`, which defaults to `np.uint8` values,
+            :py:class:`VideoWriter`, which defaults to `np.uint8` values,
             color images being in RGB color space.
+
         """
-        if self._display.closed:
-            raise ValueError("Writing to closed display.")
         self._display.show(frame)
 
     def close(self):
-        """Close the video :py:class:`Writer`.  In the case
-        of a :py:class:`Display` this means to close the display
+        """Close the :py:class:`VideoWriter`.  In the case
+        of a :py:class:`VideoDisplay` this means to close the display
         component showing the images.
         """
         self._display.close()
 
 
-class FileWriter(VideoWriter, FileBase):
-    pass  # FIXME[hack]
-
-
-
-class VideoUtils:
-    """A helper class for videos, that allows to
-    (1) download videos from URL and
-    (2) transform video into sequence of images.
+class FileWriter(VideoWriter, FileBase): # pylint: disable=abstract-method
+    """A `FileWriter` can write a video into a file.
     """
-
-    def __init__(self, **kwargs):
-        super().__init__(self, **kwargs)
-
-    def download(self, url: str, filename: str) -> None:
-        pass
-
-    def download_youtube(self, url: str, filename: str) -> None:
-        pass
-
-
-class VideoOperator:
-    """A :py:class:`VideoProcessor` processes a video frame by frame.
-    It thereby transforms an input video into an output video.
-    """
-
-    def __init__(self, operator: ImageOperator, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._operator = operator
-
-    def __call__(self, source: VideoReader) -> VideoReader:
-        for frame in source:
-            yield self._operator(frame)
-
-    def transform(self, source: VideoReader, target: VideoWriter):
-        for frame in self(source):
-            target += frame
 
 
 class VideoDirectory:
@@ -659,10 +808,20 @@ class VideoDirectory:
     """
 
     _frames_directory: Path
+    _frame_index: Optional[int]
 
-    def __init__(self, directory: Union[Path, str], **kwargs) -> None:
+    def __init__(self, directory: Optional[Pathlike] = None, **kwargs) -> None:
+        if directory is None:
+            raise ValueError(f"No directory specified for {type(self).__name__}.")
         super().__init__(**kwargs)
-        self._frames_directory = Path(directory)
+        self._frames_directory = as_path(directory)
+        self._frame_index = None
+
+    @property
+    def directory(self) -> str:
+        """The video directory.
+        """
+        return str(self._frames_directory)
 
     def filename_for_frame(self, index: int) -> Path:
         """Obtain the filename for a specific frame in this
@@ -680,10 +839,15 @@ class VideoDirectory:
         return self._frames_directory / f'frame_{index}.jpg'
 
 
-class DirectoryReader(Reader, VideoDirectory):
+class DirectoryReader(VideoReader, VideoDirectory):
     """A :py:class:`VideoReader` for videos that are stored as individual
     images in a directory.
     """
+    _len: Optional[int] = None
+
+    def __init__(self, reader: Optional[ImageReader] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._image_reader = reader or ImageReader()
 
     def __len__(self) -> int:
         if self._len is None:
@@ -691,8 +855,7 @@ class DirectoryReader(Reader, VideoDirectory):
                 raise RuntimeError("Frames directory "
                                    f"'{self._frames_directory}' "
                                    "does not exist.")
-            else:
-                self._len = len(os.listdir(self._frames_directory))
+            self._len = len(os.listdir(self._frames_directory))
         return self._len
 
     def __getitem__(self, index: int) -> np.ndarray:
@@ -702,7 +865,7 @@ class DirectoryReader(Reader, VideoDirectory):
         if not 0 <= index < len(self):
             raise IndexError(f"Invalid frame index {index}"
                              f"is not in [0, {len(self)}]")
-        return self._loader(self.filename_for_frame(index))
+        return self._image_reader.read(self.filename_for_frame(index))
 
 
 class DirectoryWriter(VideoWriter, VideoDirectory):
@@ -711,21 +874,20 @@ class DirectoryWriter(VideoWriter, VideoDirectory):
 
     """
 
-    def __init__(self, image_writer, **kwargs) -> None:
+    def __init__(self, writer: Optional[ImageWriter] = None, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._image_writer = image_writer
-        self._frame_index = None
+        self._image_writer = writer or ImageWriter()
 
     def _prepare(self) -> None:
         """Prepare this :py:class:`DirectoryWriter` for writing.
         Thi will ensure that the directory exists.
         """
         super()._prepare()
-        os.makedirs(self._directory, exist_ok=True)
+        os.makedirs(self._frames_directory, exist_ok=True)
         self._frame_index = 0
 
     def _unprepare(self) -> None:
-        """Release resources acquired by this video :py:class:`Writer`
+        """Release resources acquired by this :py:class:`VideoWriter`
         and reset it into an unprepared state.
         """
         self._frame_index = None
@@ -745,7 +907,7 @@ class DirectoryWriter(VideoWriter, VideoDirectory):
         Arguments
         ---------
         frame:
-            The frame to be written to the :py:class:`Writer`. This
+            The frame to be written to this :py:class:`VideoWriter`. This
             is assumed to be given in the correct format (dtype, colorspace,
             size, etc.) as expected by the :py:class:`ImageWriter`
             employed by this :py:class:`DirectoryWriter`.

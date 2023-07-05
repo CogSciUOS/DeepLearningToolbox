@@ -1,6 +1,8 @@
+
+# toolbox imports
 from base import Controller as BaseController
-from network import Network
 from tools.lucid import Engine
+from dltb.network import Network
 
 
 class Controller(BaseController):

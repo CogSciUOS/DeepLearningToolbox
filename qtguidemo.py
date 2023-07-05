@@ -8,7 +8,6 @@
 
 # standard imports
 import sys
-import importlib
 from argparse import ArgumentParser
 
 # third party imports
@@ -16,6 +15,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
 
 # toolbox imports
 from dltb.util.image import imread
+from dltb.util.importer import import_from_module
 
 widget_names = {
     'QImageView': 'qtgui.widgets.image.QImageView',
@@ -62,8 +62,7 @@ def main() -> None:
         window.show()
 
     for module_name, cls_name in widgets:
-        module = importlib.import_module(module_name)
-        Widget = getattr(module, cls_name)
+        Widget = import_from_module(module_name, cls_name)
         qwidget = Widget()
         if cls_name == 'QImageView':
             qwidget.setImage(imread(images[0]))

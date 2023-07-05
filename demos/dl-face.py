@@ -37,14 +37,13 @@ import tqdm
 import dltb.argparse as ToolboxArgparse
 from dltb.base.data import Data
 from dltb.base.image import Image, Imagelike, ImageDisplay, ImageWarper
-from dltb.base.video import Webcam, Reader as VideoReader
+from dltb.base.video import Webcam, VideoReader
 from dltb.datasource import ImageDirectory
 from dltb.datasource import argparse as DatasourceArgparse
 from dltb.tool.face import Detector as FaceDetector
 from dltb.tool.face.landmarks import apply_single_hack, apply_multi_hack
 from dltb.tool.align import LandmarkAligner
 from dltb.util.image import imshow, get_display
-from dltb.thirdparty import implementations, import_class
 
 
 def output_detections(detector: FaceDetector, data: Data,
@@ -208,15 +207,11 @@ def main():
     ToolboxArgparse.process_arguments(parser, args)
 
     if args.list_detectors:
-        print("FaceDetector implementations:")
-        for index, implementation in enumerate(implementations(FaceDetector)):
-            print(f"{index+1}) {implementation}")
-        return
+        print(FaceDetector.implementation_info())
+        return os.EX_OK
 
     if args.list_warpers:
-        print("ImageWarper implementations:")
-        for index, implementation in enumerate(ImageWarper.implementations()):
-            print(f"{index+1}) {implementation}")
+        print(ImageWarper.implementation_info())
         return os.EX_OK
 
     # obtain the datasource if provided (otherwise None)
@@ -224,16 +219,6 @@ def main():
 
     if args.detector:
         detector = FaceDetector(implementation=args.detector)
-    elif args.detector:  # FIXME[old]
-        print(f"Detector class: {args.detector}")
-        Detector = import_class(args.detector)
-        detector = Detector()
-        # 'haar', 'ssd', 'hog',  'cnn', 'mtcnn'
-        # detector = Tool['haar']
-        # detector = Tool['ssd']
-        print(f"Detector: {detector} [prepared={detector.prepared}]")
-        detector.prepare()
-        print(f"Detector: {detector} [prepared={detector.prepared}]")
 
     if args.detect:
 

@@ -1,26 +1,49 @@
 """Definition of an abstract sound interface.
 
+Examples:
+
+>>> from dltb.base.sound import Sound, SoundPlayer, SoundDisplay
+>>> sound = Sound(sound="examples/win_xp_shutdown.wav")
+>>> player = SoundPlayer()
+>>> player.play(sound)
+>>> display = SoundDisplay()
+
 """
 # FIXME[todo]: some conceptual work has to be done on
 # synchronous/asynchronous use for reading and writing,
 # but especially for recording and playback!
+#
+# FIXME[todo]: allow time indexing of sound (module util.timing)
+# FIXME[todo]: support frames and subsampling
 
 
 # standard imports
-from typing import Union, List
+from typing import Union, Optional
+from abc import ABC
 import logging
+from pathlib import Path
 
 # third party imports
 import numpy as np
 
 # toolbox imports
 from .observer import Observable
+from .implementation import Implementable
 from .data import Data
-from . import run
-from .. import thirdparty
+from .gui import SimpleDisplay
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+# Soundlike is intended to be everything that can be used as
+# a sound.
+#
+# np.ndarray:
+#    The raw sound data
+# str:
+#    A URL.
+Soundlike = Union[np.ndarray, str, Path]
 
 
 class Sound(Data):
@@ -55,29 +78,78 @@ class Sound(Data):
 
     """
 
-    def __init__(self, samplerate: int = 44100, channels: int = None,
-                 data: np.ndarray = None, **kwargs) -> None:
+    @staticmethod
+    def as_sound(sound: Optional[Soundlike]) -> Optional['Sound']:
+        """Create a `Sound` from a `Soundlike` object.  Will
+        return `None` for `None` argument.
+        """
+        if sound is None or isinstance(sound, Sound):
+            return sound
+        return Sound(sound=sound)
 
-        super().__init__(*kwargs)
+    def __new__(cls, sound: Optional[Soundlike] = None,
+                array: Optional[np.ndarray] = None, copy: bool = False,
+                samplerate: int = 44100, channels: Optional[int] = None,
+                **kwargs) -> None:
+        if isinstance(sound, Sound) and not copy:
+            return sound  # just reuse the given Sound instance
 
-        # if data is give, infer information from that data
-        if data is not None:
-            data_channels = 1 if data.ndim == 1 else min(data.shape)
+        if isinstance(sound, Path):
+            sound = str(sound)
+        if isinstance(sound, str):
+            LOG.debug("Loading sound '%s'.", sound)
+            return SoundReader.read_with_default_reader(filename=sound,
+                                                        samplerate=samplerate,
+                                                        channels=channels)
+
+        return super().__new__(cls, sound, array, copy, **kwargs)
+
+    def __init__(self, sound: Optional[Soundlike] = None,
+                 array: Optional[np.ndarray] = None, copy: bool = False,
+                 samplerate: int = 44100, channels: Optional[int] = None,
+                 **kwargs) -> None:
+        if isinstance(sound, Sound) and not copy:
+            return  # just reuse the given Sound instance (returned by __new__)
+        if isinstance(sound, (Path, str)):
+            return  # created Sound object with SoundReader in __new__
+
+        super().__init__(**kwargs)
+
+        # if data is given, infer information from that data
+        if array is None and isinstance(sound, np.ndarray):
+            array = sound
+
+        if array is not None:
+            # check array dimensions and channels
+            if array.ndim == 1:
+                array = array[:, np.newaxis]
+            elif array.ndim == 2:
+                if array.shape[0] < array.shape[1]:
+                    array = array.T
+            else: 
+                raise ValueError("Invaled array shape for Sound: "
+                                 f"{array.shape}")
+
             if channels is None:
-                channels = data_channels
-            elif channels != data_channels:
+                channels = array.shape[1]
+            elif channels != array.shape[1]:
                 raise ValueError("Inconsistent numbers of channels: "
-                                 f"{channels} vs. {data_channels}")
+                                 f"{channels} vs. {array.shape[1]}")
 
         channels = channels or 1
         self._samplerate = samplerate
 
-        self._array = np.empty(shape=(self.samplerate, channels),
-                               dtype=np.float32)
-        self._data = self._array[:0]
+        if array is not None and not copy:
+            self._array = array
+            self._data = array
+        else:
+            # create an initial array with space for 1 second of sound
+            self._array = np.empty(shape=(self.samplerate, channels),
+                                   dtype=np.float32)
+            self._data = self._array[:0]
 
-        if data is not None:
-            self += data
+            if array is not None:
+                self += array
 
     @property
     def frames(self) -> int:
@@ -95,7 +167,8 @@ class Sound(Data):
     def duration(self) -> float:
         """The duration of the :py:class:`Sound` in seconds.
         """
-        return self.frames / self._samplerate
+        return (self.frames / self._samplerate
+                if self._samplerate else float('nan'))
 
     @property
     def samplerate(self) -> int:
@@ -136,22 +209,23 @@ class Sound(Data):
                 raise ValueError("Invalid end position ({stop}) "
                                  "for indexing Sound object {self}.")
 
-            index_start = int(index.start * self.samplerate)
-            index_end = int(index.stop * self.samplerate)
+            index_start = round(index.start * self.samplerate)
+            index_end = round(index.stop * self.samplerate)
             samplerate = index.step or self.samplerate
 
             # we will compute indices of sample points
             step = self.samplerate / samplerate
+            round_step = round(step)
 
-            if abs(round(step) - step) < 0.001:
+            if abs(round_step - step) < 0.001:
                 # target samplerate is approximate divider of
                 # source samplerate: we will use numpy slicing
                 # (should be more efficient)
-                return self._data[index_start:index_end:int(step)]
+                return self._data[index_start:index_end:round_step]
 
-            points = int((index_end - index_start) / step)
-            return self._data[np.linspace(index_start, index_end, points,
-                                          dtype=np.int)]
+            samples = round((index.stop - index.start) * samplerate)
+            return self._data[np.linspace(index_start, index_end, samples,
+                                          endpoint=False, dtype=np.int)]
 
         raise TypeError(f"Index ({index}) to Sound object has invalid type: "
                         f"{type(index)}")
@@ -194,6 +268,9 @@ class Sound(Data):
             step = self.samplerate / samplerate
 
             if abs(round(step) - step) < 0.001:
+                # target samplerate is approximate divider of
+                # source samplerate: we will use numpy slicing
+                # (should be more efficient)
                 self._insert(data[::step], start=index_start, end=index_end)
             else:
                 points = int((index_end - index_start) / step)
@@ -204,8 +281,58 @@ class Sound(Data):
         raise TypeError(f"Index ({index}) to Sound object has invalid type: "
                         f"{type(index)}")
 
+    def sample(self, samplerate: Optional[int] = None,
+               start: Optional[float] = 0,
+               output: Optional[np.ndarray] = None,
+               samples: Optional[int] = None) -> None:
+        """Sample from this sound.
+        """
+        if output is None:
+            if samples is None:
+                raise ValueError("Neither output nor samples provided.")
+            output = np.asarray((samples, self.channels),
+                                dtype=self._data.dtype)
+        else:
+            samples = len(output)
+
+        if samplerate is None:
+            samplerate = self.samplerate
+            step = 1
+        else:
+            step = self.samplerate/samplerate
+        round_step = round(step)
+        index_start = round(start * self.samplerate)
+
+        if abs(round_step - step) < 0.001:
+            # target samplerate is approximate divider of
+            # source samplerate: we will use numpy slicing
+            # (should be more efficient)
+            length = samples * round_step
+            if index_start + length <= len(self._data):
+                valid_samples = samples
+            else:
+                length = len(self._data) - index_start + round_step - 1
+                valid_samples = length // round_step
+            output[:valid_samples] = \
+                self._data[index_start:index_start+length:round_step]
+        else:
+            length = round(samples * step)
+            if index_start + length <= len(self._data):
+                valid_samples = samples
+            else:
+                length = len(self._data) - index_start
+                valid_samples = round(length / step)
+            output[:valid_samples] = \
+                self._data[np.linspace(index_start, index_start + length,
+                                       valid_samples,
+                                       endpoint=False, dtype=np.int)]
+        if valid_samples < samples:
+            output[valid_samples:].fill(0)
+        return (0, valid_samples), output
+
     def level(self, blocks: int,
-              start: float = None, end: float = None) -> np.ndarray:
+              start: Optional[float] = None,
+              end: Optional[float] = None) -> np.ndarray:
         """Compute the block wise signal level.
 
         FIXME[todo]: one may provide a blocksize argument instead of
@@ -222,7 +349,7 @@ class Sound(Data):
         blocks = squares.reshape((blocks, -1)).mean(axis=1)
         return np.sqrt(blocks)
 
-    def __iadd__(self, other: 'Sound') -> None:
+    def __iadd__(self, other: Soundlike) -> None:
         """Add (append) another sound to this :py:class:`Sound`. The
         other sound should be compatible with this sound
         (with respect to sampling rate and number of channels).
@@ -261,8 +388,8 @@ class Sound(Data):
     def _append(self, data: np.ndarray) -> None:
         self._insert(data, start=self.frames)
 
-    def _insert(self, data: np.ndarray,
-                start: int = None, end: int = None) -> None:
+    def _insert(self, data: np.ndarray, start: Optional[int] = None,
+                end: Optional[int] = None) -> None:
         """Insert data into this Sound, potentially overwriting
         some part of this sound.
         """
@@ -293,19 +420,31 @@ class Sound(Data):
                 f"{self.duration:.2f} seconds at rate {self.samplerate})")
 
 
-class SoundReader:
+class SoundReader(Implementable):
     """A :py:class:`SoundReader` can be used to read :py:class:`Sound` objects.
     """
 
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundReader':
-        if cls is SoundReader:
-            new_cls = thirdparty.import_class('SoundReader', module=module)
-        else:
-            new_cls = cls
-        return super(SoundReader, new_cls).__new__(new_cls)
+    _default_reader: Optional['SoundReader'] = None
 
-    def read(self, filename: str, channels: int = None,
-             samplerate: float = None, endian: str = None) -> Sound:
+    @classmethod
+    def get_default_reader(cls) -> 'SoundReader':
+        """Get the default `SoundReader`.  If none has been assigned yet,
+        a new one will be created.
+        """
+        if cls._default_reader is None:
+            cls._default_reader = SoundReader()
+        return cls._default_reader
+
+    @classmethod
+    def read_with_default_reader(cls, *args, **kwargs) -> Sound:
+        """Read a :py:class:`Sound` with the default `SoundReader`.
+        """
+        reader = cls.get_default_reader()
+        return reader.read(*args, **kwargs)
+
+    def read(self, filename: str, channels: Optional[int] = None,
+             samplerate: Optional[float] = None,
+             endian: Optional[str] = None) -> Sound:
         """Read a sound file and return it as :py:class:`Sound` object.
 
         Arguments
@@ -356,18 +495,12 @@ class SoundReader:
         return self.Async(self)
 
 
-class SoundWriter:
+class SoundWriter(Implementable):
     """A :py:class:`SoundWriter` can be used to write :py:class:`Sound`
     objects.
     """
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundWriter':
-        if cls is SoundWriter:
-            new_cls = thirdparty.import_class('SoundWriter', module=module)
-        else:
-            new_cls = cls
-        return super(SoundWriter, new_cls).__new__(new_cls)
 
-    def write(self, sound: Sound, filename: str) -> None:
+    def write(self, sound: Soundlike, filename: str) -> None:
         """Write the given :py:class:`Sound` object to a file.
         The file format is inferred from the file suffix.
         """
@@ -392,10 +525,38 @@ class SoundWriter:
         return self.Async(self)
 
 
-class SoundPlayer(Observable, method='player_changed', changes={
+class SoundPlayer(Observable, Implementable, method='player_changed', changes={
         'state_changed', 'position_changed', 'sound_changed'}):
     """A :py:class:`SoundPlayer` can play sounds on a suitable audio
     device.
+
+    Playback
+    --------
+    The `SoundPlayer` is controlled by to main commands:
+    :py:meth:`play` and :py:meth:`stop`.  `play` starts the playback
+    and `stop` will end it.
+
+    Playback can be done in blocking and non-blocking mode.  In blocking
+    mode, the `play` method will only return once playback has finished
+    (either by reaching the end of the sound or by due to interruption,
+    i.e., some call to the :py:meth:`stop` method, e.g. from another
+    thread or by some interrupt handler).
+
+    The current state of the player can be inspected by the property
+    :py:prop:`playing`.  The `SoundPlayer` will notify interested
+    observers whenever this flag changes its value.
+
+    Loop mode
+    ---------
+    A player can be set in loop mode, indicated by the property
+    :py:prop:`loop`.  In loop mode, when reaching the end of the sound,
+    the player will continue playing, starting again from the beginning.
+
+    Replay interval
+    ---------------
+    A `SoundPlayer` can be assiged a replay interval by the :py:prop:`start`
+    and :py:prop:`end` properties.  If set, the playback is restricted
+    to this interval, including looping and reverting.
 
     Changes
     -------
@@ -410,43 +571,69 @@ class SoundPlayer(Observable, method='player_changed', changes={
     sound_changed:
         The sound object to be played by this :py:class:`SoundPlayer`
         was exchanged.
+
+    Arguments
+    ---------
+    sound:
+        The sound to be played.
+    blocking:
+        A flag indicating if playback should be done blocking (synchronous)
+        or non-blocking (asynchronous). This default behaviour can be
+        overwritten when invoking the :py:meth:`play` method.
+    loop:
+        A flag indicating if the player should operate in loop mode.
+    reverse:
+        A flag indicating if the player should operate in reverse mode.
     """
 
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundPlayer':
-        if cls is SoundPlayer:
-            new_cls = thirdparty.import_class('SoundPlayer', module=module)
-        else:
-            new_cls = cls
-        return super(SoundPlayer, new_cls).__new__(new_cls)
+    _position: float = None
+    _start: float = None
+    _end: float = None
+    _blocking: bool = None
+    _sound: Sound = None
 
-    def __init__(self, sound: Sound = None,
-                 loop: bool = False, reverse: bool = False) -> None:
-        super().__init__()
-        self._sound = sound
-        self._start = None
-        self._end = None
-        self._position = None
+    def __init__(self, sound: Optional[Soundlike] = None,
+                 blocking: bool = True, loop: bool = False,
+                 reverse: bool = False, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.sound = sound
+        self.blocking = blocking
         self.loop = loop
         self.reverse = reverse
 
+    def __del__(self) -> None:
+        if self.playing:
+            LOG.info("SoundPlayer: stop playback to allow for smooth deletion")
+            self.stop()
+        super().__del__()
+
+    def __str__(self) -> str:
+        return f"SoundPlayer({self._attributes_str()}"
+
+    def _attributes_str(self) -> str:
+        return (f"sound={self.sound}, "
+                f"{'playing' if self.playing else 'stopped'}, "
+                f"position={self.position} in {self.start} to {self.end}")
+
     @property
-    def position(self) -> float:
-        """The current position of this :py:class:`SoundPlayer` in secondes.
-        A value of None means that no position has been assigned.
+    def position(self) -> Optional[float]:
+        """The current position of this :py:class:`SoundPlayer` in seconds.
+        A value of `None` means that no position has been assigned.
         When playing, the position is increased in small steps
         (e.g., for each block put on the audio device).
         """
         return self._position
 
     @position.setter
-    def position(self, position: float) -> None:
+    def position(self, position: Optional[float]) -> None:
         """Set the position. If set during playing, this will instruct the
         :py:class:`SoundPlayer` to continue playback at that position.
         """
-        self._set_position(position)
+        if position != self.position:
+            self._set_position(position)
 
     def _set_position(self, position: float) -> None:
-        """The actual assignment of position. This method cancel
+        """The actual assignment of position. This method can
         be overwritten in subclasses.
         """
         self._position = position
@@ -474,7 +661,7 @@ class SoundPlayer(Observable, method='player_changed', changes={
         fixed end time, that is the :py:class:`Sound` is played
         until the end.
         """
-        return self._end or self._sound.duration
+        return self._end or (self._sound and self._sound.duration)
 
     @end.setter
     def end(self, end: float) -> None:
@@ -486,18 +673,30 @@ class SoundPlayer(Observable, method='player_changed', changes={
         self._end = end
 
     @property
+    def blocking(self) -> bool:
+        """A flag indicating if the player will operate in blocking
+        mode (synchronous) of non-blocking mode (asynchronous).
+        """
+        return self._blocking
+
+    @blocking.setter
+    def blocking(self, blocking: bool) -> None:
+        self._blocking = blocking
+
+    @property
     def sound(self) -> Sound:
         """The sound assigned to this :py:class:`SoundPlayer`.
         """
         return self._sound
 
     @sound.setter
-    def sound(self, sound: Sound) -> None:
+    def sound(self, sound: Optional[Soundlike]) -> None:
         """Assign a new sound to this :py:class:`SoundPlayer`.
         """
-        self._set_sound(sound)
+        if sound is not self._sound:
+            self._set_sound(Sound.as_sound(sound))
 
-    def _set_sound(self, sound: Sound) -> None:
+    def _set_sound(self, sound: Optional[Sound]) -> None:
         """Actual implementation of the sound setter, to be overwritten by
         subclasses.
         """
@@ -508,12 +707,19 @@ class SoundPlayer(Observable, method='player_changed', changes={
     def playing(self) -> bool:
         """A flag indicating if the player is currently playing.
         """
+        return self._playing()
+
+    def _playing(self) -> bool:
+        """Report if the player is currently playing.
+        """
         return False  # to be implemented by sublcassses
 
-    @run
-    def play(self, sound: Sound = None, start: float = None, end: float = None,
-             duration: float = None,
-             loop: bool = None, reverse: bool = None) -> None:
+    def play(self, sound: Optional[Soundlike] = None,
+             start: Optional[float] = None, end: Optional[float] = None,
+             duration: Optional[float] = None, loop: Optional[bool] = None,
+             reverse: Optional[bool] = None,
+             # run: Optional[bool] = None,
+             blocking: Optional[bool] = None) -> None:
         # pylint: disable=too-many-arguments
         """Play the given :py:class:`Sound`.
 
@@ -537,7 +743,10 @@ class SoundPlayer(Observable, method='player_changed', changes={
             A flag indicating if playback should be backwards.
         """
         if self.playing:
-            raise RuntimeError("SoundPlayer is already playing.")
+            # raise RuntimeError("SoundPlayer is already playing.")
+            LOG.warning("Trying to start a SoundPlayer that is "
+                        "already playing.")
+            return
 
         LOG.info("Playing sound: %s, start=%s, end=%s", sound, start, end)
         if sound is not None:
@@ -547,9 +756,9 @@ class SoundPlayer(Observable, method='player_changed', changes={
 
         if start is not None:
             self._start = start
-            self._position = start
-        elif self._position is None:
-            self._position = self._start or 0
+            self.position = start
+        elif self.position is None:
+            self.position = self._start or 0
 
         if end is not None and duration is not None:
             raise ValueError("Specification of end and duration.")
@@ -558,17 +767,16 @@ class SoundPlayer(Observable, method='player_changed', changes={
         elif duration is not None:
             self._end = self._start + duration
         else:
-            self._end = sound.duration
+            self._end = self.sound.duration
 
         if loop is not None:
             self.loop = loop
         if reverse is not None:
             self.reverse = reverse
 
-        self._play()
-        self.change('state_changed')
+        self._play(self._blocking if blocking is None else blocking)
 
-    def _play(self) -> None:
+    def _play(self, blocking: bool) -> None:
         """The actual implementation of starting the player
         (to be implemented by subclasses).
         """
@@ -577,30 +785,63 @@ class SoundPlayer(Observable, method='player_changed', changes={
         """Stop ongoing sound playback.
         """
         if not self.playing:
-            raise RuntimeError("SoundPlayer is not playing.")
+            # raise RuntimeError("SoundPlayer is not playing.")
+            LOG.warning("Trying to stop a SoundPlayer that is not playing.")
+            return
         self._stop()
-        self.change('state_changed')
+
+        # After calling _stop, playing should have stopped. Make
+        # sure that this is the case and inform the observers.
+        if self.playing:
+            LOG.warning("SoundPlayer did not stop playing.")
 
     def _stop(self) -> None:
         """The actual implementation of stopping the player
         (to be implemented by subclasses).
         """
+        LOG.debug("SoundPlayer: stopping playback")
+        self._pause()
+        self.position = None
+
+    def pause(self) -> None:
+        """Pause playback. The audio playback is interrupted but the
+        current position is kept so that playback can be continued
+        later by calling :py:meth:`play`.
+        """
+        LOG.info("SoundPlayer: pausing playback")
+        self._pause()
+
+    def _pause(self) -> None:
+        LOG.debug("SoundPlayer: pausing playback")
+
+    def _player_started(self) -> None:
+        """This method should be invoked once the player has started
+        playing.  It will inform observers.
+        """
+        if not self.playing:
+            LOG.warning("SoundPlayer was started but is not playing: %s",
+                        self)
+        LOG.info("SoundPlayer sending state_changed notification (started)")
+        self.change('state_changed')
+
+    def _player_stopped(self) -> None:
+        """This method should be invoked once the player has stopped
+        playing.  It will inform observers.
+        """
+        if self.playing:
+            LOG.warning("SoundPlayer was stopped but is still playing: %s",
+                        self)
+        LOG.info("SoundPlayer sending state_changed notification (stopped)")
+        self.change('state_changed')
 
 
-class SoundRecorder(Observable, changes={'state_changed', 'time_changed'},
-                    method='recorder_changed'):
+class SoundRecorder(Observable, Implementable, changes={
+        'state_changed', 'time_changed'}, method='recorder_changed'):
     """A :py:class:`SoundRecorder` provides functions for sound
     recording.
     """
 
-    def __new__(cls, module: Union[str, List[str]] = None) -> 'SoundRecorder':
-        if cls is SoundRecorder:
-            new_cls = thirdparty.import_class('SoundRecorder', module=module)
-        else:
-            new_cls = cls
-        return super(SoundRecorder, new_cls).__new__(new_cls)
-
-    def __init__(self, sound: Sound = None,
+    def __init__(self, sound: Optional[Sound] = None,
                  samplerate: int = 44100, channels: int = 2):
         super().__init__()
         self._sound = sound
@@ -624,9 +865,13 @@ class SoundRecorder(Observable, changes={'state_changed', 'time_changed'},
         """
         return self._sound
 
-    def record(self, sound: Sound = None,
-               start: float = None, end: float = None,
-               duration: float = None) -> None:
+    @sound.setter
+    def sound(self, sound: Optional[Sound]) -> None:
+        self._sound = sound
+
+    def record(self, sound: Optional[Sound] = None,
+               start: Optional[float] = None, end: Optional[float] = None,
+               duration: Optional[float] = None) -> None:
         """Start recording a sound into a :py:class:`Sound` object.
 
         Arguments
@@ -708,26 +953,182 @@ class SoundRecorder(Observable, changes={'state_changed', 'time_changed'},
         """
 
 
-class SoundDisplay:
+class SoundView(Implementable):
+    """A graphical component capable of displaying a :py:class:`Sound`.
+    """
+
+    _sound: Optional[Sound] = None
+    _player: Optional[SoundPlayer] = None
+    _recorder: Optional[SoundRecorder] = None
+
+    def __init__(self, sound: Optional[Soundlike] = None,
+                 player: Optional[SoundPlayer] = None,
+                 recorder: Optional[SoundRecorder] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.sound = sound
+        self.player = player
+        self.recorder = recorder
+
+    @property
+    def sound(self) -> Optional[Sound]:
+        """The :py:class:`Sound` to be displayed in this
+        :py:class:`SoundView`.  If `None` the display will
+        be cleaned.
+        """
+        return self._sound
+
+    @sound.setter
+    def sound(self, sound: Optional[Soundlike]) -> None:
+        if sound is not self._sound:
+            self._set_sound(Sound.as_sound(sound=sound))
+
+    def _set_sound(self, sound: Optional[Sound]) -> None:
+        # if self._sound is not None:
+        #     self.unobserve(self._sound)
+        self._sound = sound
+        # if self._sound is not None:
+        #     self.observe(self._sound)
+
+        player = self.player
+        if player is not None:
+            player.sound = sound
+
+        recorder = self.recorder
+        if recorder is not None:
+            recorder.sound = sound
+
+    @property
+    def player(self) -> SoundPlayer:
+        """A :py:class:`SoundPlayer` observed by this
+        :py:class:`SoundView`. Activities of the player may be
+        reflected by this view and the view may contain
+        graphical elements to control the player. The player
+        may be `None` in which case such controls will be disabled.
+        """
+        return self._player
+
+    @player.setter
+    def player(self, player: Optional[SoundPlayer]) -> None:
+        if player is not self._player:
+            self._set_player(player)
+
+    def _set_player(self, player: Optional[SoundPlayer]) -> None:
+        self._player = player
+        if player is not None:
+            player.sound = self.sound
+
+    @property
+    def recorder(self) -> SoundRecorder:
+        """A :py:class:`SoundRecorder` observed by this
+        :py:class:`SoundView`. Activities of the recorder may be
+        reflected by this view and the view may also contain
+        graphical elements to control the recorder.
+        """
+        return self._recorder
+
+    @recorder.setter
+    def recorder(self, recorder: Optional[SoundRecorder]) -> None:
+        if recorder is not self._recorder:
+            self._set_recorder(recorder)
+
+    def _set_recorder(self, recorder: Optional[SoundRecorder]) -> None:
+        self._recorder = recorder
+        if recorder is not None:
+            recorder.sound = self.sound
+
+    def sound_changed(self, sound: Sound, change: Sound.Change) -> None:
+        """React to a change of the sound.
+        """
+        del sound, change  # unused arguments
+        self.update()
+
+    def player_changed(self, player: SoundPlayer,
+                       change: SoundPlayer.Change) -> None:
+        """React to a change of the player.
+        """
+        del player, change  # unused arguments
+        self.update()
+
+    def recorder_changed(self, recorder: SoundRecorder,
+                         change: SoundRecorder.Change) -> None:
+        """React to a change of the recorder.
+        """
+        del recorder, change  # unused arguments
+        self.update()
+
+    def update(self) -> None:
+        """Update this `View`.
+        """
+
+
+class SoundDisplay(SimpleDisplay, Implementable, ABC):
     """A graphical element to plot sound waves.
 
     A sound viewer may be coupled with a
     :py:class:`SoundPlayer` and/or a :py:class:`SoundRecorder`.
+
+    Arguments
+    ---------
+    sound:
+        A sound to display in the newly created `SoundDisplay`.
+    player:
+        An :py:class:`SoundPlayer`, whose activities should
+        be indicated by the `SoundDisplay`.  The support of displaying
+        player activities is optional and be missing in some
+        `SoundDisplay` implementations.
     """
 
-    def __init__(self, sound: Sound = None, **kwargs) -> None:
+    def __init__(self, sound: Optional[Soundlike] = None,
+                 player: Optional[Union[SoundPlayer, bool]] = None,
+                 recorder: Optional[Union[SoundRecorder, bool]] = None,
+                 **kwargs) -> None:
         super().__init__(**kwargs)
-        self._sound = sound
+        self.sound = sound
 
-    def show(self, sound: Sound) -> None:
+        if isinstance(player, bool) and player:
+            player = SoundPlayer()
+        self.player = player
+
+        if isinstance(recorder, bool) and recorder:
+            recorder = SoundRecorder()
+        self.recorder = recorder
+
+    @property
+    def sound(self) -> Optional[Sound]:
+        """The :py:class:`Sound` object currently displayed in this
+        `SoundDisplay`.  ``None`` if no sound is displayed.
+        """
+        return self.view.sound
+
+    @sound.setter
+    def sound(self, sound: Optional[Soundlike]) -> None:
+        self.view.sound = sound
+
+    @property
+    def player(self) -> Optional[SoundPlayer]:
+        """The :py:class:`SoundPlayer` associated with this `SoundDisplay`.
+        `None` if there is no sound player.
+        """
+        return self.view.player
+
+    @player.setter
+    def player(self, player: Optional[SoundPlayer]) -> None:
+        self.view.player = player
+
+    @property
+    def recorder(self) -> Optional[SoundRecorder]:
+        """The :py:class:`SoundRecorder` associated with this `SoundDisplay`.
+        `None` if there is no sound recorder.
+        """
+        return self.view.recorder
+
+    @recorder.setter
+    def recorder(self, recorder: Optional[SoundRecorder]) -> None:
+        self.view.recorder = recorder
+
+    def show(self, sound: Optional[Soundlike] = None, **kwargs) -> None:
         """Display a :py:class:`Sound` object.
         """
-        raise NotImplementedError(f"{self.__class__.__name__} claims to "
-                                  "be an SoundDisplay, but does not implement "
-                                  f"the show method.")
-
-    def sound_changed(self, sound: Sound, change) -> None:
-        """React to a change of the sound.
-        """
-        if change:
-            self.show(sound)
+        if sound is not None:
+            self.sound = sound
+        super().show(**kwargs)

@@ -15,6 +15,7 @@ import numpy as np
 from dltb.base.busy import BusyObservable, busy
 from dltb.base.data import Data
 from dltb.base.image import Image, ImageObservable
+from dltb.base.implementation import Implementable
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -256,7 +257,7 @@ class Generator:
         return generatum
 
 
-class ImageGenerator(Generator):
+class ImageGenerator(Generator, Implementable):
     """An :py:class:`ImageGenerator` is a :py:class:`Generator`
     specialized on creating images.
     """
@@ -370,9 +371,6 @@ class GAN(Generator):
         pass
 
 
-class ImageGAN(GAN, ImageGenerator):
+class ImageGAN(GAN, ImageGenerator, Implementable):
     """A generative adversarial network (GAN) for generating images.
     """
-
-    # FIXME[todo]: implementation mechanism for abstract classes
-    implementations: dict = {}

@@ -28,10 +28,10 @@ import numpy as np
 
 # toolbox imports
 from dltb.base.observer import Observable, change
-from network import Network
+from dltb.network import Network
 # FIXME[hack]: make this network/dataset agnostic!
 from tools.caffe_classes import class_names
-from network.tensorflow import Network as TensorflowNetwork
+from dltb.thirdparty.tensorflow.network import Network as TensorflowNetwork
 from .config import Config
 
 # logging

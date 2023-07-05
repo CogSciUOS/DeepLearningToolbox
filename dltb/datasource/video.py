@@ -8,7 +8,7 @@ import logging
 import numpy as np
 
 # toolbox imports
-from dltb.base.video import Reader
+from dltb.base.video import VideoReader
 from dltb.base.data import Data
 from .datasource import Imagesource, Imagesourcelike, Indexed, Livesource
 
@@ -62,7 +62,7 @@ class Video(Indexed, Imagesource, Livesource):
         """Prepare this Datasource for use.
         """
         super()._prepare()
-        self._backend = Reader(filename=self._filename)
+        self._backend = VideoReader(filename=self._filename)
         self._loop_interval = 1. / self._backend.frames_per_second
 
     def _unprepare(self) -> None:
@@ -185,8 +185,8 @@ class Video(Indexed, Imagesource, Livesource):
         return len(self._backend)
 
 
-class Thumbcinema(Reader):
-    """A video :py:class:`Reader` that uses an `Imagesource` to produce
+class Thumbcinema(VideoReader):
+    """A video :py:class:`VideoReader` that uses an `Imagesource` to produce
     a sequence of frames.
 
     >>> reader = Thumbcinema(Datasource['imagenet'])
@@ -197,7 +197,7 @@ class Thumbcinema(Reader):
     def __init__(self, source: Imagesourcelike) -> None:
         self._source = Imagesource.as_imagesource(source)
 
-    def __enter__(self) -> Reader:
+    def __enter__(self) -> VideoReader:
         self._source.prepare()
         self._iterator = iter(self._source)
         self._count = 0

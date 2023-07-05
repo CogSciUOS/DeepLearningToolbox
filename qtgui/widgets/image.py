@@ -12,7 +12,7 @@ device. If you plan to modify an image, use `QImage`.
 """
 
 # standard imports
-from typing import Union, List, Iterable, Tuple
+from typing import Union, List, Iterable, Tuple, Optional
 import logging
 
 # Generic imports
@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import QToolTip
 
 # toolbox imports
 from dltb.base.data import Data
-from dltb.base.meta import Metadata
+from dltb.base.metadata import Metadata
 from dltb.base.image import Image, Imagelike, ImageObservable
 from dltb.base.image import BoundingBox, PointsBasedLocation, Region, Landmarks
 from dltb.tool.image import ImageTool
@@ -86,14 +86,14 @@ def qimageFromFilename(filename: str) -> QImage:
     return QImage(filename)
 
 
-def qimageFromArray(array: np.ndarray, copy: bool = True) -> QImage:
+def qimageFromArray(array: np.ndarray, copy: Optional[bool] = True) -> QImage:
     array = array.astype(np.uint8)  # FIXME[todo]: maybe scale to 0-255?
     array = np.transpose(array, (1, 0, 2)).copy()
     return QImage(array.data, array.shape[1], array.shape[0],
                   3 * array.shape[1], QImage.Format_RGB888)
 
 
-def qimageToArray(qimage: QImage, copy: bool = True) -> np.ndarray:
+def qimageToArray(qimage: QImage, copy: Optional[bool] = True) -> np.ndarray:
     # qimage = qimage.convertToFormat(QImage.Format_RGBA8888)
     # channels = 4
     # qimage = qimage.convertToFormat(QImage.Format_RGB32)
@@ -115,13 +115,9 @@ Image.as_qimage = staticmethod(imageToQImage)
 
 Imagesource.add_loader('qt', qimageFromFilename)
 
-Image.add_converter(QImage,
-                    lambda image, copy: (qimageToArray(image, copy), copy),
-                    target='array')
-
-Image.add_converter(np.ndarray,
-                    lambda image, copy: (qimageFromArray(image, copy), copy),
-                    target='qimage')
+Image.add_type(QImage, 'qimage')
+Image.add_converter(qimageToArray, source=QImage, target='array')
+Image.add_converter(qimageFromArray, source=np.ndarray, target='qimage')
 
 
 class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
@@ -142,6 +138,9 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
     _show_raw: bool
         A flag indicating whether this QImageView will show
         the raw input data, or the data actually fed to the network.
+    _showImageTool: bool
+        A flag indicating whether this QImageView will show
+        the imageTool bounding box.
     _showMetadata: bool
         A flag indicating if metadata should be shown if available.
     _toolTipActive : bool
@@ -220,6 +219,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         super().__init__(**kwargs)
         self._raw: np.ndarray = None
         self._show_raw = False
+        self._showImageTool = False
 
         self._data = None
         self._image = None
@@ -378,6 +378,9 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
     def setImageTool(self, imageTool: ImageTool) -> None:
         """Set an :py:class:`ImageTool` for this :py:class:`QImageView`.
+        The `ImageTool` represents a transformation to be applied
+        to the image (for example, reflecting some preprocessing of
+        the image).
 
         Arguments
         ---------
@@ -390,7 +393,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
         self._updateImageTool()
 
     def _updateImageTool(self) -> None:
-        """Update the :py:class:`ImageTool`
+        """Update the :py:class:`ImageTool`. This will set the properties
+        `_imageToolRect`, `_imageToolSize`, and `_imageToolTransform`.
         """
         imageTool, image = self._imageTool, self._raw
 
@@ -404,7 +408,7 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
                 QRect(rectangle[0], rectangle[1],
                       rectangle[2]-rectangle[0], rectangle[3]-rectangle[1])
             size = QSize(*imageTool.size_of_image(image))
-            imageSize = QSize(image.shape[1], image.shape[0])
+            # imageSize = QSize(image.shape[1], image.shape[0])
             self._imageToolSize = size
 
             # imageToolTransform: map tool coordinates to image coordinates
@@ -631,7 +635,8 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
         Parameters
         ----------
-        painter :   QPainter
+        painter:
+            The painter perfomring the painting.
         """
         if self._image is not None:
             painter.drawImage(QPoint(0, 0), self._image)
@@ -641,9 +646,10 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
         Parameters
         ----------
-        painter :   QPainter
+        painter:
+            The painter perfomring the painting.
         """
-        if self._imageToolRect is not None:
+        if self._imageToolRect is not None and self._showImageTool:
             pen_width = 4
             pen_color = Qt.blue
             pen = QPen(pen_color)
@@ -656,12 +662,20 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
 
         Parameters
         ----------
-        painter :   QPainter
+        painter:
+            The painter perfomring the painting.
         """
         if self._image is not None and self._overlay is not None:
             painter.drawImage(QPoint(0, 0), self._overlay)
 
     def _drawReceptiveField(self, painter: QPainter):
+        """Draw the receptive field onto this image.
+
+        Parameters
+        ----------
+        painter:
+            The painter perfomring the painting.
+        """
         if self._receptiveField is None:
             return
 
@@ -770,9 +784,12 @@ class QImageView(QWidget, QObserver, Toolbox.Observer, qobservables={
             self.showMetadata = not self.showMetadata
         elif key == Qt.Key_Space:
             self.setMode(not self._processed)
+        elif key == Qt.Key_T:
+            self._showImageTool = not self._showImageTool
+            self.update()
         elif key == Qt.Key_Delete:
             self.invalidateRegion()
-        elif key == Qt.Key_I:
+        elif key == Qt.Key_I:  # I = write infos to log
             LOG.info("image: %s, regions(%s): %s, "
                      "metadata: %s, metadata2: %s, "
                      "mode=%s, keep aspect ratio=%s, show meta data=%s, "

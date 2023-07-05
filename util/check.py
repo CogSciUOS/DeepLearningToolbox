@@ -53,8 +53,8 @@ except ModuleNotFoundError as e:
 # FIXME[update]: frozedict seems unmaintained and has been removed from
 # the toolbox - mach sure that all traces have been deleted and then
 # remove it ...
-#import importlib.util
-#if importlib.util.find_spec('frozendict'):
+#from .importer import importable
+#if importable('frozendict'):
 #try:
 #    import frozendict
 #except ModuleNotFoundError as e:

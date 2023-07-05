@@ -23,32 +23,35 @@ installed.
 # standard imports
 from pathlib import Path
 import sys
-import importlib
 
 # Before proceeding, make sure that the Deep learning toolbox
 # prerequisits are satisfied.  This module will output error messages
 # and exit if some basic requiremants are not fulfilled.
 from . import prerequisits
 
+# util.importer will patch the import machinery, allowing to adapt the
+# import process of certain modules.  This should be done early during
+# the initialization process, before the critical modules have been
+# iported.
+from .util.importer import import_module
+
 # The config module is the central interface for configuring the
 # Deep Learning ToolBox. It is imported as one of the first modules,
 # as it allows to influence the following initionalization process.
 from .config import config
 
-# util.importer2 will patch the import machinery, allowing to adapt the
-# import process of certain modules.  This should be done early during
-# the initialization process, before the critical modules have been
-# iported.
-from .util.importer2 import import_interceptor
+# thirdparty.datasource registers some additional Datasources.
+from . import register
 
 # Importing thirdparty adapts the import of some third-party libraries
 # (like keras).  This should be done before those libraries are
 # imported for the first time.
+# FIXME[concept]: it should be possible to use the DLTB without the
+# thirdparty module.
 from . import thirdparty
 
 # thirdparty.datasource registers some additional Datasources.
 from .thirdparty import datasource
-
 
 # Adapt sys.path: Make sure that the `dltb` directory is in sys.path,
 # but no subdirectory (this may happen if one of the modules is run as
@@ -65,7 +68,7 @@ if DLTB_DIRECTORY not in sys.path:
 # additional configurations that overwrite the default values from
 # the config module.
 if (DLTB_DIRECTORY / 'local.py').is_file():
-    importlib.import_module('.local', package=__name__)
+    import_module('.local', package=__name__)
 
 
 if __name__ == '__main__':

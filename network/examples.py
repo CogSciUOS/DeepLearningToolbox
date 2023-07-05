@@ -1,7 +1,7 @@
-# from network.keras import Network as KerasNetwork
-# from network.torch import Network as TorchNetwork
+# from dltb.thirdparty.keras.network import Network as KerasNetwork
+# from dltb.thirdparty.torch.network import Network as TorchNetwork
 
-from . import Network
+from dltb.network import Network
 
 def keras(backend: str, cpu: bool,
           model_file: str='models/example_keras_mnist_model.h5') -> Network:

@@ -47,7 +47,6 @@ import os
 import sys
 import signal
 import threading
-import importlib.util
 import logging
 from argparse import ArgumentParser
 
@@ -65,10 +64,14 @@ from dltb.tool import Tool
 from dltb.base.data import Data
 from dltb.base.image import Image
 from dltb.base.register import Register
+from dltb.base.package import Package
 from dltb.util.error import handle_exception, print_exception
 from dltb.util.error import set_exception_handler
 from dltb.util.logging import RecorderHandler
 from dltb.util.image import imread
+from dltb.util.importer import importable, import_from_module
+from dltb.util.hardware import HardwareInfo, SystemInfo, ResourceInfo
+from dltb.util.hardware import CudaInfo, PythonInfo
 
 
 # FIXME[todo]: speed up initialization by only loading frameworks
@@ -701,6 +704,20 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         parser.add_argument('--shell', help='Run the toolbox shell',
                             action='store_true', default=False)
 
+        parser.add_argument('--gui', help='Run the toolbox gui',
+                            action='store_true', default=True)
+
+        #
+        # Information
+        #
+        parser.add_argument('--list-packages', action='store_true',
+                            default=False, help="List known packages")
+        parser.add_argument('--package-info',
+                            help="Show package information")
+
+        parser.add_argument('--hardware-info', action='store_true',
+                            help="Show hardware information")
+
         #
         # Models
         #
@@ -790,7 +807,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         #
         # Global flags
         #
-        config.use_cpu = args.cpu
+        config.use_gpu = not args.cpu
 
         #
         # Tools
@@ -829,7 +846,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         #
         # Datasources
         #
-        for id in 'Webcam', 'Noise':  # FIXME[todo]:, 'Helen', 'Movie':
+        for id in 'Noise', :  # FIXME[todo]:, 'Webcam', 'Helen', 'Movie':
+            # this will initialize AND prepare the datasources!
             self.add_datasource(Datasource[id])
 
         if args is not None:
@@ -880,19 +898,65 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         #
         # User Interface
         #
-        if self.option('shell'):
-            gui = None
-        else:
-            gui = 'qtgui'
+        if self.option('list_packages'):
+            for idx, package in enumerate(Package._register, start=1):
+                print(f"({idx}) {package.label} ({package.version})")
+            rc = 0
+        elif self.option('package_info'):
+            package_name = self.option('package_info')
+            if package_name in Package:
+                try:
+                    Package[package_name].prepare()
+                    print(Package[package_name])
+                except:
+                    print("Error importing package:", package_name)
+            else:
+                print("No such package:", package_name)
+            rc = 0
+        elif self.option('hardware_info'):
 
-        if gui is not None:
-            rc = self.start_gui(gui=gui)
-        else:
+            hardware_info = HardwareInfo()
+            header = f"Hardware info ({type(hardware_info)})"
+            print("", header, len(header) * "=", sep=os.linesep)
+            print(str(hardware_info))
+
+            system_info = SystemInfo()
+            header = f"System info ({type(system_info)})"
+            print("", header, len(header) * "=", sep=os.linesep)
+            print(str(system_info))
+
+            resource_info = ResourceInfo()
+            header = f"Resource info ({type(resource_info)})"
+            print("", header, len(header) * "=", sep=os.linesep)
+            print(str(resource_info))
+
+            cuda_info = CudaInfo()
+            header = f"CUDA info ({type(cuda_info)})"
+            print("", header, len(header) * "=", sep=os.linesep)
+            print("CudaInfo implementations:",
+                  tuple(CudaInfo.implementations()))
+            print(str(cuda_info))
+            for device in cuda_info:
+                print(str(device))
+
+            python_info = PythonInfo()
+            header = f"Python info ({type(python_info)})"
+            print("", header, len(header) * "=", sep=os.linesep)
+            print(str(python_info))
+
+            rc = 0
+        elif self.option('shell'):
             self.setup()
             # self.setup(tools=tools, networks=networks, datasources=datasources)
             self.run_shell(asynchronous=False)
             self.quit(sys_exit=False)
             rc = 0
+        elif self.option('gui'):
+            gui = 'qtgui'
+            rc = self.start_gui(gui=gui)
+        else:  # non-interactive mode
+            rc = 0
+
         return rc
 
     #
@@ -984,8 +1048,7 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
         for name, module in valid_guis.items():
             if gui is not None and gui != name:
                 continue
-            spec = importlib.util.find_spec(module)
-            if spec is not None:
+            if importable(module):
                 gui = name
                 break
             elif gui is not None:
@@ -1070,8 +1133,8 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
 
         # We use the local import here to avoid circular imports
         # (the gui_module may import toolbox.Toolbox)
-        gui_module = importlib.import_module(gui)
-        self._gui = gui_module.create_gui(sys.argv, self, **kwargs)
+        create_gui = import_from_module(gui, 'create_gui')
+        self._gui = create_gui(sys.argv, self, **kwargs)
 
         # FIXME[hack]: we need a better solution here!
         self.set_runner(self._gui.getRunner())
@@ -1361,16 +1424,16 @@ class Toolbox(BusyObservable, Datafetcher.Observer, Register.Observer,
     def _initialize_processes(self) -> None:
         """
         """
-        if True:
-            print("Toolbox: Not initializing processes")
+        if True:  # processes are currently disabled (as not implemented ...)
+            LOG.info("Toolbox: Not initializing processes")
             self._process = None
             return
 
-        print("Toolbox: Initializing process")
+        LOG.info("Toolbox: Initializing process")
         self._process = Process(name='test')
-        print("Toolbox: Starting process")
+        LOG.debug("Toolbox: Starting process")
         self._process.start()
-        print("Toolbox: Process is running")
+        LOG.debug("Toolbox: Process is running")
         self.notify_process("Hallo")
 
     def get_process(self, name: str) -> Process:

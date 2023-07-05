@@ -24,8 +24,15 @@ from . import LOG, TF_LOGGER
 #
 # CPU/GPU info
 #
-if config.use_cpu:
+if not config.tensorflow_use_gpu:
     tf.config.set_visible_devices([], 'GPU')
+
+# FIXME[todo]: make config observable
+# def config_changed(config, what: str) -> None:
+#     if what == 'use_gpu' or what == 'tensorflow_use_gpu':
+#        tensorflow_use_gpu(config.tensorflow_use_gpu)
+#     if what == 'tensorflow_version':
+#        tensorflow_set_version(config.tensorflow_version)
 
 
 # TensorFlow has a quite aggressive default GPU memory allocation policy,

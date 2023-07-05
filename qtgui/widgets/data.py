@@ -1,11 +1,28 @@
 """
+This module provides widgets for viewing data and metadata.
+
+* The :py:class:`QDataInfoBox` displays textual information on a piece of
+  :py:class:`Data`.
+
+* The :py:class:`QDataView` consists of multiple parts, displaying
+  visual and textual information of data.
+
+* The :py:class:`QBatchNavigator` allows to navigate through a batch
+  of data.
+
+* The (old) :py:class:`QMetadataView` displays metadata.
+
+* The :py:class:`QDataInspector` combines a :py:class:`QDataView`
+  and a :py:class:`QDatasourceNavigator`.
+
 .. moduleauthor:: Ulf Krumnack
 
 .. module:: qtgui.widgets.data
 
-This module provides widgets for viewing data and metadata.
 """
 # pylint --method-naming-style=camelCase --attr-rgx="_[a-z]+[A-Za-z0-9]+" --attr-naming-style=camelCase --variable-naming-style=camelCase --extension-pkg-whitelist=PyQt5 qtgui.widgets.data
+
+# FIXME[todo]: make the whole annotation functionality optional!
 
 # standard imports
 from typing import Any, Union, Optional, Sequence, Mapping
@@ -28,8 +45,8 @@ from PyQt5.QtWidgets import QScrollArea
 from toolbox import Toolbox
 from dltb.base.data import Data
 from dltb.base.image import Image
-from dltb.base.meta import Metadata
 from dltb.base.image import Region, PointsBasedLocation, Landmarks
+from dltb.base.metadata import Metadata
 from dltb.datasource import Datasource, Datafetcher
 from dltb.tool.classifier import ClassIdentifier
 
@@ -125,6 +142,10 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
     _datafetcher: Datafetcher = None
 
     """
+    FilterNone: int = 0
+    FilterWhitelist: int = 1
+    FilterBlacklist: int = 2
+
     _whitelist: Sequence = []  # also provides an order
     _blacklist: AbstractSet = set()  # no order
     _formatters: Mapping = {  # map name or type to formatter
@@ -150,7 +171,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         ),
         None: lambda value: f"{value} [{type(value).__name__}]"
     }
-    _computers: Mapping = {
+    _computers: Mapping = {  # map name to compute function
         'data': lambda data: f"{data.array.shape}"
     }
     _processed: bool = False
@@ -172,6 +193,7 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             data.
         """
         super().__init__(**kwargs)
+        self._filter = self.FilterWhitelist
         self._metaText = ""
         self._dataText = ""
         self._data = None
@@ -190,6 +212,11 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self._dataLabel = QLabel()
         self._dataLabel.setWordWrap(True)
         self._dataLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        # By default, a QWidget does not accept the keyboard focus, so
+        # we need to enable it explicitly: Qt.StrongFocus means to
+        # get focus by 'Tab' key as well as by mouse click.
+        self.setFocusPolicy(Qt.StrongFocus)
 
     def _layoutUI(self):
         """Layout the UI.
@@ -307,7 +334,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         self._data = data
         self._updateMeta(index=index)
         self._updateStatistics()
-        self.update()
 
     @protect
     def data_changed(self, data: Data, change: Data.Change,
@@ -319,7 +345,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                   data, change, attribute)
         self._updateMeta(index=None)
         self._updateStatistics()
-        self.update()
 
     #
     # Output
@@ -341,6 +366,8 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
 
         value = getattr(data, attribute)
         mtype = type(value)
+        if issubclass(mtype, np.ndarray):
+            mtype = np.ndarray  # e.g., imageio.core.util.Array
         if attribute in self._formatters:
             formatter = self._formatters[attribute]
         elif mtype in self._formatters:
@@ -366,17 +393,19 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             self._metaText += "No data!<br>\n"
             return
 
-        if self._whitelist:
-            for attribute in self._whitelist:
-                if hasattr(data, attribute):
-                    value = self._attributeValue(data, attribute)
-                    self._metaText += f"{attribute}: {value}<br>\n"
-        else:
+        if self._filter == self.FilterWhitelist:
+            if self._whitelist:
+                for attribute in self._whitelist:
+                    if hasattr(data, attribute):
+                        value = self._attributeValue(data, attribute)
+                        self._metaText += f"{attribute}: {value}<br>\n"
+        elif self._filter == self.FilterBlacklist:
             for attribute in data.attributes(batch=False):
                 if (attribute not in self._blacklist and
                         type(attribute) not in self._blacklist):
                     value = self._attributeValue(data, attribute)
                     self._metaText += f"{attribute}: {value}<br>\n"
+
             if data.is_batch:
                 if index is not None:
                     self._metaText += \
@@ -390,6 +419,16 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                     value = ('*' if data.is_batch else
                              self._attributeValue(data, attribute))
                     self._metaText += f"{attribute}[batch]: {value}<br>\n"
+        else:  # no filter
+            for attribute in data.attributes(batch=False):
+                value = self._attributeValue(data, attribute)
+                self._metaText += f"{attribute}: {value}<br>\n"
+
+        self._metaText += \
+            (f"Toolbox: {self._toolbox is not None}, "
+             f"Datfetcher: {self._datafetcher is not None}, "
+             f"Filter: {self._filter}")
+        self._metaLabel.setText(self._metaText)
 
     def _updateStatistics(self):
         """Update the statistic information from the current data object.
@@ -423,13 +462,11 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
                                format(array.min(), array.max(),
                                       array.mean(), array.std()))
 
-    def update(self):
+        self._dataLabel.setText(self._dataText if self._statistics else '')
+
+    def old_update(self):
         """Update the information displayed by this :py:class:`QDataInfoBox`.
         """
-        self._metaLabel.setText(self._metaText +
-                                f"Toolbox: {self._toolbox is not None}, "
-                                f"Datfetcher: {self._datafetcher is not None}")
-        self._dataLabel.setText(self._dataText if self._statistics else '')
 
     #
     # Events
@@ -441,12 +478,25 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
 
         S: toggle the statics flag
         M: toggle the mode flag
+        A: show all attributes
+        W: turn on the whitelist filter
+        B: turn on the blacklist filter
+        
         """
         key = event.key()
         if key == Qt.Key_S:  # toggle statistics flag
             self.setStatistics(not self.statistics())
         elif key == Qt.Key_M:  # toggle mode flag
             self.setMode(not self.mode())
+        elif key == Qt.Key_A:  # turn off the filter (show all attributes)
+            self._filter = self.FilterNone
+            self._updateMeta()
+        elif key == Qt.Key_W:  # turn on the whitelist filter
+            self._filter = self.FilterWhitelist
+            self._updateMeta()
+        elif key == Qt.Key_B:  # turn on the blacklist filter
+            self._filter = self.FilterBlacklist
+            self._updateMeta()
         else:
             super().keyPressEvent(event)
 
@@ -489,7 +539,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
         if processed != self._processed:
             self._processed = processed
             self._updateStatistics()
-            self.update()
 
     def statistics(self) -> bool:
         """A flag indicating if statistics are to be shown in this
@@ -510,7 +559,6 @@ class QDataInfoBox(QWidget, QObserver, qobservables={
             self._statistics = show
             self.statisticsChanged.emit(show)
             self._updateStatistics()
-            self.update()
 
 
 class QDataView(QWidget, QObserver, qobservables={
@@ -525,6 +573,8 @@ class QDataView(QWidget, QObserver, qobservables={
     In case of an :py:class:`Image` the display is split into (at least)
     two parts:
     * _imageView: a :py:class:`QImageView` for displaying image data.
+    * `_multiImageView` (optional): for displaying multiple regions of
+      interest (this is useful for detection tasks)
     * _inputInfo: a :py:class:`QDataInfoBox` for displaying the
         :py:class:`Data` object.
     Additional components may be included depending of the metadata
@@ -538,9 +588,22 @@ class QDataView(QWidget, QObserver, qobservables={
         `'Statistics'`. If the button is checked, additional statistical
         information will be displayed in the _dataLabel
         (otherwise it will be empty)
+
+
+    Arguments
+    ---------
+    orientation:
+        The orientation in which the components of the Widget are
+        arranged.  with `Qt.Vertical` (default), the data display is
+        put on top and other components (multiImageScroler, dataInfo)
+        are placed below.  With `Qt.Horizontal`, the data display is
+        placed on the left and further components are arranged right
+        of it.
+
     """
 
     def __init__(self, orientation: Qt.Orientation = Qt.Vertical,
+                 multiview: bool = False,
                  **kwargs) -> None:
         super().__init__(**kwargs)
         self._orientation = orientation
@@ -549,10 +612,10 @@ class QDataView(QWidget, QObserver, qobservables={
         self._regions = []
         self._autosave = True  # automatically save when changing to new Data
         self._annotationsChanged = False  # a flag indicationg if data changed
-        self._initUI()
+        self._initUI(multiview)
         self._layoutUI()
 
-    def _initUI(self) -> None:
+    def _initUI(self, multiview: bool) -> None:
         """Initialize the user interface of this :py:class:`QDataView`.
         """
         # QImageView: a widget to display the input data
@@ -561,24 +624,27 @@ class QDataView(QWidget, QObserver, qobservables={
 
         # QMultiImageView for displaying multiple regions of interest
         # (this is useful for detection tasks)
-        orientation = (Qt.Vertical if self._orientation == Qt.Horizontal else
-                       Qt.Horizontal)
-        self._multiImageView = QMultiImageView(orientation=orientation)
-        self._multiImageScroller = \
-            QOrientedScrollArea(orientation=orientation)
-        self._multiImageScroller.setWidget(self._multiImageView)
-        self._multiImageScroller.setWidgetResizable(True)
+        if multiview:
+            orientation = (Qt.Vertical if self._orientation == Qt.Horizontal
+                           else Qt.Horizontal)
+            self._multiImageView = QMultiImageView(orientation=orientation)
+            self._multiImageScroller = \
+                QOrientedScrollArea(orientation=orientation)
+            self._multiImageScroller.setWidget(self._multiImageView)
+            self._multiImageScroller.setWidgetResizable(True)
 
-        self._multiImageView.currentImageChanged.\
-            connect(self._imageView.setCurrentRegion)
-        self._multiImageView.annotationsChanged.\
-            connect(self._imageView.updateRegion)
-        self._multiImageView.annotationsChanged.\
-            connect(self.annotationsChanged)
-        self._imageView.currentRegionChanged.\
-            connect(self._multiImageView.setCurrentImage)
-        self._imageView.currentRegionChanged.\
-            connect(self.setCurrentRegion)
+            self._multiImageView.currentImageChanged.\
+                connect(self._imageView.setCurrentRegion)
+            self._multiImageView.annotationsChanged.\
+                connect(self._imageView.updateRegion)
+            self._multiImageView.annotationsChanged.\
+                connect(self.annotationsChanged)
+            self._imageView.currentRegionChanged.\
+                connect(self._multiImageView.setCurrentImage)
+            self._imageView.currentRegionChanged.\
+                connect(self.setCurrentRegion)
+        else:
+            self._multiImageView = None
 
         self._dataInfo = QDataInfoBox()
         self.addAttributePropagation(Toolbox, self._dataInfo)
@@ -597,6 +663,11 @@ class QDataView(QWidget, QObserver, qobservables={
             connect(self._dataInfo.setStatistics)
         self._dataInfo.statisticsChanged.\
             connect(self._statisticsButton.setChecked)
+
+        # By default, a QWidget does not accept the keyboard focus, so
+        # we need to enable it explicitly: Qt.StrongFocus means to
+        # get focus by 'Tab' key as well as by mouse click.
+        self.setFocusPolicy(Qt.StrongFocus)
 
     def _layoutUI(self) -> None:
         # The layout consists of two main parts
@@ -633,13 +704,15 @@ class QDataView(QWidget, QObserver, qobservables={
             # vertical layout: image above info
             layout = QVBoxLayout()
             layout.addWidget(self._imageView)
-            layout.addWidget(self._multiImageScroller)
+            if self._multiImageView is not None:
+                layout.addWidget(self._multiImageScroller)
             layout.addLayout(dataInfoLayout)
         else:  # self._orientation == Qt.Horizontal
             # horizontal layout: image left of info
             layout = QHBoxLayout()
             layout.addWidget(self._imageView)
-            layout.addWidget(self._multiImageScroller)
+            if self._multiImageView is not None:
+                layout.addWidget(self._multiImageScroller)
             layout.addLayout(dataInfoLayout)
 
         self.setLayout(layout)
@@ -672,6 +745,9 @@ class QDataView(QWidget, QObserver, qobservables={
         index:
             The index of the region to become the current region.
         """
+        if self._multiImageView is None:
+            return
+
         position = self._multiImageView.imagePosition(index)
         if position is not None:
             imageSize = self._multiImageView.imageSize()
@@ -747,10 +823,14 @@ class QDataView(QWidget, QObserver, qobservables={
             self._saveAnnotations(overwrite=True)
 
         self._data = data
+
         isBatch = bool(data) and data.is_batch
         self._batchNavigator.setVisible(isBatch)
         if isBatch:
             self._batchNavigator.setData(data)
+
+        if self._imageView is not None and self._imageView.isVisible():
+            self._imageView.setData(data)
 
         self.update()
         if self._data is not None:
@@ -764,15 +844,17 @@ class QDataView(QWidget, QObserver, qobservables={
         """Add an attribute to the list of attributes to be displayed.
         """
         self._attributes.append(name)
+        self._dataInfo.addToWhitelist(name)
 
-    def update(self):
+    def update(self) -> None:
         """Update the information displayed by this :py:class:`QDataView`
         to reflect the current state of the data object.
         """
         if not self._data:
             self._imageView.setImage(None)
             self._imageView.setMetadata(None)
-            self._multiImageView.setImagesFromRegions(None, [])
+            if self._multiImageView is not None:
+                self._multiImageView.setImagesFromRegions(None, [])
             self._dataInfo.setData(None)
             return
 
@@ -789,27 +871,29 @@ class QDataView(QWidget, QObserver, qobservables={
 
         # we have an image
         self._imageView.setImage(data.array)
-        regions = []
-        for attribute in data.attributes(batch=False):
-            value = getattr(data, attribute)
-            if isinstance(value, Region):
-                self._imageView.addRegion(value)
-                regions.append(value)
-            elif isinstance(value, Landmarks):
-                self._imageView.addLandmarks(value)
-            elif isinstance(value, list):
-                for val in value:
-                    if isinstance(val, Region):
-                        self._imageView.addRegion(val)
-                        regions.append(val)
-        self._regions = regions
-        self._multiImageView.setImagesFromRegions(data, regions)
+        if self._multiImageView is not None:
+            regions = []
+            for attribute in data.attributes(batch=False):
+                value = getattr(data, attribute)
+                if isinstance(value, Region):
+                    self._imageView.addRegion(value)
+                    regions.append(value)
+                elif isinstance(value, Landmarks):
+                    self._imageView.addLandmarks(value)
+                elif isinstance(value, list):
+                    for val in value:
+                        if isinstance(val, Region):
+                            self._imageView.addRegion(val)
+                            regions.append(val)
+            self._regions = regions
+            self._multiImageView.setImagesFromRegions(data, regions)
 
-        if self._annotationsChanged:
+        if True:
+            pass
+        elif self._annotationsChanged:
             self.setStyleSheet("border: 1px solid red")
         else:
             self.setStyleSheet("border: 1px solid green")
-
 
     @protect
     def onIndexChanged(self, _index: int) -> None:
@@ -1098,6 +1182,19 @@ class QDataInspector(QWidget, QObserver, qattributes={
         this :py:class:`QDataInspector`.
         """
         return self._datasourceNavigator
+
+    def datafetcher(self) -> Datafetcher:
+        """Obtain the :py:class:`Datafetcher` of this `QDataInspector`.
+        """
+        return self._datasourceNavigator.datafetcher()
+
+    def data(self) -> Optional[Data]:
+        """The current :py:class:`Data` of this `QDataInspector`.
+        """
+        datafetcher = self.datafetcher()
+        if datafetcher is not None:
+            return datafetcher.data
+        return None
 
     @protect
     def _onButtonClicked(self, _checked: bool) -> None:

@@ -2,7 +2,7 @@
 """
 
 # standard imports
-from typing import Tuple
+from typing import Tuple, Optional
 import math
 import logging
 
@@ -16,7 +16,7 @@ from PyQt5.QtGui import (QPainter, QImage, QPen, QColor, QBrush,
 from PyQt5.QtWidgets import QWidget, QToolTip
 
 # toolbox imports
-from network import Layer
+from dltb.network import Layer
 from dltb.tool.activation import ActivationWorker
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 from dltb.util.image import grayscaleNormalized
@@ -76,6 +76,16 @@ class QActivationView(QWidget, QObserver, qobservables={
     available space by arranging and scaling the units. However, the
     current implementation is still suboptimal and may be improved to
     allow for further configuration.
+
+    Setting activations
+    -------------------
+
+    Activation values can be set using the :py:meth:`setActivations`
+    method.
+
+    The `QActivationView` can also observe a :py:class:`ActivationWorker`.
+    In that case it will react to `data_changed` and `work_finished`
+    notification and call :py:meth:`setActivations` when suitable.
 
     Attributes
     -----------
@@ -141,6 +151,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         A flag indicatint if activation maps (in convolutional layers)
         are displayed using a color scale. Color scale can be
         toggled with the 'C' key.
+
     """
 
     unitChanged = pyqtSignal(int)
@@ -180,17 +191,32 @@ class QActivationView(QWidget, QObserver, qobservables={
         self.setToolTip(False)
         self.setActivationWorker(worker)
 
-    def setActivations(self, activations: np.ndarray) -> None:
+    def setActivations(self, activations: Optional[np.ndarray]) -> None:
         """Set the activations to be displayed in this
         :py:class:`QActivationView`.
-        """
-        if activations is not None:
-            if activations.dtype != np.float32:
-                raise ValueError('Activations must be floats.')
-            if activations.ndim not in {1, 3}:
-                raise ValueError(f'Unexpected shape {activations.shape}')
 
-        if activations is not None:
+        Arguments
+        ---------
+        activations:
+            The activation values.
+            This can also be `None`, in which the `QActivationView`
+            will not show any activation values.
+        """
+        if activations is None:
+            self._unit = None
+            self._position = None
+        else:
+            if activations.dtype != np.float32:
+                raise ValueError("Activations must be floats.")
+            if activations.ndim not in {1, 3}:
+                raise ValueError(f"Unexpected shape {activations.shape}")
+            # check shape - todo: account for channel_first/channel_last!
+            # if self._layer is not None and \
+            #        activations.shape != self._layer.output_shape[1:]:
+            #     raise ValueError("Activation shape mismatch for layer: "
+            #                      f"{activations.shape} vs. "
+            #                      f"{self._layer.output_shape[1:]}")
+
             self._isConvolution = (activations.ndim == 3)
 
             # this is a uint8 array, globally normalized
@@ -377,9 +403,13 @@ class QActivationView(QWidget, QObserver, qobservables={
         if self._layer is None:
             return  # we are not interestend in any activation
 
+        if info.data_changed and worker.data is None:
+            self.setActivations(None)
+
         # get activation and update overlay only when
         # significant properties change
         if info.work_finished:
+            refresh = True
             try:
                 # FIXME[bug]: in loop mode it may happen that the
                 # worked data has already been replaced by new data
@@ -395,9 +425,23 @@ class QActivationView(QWidget, QObserver, qobservables={
                 #LOG.warning("QActivationView.worker_changed: error=%s", error)
                 print_exception(error)
                 activations = None
-            LOG.debug("QActivationView.worker_changed: type=%s",
-                      type(activations))
-            self.setActivations(activations)
+            except KeyError:
+                # In case of quickly changing the layers, it may
+                # happen that the 'work_finished' notification still
+                # refers to the old layer, while the activations for
+                # the new layer have not yet been computed and hence
+                # trying to access them will yield a 'KeyError'.
+                # This can be considered harmless, as the worker should
+                # now compute the activations for the new layer and
+                # send another 'work_finished' notification soon.
+                # It may not even be worth setting the activations to None.
+                refresh = False
+                activations = None
+
+            if refresh:
+                self.setActivations(activations)
+                LOG.debug("QActivationView.worker_changed: type=%s",
+                          type(activations))
 
         LOG.debug("QActivationView.worker_changed: units=%s/%s, "
                   "isConvolution=%s, currentPosition=%s, size/display=%s/%s",
@@ -666,7 +710,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         ----------
         painter : QPainter
         """
-        text = "No data"
+        text = "No activation values"
         if self._showDetails:
             if self._layer:
                 text += f",\nlayer='{self._layer.key}'"
@@ -813,6 +857,7 @@ class QActivationView(QWidget, QObserver, qobservables={
         Space: toggle display of tooltips
         'C': toggle color scale
         'L': toggle local contrast
+        'D': toggle details (when no activation values are available)
         
         Parameters
         ----------

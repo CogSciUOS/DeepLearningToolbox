@@ -46,9 +46,9 @@ import PIL
 # toolbox imports
 from dltb.config import config
 from dltb.util.importer import Importer
-from dltb.base.meta import Metadata
+from dltb.base.metadata import Metadata
 from dltb.base.data import Data
-from dltb.base.image import Imagelike, BoundingBox, Size
+from dltb.base.image import BoundingBox, Size
 from dltb.tool.face.mtcnn import Landmarks, Detector as DetectorBase
 
 # logging

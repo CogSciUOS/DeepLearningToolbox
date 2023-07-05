@@ -25,8 +25,9 @@ from keras.losses import mse, binary_crossentropy
 
 #from toolbox import toolbox
 
-from network import VariationalAutoencoder
-from network.keras_tensorflow import Network as KerasNetwork
+from dltb.network.autoencoder import VariationalAutoencoder
+from dltb.thirdparty.keras.tensorflow import Network as KerasNetwork
+
 
 class KerasAutoencoder(VariationalAutoencoder, KerasNetwork):
     """A (variational) autoencoder implemented in Keras.

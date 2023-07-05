@@ -2,12 +2,12 @@
 """
 
 # standard imports
-from typing import Tuple, Any, Union, List, Iterator, Iterable, Container
+from typing import Tuple, List, Any, Union, Optional
+from typing import Iterator, Iterable, Container
 from collections import OrderedDict
 import functools
 import operator
 import logging
-import importlib
 
 # third party imports
 import numpy as np
@@ -16,16 +16,12 @@ import numpy as np
 from ..base import Extendable
 from ..base.register import RegisterClass, Registrable
 from ..base.prepare import Preparable
-from ..base.data import Data, Datalike
-from ..base.image import Imagelike, ImageExtension
-from ..tool import Tool
-from ..tool.image import ImageTool
-from ..tool.classifier import SoftClassifier
+from ..base.data import Datalike
+from ..util.importer import import_module
 from ..util.array import adapt_data_format
 from ..util.array import DATA_FORMAT_CHANNELS_FIRST, DATA_FORMAT_CHANNELS_LAST
-from ..util.image import imresize
 from ..util.terminal import Terminal, DEFAULT_TERMINAL
-from .base import NetworkBase, LayerBase as Layer, Layerlike, as_layer
+from .base import NetworkBase, LayerBase as Layer, Layerlike
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -186,7 +182,7 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
     def import_framework(cls):
         """Import the framework (python modules) required by this network.
         """
-        pass  # to be implemented by subclasses
+        # to be implemented by subclasses
 
     # FIXME[todo]: add additional parameters, e.g. cpu / gpu
     # FIXME[concept]: there are at least two different concepts of loading:
@@ -199,7 +195,7 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
     @classmethod
     def load(cls, module_name, *args, **kwargs):
         LOG.info("Loading module: %s", module_name)
-        module = importlib.import_module(module_name)
+        module = import_module(module_name)
         network_class = getattr(module, "Network")
         network_class.import_framework()
         instance = network_class(*args, **kwargs)
@@ -275,18 +271,18 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
         """
         if isinstance(key, str):
             return key in self.layer_dict
-        elif isinstance(key, Registrable):
+        if isinstance(key, Registrable):
             return key.key in self.layer_dict
         return False
 
-    def __getitem__(self, key: Any) -> Layer:
+    def __getitem__(self, key: Layerlike) -> Layer:
         """Obtain the given layer from this :py:class:`Network`.
         """
         if isinstance(key, str):
             return self.layer_dict[key]
-        elif isinstance[key, int]:
+        if isinstance[key, int]:
             return list(self.layer_dict.items())[key]
-        elif isinstance(key, Registrable):
+        if isinstance(key, Registrable):
             return self.layer_dict[key.key]
         raise KeyError(f"No layer for key '{key}' in network.")
 
@@ -323,13 +319,12 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
     def _prepared(self) -> bool:
         return (self.layer_dict is not None) and super()._prepared()
 
-    def __getitem__(self, layer: Union[int, str]) -> Layer:
+    def __getitem__(self, layer: Layerlike) -> Layer:
         """Provide access to the layers by number. Access by id is provided
         via :py:attr:`layer_dict`."""
         if not self.prepared:
             return RuntimeError("Trying to access unprepared Network "
                                 f"'{self.key}'")
-        from .layer import Layer  # FIXME[hack]: we need another way to make Layer available ...
         if isinstance(layer, Layer):
             return layer
         if isinstance(layer, str):
@@ -450,8 +445,7 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
         if not is_list:
             activations = activations[0]
         elif as_dict:
-            activations = {layer_id: activation for layer_id, activation
-                           in zip(layer_ids, activations)}
+            activations = dict(zip(layer_ids, activations))
         return activations
 
     def get_net_input(self, layer_ids: Any,
@@ -656,13 +650,12 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
             elif self._is_batch_provided(inputs.shape, network_input_shape):
                 inputs = inputs[..., np.newaxis]
             else:
-                raise ValueError('Non matching input dimensions: '
-                                 'network={} vs data={}'.
-                                 format(network_input_shape, inputs.shape))
+                raise ValueError("Non matching input dimensions: "
+                                 f"'network={network_input_shape} vs. "
+                                 f"data={inputs.shape}")
         elif len(inputs.shape) > 4:
-            raise ValueError('Too many input dimensions.'
-                             'Should be maximally 4 instead of {}.'
-                             .format(len(inputs.shape)))
+            raise ValueError("Too many input dimensions: should be "
+                             f"maximally 4 instead of {len(inputs.shape)}.")
 
         return inputs
 
@@ -747,11 +740,11 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
                 # channel information is not provided, add it
                 input_shape = (*input_shape, network_input_channels)
         elif len(input_shape) != 4:
-            raise ValueError('Incorrect input shape {}, len should be {}'
-                             .format(input_shape, 4))
+            raise ValueError(f"Incorrect input shape {input_shape}, "
+                             f"len should be {4}")
         elif input_shape[-1] != network_input_channels:
-            raise ValueError('Invalid input shape {}: channels should be {}'
-                             .format(input_shape, network_input_channels))
+            raise ValueError(f"Invalid input shape {input_shape}: "
+                             f"channels should be {network_input_channels}")
         return input_shape
 
     def _get_number_of_input_channels(self) -> int:
@@ -786,13 +779,19 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
     #
 
     def empty(self) -> bool:
+        """A flag indicating that this `Network` is empty, meaning
+        has no layers.
+        """
         return self.layer_dict is None or not bool(self.layer_dict)
 
     def input_layer_id(self) -> str:
+        """
+        """
         first_layer_id = next(iter(self.layer_dict.keys()))
         return first_layer_id
 
     def output_layer_id(self):
+        last_layer_id = None
         for last_layer_id in iter(self.layer_dict.keys()):
             pass
         return last_layer_id
@@ -1134,16 +1133,21 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
             If the given layer is not convolutional.
         """
         if not self.layer_is_convolutional(layer_id):
-            raise ValueError('Not a convolutional layer: {}'.format(layer_id))
+            raise ValueError("Not a convolutional layer: {layer_id}")
 
     #
     # Pre- and postprocessing
     #
 
     def preprocess(self, inputs: Any) -> Any:
+        """Preprocess the inputs to obtain the inputs
+        in the internal format.
+        """
         return inputs
 
     def postprocess(self, outputs: Any) -> Any:
+        """Postprocess the outputs.
+        """
         return outputs
 
     def internal_to_numpy(self, array: np.ndarray,
@@ -1185,304 +1189,14 @@ class Network(NetworkBase, Extendable, Preparable, method='network_changed',
             terminal.output(f"({index:3}) {line}")
 
 
-class ImageNetwork(ImageExtension, ImageTool, base=Network):
-    """A network for image processiong. Such a network provides
-    additional methods to support passing images as arguments.
+Networklike = Union[Network, str]
 
-    Working on images introduces some additional concepts:
-
-    size:
-        An image typically has a specific size, given by width
-        and height in pixels.
+def network_key(network: Optional[Networklike]) -> str:
+    """The network key for a given `Networklike` object.
     """
-    @property
-    def input_size(self) -> Tuple[int, int]:
-        return self.get_input_shape()[1:-1]
+    return network.key if isinstance(network, Network) else network
 
-    # FIXME[hack]: this changes the semantics of the function:
-    # the base class expects inputs: np.ndarray, while we expect an Imagelike.
-    # We should improve the interface (either a new method or a something
-    # more flexible)
-    def get_activations(self, inputs: Imagelike,
-                        layer_ids: Any = None,
-                        data_format: str = None,
-                        as_dict: bool = False
-                        ) -> Union[np.ndarray, List[np.ndarray]]:
-        """
-        """
-
-        LOG.debug("ImageNetwork.getActivations: inputs=%s [%s], layers=%s",
-                  type(inputs), DATA_FORMAT_CHANNELS_LAST, layer_ids)
-        internal = self.image_to_internal(inputs)
-        is_list = isinstance(layer_ids, list)
-        # batched: True = the input data where given a batch and hence
-        # the result will be batch(es) of activation values
-        # (the activation arrays have a batch dimension as their first axis)
-        batched = (isinstance(inputs, Data) and inputs.is_batch or
-                   isinstance(inputs, list))
-
-        # Check whether the layer_ids are actually a list.
-        layer_ids, is_list = self._force_list(layer_ids)
-
-        # Transform the input_sample appropriate for the loaded_network.
-        LOG.debug("ImageNetwork.getActivations: internal=%s (%s)",
-                  internal.shape, self._internal_format)
-        activations = self._get_activations(internal, layer_ids)
-        LOG.debug("ImageNetwork.getActivations: internal activations=%s (%s)",
-                  len(activations), self._internal_format)
-
-        # Transform the output to stick to the canocial interface.
-        activations = [self._transform_outputs(activation, data_format,
-                                               unbatch=not batched,
-                                               internal=False)
-                       for activation in activations]
-
-        LOG.debug("ImageNetwork.getActivations: output activations=%s (%s/%s)",
-                  #activations[0].shape, data_format, self.data_format)
-                  len(activations), data_format, self.data_format)
-
-        # If it was just asked for the activations of a single layer,
-        # return just an array.
-        if not is_list:
-            activations = activations[0]
-        elif as_dict:
-            activations = {layer_id: activation for layer_id, activation
-                           in zip(layer_ids, activations)}
-        return activations
-
-    #
-    # Implementation of the Tool interface (not used yet)
-    #
-
-    def extract_receptive_field(self, layer: Layerlike, unit: Tuple[int],
-                                image: Imagelike) -> Imagelike:
-        """Extract the receptive field for a unit in this :py:class:`Network`
-        from an input image.
-
-        Arguments
-        ---------
-        layer:
-            The layer of the unit.
-        unit:
-            Coordinates for the unit in the `layer`. These may or may not
-            include the channel (the channel does not influence the
-            receptive field).
-        image:
-            The image from which the receptive field should be extracted.
-            The image will undergo the same preprocessing (resizing/cropping),
-            as it would undergo if the image would be processed by
-            this :py:class:`Network`.
-
-        Result
-        ------
-        extract:
-            The part of the image in the receptive field of the unit,
-            resized to fit the native input resolution of this
-            :py:class:`Network`.
-        """
-        layer = as_layer(layer)
-        resized = self.resize(image)
-        (fr1, fc1), (fr2, fc2) = layer.receptive_field(unit)
-        extract_shape = (fr2 - fr1, fc2 - fc1)
-        if resized.ndim == 3:  # add color channel
-            extract_shape += (resized.shape[-1], )
-        extract = np.zeros(extract_shape)
-        sr1, tr1 = max(fr1, 0), max(-fr1, 0)
-        sc1, tc1 = max(fc1, 0), max(-fc1, 0)
-        sr2, tr2 = min(fr2, resized.shape[0]), \
-            extract_shape[0] + min(0, resized.shape[0] - fr2),
-        sc2, tc2 = min(fc2, resized.shape[1]), \
-            extract_shape[1] + min(0, resized.shape[1] - fc2),
-        # print(f"field: [{fr1}:{fr2}, {fc1}:{fc2}] ({fr2-fr1}x{fc2-fc1}), "
-        #       f"extract: {extract_shape[:2]}, "
-        #       f"source:[{sr1}:{sr2}, {sc1}:{sc2}] ({sr2-sr1}x{sc2-sc1}), "
-        #       f"target:[{tr1}:{tr2}, {tc1}:{tc2}] ({tr2-tr1}x{tc2-tc1})")
-        extract[tr1:tr2, tc1:tc2] = resized[sr1:sr2, sc1:sc2]
-        return extract
-
-    def resize(self, image: Imagelike) -> Imagelike:
-        # FIXME[hack]: this should be integrated into (or make use of)
-        # the preprocessing logic
-        return imresize(image, self.input_size)
-
-    def image_to_internal(self, image: Imagelike) -> Any:
-        """
-        """
-        return self._image_to_internal(image)[np.newaxis]
-        # to be implemented by subclasses
-
-    def internal_to_image(self, data: Any) -> Imagelike:
-        """
-        """
-        return self._internal_to_image(image)
-        # to be implemented by subclasses
-
-
-class Classifier(SoftClassifier, Network):
-    """A :py:class:`Network` to be used as classifier.
-
-    _labeling: str
-        The name of the label lookup table of the :py:class:`ClassScheme`
-        by which the activation vector of the output layer(s), i.e.
-        the probit/score is indexed.
+def as_network(network: Optional[Networklike]) -> Network:
+    """The network object for `Layerlike` object.
     """
-
-    def __init__(self, labeling: str = None, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._labeling = labeling
-
-    @property
-    def labeling(self) -> str:
-        """The name of the label lookup table of the :py:class:`ClassScheme`
-        by which the activation vector of the output layer(s), i.e.
-        the probit/score is indexed.
-        """
-        return self._labeling
-
-    @property
-    def logit_layer(self) -> Layer:
-        """The layer providing the class "logits".
-        This is usually the prefinal layer that is passed
-        in the softmax output layer.
-        """
-        return self.get_output_layer()  # FIXME[todo]
-
-    @property
-    def score_layer(self) -> Layer:
-        """The layer computing the class scores ("probabilities").
-        This is usually the output layer of the :py:class:`Classifier`.
-        """
-        return self.get_output_layer()
-
-    def _prepare(self) -> None:
-        """Prepare this :py:class:`Classifier`.
-
-        Raises
-        ------
-        ValueError
-            If the :py:class:`ClassScheme` does not fit to this
-            :py:class:`Classifier`.
-        """
-        super()._prepare()
-
-        # check if the output layer fits to the classification scheme
-        output_shape = self.get_output_shape(include_batch=False)
-        if len(output_shape) > 1:
-            raise ValueError(f"Network '{self}' seems not to be Classifier "
-                             f"(output shape is {output_shape})")
-        elif output_shape[0] != len(self._scheme):
-            raise ValueError(f"Network '{self}' does not fit the the "
-                             f"classification scheme: {output_shape} output "
-                             f"units vs. {len(self._scheme)} classes")
-
-    #
-    # Implementation of the SoftClassifier API
-    #
-
-    def class_scores(self, data: Datalike,
-                     probit: bool = False) -> np.ndarray:
-        """Implementation of the :py:class:`SoftClassifier` interface.
-
-        Arguments
-        ---------
-        data:
-            The input data (either individual datum or batch of data).
-
-        Results
-        -------
-        scores:
-            The class scores obtained by classifying the input,
-            indexed according to the :py:clas:`ClassScheme` of this
-            :py:class:`Classifier`.
-        """
-        # obtain activation values for the score_layer
-        activations = self.get_activations(data, self.score_layer)
-
-        # convert scores from internal format into numpy array
-        return self.to_class_scheme(activations)
-
-    def to_class_scheme(self, activations: np.ndarray) -> np.ndarray:
-        """Reindex a given activation vector acoording to the
-        :py:class:`ClassScheme` of this :py:class:`Classifier`. The
-        reindexed activations vector can be used to directly read out
-        activation values, using the :py:class:`ClassIdentifier`s of
-        the :py:class:`ClassScheme` as index.
-        """
-        return self._scheme.reindex(activations, source=self._labeling)
-
-
-class Autoencoder(Network, method='network_changed'):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._encoder = None
-        self._decoder = None
-
-    @property
-    def encoder(self):
-        return self._encoder
-
-    @property
-    def decoder(self):
-        return self._decoder
-
-
-class VariationalAutoencoder(Autoencoder):
-
-    def sampleCode(self, n=1):
-        pass
-
-    def sampleData(self, n=1):
-        pass
-
-    def sampleCodeFor(self, input, n=1):
-        pass
-
-    def sampleDataFor(self, input, n=1):
-        pass
-
-
-class NetworkTool(Tool):
-
-    external_result: Tuple[str] = ('outputs', )
-    internal_arguments: Tuple[str] = ('inputs_', )
-    internal_result: Tuple[str] = ('outputs_', )
-
-    @property
-    def network(self) -> Network:
-        return self._network
-
-    @network.setter
-    def network(self, network: Network) -> None:
-        self._network = Network
-
-    def _preprocess(self, inputs, *args, **kwargs) -> Data:
-        data = super()._preprocess(*args, **kwargs)
-        if inputs is not None:
-            data.add_attribute('_inputs', self._network.preprocess(inputs))
-        return data
-
-    def _process(self, inputs: Any) -> Any:
-        """Default operation: propagate data through the network.
-        """
-        output_layer = self._network.output_layer_id()
-        return self._network.get_activations(inputs, output_layer)
-
-    def _postprocess(self, data: Data, what: str) -> None:
-        if what == 'outputs':
-            data.add_attribute(what, self._network.postprocess(data.outputs_))
-        elif not hasattr(data, what):
-            raise ValueError(f"Unknown property '{what}' for tool {self}")
-
-#
-# FIXME[old]: util functions
-#
-
-
-def remove_batch_dimension(shape: tuple) -> tuple:
-    """Set the batch dimension to None as it does not matter for the
-    Network interface."""
-    shape = list(shape)
-    shape[0] = None
-    shape = tuple(shape)
-    return shape
+    return Network[network] if isinstance(network, str) else network

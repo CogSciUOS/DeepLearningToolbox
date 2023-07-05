@@ -3,8 +3,8 @@ logger = logging.getLogger(__name__)
 print(f"!!!!!!!!!! getEffectiveLevel: {logger.getEffectiveLevel()} !!!!!!!!!!!!!")
 
 from dltb.base.observer import Observable, change
-from network import Network, loader
-from network.lucid import Network as LucidNetwork
+from dltb.network import Network
+from dltb.thirdparty.lucid import Network as LucidNetwork, load_lucid
 
 # lucid.modelzoo.vision_models:
 #     A module providinge the pretrained networks by name, e.g.
@@ -71,7 +71,7 @@ class Engine(Observable, method='engine_changed',
         logger.info(f"load_model({name})")
         try:
             #self._network = LucidNetwork(name=name)
-            self._network = loader.load_lucid(name)
+            self._network = load_lucid(name)
             self._model = self._network.model
         except KeyError as e:
             self._network = None

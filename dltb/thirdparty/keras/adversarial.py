@@ -31,9 +31,9 @@ print(f"keras: {keras.__version__} (backend: {keras.backend.backend()}, dim_orde
 
 assert keras.backend.image_data_format() == 'channels_last', "this tutorial requires keras to be configured to channels_last format"
 
+from dltb.network import Classifier
+from .network import Network as KerasNetwork
 
-from network.keras import Network as KerasNetwork
-from network import Classifier
 
 # FIXME[hack]: is the following really needed?
 class KerasClassifier(KerasNetwork, Classifier): pass

@@ -9,12 +9,12 @@ from typing import Iterable
 
 # toolbox imports
 from dltb.datasource import Datasource
+from dltb.network import Network
 from dltb.tool import Tool
 from dltb.thirdparty.soundfile import SoundReader as SoundfileReader
 from dltb.thirdparty.sounddevice import SoundPlayer as SoundDevicePlayer
 from dltb.util.error import handle_exception
 from toolbox import Toolbox
-from network import Network
 
 # FIXME[bug]: a (syntax) error in this file lets the toolbox crash!
 
@@ -490,8 +490,8 @@ class ToolboxShell(Cmd):
         except KeyError as error:
             print(f"panel: error: {error}")
             # FIXME[hack]: do not access private members - we need some API
-            print("panel: info: Valid panels ids are:",
-                  [m.id for m in self._toolbox.gui._panelMetas])
+            print("panel: info: Valid panels names are:",
+                  [m.name for m in self._toolbox.gui._panelMetas])
 
     def complete_panel(self, text, line, begidx, endix):
         if not self._toolbox or not self._toolbox.gui:

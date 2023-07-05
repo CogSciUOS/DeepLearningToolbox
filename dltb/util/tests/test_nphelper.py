@@ -18,7 +18,7 @@ class TestNPHelper(TestCase):
     def test_multimax_01(self):
         """Test `nphelper.multimax` on a 1-dimensional value array.
         """
-        values = np.asarray([4, 2, 5, 3, 7], dtype=np.float)
+        values = np.asarray([4, 2, 5, 3, 7], dtype=nphelper.np_float)
 
         top3_indices = nphelper.argmultimax(values, num=3, sort=True)
         self.assertTrue(np.array_equal(top3_indices, [4, 2, 0]))
@@ -37,7 +37,7 @@ class TestNPHelper(TestCase):
             [7, 3, 6],
             [3, 4, 4],
             [8, 0, 7]
-        ], dtype=np.float)
+        ], dtype=nphelper.np_float)
 
         top_indices = np.argsort(-values, axis=0)
         top4_indices = \
@@ -59,7 +59,7 @@ class TestNPHelper(TestCase):
             [7, 3, 6],
             [3, 4, 4],
             [8, 0, 7]
-        ], dtype=np.float)
+        ], dtype=nphelper.np_float)
 
         top_indices = np.argsort(-values, axis=1)
         top2_indices = \

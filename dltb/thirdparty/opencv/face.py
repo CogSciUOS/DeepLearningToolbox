@@ -12,7 +12,7 @@ import numpy as np
 
 # toolbox imports
 from ...base.data import Data
-from ...base.meta import Metadata
+from ...base.metadata import Metadata
 from ...base.image import BoundingBox
 from ...base.install import Installable
 from ...tool.detector import BoundingBoxDetector

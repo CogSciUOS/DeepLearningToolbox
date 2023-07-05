@@ -8,12 +8,12 @@ from abc import ABC, abstractmethod
 import os
 import sys
 import time
-import importlib
 import logging
 
 # toolbox imports
 from .busy import BusyObservable
 from .fail import Failable
+from ..util.importer import importable, import_module
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -56,8 +56,7 @@ class Installable(BusyObservable, Failable):
             if requirement[0] == 'module':
                 if requirement[1] in sys.modules:
                     continue
-                spec = importlib.util.find_spec(requirement[1])
-                if spec is None:
+                if not importable(requirement[1]):
                     LOG.warning("Module requirement '%s' (module=%s) "
                                 "for resource '%s' (%s) not found.", name,
                                 requirement[1], self.key, type(self).__name__)
@@ -79,8 +78,7 @@ class Installable(BusyObservable, Failable):
 
         for requirement in self._requirements.values():
             if requirement[0] == 'module' and requirement[1] not in globals():
-                globals()[requirement[1]] = \
-                    importlib.import_module(requirement[1])
+                globals()[requirement[1]] = import_module(requirement[1])
 
         if not self.preparable:
             if install:

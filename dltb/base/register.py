@@ -4,25 +4,32 @@ unregistered.
 
 """
 # Generic imports
-from abc import ABCMeta, abstractmethod
-from typing import Iterator, Tuple, Union
-import importlib
+from abc import abstractmethod, ABC
+from typing import Iterator, Tuple, Union, Optional
 import logging
 
 # Toolbox imports
+from .meta import ABCToolboxMeta
+from .mixin import Mixin
 from .observer import Observable
 from .busy import BusyObservable, busy
 from .prepare import Preparable
 from .fail import Failable
+from ..util.importer import import_from_module
 from ..util.debug import debug_object
-from ..thirdparty import check_module_requirements
 
+# from ..thirdparty import check_module_requirements
+# FIXME[old]: this code is now in old/thirdparty.py
+# providing a dummy replacement
+def check_module_requirements(module: str) -> bool:
+    # pylint: disable=missing-function-docstring, unused-argument
+    return True
 
 # Logging
 LOG = logging.getLogger(__name__)
 
 
-class Registrable(metaclass=ABCMeta):
+class Registrable(Mixin, ABC, debug_object):
     # pylint: disable=too-few-public-methods
     """A :py:class:`Registrable` is an object that may be put into a
     :py:class:`Register`. This basically mean that it has a unique key
@@ -42,51 +49,6 @@ class Registrable(metaclass=ABCMeta):
 
         """
         # to be implemented by subclasses
-
-
-class RegisterEntry(Registrable, debug_object):
-    # pylint: disable=too-few-public-methods
-    """A :py:class:`RegisterEntry` is a base class for
-    :py:class:`Registrable` objects. It realizes the :py:attr:`key`
-    property by storing the key value as private property.
-
-    Attributes
-    ----------
-    _key: str
-        A (supposed to be unique) key for the new instance.
-
-    Class Attributes
-    ----------------
-    _key_counter: int
-        A counter for generating unique keys.
-
-    """
-
-    _key_counter = 0
-
-    def __init__(self, *args, key: str = None, **kwargs) -> None:
-        """Iniitalization of a :py:class:`RegisterEntry`. This will
-        ensure that the object has a key.
-        """
-        super().__init__(*args, **kwargs)
-        self._key = key or self._generate_key()
-        LOG.debug("RegisterEntry: init instance of class %s with key '%s'",
-                  type(self).__name__, self.key)
-
-    def _generate_key(self) -> str:
-        """Generate a key.
-        """
-        type(self)._key_counter += 1
-        return type(self).__name__ + str(self._key_counter)
-
-    @property
-    def key(self):
-        """Get the "public" key used to identify this entry in a register.  The
-        key is created upon initialization and should not be changed
-        later on.
-
-        """
-        return self._key
 
 
 class Register(Observable, method='register_changed',
@@ -114,10 +76,10 @@ class Register(Observable, method='register_changed',
         self._entries[key] = entry
         self.register_change(key, 'entry_added')
 
-    def remove(self, entry: Registrable) -> None:
+    def remove(self, entry: Union[str, Registrable]) -> None:
         """Remove an entry from this :py:class:`Register`
         """
-        key = entry.key
+        key = entry if isinstance(entry, str) else entry.key
         del self._entries[key]
         self.register_change(key, 'entry_removed')
 
@@ -163,36 +125,53 @@ class Register(Observable, method='register_changed',
         """
         return self._entries[key]
 
+    def __delitem__(self, entry: Union[str, Registrable]) -> None:
+        """Remove an entry from this :py:class:`Register` (allowing item
+        deletion of the form `del register[key]` and `del register[entry]`)
+        """
+        self.remove(entry)
+
     def keys(self, **kwargs) -> Iterator[str]:
         """Ieterate the keys of the entries registered
         in this :py:class:`Register`.
         """
         return map(lambda entry: entry.key, self.entries(**kwargs))
 
-    def entries(self) -> Iterator[str]:
+    def entries(self) -> Iterator[Registrable]:
         """Iterate the entries of this :py:class:`Register`.
         """
         return iter(self)
+
+    #
+    # Further convenience methods
+    #
+
+    def __bool__(self) -> int:
+        """A `Register` is `True` iff it is non-empty.
+        """
+        return bool(self._entries)
 
     def __iadd__(self, entry: Registrable) -> None:
         """Add an new entry or change an existing entry
         in this :py:class:`Register`
         """
         self.add(entry)
+        return self
 
-    def __delitem__(self, entry: Union[str, Registrable]) -> None:
+    def __isub__(self, entry: Union[str, Registrable]) -> None:
         """Remove an entry from this :py:class:`Register`
         """
-        key = entry if isinstance(entry, str) else entry.key
-        del self._entries[key]
-        self.register_change(key, 'entry_removed')
+        self.remove(entry)
+        return self
 
     def register_change(self, key: str, *args, **kwargs) -> None:
         """Notify observers on a register change.
         """
         changes = self.Change(*args, **kwargs)
-        LOG.debug("register change on %s: %s with key='%s'",
-                  self, changes, key)
+        #LOG.debug("register change")
+                  #"register change on %s: %s with key='%s'",
+                  #self, changes, key)
+                  # None, None, key)
 
         if not changes:
             return
@@ -200,13 +179,171 @@ class Register(Observable, method='register_changed',
         self.notify_observers(changes, key=key)
 
 
+Registerlike = Union[bool, type, Register]
+
+def from_registerlike(register: Registerlike) -> Optional[Register]:
+    """Obtain a register from a `Registerlike` argument.
+    """
+    if isinstance(register, bool):
+        return Register() if register else None
+
+    if isinstance(register, type):
+        if not issubclass(register, Register):
+            raise TypeError(f"Type ({register}) is not a valid register type.")
+        return register()
+
+    if not isinstance(register, Register):
+        raise TypeError(f"Provided register of type {type(register)} "
+                        "is not a valid register type.")
+    return register
+
+
+
+class RegisterEntry(Registrable):
+    # pylint: disable=too-few-public-methods
+    """A :py:class:`RegisterEntry` is a base class for
+    :py:class:`Registrable` objects.  It realizes the :py:attr:`key`
+    property by storing the key value as private property.
+
+    A :py:class:`RegisterEntry` subclass can have an associated
+    :py:class:`Register` to which all `RegisterEntry` will be
+    automatically added upon initialization.  The register can be
+    provided upon class construction using the `register` keyword.
+
+    The class can be used as a mixin, allowing to easily make classes
+    `Registrable`.
+
+    Attributes
+    ----------
+    key: str
+        A (supposed to be unique) key for the new instance.
+
+    Class Attributes
+    ----------------
+    _register: Optional[Register]
+        A register to which an instance of this class is automatically added.
+        May be `None` in which case no automatic bookkeeping is performed.
+    _key_counter: int
+        A counter for generating unique keys.
+
+    Arguments
+    ---------
+    key:
+        A (unique) string identifying the new object.  If `None` (default),
+        a key will be generated automatically by invoking the protected method
+        :py:meth:`_generate_key`.
+
+    Notes
+    -----
+
+    Note: it seems impossible to automatically unregister an entry
+    upon deletion (by `del entry`), as Python's `del` decrements the
+    reference count for the object and but only calls `__del__` if
+    that count reaches 0.  This will not happen in case of a
+    registered entry, as the register will still hold a reference to
+    the entry hence the reference count will always be (at least) 1.
+    Hence unregistering has to be done by explicitly calling
+    `entry.unregister()`.
+
+    """
+    # FIXME[todo]: '_register' should become 'register' once the InstanceRegisterEntry
+    # has been updated (it currently implements a 'register' property)
+    _register: Optional[Register] = None
+    _key_counter: int = 0
+
+    def __init_subclass__(cls: type, register: Optional[Registerlike] = None,
+                          **kwargs) -> None:
+        # pylint: disable=arguments-differ
+        """Initialization of subclasses of :py:class:`RegisterEntry`.  These
+        classes can use a central :py:class`Register` to track all
+        instances ot hat class.
+
+        Arguments
+        ---------
+        register:
+            A register to be used for registering instances of that class.
+            If provided it can be `True` (using a standard `Register`),
+            or `False` (using no central register). It is also possible
+            to provide a `Register` or a `Register` type (which will then
+            be instantiated).  If `None` (the default), the new class will
+            inherit the register from its superclass (which is `None`
+            for the base class `RegisterEntry`, meaning that the default
+            behavior is to not automatically register objects).
+
+        """
+        super().__init_subclass__(**kwargs)
+        if register is not None:
+            cls._register = from_registerlike(register)
+
+    def __new__(cls, *args, key: str = None, **kwargs) -> 'RegisterEntry':
+        if cls._register is not None and key in cls._register:
+            entry = cls._register[key]
+            if not issubclass(cls, type(entry)):
+                raise TypeError(f"Cannot cast register entry '{key}' "
+                                f"of type {type(entry)} to become an "
+                                f"an instance of {cls}. Remove old register "
+                                f"entry '{key}' before inserting a new one.")
+            entry.__type__ = cls
+            if not isinstance(entry, cls):
+                raise TypeError(f"Casting register entry '{key}' "
+                                f"of type {type(entry)} to become an "
+                                f"instance of {cls} failed.")
+            return entry
+        return super().__new__(cls, *args, **kwargs)
+
+    def __init__(self, *args, key: str = None, **kwargs) -> None:
+        """Iniitalization of a :py:class:`RegisterEntry`. This will
+        ensure that the object has a key.
+        """
+        super().__init__(*args, **kwargs)
+        self._key = key or self._generate_key()
+        if self._register is not None:
+            self._register.add(self)
+        LOG.debug("RegisterEntry: init instance of class %s with key '%s'",
+                  type(self).__name__, self.key)
+
+    def unregister(self) -> None:
+        """This method is intended to support unregistration from the
+        associated :py:class:`Register`, as automatic unregistration
+        upon calling `del entry` seems impossible.  Hence code should
+        first call `entry.unregister()` followed by `del entry` to
+        make sure that the entry is removed from the automatic
+        register.
+        """
+        if self._register is not None:
+            # Spurios pylint complaint (pylint 2.4.4/astroid 2.3.3/Python 3.8.10)
+            # pylint: disable=unsupported-delete-operation
+            del self._register[self]
+
+    def _generate_key(self) -> str:
+        """Generate a key.
+        """
+        type(self)._key_counter += 1
+        return type(self).__name__ + str(self._key_counter)
+
+    @property
+    def key(self):
+        """Get the "public" key used to identify this entry in a register.  The
+        key is created upon initialization and should not be changed
+        later on.
+
+        """
+        return self._key
+
+
 #
 # The ClassRegister
 #
 
-class StatefulRegisterEntry(BusyObservable, Registrable, Failable,
-                            method='entry_changed'):
-    """Base class for observable register items
+class ObservableRegisterEntry(BusyObservable, Registrable, Failable,
+                              method='entry_changed'):
+    """Base class for :py:class:`Observable` register entries.  Such
+    entries can notify observers.
+
+    Why BusyObservable?
+
+    Why Failable?
+
     """
 
     @property
@@ -216,28 +353,41 @@ class StatefulRegisterEntry(BusyObservable, Registrable, Failable,
         """
 
 
-class StatefulRegister(Register, StatefulRegisterEntry.Observer):
-    """Base class for registers with stateful items.
-    """
+class ObserverRegister(Register, ObservableRegisterEntry.Observer):
+    """Base class for registers that observe their entries.
 
-    def add(self, entry: StatefulRegisterEntry) -> None:
-        """Add a new entry to this :py:class:`StatefulRegister`
+    Items in a :py:class:`ObserverRegister` can change their states.
+    The `ObserverRegister` will observe all its entries and collect
+    all notifications, and forward them to interested parties.  This
+    relieves such Observers from having to observe all entries
+    individually.  Instead they can observe only the register and
+    get informed whenever an entry changes.
+
+    """
+    # FIXME[design]: we should move away from the ideosynchratic
+    # "state" and "initialized" terminology and instead use notions
+    # like "observable" that are used throughout the toolbox.  Also it
+    # is not clear, why `ObservableRegisterEntry` is a
+    # `BusyObservable`, not a base `Observable`.
+
+    def add(self, entry: ObservableRegisterEntry) -> None:
+        """Add a new entry to this :py:class:`ObserverRegister`
         """
         super().add(entry)
         # 'busy_changed', state_changed
-        interests = StatefulRegisterEntry.Change('state_changed')
+        interests = ObservableRegisterEntry.Change('state_changed')
         self.observe(entry, interests=interests)
 
-    def remove(self, entry: StatefulRegisterEntry) -> None:
-        """Remove an entry from this :py:class:`StatefulRegister`
+    def remove(self, entry: ObservableRegisterEntry) -> None:
+        """Remove an entry from this :py:class:`ObserverRegister`
         """
         self.unobserve(entry)
         super().remove(entry)
 
-    def entry_changed(self, entry: StatefulRegisterEntry,
-                      _change: StatefulRegisterEntry.Change) -> None:
+    def entry_changed(self, entry: ObservableRegisterEntry,
+                      _change: ObservableRegisterEntry.Change) -> None:
         """React to a change of the observed
-        :py:class:`StatefulRegisterEntry`. Such a change will be
+        :py:class:`ObservableRegisterEntry`. Such a change will be
         propagated to observers of the register.
         """
         self.register_change(entry.key, 'entry_changed')
@@ -250,15 +400,54 @@ class StatefulRegister(Register, StatefulRegisterEntry.Observer):
                 filter(lambda entry: initialized is entry.initialized,
                        super().entries()))
 
+
 #
 # The ClassRegister
 #
 
-
-class ClassRegisterEntry(StatefulRegisterEntry):
+class ClassRegisterEntry(ObservableRegisterEntry):
     """A :py:class:`ClassRegisterEntry` represents information that
     can be used to import a class. This includes module and class.
+
+    The idea is to use this information to refer to classes even
+    before the module defining that class has been imported.  This is
+    mainly motivated by performance considerations: (1) many classes
+    (like specific networks or datasets) are only used rarely and
+    loading them on every run would waste resources and slow down
+    initialization. (2) Some classes may be defined in optional
+    packages and not be available when these packages are not
+    installed.
+
+    A class can be initialized (that is, the class definitiion is
+    loaded by importing the required module) by calling the
+    :py:method:`initialize` method.  Initialization may fail if the
+    module cannot be imported.  The method :py:method:`initializable`
+    checks if initialization is possible.
+
+    Attributes
+    ----------
+
+    module_name:
+        The (fully qualified) name of the module in which the
+        class is defined.
+    class_name:
+        The (unqualified) class name, relative to `module_name`.
+    cls:
+        The class object.  `None` if the (module defining the) class
+        has not been imported yet.
+    initialized:
+        The class definition has been loaded (and stored in the
+        property `cls`).
+
     """
+    # FIXME[bug/todo]: initialization of a class is currently only
+    # detected via the `RegisterClass` metaclass, that is, if the
+    # `ClassRegisterEntry` is registered in the `class_register` of
+    # the corresponding class.  Otherwise, if the module is imported
+    # in another part of the program, bypassing the `initialize`
+    # method, the `ClassRegisterEntry` will not reflect that fact.  It
+    # should be possible to observe the import machinery to be
+    # notified once the module is imported.
 
     def __init__(self, module_name: str = None, class_name: str = None,
                  cls: type = None, **kwargs) -> None:
@@ -324,7 +513,7 @@ class ClassRegisterEntry(StatefulRegisterEntry):
 
     @busy("Initializing class")
     def initialize(self) -> None:
-        """Initialize this class. This essentially means to load
+        """Initialize this class. This essentially means to import
         the module holding the class definition.
         """
         if self.cls is not None:
@@ -333,12 +522,15 @@ class ClassRegisterEntry(StatefulRegisterEntry):
         message = (f"Initialization of class '{self.class_name}' "
                    f"from module {self.module_name}")
         with self.failure_manager(logger=LOG, message=message):
-            module = importlib.import_module(self.module_name)
-            self.cls = getattr(module, self.class_name)
+            self.cls = import_from_module(self.module_name, self.class_name)
 
 
-class ClassRegister(StatefulRegister):
+class ClassRegister(ObserverRegister):
     """A register for :py:class:`ClassRegisterEntry`s.
+
+    The `ClassRegister` observes the registered `ClassRegisterEntry`s
+    to inform
+
     """
 
     def __init__(self, base_class: type = None, **kwargs) -> None:
@@ -364,6 +556,12 @@ class ClassRegister(StatefulRegister):
 
     def initialized(self, full_name: str) -> bool:
         """Check if a given class is initialized.
+
+        Arguments
+        ---------
+        full_name:
+            The fully qualified class name (including the module name)
+            of the class to check.
         """
         return full_name in self and self[full_name].initialized
 
@@ -380,7 +578,7 @@ class ClassRegister(StatefulRegister):
             self.add(ClassRegisterEntry(cls=cls))
 
 
-class InstanceRegister(StatefulRegister):
+class InstanceRegister(ObserverRegister):
     """A register for :py:class:`InstanceRegisterEntry`s.
     """
 
@@ -399,7 +597,7 @@ class InstanceRegister(StatefulRegister):
         return self._base_class
 
 
-class InstanceRegisterEntry(StatefulRegisterEntry, RegisterEntry):
+class InstanceRegisterEntry(ObservableRegisterEntry, RegisterEntry):
     """A :py:class:`InstanceRegisterEntry` represents information that
     can be used to create an object. This includes module and
     class name as well as initialization parameters.
@@ -516,6 +714,7 @@ class InstanceRegisterEntry(StatefulRegisterEntry, RegisterEntry):
         self.change('state_changed')
         del obj
 
+    # FIXME[old]: `register` has now become a class property
     @property
     def register(self) -> InstanceRegister:
         """The instance register of the :py:class:`RegisterClass` to
@@ -526,7 +725,25 @@ class InstanceRegisterEntry(StatefulRegisterEntry, RegisterEntry):
                 self._class_entry.cls.instance_register)
 
 
-class RegisterClass(ABCMeta):
+# FIXME[todo]: we should avoid using metaclasses, as they make
+# building complex (multiple) inheritance relations and the used of
+# mixin classes much more difficult.
+#
+# The `RegisterClass` is currently used for the following classes:
+#  - Datasource (in dltb/datasource/datasource.py)
+#  - ClassScheme (in dltb/tool/classifier.py)
+#  - Tool (in dltb/tool/tool.py)
+#  - Network (in dltb/network/network.py)
+#
+# It is furthermore mentioned in comments/docstrings in following files
+#  - dltb/base/tests/extras0.py
+#  - dltb/base/mixin.py
+#  - dltb/base/implementation.py
+#
+# Before removing this metaclass, the following old code needs to be
+# rewritten:
+#   Datasource[], ClassScheme[], Tool[], Network[]
+class RegisterClass(ABCToolboxMeta):
     # pylint: disable=no-value-for-parameter
     # no-value-for-parameter:
     #     we disable this warning as there is actually a bug in pylint,
@@ -592,6 +809,24 @@ class RegisterClass(ABCMeta):
     created (synchronously).
     """
 
+    # FIXME[todo]: we should try to get rid of the metaclass
+    #  - multiple inheritance with multiple metaclasses can get complicated
+    #  - index access to classes may prevent generic types
+    #  - attributes introduced by metaclass __new__ are not known to the linter
+    # Currently, the following classes use metaclass=RegisterClass:
+    #   dltb/datasource/datasource.py:   Datasource      26 * Datasource[...]
+    #   dltb/network/network.py:         Network         19 * Network[...]
+    #   dltb/tool/classifier.py:         ClassScheme      6 * ClassScheme[...]
+    #   dltb/tool/tool.py:               Tool             4 * Tool[...]
+    #
+    # Replace instantiation by a more general concept:
+    #   - class Initialization: class, args, kwargs, key, object
+    #   - class Initializable: (mixin)
+    #      add a init=... parameter to the __new__ method
+    #
+    #     datasource = Datasource(init=Initialization)
+    #
+    
     class RegisterClassEntry(RegisterEntry):
         # pylint: disable=too-few-public-methods
         """A registrable object that generates keys from a register.
@@ -660,7 +895,8 @@ class RegisterClass(ABCMeta):
         class in the register. If no register key is provided,
         a new one will be created from the class name.
         """
-        LOG.debug("RegisterClass: {cls.__name}.__call__({args}, {kwargs})")
+        LOG.debug("RegisterClass: %s.__call__(%s, %s)",
+                  cls.__name__, args, kwargs)
         new_entry = super().__call__(*args, **kwargs)
 
         # Some old code invents its own keys, even if an explict key
@@ -678,9 +914,17 @@ class RegisterClass(ABCMeta):
             entry = InstanceRegisterEntry(obj=new_entry,
                                           args=args, kwargs=kwargs)
             cls.instance_register.add(entry)
+            LOG.info("RegisterClass: new instance of class %s with key '%s'",
+                     type(new_entry).__name__, new_entry.key)
 
-        LOG.info("RegisterClass: new instance of class %s with key '%s'",
-                 type(new_entry).__name__, new_entry.key)
+        else:  # Replace current object
+            LOG.info("RegisterClass: "
+                     "Replacing instance of class %s for key '%s'",
+                     type(new_entry).__name__, new_entry.key)
+            #cls.instance_register.remove(new_entry.key)
+            entry = InstanceRegisterEntry(obj=new_entry,
+                                          args=args, kwargs=kwargs)
+            cls.instance_register.add(entry)
         return new_entry
 
     #

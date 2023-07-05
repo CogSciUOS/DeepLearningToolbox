@@ -4,6 +4,7 @@ hardware or software, including tools, data, and models (networks).
 """
 
 # Generic imports
+from typing import Optional
 import logging
 
 # Qt imports
@@ -13,7 +14,7 @@ from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QSizePolicy
 
 # toolbox imports
 from toolbox import Toolbox
-from dltb.network import Network
+from dltb.network import Network, Layer
 from dltb.datasource import Datasource, Datafetcher
 from dltb.base.register import RegisterClass
 from dltb.base.register import InstanceRegisterEntry, ClassRegisterEntry
@@ -229,13 +230,14 @@ class QResourceInspector(QGroupBox, QObserver, qattributes={
 
 
 class QNetworkInspector(QResourceInspector):
-    """
+    """The `QNetworkInspector` is a :py:class:`QResourceInspector` for
+    managing network. It provides the following components:
 
     _resourceList: QRegisterClassView = None
+    
     _layerSelector: QLayerSelector = None
     _networkBox: QNetworkBox = None
     _networkInternals: QNetworkInternals = None
-
     """
 
     def __init__(self, title: str = 'Networks', **kwargs) -> None:
@@ -256,6 +258,8 @@ class QNetworkInspector(QResourceInspector):
         self._networkBox = QNetworkBox()
         self._networkInternals = QNetworkInternals()
 
+        self._layerSelector.layerClicked.connect(self._onLayerClicked)
+
         networkView = QWidget()
 
         layout = QHBoxLayout()
@@ -272,6 +276,23 @@ class QNetworkInspector(QResourceInspector):
         """Set the network for this :py:class:`QNetworkInspector`.
         """
         self.setResource(network)
+
+    @protect
+    def _onLayerClicked(self, layer_name: str, selected: bool) -> None:
+        """React to a layer seletion in the :py:class:`QLayerSelector`.
+        """
+        print(f"QNetworkInspector._onLayerClicked: {layer_name} ({selected})")
+        self._networkBox.setLayer(layer_name if selected else None)
+        
+    def layer(self) -> Optional[Layer]:
+        """The currently selected layer in this :py:class:`QNetworkInspector`.
+        """
+        return self._layerSelector.layer()
+
+    def setLayer(self, layer: Optional[Layer]) -> None:
+        """Change the currently selected layer.
+        """
+        self._layerSelector.setLayer(layer)
 
     def _updateResource(self) -> None:
         """React to a change of resource (network) for this

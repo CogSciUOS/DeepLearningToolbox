@@ -11,7 +11,7 @@ import numpy as np
 import dlib
 
 # toolbox imports
-from ..base.meta import Metadata
+from ..base.metadata import Metadata
 from ..base.image import BoundingBox
 from ..base.install import Installable
 from ..tool.face.detector import Detector as FaceDetector
@@ -228,11 +228,14 @@ class DetectorCNN(FaceDetector, Installable):
             description='Detections by the dlib CNN face detector')
         for detection in detections:
             rect = detection.rect
-            result.add_region(BoundingBox(x=rect.left(), y=rect.top(),
-                                          width=rect.width(),
-                                          height=rect.height()),
+            result.add_region(self._rectangle_to_bounding_box(rect),
                               confidence=detection.confidence)
         return result
+
+    @staticmethod
+    def _rectangle_to_bounding_box(rect: dlib.rectangle) -> BoundingBox:
+        return BoundingBox(x=rect.left(), y=rect.top(),
+                           width=rect.width(), height=rect.height())
 
 
 class FacialLandmarkDetector(LandmarkDetector):

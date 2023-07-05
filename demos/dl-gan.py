@@ -11,21 +11,25 @@
 """
 
 # standard imports
+import os
+import sys
 import random
 import argparse
+from threading import Thread
 
 # third party imports
+import numpy as np
 
 # toolbox imports
 import dltb.argparse as ToolboxArgparse
 from dltb.util.image import ImageDisplay, imshow, imwrite
-from dltb.thirdparty import modules_with_class, implementations, import_class
+from dltb.tool.generator import ImageGAN
 
 
-from threading import Thread
-import numpy as np
 
 class Slideshow:
+    """Present multiple images in a Slideshow
+    """
 
     def __init__(self, gan) -> None:
         self._gan = gan
@@ -70,9 +74,11 @@ class Slideshow:
         batch = self._gan.generate_array(seed=[seed])
         print("new batch:", batch.shape)
         self.add_batch(batch)
-        
+
 
 def main():
+    """The main program.
+    """
     parser = \
         argparse.ArgumentParser(description='GAN demonstration program')
     parser.add_argument('--list', action='store_true',
@@ -118,18 +124,15 @@ def main():
 
     ToolboxArgparse.add_arguments(parser)
     args = parser.parse_args()
-    ToolboxArgparse.process_arguments(parser)
+    ToolboxArgparse.process_arguments(parser, args)
 
     if args.list:
-        for implementation in implementations('ImageGAN'):
-            print(f" - {implementation}")
-
-        return
+        print(ImageGAN.implementation_info())
+        return os.EX_OK
 
     # Instantiation and initialization
-    ImageGANImplementation = import_class(getattr(args, 'class'))
-    gan = ImageGANImplementation(model=args.model, filename=args.filename)
-    gan.prepare()
+    gan = ImageGAN(implementation=getattr(args, 'class'),
+                   model=args.model, filename=args.filename)
     gan.info()
 
     if args.seed is not None:
@@ -160,7 +163,8 @@ def main():
     elif False:  # FIXME[hack]: add option "--slideshow" once this is finished
         slideshow = Slideshow(gan)
         with ImageDisplay() as display:
-            while True:  # not display.closed:  # FIXME[todo]: context manager should show the window
+            # FIXME[todo]: context manager should show the window
+            while True:  # not display.closed:
                 slideshow.step(step=2)
                 display.show(slideshow.canvas, timeout=.01, unblock='freeze',
                              title=f"Slideshow ({slideshow._offset})")
@@ -170,7 +174,8 @@ def main():
     else:
         # Display randomly generated images
         with ImageDisplay() as display:
-            while True:  # not display.closed:  # FIXME[todo]: context manager should show the window
+            # FIXME[todo]: context manager should show the window
+            while True:  # not display.closed:
                 seed = random.randint(0, 10000)
                 image = gan.generate(seed=seed)
                 display.show(image, timeout=0, unblock='freeze',
@@ -178,6 +183,8 @@ def main():
                 if display.closed:
                     break  # FIXME[todo]
 
+    return os.EX_OK
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

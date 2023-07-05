@@ -50,9 +50,9 @@ from torchvision import transforms
 from dltb.base.data import Datalike
 from dltb.base.image import Image, Imagelike
 from dltb.tool.classifier import ClassIdentifier
-from dltb.network.network import Network as BaseNetwork
-from dltb.network.network import Classifier as BaseClassifier
-from dltb.network.network import ImageNetwork as BaseImageNetwork
+from dltb.network import Network as BaseNetwork
+from dltb.network import Classifier as BaseClassifier
+from dltb.network import ImageNetwork as BaseImageNetwork
 from dltb.network import layer as Base
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 from .util import Debug
@@ -620,7 +620,7 @@ class Network(BaseNetwork):
 
         for module in modules:
             if isinstance(module, Layer):
-                name = module.get_id()
+                name = module.key
                 module = module.module
             elif isinstance(module, str) and module in self.layer_dict:
                 name = module

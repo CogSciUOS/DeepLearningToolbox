@@ -150,7 +150,12 @@ class ImageUtils(image.ImageResizer, image.ImageWarper):
     """
     """
 
-    def resize(self, image: np.ndarray, size=(640, 360)) -> np.ndarray:
+    def _internalize(self, image: Imagelike) -> np.ndarray:
+        """OpenCV operates on numpy arrays.
+        """
+        return Image.as_array(image)
+
+    def _resize(self, image: np.ndarray, size=(640, 360)) -> np.ndarray:
         """Resize the frame to a smaller resolution to save computation cost.
         """
         return cv2.resize(image, size, interpolation=cv2.INTER_LINEAR)
@@ -218,8 +223,21 @@ class ImageUtils(image.ImageResizer, image.ImageWarper):
         # solution.
         return transformation
 
+    @staticmethod
+    def mark_image_region(image: np.ndarray, region, color) -> np.ndarray:
+        pos_x, pos_y, width, height = rect
+        cv2.rectangle(image, (pos_x, pos_y),
+                      (pos_x + width, pos_y + height), color, 1)
 
-class VideoReader(video.Reader):
+    @staticmethod
+    def output_image_text(image: np.ndarray, text: str,
+                          color: Tuple[int, int, int]) -> None:
+        cv2.putText(image, text,
+                    (10, 20), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, color, 2)
+
+
+class VideoReader(video.VideoFileReader):
     """A :py:class:`VideoReader` realized by an OpenCV
     :py:class:`VideoCapture` object. This is a superclass of
     :py:class:`VideoFileReader` and :py:class:`Webcam`, providing
@@ -239,7 +257,7 @@ class VideoReader(video.Reader):
         The underlying :py:class:`cv2.VideoCapture` object will be
         created.
         """
-        super().__init__(**kwargs)
+        super().__init__(filename=init, **kwargs)
         self._capture = cv2.VideoCapture(init)
         if not self._capture:
             raise RuntimeError("Creating video capture object for "
@@ -269,7 +287,7 @@ class VideoReader(video.Reader):
     # Iterator
     #
 
-    def _read_frame(self) -> np.ndarray:
+    def _next_frame(self) -> np.ndarray:
         """Get the next frame from the OpenCV Video Capture.
         """
         if not self.prepared:
@@ -384,10 +402,12 @@ class VideoFileReader(VideoReader, video.FileReader):
                 self._capture.set(cv2.CAP_PROP_POS_FRAMES, index)
             # note: read() will advance the frame position to the next
             # frame to be read.
-            ret, image = self._capture.read()
-            if not ret:
-                raise RuntimeError("Reading an image from video capture "
-                                   f"at frame {index} failed!")
+            return self._next_frame()
+
+    def _next_frame(self) -> np.ndarray:
+        ret, image = self._capture.read()
+        if not ret:
+            raise RuntimeError("Reading an image from video capture failed!")
         return image[:, :, ::-1]  # convert OpenCV BGR representation to RGB
 
     # FIXME[old]: opencv seems to have its own means to jump to
@@ -406,12 +426,7 @@ class VideoFileReader(VideoReader, video.FileReader):
         time_in_seconds = self.time_in_seconds(time)
         with self._lock:
             self._capture.set(cv2.CAP_PROP_POS_MSEC, time_in_seconds * 1000)
-            ret, frame = self._capture.read()
-            if not ret:
-                raise RuntimeError("Reading an image from video capture "
-                                   f"at {time_in_seconds:.4f}s "
-                                   f"({time}) failed!")
-        return frame[:, :, ::-1]  # convert OpenCV BGR representation to RGB
+            return self._next_frame()
 
 
 class VideoFileWriter(video.Writer):

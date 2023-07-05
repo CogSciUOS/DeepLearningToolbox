@@ -22,7 +22,7 @@ from . import LOG, get_tensorflow_version, set_tensorflow_version
 # the following should be run before Tensorflow is imported
 # pylint: disable=wrong-import-position
 tensorflow_version = get_tensorflow_version()
-if tensorflow_version is None:
+if True or tensorflow_version is None:  # FIXME[hack]
     LOG.info("v1: Setting DLTB tensorflow_version to 'v1'")
     set_tensorflow_version('v1')
 elif tensorflow_version != 'v1':

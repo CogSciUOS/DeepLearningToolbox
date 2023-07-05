@@ -7,7 +7,7 @@ import sys
 import importlib
 
 # toolbox imports
-from dltb.util.importer2 import ImportInterceptor
+from dltb.util.importer import ImportInterceptor
 
 
 class ImporterTest(TestCase):
@@ -37,7 +37,7 @@ class ImporterTest(TestCase):
         pre_name = None
         post_name = None
 
-        def pre_patch(fullname, path, target=None):
+        def pre_patch(fullname: str, path, target=None):
             # pylint: disable=unused-argument
             nonlocal pre_name
             pre_name = fullname

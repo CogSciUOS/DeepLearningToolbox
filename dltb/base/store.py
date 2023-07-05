@@ -1,5 +1,5 @@
-""":py:class:`Storable` objects allow to store their state to restore
-it later.
+""":py:class:`Storable` objects allow to store their state and to
+restore it later.
 
 """
 
@@ -101,8 +101,8 @@ class Storable(Preparable):
     """
     _storables = set()
 
-    def __init_subclass__(cls: type, storables: set = None, **kwargs):
-        # pylint: disable=arguments-differ
+    def __init_subclass__(cls, storables: set = None, **kwargs) -> None:
+        # pylint: disable=signature-differs
         """Initialization of subclasses of :py:class:`Storable`.
         Each of these classes will provide an extra class property
         `storables`, listing the attributes that are to be stored.
@@ -123,7 +123,7 @@ class Storable(Preparable):
         for base in cls.__bases__:
             if issubclass(base, Storable):
                 # pylint: disable=protected-access
-                new_storables |= base._storables
+                new_storables |= getattr(base, '._storables')
         if new_storables != cls._storables:
             cls._storables = new_storables
 
@@ -311,11 +311,11 @@ class FileStorage(Storage):
         """Store a :py:class:`Storable` in this :py:class:`Storage`.
         """
         os.makedirs(self.directory, exist_ok=True)
-        with open(self.filename(), 'w') as outfile:
+        with open(self.filename(), 'w', encoding='utf-8') as outfile:
             storable.store_to_file(outfile)
 
     def restore(self, storable: Storable) -> None:
         """Restore a :py:class:`Storable` in this :py:class:`Storage`.
         """
-        with open(self.filename(), 'r') as infile:
+        with open(self.filename(), 'r', encoding='utf-8') as infile:
             storable.restore_from_file(infile)

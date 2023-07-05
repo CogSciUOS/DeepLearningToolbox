@@ -7,7 +7,7 @@ Maybe these classes can be realized as Protocols.
 
 """
 # standard imports
-from typing import Tuple, Any, Union
+from typing import Tuple, Any, Union, Optional
 from collections import OrderedDict
 
 # toolbox imports
@@ -39,12 +39,14 @@ class LayerBase(RegisterEntry):
 
     @property
     def input_shape(self) -> Tuple[int, ...]:
-        """The shape of the tensor that is input to the layer."""
+        """The shape of the tensor that is input to the layer
+        (including the batch axis)."""
         raise NotImplementedError
 
     @property
     def output_shape(self) -> Tuple[int, ...]:
-        """The shape of the tensor that is output to the layer."""
+        """The shape of the tensor that is output to the layer
+        (including the batch axis)."""
         raise NotImplementedError
 
     @property
@@ -144,14 +146,24 @@ class NetworkBase:
 
 # For passsing a layer, one can either pass the layer object, or
 # just is (per Network) unique key.
-Layerlike = Union[LayerBase, str]
+Layerlike = Union[LayerBase, str, int]
 
-def layer_key(layer: Layerlike) -> str:
+def layer_key(layer: Optional[Layerlike]) -> str:
     """The layer key for a given `Layerlike` object.
     """
-    return layer if isinstance(layer, str) else layer.key
+    return layer.key if isinstance(layer, LayerBase) else layer
 
-def as_layer(layer: Layerlike, network: NetworkBase) -> LayerBase:
+def as_layer(layer: Optional[Layerlike],
+             network: NetworkBase) -> Optional[LayerBase]:
     """The layer object for `Layerlike` object.
+
+    Result
+    ------
+    layer:
+        The Layer object or `None` if `layer` or `network` is `None`.
     """
-    return network[layer] if isinstance(layer, str) else layer
+    if isinstance(layer, LayerBase):
+        return layer
+    if layer is None or network is None:
+        return None
+    return network[layer]

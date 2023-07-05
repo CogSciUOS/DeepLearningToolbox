@@ -123,6 +123,7 @@ class QIndexControls(QWidget):
         layout.addWidget(self._indexLabel)
         layout.addWidget(self._nextButton)
         layout.addWidget(self._lastButton)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
 
     @protect

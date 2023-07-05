@@ -34,7 +34,7 @@ class ImageIO(image.ImageReader, image.ImageWriter):
         imageio.imwrite(filename, image.Image.as_array(image))
 
 
-class VideoReader(video.FileReader):
+class VideoReader(video.VideoFileReader):
     """A :py:class:`BaseFileReader` realized by the imageio library.
 
 
@@ -205,7 +205,7 @@ class Webcam(video.Webcam):
             self._reader = None
         super().__del__()
 
-    def _read_frame(self) -> np.ndarray:
+    def _next_frame(self) -> np.ndarray:
         """Read the next frame from the ImageIO Video Reader.
         """
         # frame, meta = self._reader.get_next_data()

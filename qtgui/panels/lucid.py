@@ -16,7 +16,7 @@ from ..widgets.image import QImageView
 import numpy as np
 import tensorflow as tf
 
-from network import loader
+from dltb.thirdparty.lucid import lucid_names
 
 from tools.lucid import (Engine as LucidEngine, EngineObserver, EngineChange,
                          Controller as LucidController)
@@ -111,7 +111,7 @@ class LucidPanel(Panel, QObserver, qobservables={
 
         self._networks.clear()
         if engine is not None:
-            self._networks.addItems(loader.lucid_names())
+            self._networks.addItems(lucid_names())
 
         self._button.clicked.connect(controller.onMaximize)
         self._buttonAll.clicked.connect(controller.onMaximizeMulti)

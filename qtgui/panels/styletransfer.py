@@ -42,11 +42,13 @@ class StyletransferData:
     """
 
     venice_url = \
-        ('https://www.thelocal.it/userdata/images/article/'
-         '448c28d89b397330b0def227ddbbb2086ae2d23bc765964e27bbbc6492d1e563.jpg')
+        ('https://factcity.com/wp-content/uploads/2020/02/'
+         'facts-about-Venice-Italy-920x480.jpg')
+    # 404: ('https://www.thelocal.it/userdata/images/article/'
+    #    '448c28d89b397330b0def227ddbbb2086ae2d23bc765964e27bbbc6492d1e563.jpg')
     #    ('https://facts.uk/wp-content/uploads/2020/02/'
     #     'facts-about-Venice-Italy-1920x1080.jpg')
-
+    
     starry_night_url = \
         ('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/'
          'Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/'

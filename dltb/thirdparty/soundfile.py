@@ -1,6 +1,8 @@
 """Access to the soundfile library
 
 """
+# standard imports
+from typing import Optional
 
 # third party imports
 import soundfile as sf
@@ -21,7 +23,9 @@ class SoundReader(SoundReaderBase):
     def __str__(self) -> str:
         return "soundfile-based SoundReader"
 
-    def read(self, filename: str) -> Sound:
+    def read(self, filename: str, channels: Optional[int] = None,
+             samplerate: Optional[float] = None,
+             endian: Optional[str] = None) -> Sound:
 
         # FIXME[todo]: soundfile.read() can also read from file like
         # objects, e.g., open files:
@@ -40,8 +44,8 @@ class SoundReader(SoundReaderBase):
         #                              subtype='FLOAT')
 
         # data is in the (frames, channels) format
-        data, samplerate = sf.read(filename)
-        return Sound(samplerate=samplerate, data=data)
+        array, samplerate = sf.read(filename)
+        return Sound(array=array, samplerate=samplerate)
 
 
 class SoundWriter(SoundWriterBase):

@@ -1,11 +1,13 @@
+"""Utility functions for working with videos.
+"""
+
 # standard imports
 from typing import Union
 import time
 
 # toolbox imports
 from ..base.image import ImageDisplay
-from ..base.video import Reader as VideoReader, Writer as VideoWriter
-from ..base.video import Display as VideoDisplay
+from ..base.video import VideoReader, VideoWriter, VideoDisplay
 from .image import get_display
 from .time import pacemaker
 
@@ -19,12 +21,16 @@ def copy(reader: VideoReader, writer: VideoWriter,
     try:
         last_index = index = 0
         last_time = start_time = time.time()
-        with reader as frames, writer:
+        with reader as frames, writer as output:
             if fps is not None:
                 frames = pacemaker(frames, 1.0/fps)
 
+            if progress is not None:
+                frames = progress(frames)
             for index, frame in enumerate(reader):
-                writer += frame
+                if transform is not None:
+                    frame = transform(frame)
+                output += frame
 
                 new_time = time.time()
                 if new_time - last_time > 1.0:
@@ -32,13 +38,6 @@ def copy(reader: VideoReader, writer: VideoWriter,
                           f"{index-last_index/(new_time-last_time):.2f}"
                           " frames per seccond")
                     last_time, last_index = new_time, index
-        # Go through frames and add them to video
-        # if progress is not None:
-        #     video = progress(video)
-        # for frame in video:
-        #   if transform is not None:
-        #      frame = transform(frame)
-        #      writer(frame)
     except KeyboardInterrupt:
         print("Keyboard interrupt.")
     finally:

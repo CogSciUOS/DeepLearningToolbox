@@ -5,6 +5,7 @@ QNetworkInternals: details of a network
 """
 
 # standard imports
+from typing import Optional, Iterable
 import logging
 
 # Qt imports
@@ -16,7 +17,9 @@ from PyQt5.QtWidgets import QVBoxLayout
 
 # toolbox imports
 from toolbox import Toolbox
-from dltb.network import Network, Layer
+from dltb.network import Network, Networklike, as_network, Layer, Layerlike
+from dltb.network import StridingLayer, Dense, Conv2D, MaxPooling2D
+from dltb.network import Dropout, Flatten
 
 # GUI imports
 from .register import QRegisterListWidget, QRegisterComboBox
@@ -164,13 +167,16 @@ class QNetworkBox(QLabel, QObserver, qobservables={
     A simple widget to display information on a network and a selected
     layer.
     """
+    _network: Optional[Network] = None
+    _layer: Optional[Layer] = None
+
+    _networkText: str = ''
+    _layerText: str = ''
 
     def __init__(self, network: Network = None, **kwargs) -> None:
         """Create a new :py:class:``QNetworkInfoBox``"""
         super().__init__(**kwargs)
         self.setWordWrap(True)
-        self._networkText = ''
-        self._layerText = ''
         self.setNetwork(network)
 
     def network_changed(self, network: Network,
@@ -178,36 +184,97 @@ class QNetworkBox(QLabel, QObserver, qobservables={
         # pylint: disable=invalid-name
         """React to a change of the observed :py:class:`Network`.
         """
+        self._update()
+        # QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
 
+    def setNetwork(self, network: Optional[Networklike]) -> None:
+        """Set the network currently displayed in the
+        :py:class:`QNetworkBox`.
+
+        """
+        theNetwork = as_network(network)
+        if theNetwork is self._network:
+            return  # nothing to do
+
+        super().setNetwork(theNetwork)
+        self.setLayer(None)
+
+    def setLayer(self, layer: Optional[Layerlike]) -> None:
+        """Set the current layer to be displayed in this 
+        :py:class:`QNetworkBox`.
+        """
+        try:
+            if layer is None or self._network is None:
+                theLayer = None
+            else:
+                theLayer = self._network[layer]
+        except KeyError as error:
+            theLayer = None
+            raise error
+        finally:
+            if theLayer is not self._layer:
+                self._layer = theLayer
+                self._update()
+
+    def _update(self) -> None:
+        """
+        """
         #
         # Set Network info text
         #
-        networkText = ''
+        networkText = ""
         # networkText += '<b>Network info:</b> '
-        if network is not None:
-            # network_name = type(network).__name__
+        if self._network is not None:
+            # network_name = type(self._network).__name__
             # networkText += 'FIXME[todo]: obtain network information ...'
             networkText += ('<br>\n<b>class:</b> '
-                            f'{network.__class__.__name__}')
-            networkText += f'<br>\n<b>name:</b> {network}'
-            # if not network.empty():
+                            f'{self._network.__class__.__name__}')
+            networkText += f'<br>\n<b>name:</b> {self._network}'
+            # if not self._network.empty():
             #    networkText += ('<br>\n<b>input layer:</b> '
-            #                     f'{network.input_layer_id()}')
+            #                     f'{self._network.input_layer_id()}')
             #    networkText += ('<br>\n<b>output layer:</b> '
-            #                     f'{network.output_layer_id()}')
+            #                     f'{self._network.output_layer_id()}')
         else:
             networkText += "No network"
         self._networkText = networkText
 
-        self.update()
-        # QMetaObject.invokeMethod(self, "setText", Q_ARG(str, text))
+        #
+        # Layer
+        #
+        layerText = "<b>Layer Info</b><br>"
+        if self._layer is not None:
+            layerText += self._createLayerText(self._layer)
+        else:
+            layerText += "No Layer <br><br><br>"
+        self._layerText = layerText
 
+        #
+        # Set the info text
+        #
+        text = ('<b>Network Info Box</b><br>' +
+                self._networkText + '<br>' + self._layerText)
+        self.setText(text)
+        super().update()
+
+    def _createLayerText(self, layer: Layer) -> str:
+        text = f"Type: {type(layer).__name__}<br>"
+        if isinstance(Layer, StridingLayer):
+            text += (f"Striding with size {layer.strides}<br>"
+                     f"and padding {layer.padding}")
+        if isinstance(Layer, Dense):
+            text += "Dense layer"
+        if isinstance(Layer, Conv2D):
+            text += ("2D Convolutional layer with<br>"
+                     f"{layer.filters}filters of size {layer.filter_size}")
+        return text
+        
     def paintEvent(self, event: QPaintEvent):
         """Process a QPaintEvent
         """
         # text = ('<b>Network Info Box</b><br>' +
-        #        self._networkText + self._layerText)
-        # self.setText(text)
+        #        self._networkText + '<br>' + self._layerText)
+        # self.setText("A" + text + "B")
         super().paintEvent(event)
 
 #
@@ -267,44 +334,43 @@ class QNetworkInternals(QWidget, QObserver, qobservables={
 
 
 
-##############################################################################
+# ########################################################################## #
 #                                                                            #
 #                                 QLayerSelector                             #
 #                                                                            #
-##############################################################################
+# ########################################################################## #
 
 
 class QLayerSelector(QWidget, QObserver, qobservables={
         Network: {'state_changed'}}):
-    """A simple widget to display information on a network and select a
-    layer.
+    """A simple widget to select :py:class:`Layer`s in a :py:class:`Network`. 
 
     The Layers are presented as a stack of buttons. Clicking at a
-    button will set the corresponding layer in the
-    py:class:`ActivationEngine`.
+    button will emit the `layerClicked` signal.
 
-    The :py:class:`QLayerSelector` observes a py:class:`Network` and an
-    py:class:`ActivationEngine`. If the network is changed, the
-    new network architecture needs to be displayed.
+    The :py:class:`QLayerSelector` observes a py:class:`Network`. If
+    the network is changed, the new network architecture needs to be
+    displayed.
 
     Attributes
     ----------
     _network: Network
         The network currently shown by this :py:class:`QLayerSelector`
+        (inherited from `Network` QObserver).
+
     _layerButtons: dict[str, QPushButton]
         A mapping from `layer_id`s to buttons for (un)selecting that
         layer.
+
     _layerLayout: QVBoxLayout
         A Layout in which the _layerButtons are arranged.
+    
     _exclusive: Union[bool, Layer]
         This attribute indicates if the :py:class:`QLayerSelector`
         operates in exclusive mode. If `False` multiple values
         can be selected. Otherwise the attribute holds the currently
         selected :py:class:`Layer` or `True` if no layer is selected.
 
-    FIXME[old]:
-    _activation: ActivationEngine
-        Controller for this UI element
     _currentSelected: int
         Layer id of the currently selected layer.
 
@@ -313,12 +379,10 @@ class QLayerSelector(QWidget, QObserver, qobservables={
     layerClicked(layer_id: str, selected: bool):
         Emitted when a Layer was clicked. The boolean status indicates
         if the Layer has been selected (`True`) or deselected (`False`)
+
     """
 
     layerClicked = pyqtSignal(str, bool)
-
-    # FIXME[todo]: this should not be part of the QLayerSelector
-    _networkInfo: QNetworkBox = None
 
     # FIXME[old]: is this still used? remove ...
     _UPDATE_NETWORK = QEvent.registerEventType()
@@ -341,48 +405,90 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         self.labelInput = None
         self._labelOutput = None
 
-        self.initUI()
-        self.layoutUI()
+        self._initUI()
+        self._layoutUI()
 
         self._network = None
         self.setNetwork(network)
 
-    def initUI(self) -> None:
+    def _initUI(self) -> None:
         """Initialize the user interface.
         """
-        self._networkInfo = QNetworkBox(parent=self)
-        self._networkInfo.setMinimumWidth(300)
+        self.setMinimumWidth(300)
 
-    def layoutUI(self) -> None:
+    def _layoutUI(self) -> None:
         """Layout the user interface.
         """
         self._layerLayout = QVBoxLayout()
 
-        info_layout = QVBoxLayout()
-        info_layout.addWidget(self._networkInfo)
-
         layout = QVBoxLayout()
         layout.addLayout(self._layerLayout)
-        layout.addLayout(info_layout)
         layout.addStretch(1)
         self.setLayout(layout)
 
-    def selectLayer(self, layer: Layer, selected: bool = True) -> None:
-        """(De)select a layer in this :py:class:`QLayerSelector`.
-        """
-        button = self._layerButtons[layer.key]
-        self._markButton(button, selected)
+    def _asLayer(self, layer: Layerlike) -> Layer:
+        return layer if isinstance(layer, Layer) else self.network()[layer]
 
-    def layerSelected(self, layer: Layer) -> bool:
+    def _asLayerId(self, layer: Layerlike) -> str:
+        return layer.key if isinstance(layer, Layer) else layer
+
+    def selectLayer(self, layer: Optional[Layerlike],
+                    selected: bool = True) -> None:
+        """(De)select a layer in this :py:class:`QLayerSelector`.
+
+        Arguments
+        ---------
+        layer:
+            the :py:class:`Layer` to be selected :py:class:`Layer`.
+            `None` if no layer is selected.
+        """
+        if layer is not None:
+            self._markButton(self._button(layer), selected)
+        elif self._exclusive is False:
+            self.selectLayers(())
+        elif self._exclusive is not True:
+            self._markButton(self._exclusive, False)
+            self._exclusive = True
+
+    def selectLayers(self, layers: Iterable[Layerlike]) -> None:
+        """Set the currently selected :py:class:`Layer`.
+        """
+        if exclusive is not False:
+            return RuntimeError("Cannot select multiple Layers in a "
+                                "non-exclusive QLayerSelector.")
+        state = { layerId: False for layerId in self._layerButtons }
+        for layer in layers:
+            state[self._asLayerId(layer)] = True
+
+        for layerId, selected in state.items():
+            self._markButton(self._layerButtons[button], selected)
+
+    def layerSelected(self, layer: Layerlike) -> bool:
         """Check if the given :py:class:`Layer` is selected.
         """
-        if layer is None:
-            raise ValueError("None is not a valid layer.")
-        if layer.key not in self._layerButtons:
-            raise KeyError(f"'{layer.key}' is not a valid layer id:"
-                           f"{list(self._layerButtons.keys())}")
-        button = self._layerButtons[layer.key]
-        return self._buttonIsMarked(button)
+        return self._buttonIsMarked(self._button(layer))
+
+    def layer(self) -> Optional[Layer]:
+        """The currently selected :py:class:`Layer`. `None` if no
+        layer is selected.
+        """
+        exclusive = self._exclusive
+        if exclusive is False:
+            return RuntimeError("Cannot obtain Layer for an exclusive "
+                                "QLayerSelector.")
+
+        if exclusive is True:
+            return None  # no layer selected
+
+        return self._layerForLayerId(excusive)
+
+    def layers(self) -> Iterable[Layer]:
+        """The currently selected :py:class:`Layer`. `None` if no
+        layer is selected.
+        """
+        for button in self._layerButtons:
+            if self._buttonIsMarked(button):
+                yield self._layerForButton(button)
 
     #
     # Buttons
@@ -404,7 +510,6 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         if self._labelOutput is not None:
             self._labelOutput.deleteLater()
             self._labelOutput = None
-        self._currentSelected = None
 
     def _initButtonsFromNetwork(self, network: Network) -> None:
         """Update the buttons to reflect the layers of the
@@ -465,20 +570,41 @@ class QLayerSelector(QWidget, QObserver, qobservables={
         """
         return bool(button.styleSheet())
 
+    def _button(self, layer: Layerlike) -> QPushButton:
+        """The button associated with a given layer.
+        """
+        layerId = self._asLayerId(layer)
+        if layerId not in self._layerButtons:
+            raise KeyError(f"'{layerId}' is not a valid layer id:"
+                           f"{list(self._layerButtons.keys())}")
+        return self._layerButtons[layerId]
+
+    def _layerIdForButton(self, button: QPushButton) -> Layer:
+        """Get the layer-ID associated with a button.
+        """
+        return button.text()
+
+    def _layerForButton(self, button: QPushButton) -> Layer:
+        """Get the :py:class:`Layer` associated with a button.
+        """
+        return self.network()[self._layerIdForButton(button)]
+
     @protect
     def onLayerButtonClicked(self, checked: bool):
         """Callback for clicking one of the layer buttons.
         If we have an ActivationEngine set, we will set that layer in
         the engine.
         """
+        button = self.sender()
         LOG.info("QLayerSelector.onLayerButtonClicked(checked=%s): "
-                 "sender=%s, current_selected=%s",
-                 checked, self.sender().text(), self._currentSelected)
+                 "sender=%s", checked, button.text())
 
         if self._network is None:
-            return
+            # should not happen: there should be no buttons to click
+            # if we do not have a Network
+            return  # just ignore it
 
-        layer = self._network[self.sender().text()]
+        layer = self._layerForButton(button)
         select = not self.layerSelected(layer)
         self.selectLayer(layer, select)
 
@@ -490,67 +616,13 @@ class QLayerSelector(QWidget, QObserver, qobservables={
 
         self.layerClicked.emit(layer.key, select)
 
-    def selectLayers(self, activation, info) -> None:
-        # FIXME[old]:
-        # def activation_changed(self, activation: ActivationEngine,
-        #                        info: ActivationEngine.Change) -> None:
-        # pylint: disable=invalid-name
-        """The QLayerSelector is interested in network related changes, i.e.
-        changes of the network itself or the current layer.
-        """
-        LOG.debug("QLayerSelector.activation_changed(%s, %s)",
-                  activation, info)
-
-        # FIXME[design]: The 'network_changed' message can mean that
-        # either the current model has changed or that the list of
-        # models was altered (or both).
-        # FIXME[old]: should be redundant with network.observable_changed
-        if False and info.network_changed:
-            #
-            # Respond to network change
-            #
-
-            # As we may add/remove QWidgets, we need to make sure that
-            # this method is executed in the main thread
-            event = QEvent(QLayerSelector._UPDATE_NETWORK)
-            event.activation = activation
-            QCoreApplication.postEvent(self, event)
-
-        return  # FIXME[old]
-
-        if ((info.network_changed or info.layer_changed) and
-                activation is not None):
-            #
-            # Respond to layer change
-            #
-
-            layerId = activation.layer_id
-            try:
-                layer_index = activation.idForLayer(layerId)
-            except ValueError:
-                print(f"ERROR: {self.__class__.__name__}."
-                      "activation_changed(): {error}")
-                layer_index = None
-            if layer_index != self._currentSelected:
-
-                # unmark the previously active layer
-                if self._currentSelected is not None:
-                    oldItem = self._layerButtons[self._currentSelected]
-                    self._markButton(oldItem, False)
-
-                self._currentSelected = layer_index
-                if self._currentSelected is not None:
-                    # and mark the new layer
-                    newItem = self._layerButtons[self._currentSelected]
-                    self._markButton(newItem, True)
-
     #
     # Network
     #
 
-    def setNetwork(self, network: Network) -> None:
-        self._networkInfo.setNetwork(network)
-
+    def setNetwork(self, network: Optional[Networklike]) -> None:
+        self._initButtonsFromNetwork(network)
+    
     def network_changed(self, network: Network,
                         change: Network.Change) -> None:
         # pylint: disable=invalid-name

@@ -6,6 +6,7 @@ Github: https://github.com/themightyoarfish
 """
 
 # Generic imports
+from typing import Optional
 import logging
 
 # Qt imports
@@ -14,10 +15,11 @@ from PyQt5.QtWidgets import QWidget, QGroupBox, QSplitter
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout
 
 # toolbox imports
+from dltb.base.data import Data, Datalike
 from dltb.tool.activation import ActivationTool, ActivationWorker
 from dltb.tool.image import ImageTool
 from dltb.network import Network
-from dltb.datasource import Datasource
+from dltb.datasource import Datasource, Datafetcher
 from dltb.util.array import DATA_FORMAT_CHANNELS_FIRST
 from dltb.util.image import grayscaleNormalized
 
@@ -27,20 +29,15 @@ from toolbox import Toolbox
 from .panel import Panel
 from ..utils import QObserver, QPrepareButton, protect
 from ..widgets.activationview import QActivationView
-from ..widgets.data import QDataInspector
+from ..widgets.data import QDataView
 from ..widgets.network import QLayerSelector, QNetworkComboBox
+from ..widgets.network import QNetworkComboBox
 from ..widgets.classesview import QClassesView
+from ..widgets.datasource import QDatasourceNavigator
 
 
 # logging
 LOG = logging.getLogger(__name__)
-
-# FIXME[bug]: when
-# 1. loading an image and then
-# 2. preparing the network
-# 3. selecting a layer
-# the activations are not computed.
-# Desired behavior: activations should be computed.
 
 # FIXME[todo]: show some busy widget for operations that may take some time:
 # - initializing/perparing a network
@@ -49,7 +46,9 @@ LOG = logging.getLogger(__name__)
 
 class ActivationsPanel(Panel, QObserver, qobservables={
         Toolbox: {'datasource_changed', 'input_changed'},
-        ActivationWorker: {'data_changed', 'work_finished'}}, qattributes={
+        ActivationWorker: {'tool_changed', 'data_changed', 'worker_changed',
+                           'work_finished'},
+        Datafetcher: {'data_changed'}}, qattributes={
             Datasource: False, Network: False}):
     # pylint: disable=too-many-instance-attributes
     """The :py:class:`ActivationsPanel` is a graphical frontend for an
@@ -59,18 +58,12 @@ class ActivationsPanel(Panel, QObserver, qobservables={
     :py:class:`ActivationWorker` and displays activation maps computed
     by the tool.
 
-    The :py:class:`ActivationsPanel` complex panel consisting
+    The :py:class:`ActivationsPanel` is a complex panel consisting
     of three parts:
     (A) activation: display of layer and unit activations
-    (B) input: select and display inputs
+    (B1) input: select inputs
+    (B2) input: display inputs
     (C) network: display network information and select network layers
-
-    The :py:class:`ActivationsPanel` can be used with a
-    :py:class:`Toolbox`, in which case the selection of the network
-    and input data are restricted to the resources offered by that
-    toolbox. If no toolbox is used, network and datasource selection
-    have to configured with the _networkSelector and
-    _datasourceNavigator components.
 
     Attributes
     ----------
@@ -92,7 +85,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
     following protected attributes based on the current state of the
     underlying activation worker:
 
-    _layerID: str
+    _layer: str
         The currently selected unit in the activation map.
 
     _unit: int
@@ -137,11 +130,38 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         a network from a list of networks, selecting a layer for a network,
         displaying network information and network output.
 
+    _networkBox: QNetworkBox
+        An box to display some details on the current network and the
+        selected Layer.
+
     _classesView: QClassesView = None
         A :py:class:`QClassesView` for displaying classification results
         in case the current :py:class:`Network` is a
         :py:class:`Classifier`.
 
+    Stand-alone and Toolbox mode
+    ----------------------------
+
+    The :py:class:`ActivationsPanel` can be used with a
+    :py:class:`Toolbox`, in which case the selection of the network
+    and input data are performed via the toolbox.
+    - the toolbox network selector is used for selecting a Network
+    - datasource selection affects the toolbox datasource
+    - datasource navigation controls the toolbox Datafetcher
+      (which in turn sets the toolbox input data)
+    - the toolbox input data is used as input for the activation worker
+
+    If no toolbox is used, network and datasource selection are done
+    locally in the panel. The panel will create a private `Datafetcher`
+    and `Data` obtained from that fetcher are used as input.
+
+    In both cases, the properties can be get and set via the specific
+    methods: `network`, `datasource`.
+
+    network:
+        the :py:class:`Network` is propagated to the
+        :py:class:`QLayerSelector `and the :py:class:` and
+        the :py:class:`QClassesView`
     """
 
     def __init__(self, toolbox: Toolbox = None,
@@ -157,10 +177,10 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         parent: QWidget
             The parent argument is sent to the QWidget constructor.
         """
-        self._layerID = None
+        self._layer = None
         self._unit = None
         self._receptiveField = None
-        LOG.info("ActivationsPanel(toolbox=%s, network=%s, datasource=%s)",
+        LOG.info("QActivationsPanel(toolbox=%s, network=%s, datasource=%s)",
                  toolbox, network, datasource)
         super().__init__(**kwargs)
         self._initUI()
@@ -201,6 +221,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._classesView = QClassesView()
         self._classesViewBox = QGroupBox('Classification')
         self._classesViewBox.setCheckable(True)
+        self._classesViewBox.toggled.connect(self.onClassesViewBoxToggled)
         classesViewLayout = QVBoxLayout()
         classesViewLayout.addWidget(self._classesView)
         self._classesViewBox.setLayout(classesViewLayout)
@@ -210,15 +231,12 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # (B) Input
         #
 
-        # QImageView: a widget to display the input data
-        self._dataInspector = QDataInspector()
-        self.addAttributePropagation(Toolbox, self._dataInspector)
+        # QDataView: a widget to display the input data
+        self._dataView = QDataView()
+        self.addAttributePropagation(Toolbox, self._dataView)
+        self.addAttributePropagation(Datafetcher, self._dataView)
 
-        self._imageView = self._dataInspector.imageView()
-        # self.addAttributePropagation(Toolbox, self._imageView)
-
-        # QDataView: display data related to the current input data
-        self._dataView = self._dataInspector.dataView()
+        # display data related to the current input data
         self._dataView.addAttribute('filename')
         self._dataView.addAttribute('basename')
         self._dataView.addAttribute('directory')
@@ -226,11 +244,18 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._dataView.addAttribute('regions')
         self._dataView.addAttribute('image')
 
-        # QDatasourceNavigator: navigate through the datasource
-        self._datasourceNavigator = self._dataInspector.datasourceNavigator()
-        self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+        # store reference to the QImageView in the QDataView
+        self._imageView = self._dataView.imageView()
 
-        # self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+        #
+        # (B2) Datasource navigation
+        #
+        self._datasourceNavigator = \
+            QDatasourceNavigator(datasource_selector=True, style='wide')
+        self.addAttributePropagation(Toolbox, self._datasourceNavigator)
+        self.setDatafetcher(self._datasourceNavigator.datafetcher())
+        LOG.info("QActivationsPanel.initGUI: datafetcher=%s",
+                 self.datafetcher())
 
         #
         # (C) Network
@@ -257,6 +282,9 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         self._layerSelector = QLayerSelector()
         self._layerSelector.layerClicked.connect(self.onLayerSelected)
         self.addAttributePropagation(Network, self._layerSelector)
+
+        self._networkBox = QNetworkBox()
+        self.addAttributePropagation(Network, self._networkBox)
 
     def _layoutUI(self):
         """Layout the graphical user interface.
@@ -285,7 +313,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         # Input data (center column)
         #
         inputLayout = QVBoxLayout()
-        inputLayout.addWidget(self._dataInspector)
+        inputLayout.addWidget(self._dataView)
 
         inputBox = QGroupBox('Input')
         inputBox.setLayout(inputLayout)
@@ -301,6 +329,7 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         row.addWidget(self._networkPrepareButton, stretch=1)
         networkLayout.addLayout(row)
         networkLayout.addWidget(self._layerSelector)
+        networkLayout.addWidget(self._networkBox)
         networkBox.setLayout(networkLayout)
         rightLayout.addWidget(networkBox)
 
@@ -314,19 +343,43 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         splitter.addWidget(activationBox)
         splitter.addWidget(inputBox)
 
+        leftLayout = QVBoxLayout()
+        leftLayout.addWidget(splitter)
+        leftLayout.addWidget(self._datasourceNavigator)
+
+        leftWidget = QWidget()
+        leftWidget.setLayout(leftLayout)
+        leftLayout.setContentsMargins(0, 0, 0, 0)
+
         rightWidget = QWidget()
         rightWidget.setLayout(rightLayout)
         rightLayout.setContentsMargins(0, 0, 0, 0)
-        splitter.addWidget(rightWidget)
+
+        splitter2 = QSplitter(Qt.Horizontal)
+        splitter2.addWidget(leftWidget)
+        splitter2.addWidget(rightWidget)
 
         layout = QHBoxLayout()
-        layout.addWidget(splitter)
+        layout.addWidget(splitter2)
         self.setLayout(layout)
 
     def setActivationWorker(self, worker: ActivationWorker) -> None:
         """Set the underlying :py:class:`ActivationWorker`.
         """
-        LOG.debug("ActivationsPanel.setActivationWorker(%s)", worker)
+        LOG.debug("QActivationsPanel.setActivationWorker(%s)", worker)
+        self._classesViewBox.setChecked(worker.classification)
+
+    def setToolbox(self, toolbox: Toolbox) -> None:
+        """Set a :py:class:`Toolbox` to be used by this `QActivationsPanel`.
+
+        Arguments
+        ---------
+        toolbox:
+            The :py:class:`Toolbox` object to be used. If `None`,
+            toolbox functionality will be disabled.
+        """
+        LOG.debug("QActivationsPanel.setToolbox(%s)", toolbox)
+        self.setData(None if toolbox is None else toolbox.input_data)
 
     def network(self) -> Network:
         """The network used by this :py:class:`ActivationsPanel`, i.e. by the
@@ -342,11 +395,11 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         set, setting the network will have no effect (and it will
         not be remembered in case an tool will be set in the future).
         """
+        LOG.debug("QActivationsPanel.setNetwork(%s): ImageTool: %s",
+                  network, isinstance(network, ImageTool))
         self._networkPrepareButton.setPreparable(network)
         if self._activationTool is not None:
             self._activationTool.network = network
-        print(f"ActivationsPanel.setNetwork({network}): "
-              f"{isinstance(network, ImageTool)}")
         self._imageView.setImageTool(network if isinstance(network, ImageTool)
                                      else None)
 
@@ -370,15 +423,29 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             for selecting inputs by the datasource navigator of them
             :py:class:`ActivationsPanel`.
         """
-        LOG.debug("ActivationsPanel.toolbox_changed: %s", change)
+        LOG.debug("QActivationsPanel.toolbox_changed: %s", change)
         if change.input_changed:
             data = toolbox.input_data if toolbox is not None else None
-            self._imageView.setData(data)
-            self._dataView.setData(data)
-            if self._activationWorker is not None:
-                self._activationWorker.work(data)
+            self.setData(data)
         elif change.datasource_changed:
             self.setDatasource(toolbox.datasource)
+
+    #
+    # Datafetcher
+    #
+
+    # FIXME[todo/concept]: this is not yet implemented, and it is not
+    # clear if that is really needed.
+    def datafetcher_changed(self, datafetcher: Datafetcher,
+                            info: Datafetcher.Change) -> None:
+        # pylint: disable=invalid-name
+        """React to a change in the state of the controlled
+        :py:class:`Datafetcher`.
+        """
+        LOG.debug("QActivationsPanel: Datafetcher %s changed %s",
+                  datafetcher, info)
+        if info.data_changed:
+            self.setData(datafetcher.data)
 
     #
     # ActivationWorker
@@ -399,16 +466,46 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             self._networkSelector.setNetwork(network)
             self._networkPrepareButton.setPreparable(network)
             self._layerSelector.setNetwork(network)
+            self._classesViewBox.setEnabled(worker.ready and
+                                            network.is_classifier())
+            if worker.ready:
+                worker.work(self.data())
 
-            enabled = (network is not None and network.prepared and
-                       network.is_classifier())
-            self._classesViewBox.setEnabled(enabled)
+        if info.data_changed:
+            self._dataView.setData(worker.data)
+
+        if info.worker_changed:
+            self._classesViewBox.setChecked(worker.classification)
+
         if info.work_finished:
             self.updateImageMask()
 
     #
     # update
     #
+
+    def data(self) -> Optional[Data]:
+        """The :py:class:`Data` currently used by this `QActivationView`.
+        """
+        # if self._toolbox is not None:
+        #     return self._toolbox.input_data
+
+        # if self._dataView is not None:
+        #     return self._dataView.data()
+
+        worker = self._activationWorker
+        return None if worker is None else worker.data
+
+    def setData(self, data: Datalike) -> None:
+        """Update the data to be displayed in the `ActivationsPanel`.
+        """
+        worker = self._activationWorker
+        if worker is not None:
+            LOG.debug("QActivationPanel: setData(%s) - worker "
+                      "ready/busy: %s/%s", data, worker.ready, worker.busy)
+            worker.work(data)
+        else:
+            LOG.debug("QActivationPanel: setData(%s) - no worker!", data)
 
     def updateImageMask(self) -> None:
         """Display the current activations as mask in the image view.
@@ -417,15 +514,14 @@ class ActivationsPanel(Panel, QObserver, qobservables={
             self._imageView.setMask(None)
             return
 
-        if self._layerID is None:
+        if self._layer is None:
             self._imageView.setMask(None)
             return
 
-        activations = self._activationWorker.activations(self._layerID,
-                                                         unit=self._unit)
-
         # For convolutional layers add a activation mask on top of the
         # image, if a unit is selected
+        activations = self._activationWorker.activations(self._layer,
+                                                         unit=self._unit)
         if activations is not None and activations.ndim > 1:
             # exclude dense layers
             activationMask = grayscaleNormalized(activations)
@@ -484,29 +580,49 @@ class ActivationsPanel(Panel, QObserver, qobservables={
         else:
             point = (position.x(), position.y())
             self._receptiveField = layer.receptive_field(point)
-        print(f"AcivationsPanel: New receptive field is: {self._receptiveField}")
+        LOG.info("QActivationsPanel: position changed: "
+                 "new receptive field is: %s", self._receptiveField)
         self.updateReceptiveField()
 
     @protect
-    def onLayerSelected(self, layer_id: str, selected: bool) -> None:
+    def onLayerSelected(self, layer: str, selected: bool) -> None:
         """A slot for reacting to layer selection signals.
 
         Parameters
         ----------
-        layer_id: str
-            The id of the network :py:class:`Layer`. It is assumed
-            that this id refers to a layer in the current
+        layer: str
+            The (key of) the network :py:class:`Layer`. It is assumed
+            that this key refers to a layer in the current
             `py:meth:`ActivationTool.network`
             of the :py:class:`ActivationTool`.
         selected: bool
             A flag indicating if the layer was selected (`True`)
             or deselected (`False`).
         """
-        LOG.info("QActivationsPanel.onLayerSelected('%s', %s)",
-                 layer_id, selected)
+        LOG.info("QActivationsPanel.onLayerSelected('%s', %s) - tool: %s",
+                 layer, selected, self._activationTool is not None)
         if self._activationTool is None:
             return  # we will not do anything without an ActivationTool
 
-        self._layerID = layer_id if selected else None
-        layer = self.network()[layer_id] if selected else None
+        self._layer = layer if selected else None
+        layer = self.network()[layer] if selected else None
         self._activationView.setLayer(layer)
+        self._networkBox.setLayer(layer)
+
+    @protect
+    def onClassesViewBoxToggled(self, on: bool) -> None:
+        # parameter name "on" is prescribed by Qt API.
+        # pylint: disable=invalid-name
+        """The checkbox of the `QGroupBox` containining the `QClassesView` has
+        been toggled.  The underlying :py:class:`ActivationWorker` is
+        informed whether class information are still desired.
+
+        Arguments
+        ---------
+        on:
+             If `True`, class predictions are to be displayed, if `False`
+             that functionality is disabled.
+        """
+        activationWorker = self._activationWorker
+        if activationWorker is not None:
+            activationWorker.classification = on

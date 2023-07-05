@@ -173,7 +173,7 @@ class HighscoreGroupNumpy(HighscoreGroup):
         owners_shape = (self.size, len(self))
         if self.owner_dimensions is not None:
             owners_shape += (self.owner_dimensions, )
-        self._owners = np.full(owners_shape, -1, np.int)
+        self._owners = np.full(owners_shape, -1, nphelper.np_int)
         # scores: (size, top)
         self._scores = np.full((self.size, len(self)), np.NINF, np.float32)
 

@@ -19,7 +19,7 @@ from .detector import Detector as FaceDetector
 from ..detector import ImageDetector
 from ...typing import Protocol
 from ...base.busy import busy
-from ...base.meta import Metadata
+from ...base.metadata import Metadata
 from ...base.data import Data
 from ...base.image import Image, Imagelike, ImageDisplay
 from ...base.image import BoundingBox, Landmarks, Sizelike, Size
@@ -121,7 +121,7 @@ class Detector(Protocol, Generic[LandmarksType]):
         """
 
 
-class DetectorBase(Implementable, ImageDetector):  # , Generic[LandmarksType]
+class DetectorBase(ImageDetector, Implementable):  # , Generic[LandmarksType]
     """Base implementation for a facial :py:class:`LandmarksDetector`.
 
     Most :py:class:`LandmarksDetector` will derive from this base

@@ -20,3 +20,12 @@ max-parents=25
 # supports qualified module names, as well as Unix pattern matching.
 ignored-modules=torch
 
+# List of decorators that change the signature of a decorated function.
+signature-mutators=dltb.base.reuse.reusable
+
+[MISCELLANEOUS]
+
+# Regular expression of note tags to take in consideration.
+# Special pattern required for pylint >=2.13.0 to see notes like
+# "FIXME[bug]" and "FIXME[todo]"
+notes-rgx=FIXME\[.*\]

@@ -1,13 +1,17 @@
-from .engine import Engine, _EngineHelper, logger
-from .config import Config
 
+# standard imports
 import os
-import cv2
 import time
+
+# thirdparty imports
+import cv2
 import numpy as np
 import tensorflow as tf
 
-from network import Network
+# toolbox imports
+from dltb.network import Network
+from .engine import Engine, _EngineHelper, logger
+from .config import Config
 
 
 class _TensorflowHelper(_EngineHelper):

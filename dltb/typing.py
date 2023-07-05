@@ -1,6 +1,6 @@
 """Auxiliary module to provide uniform access to some Python type hints.
 """
-__all__ = ['Protocol', 'get_origin', 'get_args']
+__all__ = ['Protocol', 'Literal', 'get_origin', 'get_args']
 
 # standard imports
 import sys

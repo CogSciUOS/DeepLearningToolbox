@@ -15,7 +15,7 @@ import tensorflow as tf
 import numpy as np
 
 # toolbox imports
-from network.tensorflow import Network as TensorFlowNetwork
+from dltb.thirdparty.tensorflow.network import Network as TensorFlowNetwork
 from dltb.util.image import imread, imresize
 
 # from imagenet_classes import class_names

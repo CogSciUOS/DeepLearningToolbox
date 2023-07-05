@@ -9,9 +9,9 @@ import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten
 
-from network import Classifier
-from network.keras_tensorflow import Network as KerasNetwork
-from network.keras import conv_2d
+from dltb.network import Classifier
+from dltb.thirdparty.keras.tensorflow import Network as KerasNetwork
+from dltb.thirdparty.keras.layer import conv_2d
 
 
 class KerasMnistClassifier(KerasNetwork, Classifier):

@@ -1,24 +1,18 @@
+
+# standard imports
 from unittest import TestCase, SkipTest, skipUnless
 
-import os
+# thirdparty imports
 import numpy as np
+from keras.datasets import mnist  # FIXME[todo]: use toolbox MNIST instead ...
 
-from keras.datasets import mnist
-
+# toolbox imports
 from dltb.config import config
 
 
-os.environ['GLOG_minloglevel'] = '2' # Suppress verbose output from caffe.
-
-## The following lines allow the test to be run from within the test
-## directory (and provide the MODELS_DIRECTORY):
-# if not __package__: import __init__
-# if __package__: from . import MODELS_DIRECTORY
-# else: from __init__ import MODELS_DIRECTORY
-
 try:
     from dltb.thirdparty.caffe.network import Network as CaffeNetwork
-    from network.layers import caffe_layers
+    import dltb.thirdparty.caffe.layers as caffe_layers
     caffe_available = True
 except ImportError:
     caffe_available = False

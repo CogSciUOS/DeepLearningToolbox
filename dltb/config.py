@@ -67,8 +67,8 @@ LOG = logging.getLogger(__name__)
 # Potential solutions do not really work out:
 #
 # 1. Enum:  dtype = Enum('DtypeEnum', {n: idx for n, idx in enumerate(dtype)})
-#    This is a proper type, but instances are only the attributes of this
-#    type: dtype.value1, dtype.value2, ...
+#    This is a proper type, but instances are only the attributes of this type:
+#    dtype.value1, dtype.value2, ...
 #    There seems to be no way to directly check isinstance(value, dtype)
 #
 # 2. Literal:  dtype = Literal[(n for n in dtype)]
@@ -207,7 +207,7 @@ class Config:
         if isinstance(dtype, set):
             if value not in dtype:
                 raise TypeError(f"Value '{value}' is no member of {dtype}.")
-            return value, dtype, 
+            return value, dtype
 
         if issubclass(dtype, Path):
             if not isinstance(value, get_args(Pathlike)):
@@ -344,9 +344,9 @@ config.add_property('run_slow_tests', default=False,
                     "Slow tests may perform file downloads, running networks, "
                     "etc. and hence significantly slow down the test time.")
 
-config.add_property('use_cpu', default=False,
-                    description="Should we use CPU "
-                    "(even if GPU is available)?")
+config.add_property('use_gpu', default=True,
+                    description="Use GPU if available (set to False to "
+                    "disable GPU and enforce GPU calculation)")
 
 config.add_property('prepare_on_init', default=True,
                     description="prepare Preparable objects upon"
@@ -391,3 +391,11 @@ config.add_property('github_directory',
 
 config.add_property('activations_directory',
                     default=lambda c: c.work_directory / 'activations')
+
+
+#
+# Example files
+#
+
+config.add_property('sound_example',
+                    default='examples/win_xp_shutdown.wav')

@@ -43,7 +43,6 @@ from dltb.tool.face.landmarks import apply_single_hack, apply_multi_hack
 from dltb.tool.face import Detector as FaceDetector
 from dltb.tool.align import LandmarkAligner
 from dltb.util.image import get_display
-from dltb.thirdparty import implementations
 
 # logging
 LOG = logging.getLogger(__name__)
@@ -56,8 +55,6 @@ LOG = logging.getLogger(__name__)
 
 # wrong face:
 # /space/data/lfw/lfw/Gordon_Brown/Gordon_Brown_0006.jpg
-
-
 
 
 def main():
@@ -97,15 +94,11 @@ def main():
     ToolboxArgparse.process_arguments(parser, args)
 
     if args.list_detectors:
-        print("FaceDetector implementations:")
-        for index, implementation in enumerate(implementations(FaceDetector)):
-            print(f"{index+1}) {implementation}")
+        print(FaceDetector.implementation_info())
         return os.EX_OK
 
     if args.list_warpers:
-        print("ImageWarper implementations:")
-        for index, implementation in enumerate(ImageWarper.implementations()):
-            print(f"{index+1}) {implementation}")
+        print(ImageWarper.implementation_info())
         return os.EX_OK
 
     # obtain the datasource if provided (otherwise None)

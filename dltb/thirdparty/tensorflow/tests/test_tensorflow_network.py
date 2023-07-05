@@ -2,21 +2,19 @@
 """
 
 # standard imports
-from unittest import TestCase, skipUnless
+from unittest import TestCase, SkipTest, skipUnless
 import os
 
 # third-party imports
-import numpy as np
-
-# FIXME[old]: The following lines allow the test to be run from within
-# the test directory (and provide the MODELS_DIRECTORY):
-# if __package__: from . import MODELS_DIRECTORY
-# else: from __init__ import MODELS_DIRECTORY
+try:
+    import numpy as np
+    import tensorflow as tf
+except ImportError as error:
+    raise SkipTest("Third party requirements are missing") from error
 
 # toolbox imports
 from dltb.config import config
 from dltb.thirdparty.tensorflow import tensorflow_version_available
-#import network.tensorflow
 
 # FIXME[hack]: we need tf, but we want to make sure that it is only
 # loaded after the import mechanism was patched by the deep learning
@@ -24,20 +22,21 @@ from dltb.thirdparty.tensorflow import tensorflow_version_available
 # pylint: disable=wrong-import-order
 #import tensorflow as tf
 
-@skipUnless(tensorflow_version_available('v1'),
-            "TensorFlow version 1 is not available.")
+@skipUnless(tensorflow_version_available('v1') and
+            (config.model_directory / 'example_tf_mnist_model').is_dir(),
+            "TensorFlow version 1 and/or example model is not available.")
 class TestTensorFlowNetwork(TestCase):
     """Test suite for a Tensorflow `Network`.
     """
     dltb_tensorflow_network = None
-    
+
     @classmethod
     def setUpClass(cls):
         """Load a small MNIST classifier for testing the interface.
         """
-        import network.tensorflow
-        cls.dltb_tensorflow_network = network.tensorflow
-        TensorFlowNetwork = network.tensorflow.Network
+        import dltb.thirdparty.tensorflow.network
+        cls.dltb_tensorflow_network = dltb.thirdparty.tensorflow.network
+        TensorFlowNetwork = dltb.thirdparty.tensorflow.network.Network
 
         checkpoints = os.path.join(config.model_directory,
                                    'example_tf_mnist_model',

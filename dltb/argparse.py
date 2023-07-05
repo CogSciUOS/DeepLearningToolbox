@@ -14,7 +14,7 @@ parser = ArgumentParser(...)
 ToolboxArgparse.add_arguments(parser)
 
 args = parser.parse_args()
-ToolboxArgparse.process_arguments(args)
+ToolboxArgparse.process_arguments(parser, args)
 
 # ...
 ```
@@ -26,11 +26,11 @@ from typing import Any, Optional
 from argparse import ArgumentParser, Namespace, Action
 import sys
 import logging
-import importlib
 
 # toolbox imports
 from .config import config
 from .util.logging import TerminalFormatter
+from .util.importer import importable, import_module
 
 
 # argparse modules from additional deep learning toolbox components
@@ -79,10 +79,10 @@ def add_arguments(parser: ArgumentParser, components=()) -> None:
     for component in components:
         if component == 'network':
             component_argparse = \
-                importlib.import_module('..network.argparse', __name__)
+                import_module('..network.argparse', __name__)
         elif component == 'datasource':
             component_argparse = \
-                importlib.import_module('..datasource.argparse', __name__)
+                import_module('..datasource.argparse', __name__)
         else:
             raise ValueError(f"Invalid component '{component}'. Known "
                              "components are 'network' and 'datasource'")
@@ -97,6 +97,9 @@ def add_arguments(parser: ArgumentParser, components=()) -> None:
     group.add_argument('--cpu',
                        help="Force CPU usage (even if GPU is available)",
                        action='store_true', default=False)
+    group.add_argument('--gpu',
+                       help="Perform GPU computation if available (default)",
+                       action='store_true', default=True)
 
     group = parser.add_argument_group("General toolbox arguments")
 
@@ -135,32 +138,33 @@ def process_arguments(parser: ArgumentParser, args: Namespace = None) -> None:
     if args.warn_missing_dependencies:
         config.warn_missing_dependencies = True
 
+    if args.gpu:
+        config.use_gpu = True
     if args.cpu:
-        config.use_cpu = True
+        config.use_gpu = False
 
     #
     # Debugging
     #
     handler = None
-    for what in ('info', 'debug'):
+    for what in ('debug', 'info'):
         modules = getattr(args, what)
         if not modules:
             continue  # no modules provided as 'info/debug' command line args
 
+        level = getattr(logging, what.upper())
         if handler is None:
             handler = logging.StreamHandler(sys.stderr)
-            handler.setLevel(logging.DEBUG)
+            handler.setLevel(level)
             handler.setFormatter(TerminalFormatter())
         for module in modules:
             logger = logging.getLogger(module)
             logger.addHandler(handler)
-            logger.setLevel(getattr(logging, what.upper()))
+            logger.setLevel(level)
             log = getattr(logger, what)
             log("Outputting %s messages from module %s", what, module)
-            if (module != '__main__' and
-                    importlib.util.find_spec(module) is None):
-                logger.warning("Target module %s not found by importlib.",
-                               module)
+            if module != '__main__' and not importable(module):
+                logger.warning("Cannot find target module '%s'.", module)
 
     for component in _components:
         component.process_arguments(parser, args)

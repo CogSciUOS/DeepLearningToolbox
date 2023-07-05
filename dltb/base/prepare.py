@@ -22,62 +22,19 @@ Classes that realize the idea of preparation should inherit from
 :py:class:`Preparable` and overwrite the relevant methods.
 """
 # standard imports
+from abc import ABC
 import logging
-import inspect
 
 # toolbox imports
 from ..config import config
 from .busy import BusyObservable, busy
+from .meta import Postinitializable
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class Postinitializable:
-    """A class supporting a post init hook :py:meth:`__post_init__`, that
-    is a method that is called immediately after the class was
-    initialized (by the :py:meth:`__init__`).
-    """
-
-    def __init_subclass__(cls, *args, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-        if '__init__' in cls.__dict__:
-            cls._postinit_original_init = cls.__init__
-            cls.__init__ = Postinitializable.__init__
-
-    def __init__(self, *args, _cls: type = None, **kwargs):
-        # As we use this method, i.e.,  Postinitializable.__init__,
-        # in multiple classes as __init__ method (via the assignment in
-        # __init_subclass__), super() will not work as expected (it will
-        # always refer to the superclass of Postinitializable, not to
-        # the superclass of the class to which the method was assigned).
-        # Hence we we have to do a manual lookup of the superclass.
-        # We do this by passing an additional argument _cls, referring
-        # to the last class in the MRO in which __init__ was involved and
-        # then explicitly progress in the MRO:
-
-        # obtain the original __init__ method ...
-        meth = (self._postinit_original_init if _cls is None else
-                super(_cls, self)._postinit_original_init)
-        # ... get the class in which that method was defined ...
-        meth_cls = getattr(inspect.getmodule(meth),
-                           meth.__qualname__.rsplit('.', 1)[0])
-        # ... and call it!
-        meth(*args, _cls=meth_cls, **kwargs)
-
-        # in the outermost __init__ method, we call __post_init__
-        if _cls is None:
-            self.__post_init__()
-
-    def _postinit_original_init(self, *args, _cls: int = None, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def __post_init__(self):
-        LOG.debug("Postinitializable.__post_init__")
-
-
-# FIXME[todo]: make this an abstract class
-class Preparable(BusyObservable, Postinitializable,
+class Preparable(BusyObservable, Postinitializable, # ABC,
                  method='preparable_changed', changes={'state_changed'}):
     """The :py:class:`Preparable` implements this idea providing three public
     methods:
@@ -106,6 +63,7 @@ class Preparable(BusyObservable, Postinitializable,
             self._prepare_on_init = prepare
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         if getattr(self, '_prepare_on_init', config.prepare_on_init):
             self.prepare()
 
@@ -147,7 +105,6 @@ class Preparable(BusyObservable, Postinitializable,
         return self._prepared()
 
     def _prepared(self) -> bool:
-        # pylint: disable=no-self-use
         """Implementation of the :py:class:`prepared` property.
         The default implementation will always return `True`.
         Subclasses should overwrite this method to adapt to their
@@ -175,7 +132,7 @@ class Preparable(BusyObservable, Postinitializable,
             return  # nothing to do ...
 
         if not self.preparable and not force:
-            raise RuntimeError(f"{self} is not preparable.")
+            raise RuntimeError(f"{self} ({type(self)}) is not preparable.")
 
         try:
             with self.failure_manager(cleanup=self._unprepare, catch=True):
@@ -263,7 +220,6 @@ class Preparable(BusyObservable, Postinitializable,
         return self.prepared or self._preparable()
 
     def _preparable(self) -> bool:
-        # pylint: disable=no-self-use
         """The actual implementation of :py:meth:`preparable`. The default
         is `True` and subclasses with deviating behaviour should overwrite
         this method (combining their state `with super._preparable()`).

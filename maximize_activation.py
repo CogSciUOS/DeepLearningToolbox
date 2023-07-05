@@ -37,9 +37,9 @@ def main():
                         default=False)
     args = parser.parse_args()
 
-    config.use_cpu = args.cpu
+    config.use_gpu = not args.cpu
 
-    from network.tensorflow import Network as TensorFlowNetwork
+    from dltb.thirdparty.tensorflow.network import Network as TensorFlowNetwork
     checkpoint = os.path.join('models', 'example_tf_alexnet',
                               'bvlc_alexnet.ckpt')
     network = TensorFlowNetwork(checkpoint=checkpoint, key='AlexNet')

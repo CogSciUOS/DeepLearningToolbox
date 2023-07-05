@@ -28,7 +28,7 @@ class TestDetector(TestCase):
         on the example image.
         """
         detections = self.detector.detect(self.image)
-        self.assertTrue(isinstance(detections, Detections))
+        self.assertIsInstance(detections, Detections)
         # self.datasource.unprepare()
         # self.assertFalse(self.datasource.prepared)
 

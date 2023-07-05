@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import QTabWidget, QGridLayout
 
 # toolbox imports
 from toolbox import Toolbox
-from network import Network
+from dltb.network import Network
 from dltb.datasource import Datasource
 
 # GUI imports

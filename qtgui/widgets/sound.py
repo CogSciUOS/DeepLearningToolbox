@@ -1,8 +1,25 @@
 """
+
+
+:py:class:`QSoundViewer`
+
+:py:class:`QSoundViewerScrollbar`
+
+The :py:class:`QSoundControl` offers controls buttons
+for a :py:class:`SoundPlayer` and/or :py:class:`SoundRecorder`
+
+
+>>> from qtgui.widgets.sound import SoundDisplay
+>>> display = SoundDisplay(sound='examples/win_xp_shutdown.wav', player=True)
+>>> display.show()
+
+
+
 """
 
 # standard imports
-from typing import Tuple
+from typing import Tuple, Optional
+import os
 import time
 import logging
 
@@ -10,24 +27,44 @@ import logging
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QPushButton, QVBoxLayout, QApplication,
                              QHBoxLayout, QRadioButton, QStyle, QScrollBar,
-                             QCheckBox)
+                             QCheckBox, QFileDialog, QGroupBox)
 from PyQt5.QtGui import (QPainter, QPainterPath, QPen,
                          QMouseEvent, QWheelEvent, QResizeEvent, QPaintEvent)
 
 # toolbox imports
-from dltb.base.sound import (Sound, SoundPlayer, SoundRecorder,
-                             SoundDisplay)
+from dltb.base.sound import Sound, Soundlike, SoundPlayer, SoundRecorder
+from dltb.base.sound import SoundView, SoundDisplay
+from dltb.base.gui import View
 from dltb.util.time import time_str
 from ..utils import QObserver, protect, QThreadedUpdate, pyqtThreadedUpdate
+from .. import QStandalone
 
 # logging
 LOG = logging.getLogger(__name__)
 
 
-class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
+class QSoundViewer(QThreadedUpdate, QObserver,
                    qobservables={
-        SoundPlayer: {'state_changed', 'position_changed'}}):
+                       Sound: {'data_changed'},
+                       SoundPlayer: {'state_changed', 'position_changed'}}):
     """A Qt-based graphical widget that allows to display sound.
+
+    The sound will be displayed as a (subsampled) waveform.
+    The `QSoundViewer` offers the possibility to zoom into the
+    waveform.  The current view is provided by the :py:prop:`_view`
+    property as a pair (first_position, last_position). It will
+    initially be set to show the full sound, and it can be changed
+    by :py:meth:`setView`.  The minimal view duration is fixed
+    by the property `MINIMUM_VIEW_LENGTH`.
+    
+
+    The `QSoundViewer` can observe a :py:class:`SoundPlayer` to
+    indicate the current playback position.
+
+
+    The `QSoundViewer` can be in one of two modes: `MODE_PLAYING`
+    will visualize playback, while `MODE_RECORDING` aims at the
+    recording situation, with a changing :py:class:`Sound` object.
     """
     MODE_PLAYING = 1
     MODE_RECORDING = 2
@@ -36,14 +73,15 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
 
     viewChanged = pyqtSignal()
 
-    def __init__(self, sound: Sound = None, player: SoundPlayer = None,
+    def __init__(self, sound: Optional[Sound] = None,
+                 player: Optional[SoundPlayer] = None,
                  **kwargs) -> None:
         LOG.info("Initializing QSoundViewer(sound=%s, player=%s)",
                  sound, player)
         super().__init__(**kwargs)
-        print(self.__class__.__mro__)
-        self._sound = sound
-        self._player = player
+        self.setSound(sound)
+        self.setSoundPlayer(player)
+
         self._mode = self.MODE_PLAYING
         self._position = None
         self._lastUpdateTime = 0.
@@ -52,8 +90,26 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
         self._view = (0.0, 1.0 if sound is None else sound.duration)
         self._selection = None
 
+    def setSound(self, sound: Optional[Sound]) -> None:
+        """Update the :py:class:`Sound` object displayed by this
+        `QSoundViewer`.
+        """
+        LOG.info("Setting Sound for QSoundViewer: %s", sound)
+        self._view = (0.0, 1.0 if sound is None else sound.duration)
+
+    def setSoundPlayer(self, player: Optional[SoundPlayer]) -> None:
+        """Update the :py:class:`SoundPlayer` object observed by this
+        `QSoundViewer`.
+        """
+        LOG.info("Setting Player for QSoundViewer: %s", player)
+
     def length(self) -> float:
-        return 0. if self._sound is None else self._sound.duration
+        """The length (duration) of the :py:class:`Sound` object
+        displayed by this `QSoundViewer`. Will be 0.0 if no
+        `Sound` object is displayed.
+        """
+        sound = self.sound()
+        return 0. if sound is None else sound.duration
 
     def position(self) -> float:
         return self._position
@@ -82,20 +138,24 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
         start: float
             The start time of the view (in seconds).
         end: float
-            The end time of the view (in seconds).
+            The end time of the view (in seconds). If the end results
+            in a view length less than `MINIMUM_VIEW_LENGTH`, it will
+            be increased.
         """
         if start is None or start < 0:
             start = 0
-        if end is None or end > self._sound.duration:
-            end = self._sound.duration
+        length = self.length()
+        if end is None or end > length:
+            end = length
 
         if end-start < self.MINIMUM_VIEW_LENGTH:
             end = start + self.MINIMUM_VIEW_LENGTH
 
         if self._view != (start, end):
+            LOG.debug("setView(%.4f, %.4f)", start, end)
             self._view = (start, end)
             self._path = None
-            self.update()
+            self.updatePath()
             self.viewChanged.emit()
 
     def mode(self) -> int:
@@ -138,22 +198,29 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
 
     @pyqtThreadedUpdate
     def updatePath(self) -> None:
-        MAXIMAL_SAMPLE_POINTS = 200  # check when playback breaks
-        width = min(self.width(), MAXIMAL_SAMPLE_POINTS)
-        x_ratio = self.width()/width
-        height = self.height()
-        #text_height = self.fontMetrics().height()
-        text_height = 20
+        """Update the private `_path` property, holding a `QPainterPath`
+        object used to display the sound wave.
+        """
 
-        level = self._sound.level(width, start=self._view[0],
-                                  end=self._view[1])
-        level = (1-2*level) * (height - text_height)
-        path = QPainterPath()
-        iterator = enumerate(level)
-        path.moveTo(*next(iterator))
-        for (x,y) in iterator:
-            path.lineTo(x*x_ratio, y)
-        self._path = path
+        sound = self.sound()
+
+        if sound is not None:
+            MAXIMAL_SAMPLE_POINTS = 200  # check when playback breaks
+            width = min(self.width(), MAXIMAL_SAMPLE_POINTS)
+            x_ratio = self.width()/width
+            height = self.height()
+            #text_height = self.fontMetrics().height()
+            text_height = 20
+
+            level = sound.level(width, start=self._view[0],
+                                end=self._view[1])
+            level = (1-2*level) * (height - text_height)
+            path = QPainterPath()
+            iterator = enumerate(level)
+            path.moveTo(*next(iterator))
+            for (x,y) in iterator:
+                path.lineTo(x*x_ratio, y)
+                self._path = path
         self.update()
 
     @protect
@@ -164,7 +231,8 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
         ----------
         event: QPaintEvent
         """
-        if self._sound is None:
+        sound = self.sound()
+        if sound is None:
             return
 
         # FIXME[bug?]: this methods seems to be invoked quite often
@@ -215,8 +283,9 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
             painter.drawPath(self._path)
 
         # draw position indicator
-        if self._player is not None:
-            position = self._player.position
+        player = self.soundPlayer()
+        if player is not None:
+            position = player.position
             if position is not None:
                 x_position = int(((position - self._view[0]) /
                                   (self._view[1] - self._view[0])) * width)
@@ -225,7 +294,7 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
                     painter.setPen(QPen(Qt.red, 1))
                     painter.drawLine(x_position, 0, x_position, height)
                     # write time
-                    position_string = time_str(self._player.position)
+                    position_string = time_str(player.position)
                     text_width = fontMetrics.width(position_string)
                     x_location = max(0, min(x_position - text_width // 2,
                                             width - text_width))
@@ -233,19 +302,21 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
 
     def _paintSoundRecording(self, painter: QPainter,
                              downsample: int = 10) -> None:
+        sound = self.sound()
+
         points = self.width()
-        samplerate = self._sound.samplerate / downsample
+        samplerate = sound.samplerate / downsample
 
         duration = points / samplerate
 
         if self._position is None:
-            start = max(0, self._sound.duration - duration)
+            start = max(0, sound.duration - duration)
         else:
             start = self._position
-        end = min(start + duration, self._sound.duration)
+        end = min(start + duration, sound.duration)
 
         # get the sound wave
-        wave = self._sound[start:end:samplerate]
+        wave = sound[start:end:samplerate]
 
         if len(wave) > 0:
             wave = (wave[:, 0] + 1.0) * (0.5*self.height())
@@ -255,33 +326,19 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
                 path.lineTo(*p)
             painter.drawPath(path)
 
-    def set_sound(self, sound: Sound) -> None:
-        LOG.info("Setting Sound for QSoundViewer: %s", sound)
-        self._sound = sound
-        self.update()
-
     @protect
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        """A mouse press toggles between raw and processed mode.
+        """A mouse press allows to set the players position.
         """
-        if self._player is not None:
+        player = self.soundPlayer()
+        if player is not None:
             position = (self._view[0] + (event.x() / self.width()) *
                         (self._view[1]-self._view[0]))
-            self._player.position = position
+            player.position = position
             self.update()
 
-    def FIXME_demo_animation_loop(self):
-        """This function does not anything useful - it is just meant as a
-        demonstration how an animation loop in PyQt5 could be realized.
-
-        """
-        while True:  # need some stop criterion ...
-            # do something (update data)
-            self.update()  # initiate update of display (i.e., repaint)
-            QApplication.processEvents()  # start the actual repainting
-            time.sleep(0.0025)  # wait a bit
-
-    def wheelEvent(self, event: QWheelEvent):
+    @protect
+    def wheelEvent(self, event: QWheelEvent) -> None:
         """Process mouse wheel events. The mouse wheel can be used for
         zooming.
 
@@ -294,7 +351,7 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
         delta = event.angleDelta().y() / 120  # will be +/- 1
 
         center = (self._view[0] + (event.x() / self.width() *
-                                     (self._view[1] - self._view[0])))
+                                   (self._view[1] - self._view[0])))
         end = center - (center - self._view[1]) / (1 + delta * 0.01)
         start = center - (center - self._view[0]) / (1 + delta * 0.01)
 
@@ -314,6 +371,10 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
     def stop_plot(self) -> None:
         pass
 
+    def data_changed(self, sound: Sound, info: Sound.Change) -> None:
+        LOG.debug("QSoundViewer: sound changed: duration=%s",
+                  sound.duration)
+
     def player_changed(self, player: SoundPlayer,
                        info: SoundPlayer.Change) -> None:
         if info.position_changed:
@@ -327,9 +388,21 @@ class QSoundViewer(QThreadedUpdate, QObserver, SoundDisplay,
                 self._lastUpdateTime = currentTime
                 self.update()
 
+    def FIXME_demo_animation_loop(self):
+        """This function does not anything useful - it is just meant as a
+        demonstration how an animation loop in PyQt5 could be realized.
+
+        """
+        while True:  # need some stop criterion ...
+            # do something (update data)
+            self.update()  # initiate update of display (i.e., repaint)
+            QApplication.processEvents()  # start the actual repainting
+            time.sleep(0.0025)  # wait a bit
 
 
 class QSoundViewerScrollbar(QScrollBar):
+    """A special scroll bar for displaying a :py:class:`Sound` object.
+    """
 
     def __init__(self, soundViewer: QSoundViewer, **kwargs) -> None:
         super().__init__(Qt.Horizontal, **kwargs)
@@ -352,22 +425,40 @@ class QSoundViewerScrollbar(QScrollBar):
 
     def _adaptSlider(self) -> None:
         length = self._soundViewer.length()
-        view = self._soundViewer.view()
-        view_length = view[1] - view[0]
-        maximum = length-view_length
+        if length == 0:
+            position, maximum = 0, 0
+            view_length = 0.001
+        else:
+            view = self._soundViewer.view()
+            view_length = view[1] - view[0]
+            maximum = length-view_length
+            position = view[0]
         self.setMaximum(int(1000 * maximum))
         self.setPageStep(int(1000 * view_length))
-        self.setSliderPosition(int(1000 * view[0]))
+        self.setSingleStep(int(100 * view_length))
+        self.setSliderPosition(int(1000 * position))
 
     def paintEvent(self, event):
         painter = QPainter()
         painter.begin(self)
-        painter.drawText(self.width()-100, 10, "Hallo")
+        painter.drawText(self.width()-100, 10, "Hallo 2")
         painter.end()
+
         super().paintEvent(event)
+
         painter = QPainter()
         painter.begin(self)
-        painter.drawText(20, 10, "Hallo")
+        height = self.height()
+        painter.drawText(20, height-3, "Hallo")
+
+        if self._soundViewer is not None:
+            length = self._soundViewer.length()
+            position = self._soundViewer.position()
+            if length is not None and position is not None:
+                xPosition = self.width() * position/length
+                painter.setPen(QPen(Qt.red, 1))
+                painter.drawLine(xPosition, 0, xPosition, height)
+
         painter.end()
 
     @pyqtSlot()
@@ -382,53 +473,77 @@ class QSoundViewerScrollbar(QScrollBar):
 
 
 class QSoundControl(QWidget, QObserver, qobservables={
-        SoundPlayer: {'state_changed'}}):
+        Sound: {'data_changed'},
+        SoundPlayer: {'state_changed', 'position_changed'},
+        SoundRecorder: {'state_changed'}}):
     """A Qt-based graphical widget that allows to control playback
     and recording of sounds.
+
+    The `QSoundControl` is a graphical container bundling several
+    components:
+
+    * a `QSoundViewer`, combined with a `QSoundViewerScrollbar`, for
+      displaying the `Sound` object.
+    * a collection of buttons for controlling playback and recording.
+
+    Properties
+    ----------
+    sound:
+        The :py:class:`Sound` to be displayed in the sound viewer.
+    player:
+        A :py:class:`SoundPlayer` that can be used to play sounds.
+        Controls for sound playback will only be shown/enabled,
+        if a player is available.
+    recorder:
+        A :py:class:`SoundRecorder` that can be used to record sounds.
+        Controls for sound recording will only be shown/enabled,
+        if a player is available.
     """
 
-    def __init__(self, sound: Sound,
-                 player: SoundPlayer = None,
-                 recorder: SoundRecorder = None,
+    def __init__(self, sound: Optional[Sound] = None,
+                 player: Optional[SoundPlayer] = None,
+                 recorder: Optional[SoundRecorder] = None,
                  **kwargs) -> None:
         LOG.info("Initializing QSoundControl(sound=%s, player=%s, "
                  "recorder=%s)", sound, player, recorder)
         super().__init__(**kwargs)
+        self._initUI()
+        self._layoutUI()
+        self.update()
 
-        self._sound = sound
+        self.setSoundPlayer(player)
+        self.setSoundRecorder(recorder)
+        self.setSound(sound)
 
-        self._player = player
-        self.observe(player)
-        
-        self._recorder = recorder
-        self.observe(recorder)
-
+    def _initUI(self) -> None:
         style = self.style()
-        self._iconPlay = style.standardIcon(getattr(QStyle, 'SP_MediaPlay'))
-        self._iconPause = style.standardIcon(getattr(QStyle, 'SP_MediaPause'))
+        iconPlay = style.standardIcon(getattr(QStyle, 'SP_MediaPlay'))
+        iconPause = style.standardIcon(getattr(QStyle, 'SP_MediaPause'))
+        iconLoad = style.standardIcon(getattr(QStyle, 'SP_FileDialogStart'))
 
-        layout = QVBoxLayout()
+        self._buttonLoad = QPushButton("Load")
+        self._buttonLoad.clicked.connect(self._onButtonLoadClicked)
+        self._buttonLoad.setIcon(iconLoad)
+
         self._buttonRecord = QPushButton("Record")
         self._buttonRecord.setCheckable(True)
         self._buttonRecord.clicked.connect(self._onButtonRecordClicked)
-        layout.addWidget(self._buttonRecord)
 
         self._buttonPlay = QPushButton("Play")
         self._buttonPlay.setCheckable(True)
         self._buttonPlay.clicked.connect(self._onButtonPlayClicked)
-        self._buttonPlay.setIcon(self._iconPlay)
-        layout.addWidget(self._buttonPlay)
+        self._buttonPlay.setIcon(iconPlay)
 
         self._buttonInfo = QPushButton("Info")
         self._buttonInfo.clicked.connect(self._onButtonInfoClicked)
-        layout.addWidget(self._buttonInfo)
 
-        self._soundViewer = QSoundViewer(self._sound, self._player)
+        self._soundViewer = QSoundViewer()
         self._soundViewer.setMinimumSize(200, 200)
-        self._soundViewer.observe(self._player)
-        layout.addWidget(self._soundViewer)
-        layout.addWidget(QSoundViewerScrollbar(self._soundViewer))
+        self.addAttributePropagation(Sound, self._soundViewer)
+        self.addAttributePropagation(SoundPlayer, self._soundViewer)
 
+        self._soundScrollbar = QSoundViewerScrollbar(self._soundViewer)
+        
         # self._matplotlib = QMatplotlib()
         # layout.addWidget(self._matplotlib)
         self._plotter = self._soundViewer
@@ -438,15 +553,28 @@ class QSoundControl(QWidget, QObserver, qobservables={
         #                                       figure=self._matplotlib.figure,
         #                                       ax=self._matplotlib._ax)
 
-        radioLayout = QHBoxLayout()
-        self.b1 = QRadioButton("Playing")
-        self.b1.setChecked(True)
-        self.b1.toggled.connect(lambda: self.btnstate(self.b1))
-        radioLayout.addWidget(self.b1)
+    def _layoutUI(self) -> None:
+        layout = QVBoxLayout()
 
-        self.b2 = QRadioButton("Recording")
-        self.b2.toggled.connect(lambda: self.btnstate(self.b2))
-        radioLayout.addWidget(self.b2)
+        controls = QHBoxLayout()        
+        controls.addWidget(self._buttonRecord)
+        controls.addWidget(self._buttonLoad)
+        controls.addWidget(self._buttonPlay)
+        controls.addWidget(self._buttonInfo)
+        layout.addLayout(controls)
+
+        layout.addWidget(self._soundViewer)
+        layout.addWidget(self._soundScrollbar)
+
+        radioLayout = QHBoxLayout()
+        self._b1 = QRadioButton("Playing")
+        self._b1.setChecked(True)
+        self._b1.toggled.connect(lambda: self.btnstate(self._b1))
+        radioLayout.addWidget(self._b1)
+
+        self._b2 = QRadioButton("Recording")
+        self._b2.toggled.connect(lambda: self.btnstate(self._b2))
+        radioLayout.addWidget(self._b2)
 
         self._checkboxLoop = QCheckBox("Loop")
         self._checkboxLoop.stateChanged.connect(self._onLoopChanged)
@@ -461,80 +589,275 @@ class QSoundControl(QWidget, QObserver, qobservables={
         self.setLayout(layout)
 
     def btnstate(self, b):
-        if b == self.b1:
+        if b == self._b1:
             self._soundViewer.setMode(self._soundViewer.MODE_PLAYING)
-        if b == self.b2:
+        if b == self._b2:
             self._soundViewer.setMode(self._soundViewer.MODE_RECORDING)
+
+    def setSound(self, sound: Optional[Sound]) -> None:
+        player = self.soundPlayer()
+        recorder = self.soundRecorder()
+        if player is not None:
+            player.sound = sound
+        if recorder is not None:
+            recorder.sound = sound
+        self.update()
+
+    def setSoundPlayer(self, player: Optional[SoundPlayer]) -> None:
+        if player is not None:
+            player.sound = self.sound()
+        self.update()
+
+    def setSoundRecorder(self, recorder: Optional[SoundRecorder]) -> None:
+        if recorder is not None:
+            print("Recorder:", type(recorder).__mro__)
+            recorder.sound = self.sound()
+        self.update()
 
     @pyqtSlot(bool)
     # @protect
     def _onButtonRecordClicked(self, checked: bool) -> None:
-        if self._recorder is None:
-            print("QSoundControl: No recorder, sorry!")
+        recorder = self.soundRecorder()
+        if recorder is None:
+            LOG.warning("QSoundControl: No recorder, sorry!")
         elif checked:
-            print("QSoundControl: Recording sound")
+            LOG.info("QSoundControl: Recording sound")
             recorder.record(self._sound)
         else:
-            print("QSoundControl: Stop recording sound")
-            self._recorder.stop()
+            LOG.info("QSoundControl: Stop recording sound")
+            recorder.stop()
 
     @pyqtSlot(bool)
     # @protect
     def _onButtonPlayClicked(self, checked: bool) -> None:
-        if self._player is None:
+        player = self.soundPlayer()
+        if player is None:
             LOG.warning("QSoundControl: No player, sorry!")
         elif checked:
             LOG.info("QSoundControl: Playing sound %s on player %s",
-                     self._sound, self._player)
-            self._player.play(self._sound)
+                     self._sound, player)
+            player.play(self._sound, blocking=False)
         else:
             LOG.info("QSoundControl: Stop playing sound on player %s",
-                     self._player)
-            self._player.stop()
+                     player)
+            player.stop()
+
+    @pyqtSlot(bool)
+    # @protect
+    def _onButtonLoadClicked(self, checked: bool) -> None:
+        fileName, selectedFilter = QFileDialog.getOpenFileName(
+            self, "Load audio file", os.getcwd(),
+            "Audio Files (*.wav *.mp3)");
+        try:
+            print("Loading file:", fileName, selectedFilter)
+            sound = Sound(fileName)
+        except Execption as ex:
+            print("Exception:", ex)
+            sound = None
+        self.setSound(sound)
 
     @pyqtSlot(bool)
     # @protect
     def _onButtonInfoClicked(self, checked: bool) -> None:
-        print(f"info[QSoundControl]: Sound: {self._sound}")
+        player = self.soundPlayer()
+        recorder = self.soundRecorder()
+        if player is None:
+            playerText = "None"
+        elif player.sound is None:
+            playerText = "without sound"
+        else:
+            playerText = f"with sound (duration={player.sound.duration})"
+
+        if recorder is None:
+            recorderText = "None"
+        elif recorder.sound is None:
+            recorderText = "without sound"
+        else:
+            recorderText = f"with sound (duration={recorder.sound.duration})"
+
+        print(f"info[QSoundControl]: Sound: {self._sound}, "
+              f"Player: {playerText}, Recorder: {recorderText}")
+        print(str(player))
 
     @pyqtSlot(int)
     # @protect
     def _onLoopChanged(self, state: int) -> None:
-        if self._player is not None:
-            self._player.loop = (state == Qt.Checked)
+        player = self.soundPlayer()
+        if player is not None:
+            player.loop = (state == Qt.Checked)
 
     @pyqtSlot(int)
     # @protect
     def _onReverseChanged(self, state: int) -> None:
-        if self._player is not None:
-            self._player.reverse = (state == Qt.Checked)
+        player = self.soundPlayer()
+        if player is not None:
+            player.reverse = (state == Qt.Checked)
+
+    def data_changed(self, sound: Sound, info: Sound.Change) -> None:
+        # pylint: disable=invalid-name
+        LOG.debug("QSoundControl: sound changed: duration=%s",
+                  sound.duration)
 
     def player_changed(self, player: SoundPlayer,
                        info: SoundPlayer.Change) -> None:
+        # pylint: disable=invalid-name
+        LOG.debug("QSoundControl: player changed: playing=%s, position=%s",
+                  player.playing, player.position)
         if info.state_changed:
             self.update()
-        
+
+        if info.position_changed:
+            self._soundScrollbar.update()
+
     def recorder_changed(self, player: SoundRecorder,
                          info: SoundRecorder.Change) -> None:
+        # pylint: disable=invalid-name
         if info.state_changed:
             self.update()
 
     def update(self) -> None:
-        print(self._player is not None, self._player.sound)
-        self._buttonPlay.setEnabled(self._player is not None and
-                                    self._player.sound is not None)
-        self._buttonPlay.setChecked(self._player is not None and
-                                    self._player.playing)
-        self._buttonRecord.setChecked(self._recorder is not None and
-                                      self._recorder.recording)
+        sound = self.sound()
+        player = self.soundPlayer()
+        recorder = self.soundRecorder()
+        LOG.debug("QSoundControl.update: sound=%s, player=%s, recorder=%s",
+                  sound, player, recorder)
+        self._buttonPlay.setEnabled(player is not None and
+                                    player.sound is not None)
+        self._buttonPlay.setChecked(player is not None and
+                                    player.playing)
+        self._buttonRecord.setVisible(recorder is not None)
+        self._buttonRecord.setEnabled(recorder is not None and
+                                      player.sound is not None)
+        self._buttonRecord.setChecked(recorder is not None and
+                                      recorder.recording)
+        self._b1.setVisible(recorder is not None)
+        self._b2.setVisible(recorder is not None)
 
-        self._checkboxLoop.setEnabled(self._player is not None)
+        self._checkboxLoop.setEnabled(player is not None)
         self._checkboxLoop.setCheckState(Qt.Checked if
-                                         self._player is not None and
-                                         self._player.loop else Qt.Unchecked)
-        self._checkboxReverse.setEnabled(self._player is not None)
+                                         player is not None and
+                                         player.loop else Qt.Unchecked)
+        self._checkboxReverse.setEnabled(player is not None)
         self._checkboxReverse.setCheckState(Qt.Checked if
-                                            self._player is not None and
-                                            self._player.reverse else
+                                            player is not None and
+                                            player.reverse else
                                             Qt.Unchecked)
         super().update()
+
+
+class SoundViewQtAdapter(SoundView):
+    """A wrapper class that encapsulates a QSoundControl within
+    a Deep Learning Toolbox `SoundView` API.
+    """
+
+    _qWidget: QSoundControl = None
+
+    def __init__(self, **kwargs) -> None:
+        self._qWidget = QSoundControl()
+        super().__init__(**kwargs)
+
+    @property
+    def sound(self) -> Optional[Sound]:
+        """The :py:class:`Sound` to be displayed in this
+        :py:class:`SoundView`.  If `None` the display will
+        be cleaned.
+        """
+        return self._qWidget.sound()
+
+    @sound.setter
+    def sound(self, sound: Optional[Soundlike]) -> None:
+        self._qWidget.setSound(Sound.as_sound(sound=sound))
+
+    @property
+    def player(self) -> SoundPlayer:
+        """A :py:class:`SoundPlayer` observed by this
+        :py:class:`SoundView`. Activities of the player may be
+        reflected by this view and the view may contain
+        graphical elements to control the player. The player
+        may be `None` in which case such controls will be disabled.
+        """
+        return self._qWidget.soundPlayer()
+
+    @player.setter
+    def player(self, player: Optional[SoundPlayer]) -> None:
+        self._qWidget.setSoundPlayer(player)
+
+    @property
+    def recorder(self) -> SoundRecorder:
+        """A :py:class:`SoundRecorder` observed by this
+        :py:class:`SoundView`. Activities of the recorder may be
+        reflected by this view and the view may also contain
+        graphical elements to control the recorder.
+        """
+        return self._qWidget.soundRecorder()
+
+    @recorder.setter
+    def recorder(self, recorder: Optional[SoundRecorder]) -> None:
+        self._qWidget.setSoundRecorder(recorder)
+
+    def qWidget(self) -> QWidget:
+        return self._qWidget
+
+
+class QSoundSeparator(QWidget):
+    """A :py:class:`QSoundSeparatorView` supports experimenting with
+    Soundseparators, displaying the original (mixed) sound as well
+    as the separated output sound.
+    """
+
+    def __init__(self, sound: Optional[Sound] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._initUI()
+        self._layoutUI()
+    
+    def _initUI(self) -> None:
+        """Initialize the GUI
+        """
+        self._mixed = QSoundControl(player=SoundPlayer())
+        self._separatorControls = QWidget()
+        self._outputs = [
+            QSoundControl(player=SoundPlayer()),
+            QSoundControl(player=SoundPlayer())
+        ]
+
+    def _layoutUI(self) -> None:
+        mixedLayout = QVBoxLayout()
+        mixedLayout.addWidget(self._mixed)
+
+        mixedBox = QGroupBox("Mix")
+        mixedBox.setLayout(mixedLayout)
+
+        outputsLayout = QVBoxLayout()
+        outputsLayout.addWidget(self._separatorControls)
+        for output in self._outputs:
+            outputsLayout.addWidget(output)
+        
+        outputsBox = QGroupBox("Outputs")
+        outputsBox.setLayout(outputsLayout)
+
+        layout = QVBoxLayout()
+        layout.addWidget(mixedBox)
+        layout.addWidget(outputsBox)
+        self.setLayout(layout)
+
+
+
+class QtSoundDisplay(SoundDisplay, QStandalone):
+    """The :py:class:`QtSoundDisplay` implements a Deep Learning
+    Toolbox :py:class:`SoundDisplay`, that is a user interface to
+    display a sound.
+
+    The :py:class:`QtSoundDisplay` is a subclass of
+    :py:class:`QStandalone`, allowing to display the sound as
+    a standalone application.
+    """
+
+    def __init__(self, view: Optional[View] = None, **kwargs) -> None:
+        if view is None:
+            view = SoundViewQtAdapter()
+        super().__init__(view=view, **kwargs)
+    
+    def show(self) -> None:
+        widget = self.view.qWidget()
+        widget.show()
+        self.showStandalone()

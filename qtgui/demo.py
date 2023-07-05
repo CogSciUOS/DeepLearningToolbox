@@ -49,7 +49,6 @@ from dltb.network import Network
 from dltb.datasource import Datasource, Noise
 from dltb.tool.train import Trainer
 from dltb.tool.tests.test_train import MockupTrainee
-from dltb import thirdparty
 
 # GUI imports
 from . import debug
@@ -343,18 +342,19 @@ class QDemo(QWidget):
         """Demonstration of the :py:class:`QImageView`.
         """
         widget = QImageView()
-        thirdparty.import_class('ImageReader', module='imageio')
+        # We need an imageread that can read URLs
+        # ImageReader(module='imageio')
         widget.setImagelike('https://upload.wikimedia.org/wikipedia/commons/'
                             'thumb/b/b4/Last_Supper_by_Leonardo_da_Vinci.jpg/'
                             '320px-Last_Supper_by_Leonardo_da_Vinci.jpg')
         self.setWidget(widget)
 
     @runnable
-    def demoQLayerSelector(self) -> Network:
+    @staticmethod
+    def demoQLayerSelector() -> Network:
         """Demonstration of the :py:class:`QLayerSelector`.
         """
-        network = Network['alexnet-tf']
-        return network
+        return Network['alexnet-tf']
 
     def demoFinishQLayerSelector(self, network: Network) -> None:
         """Demonstration of the :py:class:`QLayerSelector`.

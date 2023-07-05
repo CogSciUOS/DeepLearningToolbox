@@ -4,8 +4,9 @@
 
 # toolbox imports
 from dltb.base import Observable  # FIXME: should not be needed!
+from dltb.network import Network
 from base import View as BaseView, Controller as BaseController
-from network import Network, Controller as NetworkController
+from Controller as NetworkController
 from .engine import Engine
 
 from . import logger

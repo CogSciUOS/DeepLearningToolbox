@@ -6,6 +6,20 @@ from typing import Optional
 # third-party imports
 import numpy as np
 
+# since numpy 1.20 the use of np.float (and other numpy types) is deprecated
+# in favor of using the Python builtin `float`.
+# We will define some portability definitions, that allows to be compatible
+# with old and new versions of numpy.
+np_float = float  # pylint: disable=invalid-name
+np_int = int  # pylint: disable=invalid-name
+np_bool = bool  # pylint: disable=invalid-name
+np_object = object  # pylint: disable=invalid-name
+# This change in numpy also cause deprecation warning when using
+# some (older) thirdparty modules:
+#  - tensorboard 2.4.0: np.bool, np.object
+#    (resolved in tensorboard 2.6.0)
+#  - h5py 2.10.0: `np.typeDict` is a deprecated alias for `np.sctypeDict`.
+
 
 def multimin(array: np.ndarray, num: int = 1, axis: Optional[int] = None,
              sort: bool = False) -> np.ndarray:

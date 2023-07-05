@@ -10,23 +10,41 @@
 # maybe also others!)
 
 # standard imports
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 import time
 import logging
 import threading
 
 # third party imports
 import numpy as np
+from PyQt5 import QtCore
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSlot
 from PyQt5.QtGui import QKeyEvent, QCloseEvent, QHideEvent
 from PyQt5.QtWidgets import QApplication
 
 # toolbox imports
 from qtgui.widgets.image import QImageView
-from ..base.image import Image, Imagelike, ImageDisplay as BaseImageDisplay
+from dltb.base.package import Package
+from dltb.base.image import Image, Imagelike, ImageDisplay as BaseImageDisplay
 
 # logging
 LOG = logging.getLogger(__name__)
+
+
+class QtPackage(Package):
+    """An extended :py:class:`Package` for providing specific Qt
+    information.
+
+    """
+    def __init__(self, **kwargs) -> None:
+        super().__init__(key='qt', **kwargs)
+
+    @property
+    def version(self) -> Optional[str]:
+        return f"{QtCore.QT_VERSION_STR}/{QtCore.PYQT_VERSION_STR}"
+
+
+QtPackage()
 
 
 class QImageDisplay(QImageView):
@@ -133,10 +151,21 @@ class ImageDisplay(BaseImageDisplay):
     def __init__(self, view: QImageView = None, **kwargs) -> None:
         """
         """
-        super().__init__(**kwargs)
+        if view is None:
+            application = QApplication([])
+            view = QImageDisplay(application)
+        elif isinstance(view, QImageView):
+            application = QApplication.instance()
+        else:
+            raise TypeError(f"{type} is not a QImageView.")
+        super().__init__(view=view, **kwargs)
+        self._application = application
 
-        self._application = QApplication([])
-        self._view = view or QImageDisplay(self._application)
+    @property
+    def view_(self) -> BaseImageDisplay:
+        """The :py:class:`ImageView` used by this `ImageDisplay`.
+        """
+        return self._view
 
     def _show(self, image: np.ndarray, title: str = None, **kwargs) -> None:
         """Show the given image.
@@ -179,7 +208,7 @@ class ImageDisplay(BaseImageDisplay):
     def _close(self) -> None:
         LOG.info("Qt: close: hide the window")
         self._view.hide()
-        if not self.event_loop_is_running():
+        if not self._event_loop_is_running():
             self._process_events()
         LOG.debug("Qt: close: done.")
 
@@ -189,7 +218,7 @@ class ImageDisplay(BaseImageDisplay):
         LOG.info("Running Qt Main Event Loop.")
         # Run the Qt main event loop to update the display and
         # process timeout and/or key events.
-        if self.event_loop_is_running():
+        if self._event_loop_is_running():
             raise RuntimeError("Only one background thread is allowed.")
 
         self._event_loop = QThread.currentThread()
@@ -208,8 +237,8 @@ class ImageDisplay(BaseImageDisplay):
             timer.timeout.disconnect(self._view.onTimer)
         self._event_loop = None
 
-        LOG.info("Qt Main Event Loop finished (event loop=%s, closed=%s).",
-                 self.event_loop_is_running(), self.closed)
+        LOG.info("Qt Main Event Loop finished (opened=%, active=%s, "
+                 "closed=%s).", self.opened, self.active, self.closed)
 
     def _run_nonblocking_event_loop(self) -> None:
         # FIXME[hack]: calling _process_events from a background task

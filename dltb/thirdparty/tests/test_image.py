@@ -1,3 +1,6 @@
+"""Tests for the :py:mod:`dltb.thirdparty` image classes:
+:py:class:`ImageReader`, :py:class:`ImageResizer`.
+"""
 
 # standard imports
 from unittest import TestCase, skipUnless
@@ -6,8 +9,9 @@ from unittest import TestCase, skipUnless
 import numpy as np
 
 # toolbox imports
-from ...util.image import imread
-from .. import available, import_class
+from dltb.base.image import ImageReader, ImageResizer
+from dltb.util.image import imread
+from dltb.util.importer import importable
 
 
 class ImageTest(TestCase):
@@ -21,28 +25,33 @@ class ImageTest(TestCase):
 
     image_file = 'images/elephant.jpg'
 
-    def image_reader_test(self, ImageReader: type) -> None:
-        image_reader = ImageReader()
+    def _image_reader_test(self, image_reader: ImageReader) -> None:
         image = image_reader.read(self.image_file)
         self.assertEqual(image.shape, (450, 300, 3))
         self.assertEqual(image.dtype, np.uint8)
         self.assertEqual(tuple(image.mean(axis=(0, 1)).astype(np.uint8)),
                          (159, 153, 143))
 
-    @skipUnless(available('matplotlib'), "Skip matplotib tests")
+    @skipUnless(importable('matplotlib'), "Skip matplotib tests")
     def test_reader_matplotlib(self) -> None:
-        ImageReader = import_class('ImageReader', 'matplotlib')
-        self.image_reader_test(ImageReader)
+        """Test matplotlib implementation of :py:class:`ImageReader`.
+        """
+        image_reader = ImageReader(module='matplotlib')
+        self._image_reader_test(image_reader)
 
-    @skipUnless(available('imageio'), "Skip imageio tests")
+    @skipUnless(importable('imageio'), "Skip imageio tests")
     def test_reader_imageio(self) -> None:
-        ImageReader = import_class('ImageReader', 'imageio')
-        self.image_reader_test(ImageReader)
+        """Test imageio implementation of :py:class:`ImageReader`.
+        """
+        image_reader = ImageReader(module='imageio')
+        self._image_reader_test(image_reader)
 
-    @skipUnless(available('dummy'), "Skip dummy tests")
+    @skipUnless(importable('dummy'), "Skip dummy tests")
     def test_reader_dummy(self) -> None:
-        ImageReader = import_class('ImageReader', 'dummy')
-        self.image_reader_test(ImageReader)
+        """Test dummy implementation (intended to be skipped).
+        """
+        image_reader = ImageReader(module='dummy')
+        self._image_reader_test(image_reader)
 
     #
     # Resizing
@@ -59,18 +68,21 @@ class ImageTest(TestCase):
 
     image = imread(image_file)
 
-    def image_resizer_test(self, ImageResizer: type) -> None:
-        image_resizer = ImageResizer()
+    def _image_resizer_test(self, image_resizer: ImageResizer) -> None:
         new_image = image_resizer.resize(self.image, size=(150, 100))
         self.assertEqual(new_image.shape, (100, 150, 3))
         self.assertEqual(new_image.dtype, np.uint8)
 
-    @skipUnless(available('skimage'), "Skip skimage tests")
+    @skipUnless(importable('skimage'), "Skip skimage tests")
     def test_resizer_skimage(self) -> None:
-        ImageResizer = import_class('ImageResizer', 'skimage')
-        self.image_resizer_test(ImageResizer)
+        """Test skimage implementation of :py:class:`ImageResizer`.
+        """
+        image_resizer = ImageResizer(module='skimage')
+        self._image_resizer_test(image_resizer)
 
-    @skipUnless(available('opencv'), "Skip opencv tests")
+    @skipUnless(importable('opencv'), "Skip opencv tests")
     def test_resizer_opencv(self) -> None:
-        ImageResizer = import_class('ImageResizer', 'opencv')
-        self.image_resizer_test(ImageResizer)
+        """Test opencv implementation of :py:class:`ImageResizer`.
+        """
+        image_resizer = ImageResizer(module='opencv')
+        self._image_resizer_test(image_resizer)

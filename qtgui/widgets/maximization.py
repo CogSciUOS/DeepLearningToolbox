@@ -23,8 +23,9 @@ Github: https://github.com/krumnack
 """
 
 from dltb.base.data import Data
+from dltb.network import Network
 from toolbox import Toolbox
-from network import Network, Controller as NetworkController
+from network import Controller as NetworkController
 from tools.am import (Config as MaximizationConfig,
                       Engine as MaximizationEngine,
                       Controller as MaximizationController)

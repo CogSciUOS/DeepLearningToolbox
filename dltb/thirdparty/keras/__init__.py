@@ -31,10 +31,6 @@ import os
 import sys
 import logging
 
-if 'keras' not in sys.modules:
-    raise ImportError("The module '{__name__}' must not be imported directly. "
-                      "It is automatically imported following 'import keras'")
-
 # thirdparty imports
 import keras
 # we are assuming that nowadays TensorFlow is the only backend
@@ -42,6 +38,7 @@ import tensorflow as tf
 
 # toolbox imports
 from ... import thirdparty
+from ...base.package import Package
 from ...config import config
 from ...datasource import Datasource
 
@@ -50,6 +47,13 @@ LOG = logging.getLogger(__name__)
 
 HAVE_KERAS_IO = sys.modules['keras'].__name__ == 'keras'
 HAVE_TENSORFLOW_KERAS = sys.modules['keras'].__name__ == 'tensorflow.keras'
+
+if __name__ + '_register' not in sys.modules:
+    LOG.warning("The module '%s' was imported without using "
+                "the Deep Learning Toolbox registration module '%s'. "
+                "Some configuration settings may be ignored.", __name__,
+                __name__ + '_register')
+
 
 if HAVE_TENSORFLOW_KERAS:
     # from . import tensorflow
@@ -109,7 +113,7 @@ if False:  # FIXME[concept]: we nee some general concept what to do here ...
     LOG.info(f"image_dim_ordering: {keras.backend.image_dim_ordering()}")
     LOG.info(f"image_data_format: {keras.backend.image_data_format()}")
 
-    if config.use_cpu:
+    if not config.use_gpu:
         #  * Can Keras with Tensorflow backend be forced to use CPU or GPU
         #    at will?
         #    https://stackoverflow.com/q/40690598
@@ -185,3 +189,24 @@ Datasource.register_instance('mnist-test', __name__ + '.datasource.keras',
 Datasource.register_instance('cifar10-train', __name__ + '.datasource.keras',
                              'KerasDatasource', name='cifar10',
                              section='train')
+
+
+class KerasPackage(Package):
+    """An extended :py:class:`Package` for providing specific TensorFlow
+    information.
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(key='keras', **kwargs)
+
+    def initialize_info(self) -> None:
+        """Register torch specific information.
+        """
+        super().initialize_info()
+
+        self.add_info(f'device{idx}', keras.backend.backend(),
+                      title="Backend")
+
+
+KerasPackage()

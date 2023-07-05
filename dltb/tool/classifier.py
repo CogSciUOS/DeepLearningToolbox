@@ -9,7 +9,7 @@
 # standard imports
 from typing import Union, Tuple, Iterable, Any, Sequence, Optional
 from typing import TypeVar, overload
-from abc import abstractmethod, ABC
+from abc import abstractmethod
 import logging
 
 # third party imports
@@ -17,6 +17,7 @@ import numpy as np
 
 # toolbox imports
 from ..typing import Protocol
+from ..base.meta import ABC
 from ..base.prepare import Preparable
 from ..base.register import RegisterClass
 from ..base.data import Datalike
@@ -348,7 +349,7 @@ class ClassIdentifier(int):
         return self._scheme and self._scheme.has_label(name)
 
 
-class Classifier(ABC, Preparable):
+class Classifier(Preparable, ABC):
     """A :py:class:`Classifier` is associated with a classification
     scheme, describing the set of classes ("labels").  Output units of
     the network have to be mapped to the class labels.

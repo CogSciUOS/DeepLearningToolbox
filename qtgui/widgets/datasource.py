@@ -16,7 +16,7 @@ import logging
 # Qt imports
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QHideEvent, QFontMetrics, QDoubleValidator
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy
 from PyQt5.QtWidgets import QWidget, QPushButton, QDoubleSpinBox
 
 
@@ -468,7 +468,7 @@ class QIndexControls(QBaseIndexControls, QDatafetcherObserver, qobservables={
 class QDatasourceNavigator(QWidget, QObserver, qattributes={
         Toolbox: False, Datasource: False}, qobservables={
             Datafetcher: {'datasource_changed'}}):
-    """The QDatasourceNavigator offers control widgets to navigate through
+    """The `QDatasourceNavigator` offers control widgets to navigate through
     a :py:class:`Datasource`. The actual controls depend on the type
     of the datasource and the arrangement can be adapted by providing
     layout parameters.
@@ -478,6 +478,13 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
     can be set using the :py:class:`setToolbox` method.
     If a toolbox is set, its current datasource will be used and it
     is no longer allowed to set the Datasource via :py:meth:`setDatasource`.
+
+    The `QDatasourceNavigator` performs navigation via a
+    :py:class:`Datafetcher`.  User actions are directly executed by
+    that `Datafetcher`.  There are no signals emitted on any
+    navigation actions.  Interested parties should observe the
+    underlying `Datafetcher`.  If a `Toolbox` is set, its `Datafetcher`
+    will be used, otherwise a private `Datafetcher` is created.
 
     _indexControls: QIndexControls
         controls for an indexed datasource (Indexed)
@@ -497,6 +504,17 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
     _selector: QDatasourceComboBox
 
     _prepareButton: QPrepareButton
+
+
+    Arguments
+    ---------
+    datasource_selector:
+        A flag indicating if a :py:class:`QDatasourceSelector`
+        should be included in this `QDatasourceNavigator`.
+
+    style:
+        The layout style of this `QDatasourceNavigator`. Valid
+        are `'wide'` (a one-row layout) and 'narrow'` (a multi-row layout).
 
     """
 
@@ -580,8 +598,17 @@ class QDatasourceNavigator(QWidget, QObserver, qattributes={
             layout.addLayout(row)
         else:
             layout = row
+            self.setSizePolicy(QSizePolicy.MinimumExpanding,
+                               QSizePolicy.Fixed)
 
         self.setLayout(layout)
+        print(self.sizeHint())
+        print("random:", self._randomButton.sizeHint())
+        print("index:", self._indexControls.sizeHint(),
+              self._indexControls.minimumSize())
+        print("first:", self._indexControls._firstButton.sizeHint())
+        print("field:", self._indexControls._indexField.sizeHint())
+        print("label:", self._indexControls._indexLabel.sizeHint())
 
     def setToolbox(self, toolbox: Toolbox) -> None:
         """Set the toolbox for this :py:class:`QDatasourceNavigator`.

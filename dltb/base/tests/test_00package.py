@@ -31,6 +31,7 @@ class TestBasePackage(unittest.TestCase):
         for path in self.package_directory.glob('*.py'):
             yield str(path.relative_to(self.package_directory).
                       with_suffix(''))
+        yield 'image'
 
     def base_tests(self) -> Iterable[str]:
         """The tests defined for the  `dltb.base` package.
@@ -47,9 +48,11 @@ class TestBasePackage(unittest.TestCase):
         untested_ok = set(('__init__', ))
         # FIXME[hack]: there should be tests for all modules
         untested_ok |= set([
-            'sound', 'install', 'hardware', 'fail', 'meta',
+            'sound', 'install', 'hardware', 'fail',
             'types', 'store', 'observer',
-            'state', 'resource', 'video'
+            'state', 'resource',
+            'background', 'metadata', 'gui',
+            'reuse', 'info'
         ])
         self.assertEqual(modules - tests, untested_ok)
 

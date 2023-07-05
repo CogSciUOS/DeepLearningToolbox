@@ -38,7 +38,7 @@ boxes = list(detector.detect_boxes(image))
 # boxes=[]
 """
 # standard imports
-from typing import Union, Tuple, List, Any, Iterable
+from typing import Union, Tuple, List, Any, Iterable, Optional
 import logging
 
 # third party imports
@@ -46,8 +46,9 @@ import numpy as np
 
 # toolbox imports
 from ..base.data import Data
-from ..base.meta import Metadata
+from ..base.metadata import Metadata
 from ..base.image import Image, Imagelike, Region, BoundingBox
+from ..base.implementation import Implementable
 from ..util.image import imshow
 from .tool import Tool
 from .image import ImageTool
@@ -143,15 +144,26 @@ class Detector(Tool):
         detections as a list of :py:class:`Location`s (usually of type
         :py:class:`BoundingBox`) in the 'regions' property.
         """
-        raise NotImplementedError("Detector class '" +
-                                  type(self).__name__ +
-                                  "' is not implemented (yet).")
+        if type(self)._detect_batch.__module__ == __name__:
+            raise NotImplementedError("Detector class '" +
+                                      type(self).__name__ +
+                                      "' is not implemented (yet).")
+        return self._detect(data[np.newaxis], **kwargs)[0]
 
-    def _detect_batch(self, data: np.ndarray, **kwargs) -> Detections:
-        # FIXME[todo]: batch processing
-        raise NotImplementedError("Detector class '" +
-                                  type(self).__name__ +
-                                  "' is not implemented (yet).")
+    def _detect_batch(self, batch: np.ndarray, **kwargs) -> Detections:
+        """
+        This is a dummy implementation, simply calling `_detect` for
+        each data point from the batch.  Subclasses my implement a
+        more efficient implementation.
+        """
+        if type(self)._detect.__module__ == __name__:
+            raise NotImplementedError("Detector class '" +
+                                      type(self).__name__ +
+                                      "' is not implemented (yet).")
+
+        results = []
+        for data in batch:
+            results.append(self.detect(data), **kwargs)
 
     def _adapt_detections(self, detections: Detections,
                           data: Data) -> Detections:
@@ -190,7 +202,7 @@ class Detector(Tool):
         return self.get_data_attribute(data, 'detections')
 
 
-class ImageDetector(Detector, ImageTool):
+class ImageDetector(Detector, ImageTool, Implementable):
     # pylint: disable=too-many-ancestors
     """A detector to be applied to image data.
 
@@ -466,7 +478,8 @@ class ImageDetector(Detector, ImageTool):
     # Marking detections
     #
 
-    def mark_image(self, image: Imagelike, detections: Detections = None,
+    def mark_image(self, image: Imagelike,
+                   detections: Optional[Detections] = None,
                    copy: bool = True, best: int = None,
                    group_size: int = 1) -> np.ndarray:
         """Mark the given detections in an image.
@@ -503,7 +516,7 @@ class ImageDetector(Detector, ImageTool):
                     region.mark_image(array, color=(255, 0, 0))
         return array
     
-    def mark_data(self, data: Data, detections: Detections = None,
+    def mark_data(self, data: Data, detections: Optional[Detections] = None,
                   **kwargs) -> None:
         """Extend the given `Data` image object by a tool specific attribute,
         called `marked`, holding a copy of the original image in which
